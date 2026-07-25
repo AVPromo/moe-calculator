@@ -101,8 +101,9 @@ def inv_norm_cdf(p):
 def norm_cdf(z):
     """Forward standard-normal CDF: Phi(z), the probability mass at or below z. The inverse
     of inv_norm_cdf. Used by the in-battle overlay to map a combined-damage value to a
-    percentile over the fitted (mu, sigma) curve (percent = 100*norm_cdf((d-mu)/sigma)),
-    so the projection rides WG's smooth distribution SHAPE instead of straight chords.
+    percentile over the per-segment (mu, sigma) solved through the surrounding threshold stops
+    (percent = 100*norm_cdf((d-mu)/sigma); see battle_builder._smooth_percent), so the
+    projection rides WG's smooth distribution SHAPE instead of straight chords.
 
     erfc-based (same idiom as the Halley step above); math.erfc exists in Python 2.7+ and 3.x.
     Always finite in (0.0, 1.0) for a finite z."""

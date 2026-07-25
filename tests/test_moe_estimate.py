@@ -84,6 +84,20 @@ def test_fit_none_when_clustered():
     assert me.fit_mu_sigma([(1500, 0.840), (1510, 0.842)]) is None
 
 
+def test_min_z_spread_guard_is_still_live():
+    # battle_builder no longer calls fit_mu_sigma (it solves each threshold segment exactly), so
+    # thresholds_from_samples is now this OLS fit's ONLY caller -- pin that the ill-conditioning
+    # guards still reject through it, i.e. no code path lost its garbage-input rejection.
+    tight = [(1500, 0.840), (1510, 0.842)]                     # z-spread < MIN_Z_SPREAD
+    assert max(me.inv_norm_cdf(p) for _d, p in tight) \
+        - min(me.inv_norm_cdf(p) for _d, p in tight) < me.MIN_Z_SPREAD
+    assert me.fit_mu_sigma(tight) is None
+    # Identical percentiles are the Sxx == 0 limit of the same condition (zero z-variance).
+    assert me.fit_mu_sigma([(1500, 0.84), (1600, 0.84)]) is None
+    # Just over the spread threshold the fit engages again (the guard does not over-reject).
+    assert me.fit_mu_sigma([(1500, 0.60), (1800, 0.72)]) is not None
+
+
 # --- thresholds_from_samples --------------------------------------------------
 
 def test_thresholds_recovered_from_fit_are_ascending():

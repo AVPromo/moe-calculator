@@ -50,11 +50,47 @@ destroys it. `battle_view.open_window()`/`close_window()` keep a `_active` singl
   (not `isObserver()`); `read_damage_log_summary_flags()` for the raised anchor.
 - **Baseline** — the dossier is unreadable in battle, so the career baseline comes from
   `domain/baseline_cache.py` (snapshotted in the garage, keyed by intCD; garage intCD == battle intCD).
-- **Math** — `domain/battle_builder.py`: `combined = damage + max(assist, stun) − teamDmg`
-  (**MAX not sum**, per WG); EWMA projection `avg + k·(C−avg)`, `k=2/(N+1)`, N≈100 (`EWMA_K` in
-  `constants.py`; community-derived, not WG-confirmed); `damage_to_percent` piecewise over stops
-  `(0,0),(D1,65),(D2,85),(D3,95),(D100,100)`. The `~`/`approx` plumbing was fully removed per user.
+- **Math** — see the section below.
 - **Push** — `bridge/battle_bridge.py` → `BattleMoEVM`.
+
+## Math (`domain/battle_builder.py`)
+
+- **Combined damage** — `C = max(0, damage + max(track, spot, stun) − team_damage)`
+  (**MAX not sum**, per WG support #15060). `counted_assistance()` also returns which stream won
+  (row-3 icon), with the pre-split merged assist as an early-battle fallback.
+- **Projection** — `ewma_project`: `proj = round_half_away(pre_avg + EWMA_K·(C − pre_avg))`,
+  `EWMA_K = 2/(N+1) = 2/101` (`constants.py`; community-derived, not WG-confirmed). A 0-damage
+  battle IS folded, so the overlay opens slightly below career standing.
+- **damage → percent: an EXACT-at-stops piecewise normal fit.** Two functions:
+  - `_fit_from_thresholds(thresholds)` → the usable **stops** `[(damage, z), …]` ascending, or
+    `None`. Stops are `(D1, 0.65) (D2, 0.85) (D3, 0.95) (D100, GOALPOST_PERCENTILE/100 = 0.99)`
+    (0.99 not 1.0 — `Phi⁻¹(1)` is +∞); `z = inv_norm_cdf(p)`. A stop with `d <= 0` or
+    `d <= the last kept d` is dropped (WG can return missing / zero / non-monotone stops), which
+    guarantees every segment has `d_hi > d_lo` **and** `z_hi > z_lo`, i.e. `sigma > 0` by
+    construction. `< 2` usable stops → `None` → `has_data=False` → **the overlay hides the
+    percent** (`cur_percent`/`pct_delta` = 0). That degrade is the only fallback — there is no
+    chord/linear-interp path (see the caveat below).
+  - `_smooth_percent(damage, fit)` picks the **bracketing** stop pair (the end segments are
+    extended for both tails — no truncation, so above D100 the curve keeps asymptoting toward
+    100) and solves that segment exactly: `sigma = (d_hi−d_lo)/(z_hi−z_lo)`,
+    `mu = d_lo − sigma·z_lo`, `pct = clamp(100·norm_cdf((d−mu)/sigma), 0, 100)`.
+  - **Invariant to preserve: `f(D_i) == 100·p_i` at EVERY stop.** Inside a segment the curve still
+    rides WG's normal distribution *shape* rather than a straight chord.
+- **The readout is ANCHORED** — `cur_percent = clamp(pre_percentile + inc, 0, 100)` with
+  `inc = f(proj) − f(pre_avg)` (and `pct_delta = inc`). WG's own dossier `damageRating`
+  (`pre_percentile`) sets the **level**; the fit only supplies the **increment**. The anchor is
+  still required even though the fit is exact at the stops, because `pre_avg` generally sits
+  *between* stops, where our curve and WG's `damageRating` still disagree.
+- **No linear-interp fallback, and the exact fit is the PRIMARY path** — not a fallback. The
+  removed `damage_to_percent` / `_threshold_stops` / `_interp_percent` chord interpolation was
+  provably dead; don't re-add it. An earlier **global OLS** (mu, sigma) fit over the 4 stops is
+  also gone: it could not pass through them (live-EU residuals D1 −3.1, D2 +1.6, D3 +0.9,
+  D100 −0.25 pts), and the anchor cancels only a *level* bias, never a *slope* one.
+- `moe_estimate.fit_mu_sigma` (the real OLS, with its `MIN_Z_SPREAD` / `Sxx<=0` guards) **is still
+  live**, but ONLY for `thresholds_from_samples` — the WG-API-error fallback
+  (`adapter/engine_adapter.py::_estimate_thresholds`) that derives a whole threshold table from
+  the player's single dossier point. The battle mapping does not use it.
+- The `~`/`approx` plumbing was fully removed per user.
 
 ## VM slots (`bridge/view_models.py::BattleMoEVM`)
 
