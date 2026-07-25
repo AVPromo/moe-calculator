@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.4.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.5.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +95,8 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.4.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.4.0 (2026-07-20) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
+**v0.1.0 through v1.5.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.5.0 (2026-07-25) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
 client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
@@ -109,7 +109,19 @@ resolution-correct **high-DPI/4K garage widget** size + position (plus an enlarg
 drag-to-reposition** (Ctrl+drag + numeric X/Y position steppers + a "Follow Carousel" toggle + a
 reset command — moves only, no resizing) and **MSA settings-value migration** so a `SETTINGS_VERSION` bump (now **v5**) no longer
 wipes users' saved settings (migrates the persisted Aslain ModsSettingsAPI values across the bump,
-fail-soft to a fresh install).
+fail-soft to a fresh install); **1.5.0 (2026-07-25)** is a minor bump carrying in-battle
+MoE-projection accuracy work — the damage→percent mapping moved from a single global
+least-squares normal `(mu, sigma)` over the four threshold stops to an **exact-at-stops piecewise**
+normal fit. Least squares passed through *none* of the stops (live-EU residuals sign-identical on
+every tank: D1 −3.1, D2 +1.6, D3 +0.9, D100 −0.25 percentile points), so the 1-mark stop read
+~61.9% instead of 65% and the slope just above a mark ran ~50% too steep — a **slope** bias the
+`pre_percentile` anchor cannot cancel (it cancels only a level bias), so the readout started right
+and drifted as damage accrued. `_fit_from_thresholds` now returns the usable stops as ascending
+`[(damage, z), …]` and `_smooth_percent` solves the bracketing segment's `(mu, sigma)` exactly
+through both stops, so `f(D_i) == 100*p_i` at every stop while the curve still rides WG's normal
+shape between them; the end segments extend for both tails (no truncation above D100). Unusable WG
+stops are dropped **individually** (`d <= 0`, or `d <=` the last kept `d`), so a bad interior stop
+costs resolution, not `has_data`.
 Both channels now ship the **same single build** (WG-API threshold source): the GitHub release
 carries `MoECalculator-Setup-<ver>.exe` + the bare `.wotmod`, and `MoECalculator_<ver>.zip`
 (same `.wotmod` + vendor deps) is uploaded manually to
