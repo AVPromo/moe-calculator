@@ -58,6 +58,7 @@ VM. `_arm` uses `getattr(holder, attr, None)` so a renamed WG event degrades qui
 - **Ticks** use the flat glyph `img://…/library/marksOnGun/mark_%d.png` (ignores `tk.icon` — nation decals mush at tick size); damage requirement printed below each (blank when unknown).
 - **Localization:** `labels` arrives as a JSON bundle; `L(key)` is missing-key-safe; JS hardcodes no English (mirrored contract with `adapter/i18n.py`).
 - **`applyWidgetScale()`** (on `whenReady` + `resize`) sets `#moe-root`'s `transform: scale(k)` so the widget height matches WG's viewport-driven bottom-bar slot boxes; `k = 1 + GROWTH·(vp/scale − SIZE_REF)/SIZE_REF` (`SIZE_REF=1080`, `GROWTH=0.625`). See the CSS-notes anchor/height bullets for the full rem-vs-vh reasoning.
+- **`posW`/`posH` are NOT the widget's width/height** — they are the *viewport* size (`window.innerWidth`/`innerHeight`) captured at pin time, stored only to rescale the widget's *position* proportionally when the resolution/UI-scale changes. They are internal (written only via `setPosition`), never user-facing controls — the v1.4.0 drag-to-reposition feature moves the widget only (Ctrl+drag + X/Y position steppers), it does NOT resize it.
 
 ## CSS notes (`MoECalculator.css`)
 

@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.3.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.4.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +95,8 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.3.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.3.0 (2026-07-17) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
+**v0.1.0 through v1.4.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.4.0 (2026-07-20) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
 client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
@@ -104,7 +104,12 @@ probit curve + self-calibrating EWMA `k`) plus the R3 row-backdrop fix — all c
 v1.1.0 tag but unreleased until then; **1.3.0** is a minor bump carrying the settings-surface
 overhaul — migrated to Aslain **ModsSettingsAPI** + bundled **Mods List API** (settings now surface
 in WoT's in-game "Modification list" window), a redesigned **two-column MSA settings panel**, and
-resolution-correct **high-DPI/4K garage widget** size + position (plus an enlarged MoE award tooltip).
+resolution-correct **high-DPI/4K garage widget** size + position (plus an enlarged MoE award tooltip);
+**1.3.1 (2026-07-19)** is a patch; **1.4.0 (2026-07-20)** is a minor bump carrying **garage widget
+drag-to-reposition** (Ctrl+drag + numeric X/Y position steppers + a "Follow Carousel" toggle + a
+reset command — moves only, no resizing) and **MSA settings-value migration** so a `SETTINGS_VERSION` bump (now **v5**) no longer
+wipes users' saved settings (migrates the persisted Aslain ModsSettingsAPI values across the bump,
+fail-soft to a fresh install).
 Both channels now ship the **same single build** (WG-API threshold source): the GitHub release
 carries `MoECalculator-Setup-<ver>.exe` + the bare `.wotmod`, and `MoECalculator_<ver>.zip`
 (same `.wotmod` + vendor deps) is uploaded manually to
@@ -115,6 +120,13 @@ from izeberg 1.7.0 in v1.3.0) alongside OpenWG GameFace, plus **Mods List API**
 settings in the in-game "Modification list" window. The installer self-update reads the GitHub Atom
 feed, so keep the `vX.Y.Z` tag + `MoECalculator-Setup-<ver>.exe` asset-name convention. Follow
 `wotmod-release` for the bump→tag→build→publish flow.
+
+**Every release cut MUST refresh this "Release state" prose** to the newly published version —
+promote it to "current Latest", add the prior version to the history line, and correct the
+canonical `src/meta.xml` value noted above. Treat this edit as a required, non-optional step of
+the release, same as bumping the version files. **Do NOT** end the post-release summary with a
+reminder to manually upload the zip to wgmods — the maintainer already knows the zip is a manual
+upload and has asked not to be reminded.
 
 **GitHub release title = `vX.Y.Z` (v-prefixed), strictly.** Both the tag AND the release title
 are `vX.Y.Z` (e.g. `v1.3.0`) — never the bare `X.Y.Z`. Every prior release (v0.1.0 … v1.3.0)
