@@ -84,3 +84,33 @@ BATTLE_ANCHOR_X_SHIFT = 5
 # The "5-digit" cutoff: a value STRICTLY greater than this (i.e. >= 10000) prints a fifth
 # digit and widens WG's panel. Compared against getTotalEfficiency() totals.
 EFFICIENCY_WIDE_THRESHOLD = 9999
+
+# Centre-screen progress-bar window anchor. Unlike the corner overlay's FIXED logical offsets
+# above (which track a Flash panel laid out in logical units), this one is genuinely
+# PROPORTIONAL: the bar must clear WG's fly-up ribbon feed, whose baseline measures 75.1vh, so
+# it is placed as a FRACTION of the window's movable vertical extent. 0.865 is the tuner's
+# settled stage placement (tools/dev/gen_bar_tuner.ps1, "top 86.5vh"). X is centred by the
+# far-sentinel identity in positioning.anchor_centred; the offset is the tuner's 0rem.
+PROGRESS_ANCHOR_Y_FRAC = 0.865
+PROGRESS_ANCHOR_X_OFFSET = 0
+
+# COMPENSATION for the bar's placement -- a WIRE CONTRACT with the JS. TWO terms, summed:
+#   1. -SHIFT_Y_REM (== -44). MoEProgress.js shifts the whole composition into POSITIVE
+#      document coordinates (nothing may sit at a negative x/y or the engine clips it there,
+#      whatever the surface size), by SHIFT_X_REM / SHIFT_Y_REM. That pushes the bar
+#      SHIFT_Y_REM down inside its own surface, so the window moves UP by exactly that much
+#      and the bar stays put on screen. Keep in lockstep with MoEProgress.js SHIFT_Y_REM
+#      (1rem == 1 logical px): if SHIFT_Y_REM changes, THIS constant must change with it.
+#   2. +round(PROGRESS_ANCHOR_Y_FRAC * 92) (== +80). UNIT CONVERSION. anchor_centred applies
+#      the fraction to the MOVABLE EXTENT (space_h - surface_h, surface_h == 92 == the JS's
+#      VIEW_H_REM), not to the viewport, so a bare 0.865 landed the track at
+#      int(988*0.865) + 44 - 44 = 854 of 1080 == 79.1vh, not the tuned 86.5vh. Adding
+#      frac*surface_h back cancels the -frac*surface_h the extent form subtracts, at EVERY
+#      resolution: 0.865*(H-92) + 0.865*92 == 0.865*H. At 1080 the track top is now
+#      854 + 44 + 36 = 934 (== 0.865*1080 within the extent term's 1px int() floor).
+# CONSEQUENCE: this is NO LONGER a plain mirror of -SHIFT_Y_REM -- the two are related but not
+# equal, and PROGRESS_ANCHOR_Y_FRAC above now genuinely reads as "fraction of viewport height".
+# X gets NO compensation on purpose: anchor_centred's `max_x // 2` centres whatever surface
+# width the view asks for and the composition is symmetric about its own centre, so the
+# horizontal centring self-calibrates (and needs no unit conversion either). Do not fight it.
+PROGRESS_ANCHOR_Y_OFFSET = 36

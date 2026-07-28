@@ -310,3 +310,117 @@ def test_reconcile_ownership_empty_is_noop(monkeypatch):
     moe_wgapi.reconcile_ownership()            # unsynced roster -> no seed, no diff
     assert moe_wgapi._owned is None
     assert calls == []
+
+
+# --- shared prefs-dir helpers (data_dir / read_json / write_json) -------------
+# REGRESSION: both persisted stores were rewritten onto these three shared helpers (now also
+# used by adapter/sample_log), so the round-trips below guard that the refactor kept serving the
+# threshold cache and the fetch list. `data_dir` is the injection seam -- it imports `helpers`
+# lazily, so pointing it at tmp_path is all it takes to run the real disk path game-closed.
+
+def _use_tmp(monkeypatch, tmp_path):
+    monkeypatch.setattr(moe_wgapi, "data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(moe_wgapi, "_table", {})
+    monkeypatch.setattr(moe_wgapi, "_want", {})
+    monkeypatch.setattr(moe_wgapi, "_updated_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: _FETCHED)
+
+
+def test_read_json_write_json_round_trip(monkeypatch, tmp_path):
+    path = str(tmp_path / "sub" / "blob.json")
+    moe_wgapi.write_json(path, {"a": 1, "b": [2, 3]})     # creates the directory
+    assert moe_wgapi.read_json(path) == {"a": 1, "b": [2, 3]}
+
+
+def test_read_json_missing_is_none(tmp_path):
+    assert moe_wgapi.read_json(str(tmp_path / "nope.json")) is None
+
+
+def test_read_json_corrupt_is_none(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_bytes(b'{"a": 1')                          # truncated
+    assert moe_wgapi.read_json(str(path)) is None
+
+
+def test_write_json_overwrites_and_leaves_no_tmp(tmp_path):
+    path = str(tmp_path / "blob.json")
+    moe_wgapi.write_json(path, {"gen": 1})
+    moe_wgapi.write_json(path, {"gen": 2})
+    assert moe_wgapi.read_json(path) == {"gen": 2}
+    assert not (tmp_path / "blob.json.tmp").exists()      # tmp+rename left nothing behind
+
+
+def test_write_json_fails_soft(tmp_path):
+    # An unwritable target (the path is a directory) degrades to in-memory-only, never raises.
+    (tmp_path / "dir.json").mkdir()
+    moe_wgapi.write_json(str(tmp_path / "dir.json"), {"a": 1})
+
+
+def test_threshold_cache_save_load_round_trip(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    row = {1: 2544, 2: 3634, 3: 4512, 100: 5229}
+    monkeypatch.setattr(moe_wgapi, "_table", {69153: dict(row)})
+    monkeypatch.setattr(moe_wgapi, "_updated_at", _UPD)
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
+    moe_wgapi._save_cache()
+
+    monkeypatch.setattr(moe_wgapi, "_table", {})
+    monkeypatch.setattr(moe_wgapi, "_updated_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: _FETCHED + 3600)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {69153: row}               # int keys restored
+    assert moe_wgapi._updated_at == _UPD
+    assert moe_wgapi._fetched_at == _FETCHED
+
+
+def test_threshold_cache_stale_on_disk_is_not_adopted(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    monkeypatch.setattr(moe_wgapi, "_table", {69153: {1: 1, 2: 2, 3: 3, 100: 4}})
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
+    moe_wgapi._save_cache()
+
+    monkeypatch.setattr(moe_wgapi, "_table", {})
+    monkeypatch.setattr(moe_wgapi, "_now_epoch",
+                        lambda: _FETCHED + moe_wgapi._REVALIDATE_SECONDS + 1)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {}                         # past the window -> refetch
+
+
+def test_threshold_cache_load_without_a_file_is_a_noop(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {}
+
+
+def test_fetch_list_save_load_round_trip(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    monkeypatch.setattr(moe_wgapi, "_want", {69153: 1700000000, 1: 1699999999})
+    moe_wgapi._save_list()
+
+    monkeypatch.setattr(moe_wgapi, "_want", {})
+    moe_wgapi._load_list()
+    assert moe_wgapi._want == {69153: 1700000000, 1: 1699999999}
+
+
+def test_fetch_list_load_without_a_file_keeps_the_list_empty(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    moe_wgapi._load_list()
+    assert moe_wgapi._want == {}
+
+
+def test_fetch_list_corrupt_on_disk_keeps_the_list_empty(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    (tmp_path / "moe_fetch_list.json").write_bytes(b"not json at all")
+    moe_wgapi._load_list()
+    assert moe_wgapi._want == {}
+
+
+def test_the_two_stores_and_the_recorder_are_separate_files(monkeypatch, tmp_path):
+    # One shared data_dir, four distinct filenames -- a path collision would have one store
+    # silently overwrite another.
+    _use_tmp(monkeypatch, tmp_path)
+    names = {moe_wgapi._store_path(), moe_wgapi._list_store_path()}
+    assert len(names) == 2
+    assert all(str(tmp_path) in n for n in names)

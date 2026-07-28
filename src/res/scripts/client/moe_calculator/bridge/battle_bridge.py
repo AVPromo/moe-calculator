@@ -18,11 +18,14 @@ from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG
 from moe_calculator.adapter import battle_adapter
 from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
-from moe_calculator.domain.battle_builder import build_battle_model, battle_bar_visible
-from moe_calculator.domain.constants import EFFICIENCY_WIDE_THRESHOLD
+from moe_calculator.adapter import sample_log
+from moe_calculator.domain.battle_builder import (
+    build_battle_model, battle_bar_visible, ewma_project_raw, mark_axis, marks_from_percentile)
+from moe_calculator.domain.constants import EFFICIENCY_WIDE_THRESHOLD, EWMA_K
 from moe_calculator.domain.positioning import efficiency_panel_wide
 from moe_calculator.bridge import battle_view
 from moe_calculator.bridge import mod_settings
+from moe_calculator.bridge import progress_view
 
 # Set while a coalesced refresh is queued, so a burst of onTotalEfficiencyUpdated fires
 # collapses to a single deferred refresh().
@@ -38,6 +41,18 @@ _data_listener_armed = False
 # reliable than the garage-side onResultPosted, whose subscription is torn down with the hangar
 # during the battle and re-armed only after the result has already posted.
 _battle_recorded = False
+
+# The battle's PREDICTION of record for the prediction<->outcome recorder: the (snapshot, model)
+# of the last non-spectating push, i.e. the overlay's final state this battle. Flushed to
+# adapter/sample_log once on teardown (and reset there), mirroring the once-per-battle
+# _battle_recorded idiom above. Diagnostics only -- nothing reads it back into the model.
+_last_prediction = None
+
+# The battle's very LAST push with a readable vehicle, SPECTATING INCLUDED -- so the recorder can
+# carry the post-death state alongside the prediction of record (see sample_log._FINAL_KEYS for
+# why: WG keeps crediting the player after death and the dossier ground truth includes it).
+# Diagnostics only; it never becomes the prediction of record.
+_last_final_push = None
 
 # The full-stats scoreboard views currently open, keyed by their g_eventBus eventType. While
 # any is open the overlay hides (it would otherwise clutter the full-screen scoreboard). All
@@ -65,9 +80,14 @@ _last_wide = None
 _in_battle = False
 
 
-# Whether Alt is currently held, as reported by the event-driven battle_input hook. Drives the
-# "Show on Alt Key" mode: while the In-Battle Widget master is on AND that mode is on, the
-# overlay's visible flag follows this. Whether the mode CARES is decided in battle_bar_visible.
+# Whether Alt is currently held, as reported by the event-driven battle_input hook. TWO readers:
+#  - the corner overlay's "Show on Alt Key" mode -- while the In-Battle Widget master is on AND
+#    that mode is on, the overlay's visible flag follows this (decided in battle_bar_visible);
+#  - the centre-screen progress bar, which gets it pushed as `altHeld` and treats it as an
+#    ADDITIVE show trigger (pull the bar up and hold it), never a gate.
+# Read this module global -- do NOT call battle_input.install_alt_key_listener again for a second
+# consumer: its `_on_change` is a SINGLE callback slot, so a second install would silently
+# replace the overlay's handler and kill its Alt peek.
 _alt_held = False
 
 
@@ -87,13 +107,17 @@ def _on_mount_refresh(*args, **kwargs):
         # Clear any scoreboard flag left over from a prior battle / relogin / replay teardown,
         # so a stale key can never keep the fresh battle's overlay hidden.
         _open_overlays.clear()
-        if not mod_settings.battle_enabled():
-            # The In-Battle Widget master is off -> the overlay is never shown, so don't open
-            # the window this battle (the "Show on Alt Key" child is inert while the master is
-            # off). A live enable opens it mid-battle (see apply_settings); _in_battle stays
-            # True so that path fires.
+        # The two windows are independently settings-gated. The In-Battle Widget master being
+        # off means the corner overlay is never shown, so don't open ITS window this battle (the
+        # "Show on Alt Key" child is inert while the master is off) -- but the centre-screen
+        # progress bar has its own checkbox and may still want to open. A live enable of either
+        # opens it mid-battle (see apply_settings); _in_battle stays True so that path fires.
+        if not (mod_settings.battle_enabled() or mod_settings.progress_bar_enabled()):
             return
-        battle_view.open_window()
+        if mod_settings.battle_enabled():
+            battle_view.open_window()
+        if mod_settings.progress_bar_enabled():
+            progress_view.open_window()
         install_all_listeners()
         moe_wgapi.start()  # idempotent; the garage path may already have kicked it
         refresh()
@@ -141,12 +165,15 @@ def _on_observed_vehicle_changed(*args, **kwargs):
 
 
 def _on_teardown(*args, **kwargs):
-    # Avatar became non-player (battle exit) -> tear down the overlay window; the next
-    # battle mount re-opens it. The event lists are rebuilt by the arena teardown regardless.
+    # Avatar became non-player (battle exit) -> tear down BOTH windows; the next battle mount
+    # re-opens whichever is enabled. The event lists are rebuilt by the arena teardown regardless.
+    # The progress bar needs its OWN close here or its window leaks across battles.
     global _in_battle
     try:
         _in_battle = False
+        _flush_prediction()
         battle_view.close_window()
+        progress_view.close_window()
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -155,9 +182,11 @@ def _on_scale_changed(*args, **kwargs):
     # Interface scale changed mid-battle (settingsCore.interfaceScale.onScaleChanged) -> the
     # logical GUI space resized, so re-place the overlay to keep it tracking WG's efficiency
     # panel (the fixed logical anchor is scale-invariant, but the window must be re-applied
-    # because the movable extent changed).
+    # because the movable extent changed). The bar's anchor is a FRACTION of that extent, so it
+    # needs re-placing for the same reason.
     try:
         battle_view.apply_position()
+        progress_view.apply_position()
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -399,25 +428,105 @@ def _record_played_tank(snap):
         LOG_CURRENT_EXCEPTION()
 
 
+# --- prediction<->outcome recorder (diagnostics) ------------------------------
+
+def _note_prediction(snap, model):
+    """Remember this push as the battle's prediction of record, so the teardown can hand it to
+    adapter/sample_log for the post-battle dossier read to grade. Skipped while spectating or
+    with no readable vehicle (the readout isn't ours then), so the LAST push that was genuinely
+    ours wins. The trailing push is ALSO kept separately, spectating included, for the
+    final_* diagnostic columns. Guarded -- the recorder must never break a push."""
+    global _last_prediction, _last_final_push
+    try:
+        if snap.has_vehicle and snap.vehicle_int_cd:
+            # Every push, spectating included -- the trailing one instruments post-mortem credit.
+            _last_final_push = (snap, model)
+            if not snap.is_spectating:
+                _last_prediction = (snap, model)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _flush_prediction():
+    """Stash the battle's final prediction for the post-battle dossier read to resolve, then
+    clear it so the next battle starts fresh. Once per battle, on teardown. Every field is
+    coerced to a plain JSON scalar/dict here (no game objects reach the log) and the whole body
+    is guarded -- a recorder failure must never break the teardown."""
+    global _last_prediction, _last_final_push
+    pair = _last_prediction
+    final = _last_final_push
+    _last_prediction = None
+    _last_final_push = None
+    if pair is None:
+        return
+    snap, model = pair
+    try:
+        pred = {
+            "int_cd": int(snap.vehicle_int_cd or 0),
+            "ewma_k": float(EWMA_K),
+            "thresholds": dict(snap.thresholds or {}),
+            "pre_percentile": float(snap.pre_percentile or 0.0),
+            "pre_avg_damage": int(snap.pre_avg_damage or 0),
+            "baseline_known": bool(getattr(snap, "baseline_known", False)),
+            "damage": int(snap.damage or 0),
+            "track_assist": int(getattr(snap, "track_assist", 0) or 0),
+            "spot_assist": int(getattr(snap, "spot_assist", 0) or 0),
+            "stun": int(snap.stun or 0),
+            "team_damage": int(snap.team_damage or 0),
+            "combined_damage": int(model.combined_damage or 0),
+            "counted_assist": int(model.counted_assist or 0),
+            "assist_kind": str(model.assist_kind or ""),
+            "proj_avg_damage": int(model.proj_avg_damage or 0),
+            "predicted_percent": float(model.cur_percent or 0.0),
+            "pct_delta": float(model.pct_delta or 0.0),
+            "has_data": bool(model.has_data),
+            "has_baseline": bool(model.has_baseline),
+        }
+        # The battle's trailing push, spectating included and guarded to the SAME tank. These two
+        # columns exist so the data answers the post-mortem-credit question without a live-client
+        # session: dying mid-battle makes our state AT DEATH the prediction of record, while WG
+        # keeps crediting us afterwards (burn damage from our fires, stun from a landed shell) and
+        # the dossier ground truth includes that credit. Equal to the prediction => a non-issue;
+        # divergent => the death path systematically under-predicts by that much.
+        if final is not None and int(final[0].vehicle_int_cd or 0) == pred["int_cd"]:
+            pred["final_combined_damage"] = int(final[1].combined_damage or 0)
+            pred["final_percent"] = float(final[1].cur_percent or 0.0)
+        sample_log.stash(pred)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 # --- push --------------------------------------------------------------------
 
 def refresh():
-    """Re-push the current battle model into the open overlay window's ViewModel."""
+    """Re-push the current battle model into whichever of our two battle windows are open.
+
+    ONE snapshot read + ONE model build per call, shared by both pushes: the coalesced
+    efficiency tick must cost a single recompute, not one per window."""
     view = battle_view.active_view()
-    if view is None:
+    bar = progress_view.active_view()
+    if view is None and bar is None:
         return False
-    push(view.viewModel)
-    return True
-
-
-def push(rvm):
-    """Recompute the in-battle MoE model and write it into rvm."""
-    if rvm is None:
-        return
     try:
         snap = battle_adapter.build_battle_snapshot()
         _record_played_tank(snap)
         model = build_battle_model(snap)
+        _note_prediction(snap, model)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return False
+    if view is not None:
+        push(view.viewModel, snap, model)
+    if bar is not None:
+        push_progress(bar.viewModel, snap, model)
+    return True
+
+
+def push(rvm, snap, model):
+    """Write the recomputed in-battle overlay model into rvm."""
+    if rvm is None:
+        return
+    try:
         overlay_open = bool(_open_overlays)
         visible = battle_bar_visible(snap.in_battle, snap.has_vehicle, snap.is_spectating,
                                      overlay_open=overlay_open,
@@ -444,27 +553,72 @@ def push(rvm):
         LOG_CURRENT_EXCEPTION()
 
 
-def apply_settings():
-    """Apply the battle-overlay settings live (the mod_settings change callback).
+def push_progress(rvm, snap, model):
+    """Write the centre-screen progress bar's model into rvm (a ProgressVM).
 
-    The window must exist whenever the "In-Battle Widget" master is on (the "Show on Alt Key"
-    child is inert while the master is off, so it never opens the window on its own). Master off
-    -> close it if open. Master on while in a battle -> open it now (arm + kick data + push) so
-    the toggle takes effect without waiting for the next battle. (Under the Alt-key mode the
-    window opens but stays hidden until Alt is held -- push/battle_bar_visible decides visible.)"""
+    The bar works in COMBINED DAMAGE along the mark axis, so it takes the axis ends plus the two
+    averages and derives everything else (position, delta, requirement-met) in JS. Its `visible`
+    reuses battle_bar_visible's base gating (in battle, own vehicle, not spectating, no full-stats
+    scoreboard) with its OWN checkbox as the master and alt_mode off -- Alt is an ADDITIVE show
+    trigger for this widget (pushed as altHeld), not a gate. Without a career baseline
+    (replay / relogin, BUG B) pre_avg is a false 0 and the axis position would be nonsense, so the
+    bar stays hidden entirely rather than dashing values out like the overlay does.
+
+    projAvg is pushed UNROUNDED (ewma_project_raw + a Real VM property), unlike the overlay's
+    integer `projAvgDamage`: the bar's only show-trigger is the JS change-detect comparing
+    successive pushes, and at k ~= 0.02 an integer proj moves ~2 steps across a whole battle, so
+    rounding it anywhere on this path is what kept the bar from ever appearing. MoEProgress.js's
+    fmt() rounds for display."""
+    if rvm is None:
+        return
     try:
-        if not mod_settings.battle_enabled():
-            if battle_view.active_view() is not None:
-                battle_view.close_window()
-            return
-        if _in_battle and battle_view.active_view() is None:
-            battle_view.open_window()
+        marks = marks_from_percentile(snap.pre_percentile)
+        axis_lo, axis_hi = mark_axis(snap.thresholds, marks)
+        visible = (battle_bar_visible(snap.in_battle, snap.has_vehicle, snap.is_spectating,
+                                      overlay_open=bool(_open_overlays),
+                                      enabled=mod_settings.progress_bar_enabled())
+                   and model.has_baseline)
+        pre_avg = snap.pre_avg_damage or 0
+        proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
+        has_data = axis_hi > axis_lo
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s" % (
+            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, _alt_held))
+        with rvm.transaction() as tx:
+            tx.setVisible(visible)
+            tx.setMarks(marks)
+            tx.setAxisLo(axis_lo)
+            tx.setAxisHi(axis_hi)
+            tx.setPreAvg(pre_avg)
+            tx.setProjAvg(proj_avg)
+            tx.setHasData(has_data)
+            tx.setAltHeld(_alt_held)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def apply_settings():
+    """Apply the battle settings live (the mod_settings change callback).
+
+    Each of the two windows must exist whenever its own master checkbox is on -- the corner
+    overlay's "In-Battle Widget" (the "Show on Alt Key" child is inert while that master is off,
+    so it never opens the window on its own) and the bar's "Next Mark Progress Bar". Master off
+    -> close that window if open. Master on while in a battle -> open it now (arm + kick data +
+    push) so the toggle takes effect without waiting for the next battle. (Under the Alt-key mode
+    the overlay window opens but stays hidden until Alt is held -- push/battle_bar_visible decides
+    visible.) A trailing re-push makes a live MODE switch, which opens nothing, take effect too."""
+    try:
+        opened = False
+        for enabled, module in ((mod_settings.battle_enabled(), battle_view),
+                                (mod_settings.progress_bar_enabled(), progress_view)):
+            if not enabled:
+                if module.active_view() is not None:
+                    module.close_window()
+            elif _in_battle and module.active_view() is None:
+                module.open_window()
+                opened = True
+        if opened:
             install_all_listeners()
             moe_wgapi.start()
-            refresh()
-        else:
-            # Window already open (or not in battle) -> just re-push so a live mode switch
-            # (e.g. Alt-key mode toggled) re-evaluates the visible flag immediately.
-            refresh()
+        refresh()
     except Exception:
         LOG_CURRENT_EXCEPTION()

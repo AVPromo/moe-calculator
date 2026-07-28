@@ -91,3 +91,46 @@ def test_build_snapshot_tail_guard_degrades_on_raise(monkeypatch):
     monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", boom)
     snap = ea.build_snapshot()
     assert snap.has_vehicle is False
+
+
+# --- ground truth for the prediction<->outcome recorder ----------------------
+# This dossier read IS the actual outcome, and it already runs on the post-battle items-cache
+# sync -- so build_snapshot hands it to adapter/sample_log next to baseline_cache.remember.
+
+def _spy_resolve(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ea.sample_log, "resolve",
+                        lambda *a: calls.append(a) or False)
+    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", lambda cd: {1: 1, 2: 2, 3: 3, 100: 4})
+    monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
+    return calls
+
+
+def test_build_snapshot_reports_the_outcome_to_the_sample_log(monkeypatch):
+    calls = _spy_resolve(monkeypatch)
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (2, 73.7, 1800, 1240))
+    ea.build_snapshot()
+    # (int_cd, post_percentile, post_avg_damage, post_battles) -- battlesCount is the pairing aid.
+    assert calls == [(1073, 73.7, 1800, 1240)]
+
+
+def test_build_snapshot_tolerates_a_three_tuple_read(monkeypatch):
+    # _read_moe grew a trailing battlesCount; the unpack is indexed + length-guarded, so a stub
+    # (or an older read path) returning the 3-tuple still builds a snapshot -- battles just 0.
+    calls = _spy_resolve(monkeypatch)
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (2, 73.7, 1800))
+    snap = ea.build_snapshot()
+    assert snap.marks == 2 and snap.cur_percentile == 73.7 and snap.cur_avg_damage == 1800
+    assert calls == [(1073, 73.7, 1800, 0)]
+
+
+def test_sample_log_raise_degrades_instead_of_propagating(monkeypatch):
+    # The recorder call sits INSIDE build_snapshot's guarded body, so a raise degrades to a
+    # hidden bar rather than propagating into the hangar mount (same contract as the tail guard
+    # above). sample_log.resolve is itself fully guarded, so this is belt-and-braces -- pinned
+    # so the recorder can never be moved outside the guard unnoticed.
+    _spy_resolve(monkeypatch)
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (2, 73.7, 1800, 1240))
+    monkeypatch.setattr(ea.sample_log, "resolve", lambda *a: 1 / 0)
+    snap = ea.build_snapshot()
+    assert snap.has_vehicle is False

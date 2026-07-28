@@ -63,3 +63,52 @@ def anchor_top_left(max_x, max_y, x_from_left, y_from_bottom):
     x = min(max(0, x_from_left), max_x)
     y = min(max(0, max_y - y_from_bottom), max_y)
     return x, y
+
+
+def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
+    """Top-left (x, y) in logical GUI space for a HORIZONTALLY CENTRED window.
+
+    Used by the centre-screen progress bar, where -- unlike the corner overlay above -- the
+    vertical placement is genuinely PROPORTIONAL (it must clear WG's fly-up ribbon feed,
+    whose baseline sits at ~75.1vh) rather than a fixed logical offset tracking a Flash panel.
+
+    `max_x, max_y` is the movable extent (= logical space - surface size) recovered by the
+    caller's far-sentinel clamp. That is the whole trick on X: max_x == space_w - surface_w,
+    so `max_x // 2` centres the surface EXACTLY without this function knowing either width.
+    `y_frac` places the top edge that fraction down the vertical extent (0.0 = top,
+    1.0 = bottom); `x_offset` / `y_offset` are signed logical-px nudges off centre / off the
+    proportional Y. Both axes are clamped on-screen. Fail-soft: an unusable (non-numeric /
+    NaN) y_frac or either offset degrades to 0 -- top edge / dead centre -- so a bad value can
+    never raise into the placement path.
+
+    `y_offset` exists to CANCEL an intra-surface offset: the bar's front end rigidly
+    translates its whole composition into positive document coordinates so nothing is clipped
+    at the document origin (MoEProgress.js SHIFT_X_REM / SHIFT_Y_REM), which pushes the bar
+    that far DOWN inside its own surface. Moving the window UP by the same amount (a NEGATIVE
+    y_offset, constants.PROGRESS_ANCHOR_Y_OFFSET) leaves the bar exactly where it was on
+    screen. X needs no such term: `max_x // 2` centres whatever surface width the view asks
+    for, and the composition is symmetric about its own centre, so the centring self-adapts."""
+    max_x = _int(max_x)
+    max_y = _int(max_y)
+    frac = _float(y_frac)
+    x = min(max(0, max_x // 2 + _int(x_offset)), max_x)
+    y = min(max(0, int(max_y * frac) + _int(y_offset)), max_y)
+    return x, y
+
+
+def _int(value):
+    """int(value), or 0 for anything unusable (None / non-numeric / NaN)."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return 0 if value != value else int(value)
+
+
+def _float(value):
+    """float(value), or 0.0 for anything unusable (None / non-numeric / NaN)."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if value != value else value

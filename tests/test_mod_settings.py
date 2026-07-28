@@ -3,6 +3,7 @@
 must be correct without the game: it turns whatever ModsSettingsAPI hands back (or nothing)
 into the booleans the bridges read. The MSA registration/glue is not unit-tested (it needs
 the client)."""
+import re
 import sys
 import types
 
@@ -11,15 +12,16 @@ import pytest
 from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge.mod_settings import (
     merge_settings, DEFAULTS, GARAGE_KEY, BATTLE_KEY, BATTLE_ALT_KEY,
-    COUNTED_ASSIST_KEY, LINKAGE, SETTINGS_VERSION, battle_alt_key_enabled,
-    battle_enabled, counted_assistance_enabled,
+    COUNTED_ASSIST_KEY, PROGRESS_BAR_KEY, LINKAGE, SETTINGS_VERSION,
+    battle_alt_key_enabled, battle_enabled, counted_assistance_enabled,
+    progress_bar_enabled,
     POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, FOLLOW_CAROUSEL_KEY, POS_MAX,
     clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position)
 from moe_calculator.adapter import settings_i18n
 
 
 def _defaults_with(over):
-    """A fresh copy of the full 9-key DEFAULTS with `over` (a dict) applied -- keeps the
+    """A fresh copy of the full 10-key DEFAULTS with `over` (a dict) applied -- keeps the
     exact-equality merge assertions readable now that DEFAULTS carries the position group.
     Takes a dict (not **kwargs) because the keys are runtime varName strings, not identifiers."""
     out = dict(DEFAULTS)
@@ -36,13 +38,13 @@ def _restore_settings():
 
 
 def test_defaults_when_empty_or_none():
-    # No saved store (fresh install / MSA absent) -> both widgets on, Alt-peek and the
-    # counted-assistance row off (both opt-in), the drag position at auto (0/0/0/0) and
-    # Follow Carousel Mode on.
+    # No saved store (fresh install / MSA absent) -> both widgets on, Alt-peek, the
+    # counted-assistance row and the Progress Log off (all opt-in), the drag position
+    # at auto (0/0/0/0) and Follow Carousel Mode on.
     assert merge_settings(None) == DEFAULTS
     assert merge_settings({}) == DEFAULTS
     assert DEFAULTS == {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
-                        COUNTED_ASSIST_KEY: False,
+                        COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
                         POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
                         FOLLOW_CAROUSEL_KEY: True}
 
@@ -57,9 +59,10 @@ def test_overlays_known_keys():
                            COUNTED_ASSIST_KEY: False,
                            POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                            FOLLOW_CAROUSEL_KEY: False})
-    # A full store overlays every key, position coords coerced to clamped ints.
+    # A full store overlays every key, position coords coerced to clamped ints. PROGRESS_BAR_KEY
+    # is absent from the input, so it keeps its (False) default.
     assert out2 == {GARAGE_KEY: True, BATTLE_KEY: False, BATTLE_ALT_KEY: False,
-                    COUNTED_ASSIST_KEY: False,
+                    COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
                     POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                     FOLLOW_CAROUSEL_KEY: False}
 
@@ -118,6 +121,18 @@ def test_counted_assistance_default_off_and_getter():
     assert counted_assistance_enabled() is False
 
 
+def test_progress_bar_default_off_and_getter():
+    # The centre-screen Progress Log bar ships OFF (a transient overlay is intrusive, so
+    # existing users must opt in) and the getter tracks live changes. The NAME
+    # `progress_bar_enabled` is a contract the progress-bar bridge calls -- don't rename it.
+    mod_settings._seed(DEFAULTS)
+    assert progress_bar_enabled() is False
+    mod_settings._apply({PROGRESS_BAR_KEY: True})
+    assert progress_bar_enabled() is True
+    mod_settings._apply({PROGRESS_BAR_KEY: 0})
+    assert progress_bar_enabled() is False
+
+
 # --- the foreign-broadcast bug: a payload with none of our keys must NOT reset us ----------
 
 def test_apply_preserves_current_for_absent_keys():
@@ -155,7 +170,7 @@ def test_on_changed_ignores_foreign_linkage():
     assert battle_enabled() is True
 
 
-# --- _template() structure (two columns + grouped In-Battle master/children) --------------
+# --- _template() structure (two columns) ---------------------------------------------------
 # _template() is buildable game-closed: settings_i18n.panel_text() falls back to English (no
 # `helpers`), and _grouped_column1 hits its FALLBACK branch (gui.aslainMenu absent) which is
 # exactly the manual masterVarName binding we assert below.
@@ -164,18 +179,47 @@ def _varnames(controls):
     return [c["varName"] for c in controls]
 
 
-def test_template_settings_version_is_5():
-    # Bumped 4 -> 5 when the drag-to-reposition controls landed (new varNames + a new
-    # column-2 layout), so the bump reaches an existing install and MSA rebuilds the panel.
-    assert SETTINGS_VERSION == 5
-    assert mod_settings._template()["settingsVersion"] == 5
+def _column_pairs(tmpl):
+    """Every ("columnN", settings_i18n.COLN_KEYS) pair the built template actually DECLARES.
+
+    Derived, not restated: a hand-written ("column1", "column2") list is exactly how the
+    zip-drift guard below silently stopped covering a third column when the (since reverted)
+    one-column-per-feature relayout landed. Deriving it means the next column is covered the
+    moment _template() grows it -- and a column added WITHOUT a matching COL*_KEYS tuple fails
+    here rather than mis-titling a control at runtime. Deliberately does NOT pin a column
+    COUNT: the count is the layout's business, the pairing is ours."""
+    cols = sorted(k for k in tmpl if re.match(r"^column\d+$", k))
+    assert cols, "the template declares no columns at all"
+    out = []
+    for col in cols:
+        keys = getattr(settings_i18n, "COL%s_KEYS" % col[len("column"):], None)
+        assert keys is not None, "%s has no settings_i18n.COL*_KEYS counterpart" % col
+        out.append((col, keys))
+    return out
 
 
-def test_template_column1_is_grouped_master_and_two_children():
+def test_template_settings_version_pins_the_current_layout():
+    # A STRUCTURAL change must bump this (MSA reuses the stored template until it does), and a
+    # bump wipes saved values -- so the exact number is pinned as a tripwire: bumping it is a
+    # deliberate act that must come with the migration below, never a drive-by edit. The name
+    # deliberately carries no version, only the assertion does.
+    # Bumped 7 -> 8 to REVERT the one-column-per-feature relayout: column 3 never rendered
+    # in-client and mangled the surrounding layout, so the progress-bar checkbox is back at the
+    # end of column 1. Going back to 6 would NOT reach a v7 install (a bump needs new > stored),
+    # hence 8. The "Progress Log" rename rides along and stays.
+    assert SETTINGS_VERSION == 8
+    assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
+
+
+def test_template_column1_is_the_grouped_battle_master_then_the_progress_bar():
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # Exactly three controls, in order: In-Battle master, Alt child, counted-assist child.
-    assert _varnames(col1) == [BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY]
+    # FOUR controls, in order: In-Battle master, Alt child, counted-assist child, then the
+    # standalone Progress Log checkbox trailing the group. It briefly lived in a column 3 of its
+    # own; that column never rendered in-client, so it is back here -- appended AFTER
+    # _grouped_column1 rather than passed in as a child (see the masterVarName test below).
+    assert _varnames(col1) == [BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY, PROGRESS_BAR_KEY]
+    assert [c["type"] for c in col1] == ["CheckBox"] * 4
 
 
 def test_template_column2_garage_then_positioning_group():
@@ -204,29 +248,36 @@ def test_template_steppers_are_bounded_manual_entry():
         assert s["snapInterval"] == 1
 
 
-def test_template_children_bind_to_battle_master():
+def test_template_children_bind_to_battle_master_but_progress_bar_does_not():
     # The two children carry masterVarName == the battle master's varName so MSA groups +
     # greys them out under the master. Proven via the manual-binding fallback branch (no
     # gui.aslainMenu under pytest -- see _grouped_column1).
     col1 = mod_settings._template()["column1"]
-    _master, alt_child, counted_child = col1
+    master, alt_child, counted_child, progress = col1
     assert alt_child["masterVarName"] == BATTLE_KEY
     assert counted_child["masterVarName"] == BATTLE_KEY
     # The master itself is NOT bound to anything.
-    assert "masterVarName" not in col1[0]
+    assert "masterVarName" not in master
+    # ...and neither is the Progress Log, even though it now shares column 1 with the group: it
+    # is an independent feature and must stay togglable while the In-Battle master is OFF. This
+    # is the whole reason it is appended AFTER _grouped_column1 instead of being passed in as a
+    # third child -- a grouped child inherits masterVarName and MSA greys it out with the master.
+    assert progress["varName"] == PROGRESS_BAR_KEY
+    assert "masterVarName" not in progress
 
 
 def test_template_control_defaults_match_defaults_dict():
     # Each value-bearing control's initial `value` mirrors its DEFAULTS entry (varName ==
     # DEFAULTS key). The Label header carries no varName/value and is skipped. Covers both the
-    # checkboxes and the numeric steppers (steppers default to 0 = auto).
+    # checkboxes and the numeric steppers (steppers default to 0 = auto), across EVERY column.
     tmpl = mod_settings._template()
-    for c in tmpl["column1"] + tmpl["column2"]:
-        if "varName" not in c:            # a Label header -- not a stored value
-            assert c["type"] == "Label"
-            continue
-        assert c["type"] in ("CheckBox", "NumericStepper")
-        assert c["value"] == DEFAULTS[c["varName"]]
+    for col, _keys in _column_pairs(tmpl):
+        for c in tmpl[col]:
+            if "varName" not in c:            # a Label header -- not a stored value
+                assert c["type"] == "Label"
+                continue
+            assert c["type"] in ("CheckBox", "NumericStepper")
+            assert c["value"] == DEFAULTS[c["varName"]]
 
 
 def test_grouped_column1_uses_aslain_helper_when_present(monkeypatch):
@@ -266,8 +317,7 @@ def test_col_keys_lockstep_with_template_order():
     # order matches the key tuples. Prove it: each control's rendered text == panel_text()[key].
     tmpl = mod_settings._template()
     text = settings_i18n.panel_text()
-    for col, keys in (("column1", settings_i18n.COL1_KEYS),
-                      ("column2", settings_i18n.COL2_KEYS)):
+    for col, keys in _column_pairs(tmpl):
         controls = tmpl[col]
         assert len(controls) == len(keys), (
             "%s length drifted from COL keys" % col)
@@ -278,12 +328,21 @@ def test_col_keys_lockstep_with_template_order():
 
 def test_sync_template_text_walks_built_template_in_lockstep():
     # End-to-end for the sync path: build a stored template exactly as register() would, drift
-    # every control's text, then _sync_template_text must restore each to panel_text()[key] --
-    # proving the COL*_KEYS walk lands the right string on the right control.
+    # EVERY column's control text, then _sync_template_text must restore each to panel_text()[key]
+    # -- proving the COL*_KEYS walk lands the right string on the right control.
+    #
+    # Drifting EVERY column _template() declares (not a hand-listed subset) is what proves
+    # _sync_template_text's OWN pair list covers them all: that pair list is the only thing that
+    # carries a text change -- e.g. the "Next Mark Progress Bar" -> "Progress Log" rename, or a
+    # client-language switch -- to an EXISTING install, because MSA renders from the template
+    # COPY it cached at registration. Miss a column there and an upgrader keeps reading the old
+    # label forever (it went stale once already, when a third column was added and then dropped).
     tmpl = mod_settings._template()
-    for c in tmpl["column1"] + tmpl["column2"]:
-        c["text"] = u"STALE"
-        c["tooltip"] = u"STALE"
+    columns = _column_pairs(tmpl)
+    for col, _keys in columns:
+        for c in tmpl[col]:
+            c["text"] = u"STALE"
+            c["tooltip"] = u"STALE"
     saved = {"called": False}
 
     class _FakeApi(object):
@@ -294,10 +353,11 @@ def test_sync_template_text_walks_built_template_in_lockstep():
 
     mod_settings._sync_template_text(_FakeApi())
     text = settings_i18n.panel_text()
-    for col, keys in (("column1", settings_i18n.COL1_KEYS),
-                      ("column2", settings_i18n.COL2_KEYS)):
+    for col, keys in columns:
         for control, key in zip(tmpl[col], keys):
-            assert control["text"] == text[key]["text"]
+            assert control["text"] == text[key]["text"], (
+                "%s/%s kept its STALE text -- is the column missing from "
+                "_sync_template_text's pair list?" % (col, key))
             assert control["tooltip"] == text[key]["tooltip"]
     assert saved["called"] is True   # something changed -> state persisted
 
@@ -470,10 +530,17 @@ class _FakeMsaApi(object):
         self.registered_cb = None
         self.template_cb = None
 
-    @staticmethod
-    def _defaults_from_template(template):
+    # The host walks a FIXED column1..column4 (Aslain MSA _constants.py:33), NOT just the columns
+    # this mod happens to use -- so the fake walks all four too. Do NOT trim this to the two we
+    # currently ship: restating our own column list is how the fake would quietly stop collecting
+    # a control's default the moment the layout moves it to another column, making the migration
+    # test below vacuous (exactly what a hand-listed pair did during the column-3 detour).
+    _COLUMNS = ("column1", "column2", "column3", "column4")
+
+    @classmethod
+    def _defaults_from_template(cls, template):
         d = {}
-        for col in ("column1", "column2"):
+        for col in cls._COLUMNS:
             for c in template.get(col, []):
                 if "varName" in c:
                     d[c["varName"]] = c.get("value")
@@ -548,6 +615,8 @@ def test_migration_preserves_user_values_drops_removed_key_and_seeds_new_default
     # New-to-v5 keys were absent from the old dict -> fresh defaults.
     assert mod_settings.pos_x() == 0 and mod_settings.pos_y() == 0
     assert mod_settings.follow_carousel() is True
+    # ...and so is the new-to-v6 progress-bar key (opt-in stays off across the bump).
+    assert mod_settings.progress_bar_enabled() is False
     # The removed legacy key never leaks into our cache.
     assert "legacyGoneVarName" not in mod_settings._settings
     # Persisted exactly once (reset + overlay coalesce into one debounced write).
@@ -558,6 +627,55 @@ def test_migration_preserves_user_values_drops_removed_key_and_seeds_new_default
     assert written[BATTLE_ALT_KEY] is True
     assert "enabled" in written and written["enabled"] is True
     assert "legacyGoneVarName" not in written
+
+
+def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
+    # THE data-loss guard for a LAYOUT-ONLY settingsVersion bump -- currently the revert bump that
+    # put the progress-bar checkbox back at the end of column 1. Nothing about the stored VALUES
+    # changed (no varName added, removed or renamed), only where a control is drawn, so a user must
+    # come out the other side with all TEN persisted varNames exactly as they left them. MSA has no
+    # value migration of its own: setModTemplate resets the stored dict to the template defaults on
+    # any bump, so without register()'s snapshot -> setModTemplate -> _apply(old_raw) ->
+    # updateModSettings + saveState path this bump is a silent settings wipe on every update.
+    #
+    # The stored version is derived (SETTINGS_VERSION - 1), not a literal: this test guards the
+    # BEHAVIOUR "a version bump never wipes stored values", so it must keep guarding the NEXT bump
+    # without an edit -- pinning the number here would just re-rot on every relayout.
+    #
+    # Every value below is the NON-default, so a wipe cannot masquerade as a pass: each flag is
+    # flipped from its DEFAULTS entry and each coordinate is a real pin.
+    old = {
+        "enabled": True,
+        GARAGE_KEY: False,              # default True
+        BATTLE_KEY: False,              # default True
+        BATTLE_ALT_KEY: True,           # default False
+        COUNTED_ASSIST_KEY: True,       # default False
+        PROGRESS_BAR_KEY: True,         # default False -- the control the relayout moved
+        POS_X_KEY: 700, POS_Y_KEY: 300, # default 0 (auto)
+        POS_W_KEY: 1920, POS_H_KEY: 1080,
+        FOLLOW_CAROUSEL_KEY: False,     # default True
+    }
+    for key in DEFAULTS:
+        assert old[key] != DEFAULTS[key], "%s must differ from its default to prove anything" % key
+    api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
+    _run_register(api)
+
+    # The live cache: every getter reports the user's choice, not the fresh default.
+    assert mod_settings.garage_enabled() is False
+    assert mod_settings.battle_enabled() is False
+    assert mod_settings.battle_alt_key_enabled() is True
+    assert mod_settings.counted_assistance_enabled() is True
+    assert mod_settings.progress_bar_enabled() is True
+    assert (mod_settings.pos_x(), mod_settings.pos_y()) == (700, 300)
+    assert (mod_settings.pos_w(), mod_settings.pos_h()) == (1920, 1080)
+    assert mod_settings.follow_carousel() is False
+
+    # ...and the same survived to DISK, in one coalesced write (the transient reset never lands).
+    written = api.state["settings"][LINKAGE]
+    for key, value in old.items():
+        assert written[key] == value, "%s was wiped by the settingsVersion bump" % key
+    assert api.updated == 1
+    assert api.saved == 1
 
 
 def test_migration_preserves_host_enabled_false(_run_register):

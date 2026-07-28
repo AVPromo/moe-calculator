@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""The four user settings, laid out as two columns in the MSA panel: an "In-Battle Widget"
-master (column 1) grouped with its "Show on Alt Key" + "Counted Assistance" children, and a
-standalone "In-Garage Widget" checkbox (column 2).
+"""The user settings, laid out as two columns in the MSA panel: an "In-Battle Widget" master
+grouped with its "Show on Alt Key" + "Counted Assistance" children, followed by the standalone
+"Progress Log" checkbox (column 1), and the "In-Garage Widget" checkbox with the drag-position
+group (column 2).
 
 Surfaced as ModsSettingsAPI (MSA) checkboxes in the game's in-game mod-settings menu. MSA
 (Aslain's gui.aslainMenu preferred, izeberg.modssettingsapi as a legacy fallback) is a SOFT
@@ -36,7 +37,18 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # Bumped 4 -> 5 when the drag-to-reposition controls landed: the posX/posY numeric steppers,
 # the Follow Carousel Mode checkbox, and a positioning Label (new varNames + a new column-2
 # layout), so the bump is mandatory to reach an existing install.
-SETTINGS_VERSION = 5
+# Bumped 5 -> 6 when the Next Mark Progress Bar checkbox landed (a new varName + a fourth
+# column-1 control), which is structural. register()'s migration branch carries the user's
+# existing values across the bump; the new key just takes its fresh default.
+# Bumped 6 -> 7 for a one-column-per-feature relayout that moved the progress-bar checkbox into
+# its own column 3. Bumped 7 -> 8 to REVERT that: column 3 never rendered in-client and the
+# surrounding layout came out mangled, so the checkbox is back at the end of column 1. Column
+# membership is non-structural to MSA (_settingsStructure records only varName/type/domain) and
+# register() never re-runs setModTemplate on an existing install, so ONLY a bump re-lays-out a
+# v7 install -- 6 would not do (a bump needs new > stored). The "Next Mark Progress Bar" ->
+# "Progress Log" rename rides along and is KEPT; on its own it would have been text-only
+# (_sync_template_text) and needed no bump.
+SETTINGS_VERSION = 8
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -49,6 +61,13 @@ BATTLE_ALT_KEY = "battle_widget_alt_key"
 # Optional third in-battle row: "counted assistance" = the higher of tracking / spotting / stun
 # assist this battle (the assist that MoE credits). Opt-in (default OFF).
 COUNTED_ASSIST_KEY = "counted_assistance_enabled"
+
+# Master enable for the transient centre-screen next-mark progress bar ("Progress Log"), shown
+# when the career moving average updates. Its OWN feature, NOT a child of BATTLE_KEY (it renders
+# independently of the In-Battle Widget overlay), so it sits AFTER the grouped column-1 controls
+# and carries no masterVarName.
+# Opt-in (default OFF) -- a centre-screen transient is intrusive, so existing users must ask for it.
+PROGRESS_BAR_KEY = "progress_bar_enabled"
 
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
@@ -72,12 +91,12 @@ POS_MAX = 20000
 
 _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY)
 
-# The two widgets ship ON; the Alt-peek mode and the counted-assistance row ship OFF (opt-in).
-# The drag position ships at auto (0/0/0/0) and Follow Carousel Mode ships ON. merge_settings
-# only ever overlays these known keys, so an MSA store from a newer/older template can never
-# introduce or drop a flag we act on.
+# The two widgets ship ON; the Alt-peek mode, the counted-assistance row and the next-mark
+# progress bar ship OFF (opt-in). The drag position ships at auto (0/0/0/0) and Follow Carousel
+# Mode ships ON. merge_settings only ever overlays these known keys, so an MSA store from a
+# newer/older template can never introduce or drop a flag we act on.
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
-            COUNTED_ASSIST_KEY: False,
+            COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             FOLLOW_CAROUSEL_KEY: True}
 
@@ -150,6 +169,14 @@ def battle_alt_key_enabled():
 def counted_assistance_enabled():
     """Whether the optional in-battle "counted assistance" row is enabled (default False)."""
     return bool(_settings.get(COUNTED_ASSIST_KEY, False))
+
+
+def progress_bar_enabled():
+    """Whether the transient centre-screen next-mark progress bar is enabled (default False).
+
+    Independent of battle_enabled(): the progress bar is its own feature, not part of the
+    In-Battle Widget overlay."""
+    return bool(_settings.get(PROGRESS_BAR_KEY, False))
 
 
 def pos_x():
@@ -276,10 +303,11 @@ def _grouped_column1(master, children):
 
 def _template():
     """The MSA panel descriptor. Column 1 is the "In-Battle Widget" master grouped with its
-    "Show on Alt Key" + "Counted Assistance" children; column 2 is the standalone "In-Garage
-    Widget" checkbox followed by the drag-position group: a positioning Label header, the X/Y
-    numeric steppers, and the Follow Carousel Mode checkbox. Every visible label/tooltip comes
-    from settings_i18n at the client's language (English fallback)."""
+    "Show on Alt Key" + "Counted Assistance" children, then the standalone "Progress Log"
+    checkbox; column 2 is the standalone "In-Garage Widget" checkbox followed by the
+    drag-position group: a positioning Label header, the X/Y numeric steppers, and the Follow
+    Carousel Mode checkbox. Every visible label/tooltip comes from settings_i18n at the client's
+    language (English fallback)."""
     t = settings_i18n.panel_text()
     battle_master = _checkbox(BATTLE_KEY, t["battleWidget"])
     battle_alt = _checkbox(BATTLE_ALT_KEY, t["battleAltKey"])
@@ -289,7 +317,13 @@ def _template():
         "modDisplayName": MOD_DISPLAY_NAME,
         "enabled": True,
         "settingsVersion": SETTINGS_VERSION,
-        "column1": _grouped_column1(battle_master, [battle_alt, counted]),
+        # column1: the grouped In-Battle master + its two children, then the Progress Log
+        # checkbox APPENDED AFTER the group -- outside _grouped_column1 on purpose, so it carries
+        # no masterVarName and stays togglable while the In-Battle Widget is off. Wire order MUST
+        # stay in lockstep with settings_i18n.COL1_KEYS (see _sync_template_text).
+        "column1": _grouped_column1(battle_master, [battle_alt, counted]) + [
+            _checkbox(PROGRESS_BAR_KEY, t["progressBar"]),
+        ],
         # column2: the garage master, then the drag-position group. The steppers show 0 (auto)
         # until a drag / edit pins a px; Follow Carousel Mode ships ON. The wire order here MUST
         # stay in lockstep with settings_i18n.COL2_KEYS (see _sync_template_text).

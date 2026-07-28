@@ -123,6 +123,18 @@ def _smooth_percent(damage, fit):
     return _clamp(100.0 * norm_cdf((d - mu) / sigma), 0.0, 100.0)
 
 
+def ewma_project_raw(prev_avg, cd, k=EWMA_K):
+    """`ewma_project` WITHOUT the final rounding -- the same fold as a float.
+
+    Exists because the rounding destroys the signal for any consumer that watches proj for
+    CHANGE rather than displaying it: k ~= 0.02, so a whole battle's damage moves proj by only a
+    couple of damage points and an integer proj quantises nearly every update away. The
+    centre-screen progress bar's change-detect (MoEProgress.js) needs the raw float; the corner
+    overlay, which only ever prints proj as a whole number, keeps the rounded `ewma_project`."""
+    prev = float(prev_avg or 0.0)
+    return prev + k * (float(cd or 0) - prev)
+
+
 def ewma_project(prev_avg, cd, k=EWMA_K):
     """Fold this battle's combined damage `cd` into the moving average `prev_avg` one EWMA
     step: prev + k*(cd - prev). Rounded to an integer damage value.
@@ -131,8 +143,7 @@ def ewma_project(prev_avg, cd, k=EWMA_K):
     'where you'd stand if the battle ended now', opening ~1-2 pts below career and climbing
     as real damage accrues. `combined_damage()` clamps cd to >= 0 upstream, so the fold
     never drags below prev*(1-k)."""
-    prev = float(prev_avg or 0.0)
-    return iround_half_away(prev + k * (float(cd or 0) - prev))
+    return iround_half_away(ewma_project_raw(prev_avg, cd, k))
 
 
 def build_battle_model(snapshot):
@@ -192,6 +203,53 @@ def build_battle_model(snapshot):
         pct_delta=pct_delta,
         has_data=has_data,
         has_baseline=has_baseline)
+
+
+# --- centre-screen progress bar: the mark axis --------------------------------
+# The bar spans the COMBINED-DAMAGE gap between the requirement for the mark you HOLD and the
+# requirement for the next one, so it needs a mark count -- which BattleSnapshot does not carry
+# (the dossier is unreadable in battle; see battle_types).
+
+def marks_from_percentile(pre_percentile):
+    """Mark count 0..3 implied by the career damage-rating percentile (MARK_PERCENTS).
+
+    ponytail: derived, not read. Right AT a boundary this can disagree with the mark the game
+    actually shows -- WG awards on its own rounding of a rating that keeps moving, so a career
+    standing of 64.999 or 65.001 is a coin toss and the bar would pick the neighbouring axis
+    segment for one battle. Upgrade path when that matters: stash the GARAGE's real
+    MARK_ON_GUN_RECORD.getValue() in adapter/baseline_cache (which already carries
+    pre_percentile / pre_avg from the garage into battle) and prefer it here, keeping this
+    derivation as the replay / relogin fallback."""
+    p = float(pre_percentile or 0.0)
+    marks = 0
+    for percent in MARK_PERCENTS:
+        if p >= percent:
+            marks += 1
+    return marks
+
+
+def mark_axis(thresholds, marks):
+    """The (lo, hi) combined-damage axis ends for the progress bar, as floats.
+
+    lo = the requirement for the mark HELD -- thresholds[marks] -- with 0 as the left end at
+    0 marks (nothing held yet, so the axis starts at no damage). hi = the requirement for the
+    mark being CHASED -- thresholds[marks + 1] -- with the 100th-percentile goalpost
+    (thresholds[100]) as the right end at 3 marks, where there is no higher mark. Mirrors the
+    tuner's own axis (`nx = marks >= 3 ? 100 : marks + 1`).
+
+    Returns (0.0, 0.0) when the table is missing or the resolved ends are not a usable
+    ascending pair -- the caller's "no data" path (the bar hides rather than dividing by a
+    zero-width axis)."""
+    thresholds = thresholds or {}
+    marks = min(max(0, int(marks or 0)), 3)
+    try:
+        lo = float(thresholds.get(marks, 0) or 0) if marks > 0 else 0.0
+        hi = float(thresholds.get(100 if marks >= 3 else marks + 1, 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        return 0.0, 0.0
+    if hi <= lo:
+        return 0.0, 0.0
+    return lo, hi
 
 
 def battle_bar_visible(in_battle, has_vehicle, is_spectating=False, overlay_open=False,

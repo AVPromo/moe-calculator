@@ -96,10 +96,12 @@ def test_battle_alt_key_ukrainian_translated():
 
 def test_counted_assist_present_in_master_and_col1():
     assert u"countedAssist" in S._PANEL[u"en"]
-    # LAST control in column 1 -- the second child under the In-Battle master in
-    # mod_settings._template() ([battle master, alt child, counted child]).
+    # THIRD control in column 1 -- the second child under the In-Battle master in
+    # mod_settings._template() ([battle master, alt child, counted child, progress bar]). It is
+    # the last of the GROUP, not of the column; the length is pinned by the template<->COL1_KEYS
+    # pairing test in test_mod_settings, not restated here.
     assert u"countedAssist" in S.COL1_KEYS
-    assert S.COL1_KEYS[-1] == u"countedAssist"
+    assert S.COL1_KEYS[2] == u"countedAssist"
     en = S.resolve(u"en")
     assert en[u"countedAssist"][u"label"] == u"Counted Assistance"
     assert u"ttHeader" in en[u"countedAssist"] and u"ttBody" in en[u"countedAssist"]
@@ -110,6 +112,38 @@ def test_counted_assist_ukrainian_translated():
     en = S.resolve(u"en")
     assert uk[u"countedAssist"][u"label"] == u"Зарахована допомога"
     assert uk[u"countedAssist"][u"label"] != en[u"countedAssist"][u"label"]
+
+
+# --- progressBar (the "Progress Log" control, last in column 1) ---------------
+
+def test_progress_bar_is_the_last_col1_key():
+    # The Progress Log control briefly had a column 3 of its own; that column never rendered
+    # in-client, so it is back as the LAST column-1 key, trailing the grouped In-Battle master.
+    # The TABLE KEY never changed through either move, so no translation was ever orphaned.
+    assert u"progressBar" in S._PANEL[u"en"]
+    assert S.COL1_KEYS[-1] == u"progressBar"
+    # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
+    # phantom column to mod_settings._sync_template_text's walk.
+    assert not hasattr(S, u"COL3_KEYS")
+    en = S.resolve(u"en")
+    assert en[u"progressBar"][u"label"] == u"Progress Log"   # renamed from "Next Mark Progress Bar"
+    assert u"ttHeader" in en[u"progressBar"] and u"ttBody" in en[u"progressBar"]
+
+
+def test_progress_bar_rename_reached_every_shipped_language():
+    # The revert kept the "Next Mark Progress Bar" -> "Progress Log" rename, so every one of the
+    # 11 shipped blocks must still carry a progressBar entry (a dropped one would silently fall
+    # back to English for that language only).
+    assert len(S._PANEL) == 11
+    for code in S._PANEL:
+        entry = S._PANEL[code][u"progressBar"]
+        assert entry[u"label"], u"%s has an empty progressBar label" % code
+        assert entry[u"ttHeader"] and entry[u"ttBody"], u"%s progressBar lost its tooltip" % code
+
+
+def test_progress_bar_ukrainian_translated():
+    uk = S.resolve(u"uk")
+    assert uk[u"progressBar"][u"label"] != S.resolve(u"en")[u"progressBar"][u"label"]
 
 
 # --- _norm -----------------------------------------------------------------

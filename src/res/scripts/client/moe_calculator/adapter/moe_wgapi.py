@@ -630,6 +630,53 @@ def _fetch_text(url):
     return None
 
 
+# --- shared prefs-dir persistence helpers ------------------------------------
+# The mod's writable data dir + the atomic-write / tolerant-read idiom, shared by this module's
+# two stores and by adapter/sample_log (the diagnostics recorder). One place so a path change or
+# a rename-semantics fix lands everywhere.
+
+def data_dir():
+    """Absolute path to the mod's writable data directory under the client's prefs dir.
+    `helpers` is imported lazily so this module imports under pytest (tests monkeypatch)."""
+    import helpers
+    return os.path.join(helpers.getPreferencesDirPath(), "mods_data", "14th_ua_moe")
+
+
+def read_json(path):
+    """Parse the JSON file at `path`, or None when it is missing / unreadable / corrupt.
+    Guarded -- a truncated or hand-edited file reads as absent instead of raising."""
+    try:
+        if not os.path.isfile(path):
+            return None
+        with open(path, "rb") as fh:
+            return json.loads(fh.read().decode("utf-8"))
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return None
+
+
+def write_json(path, blob):
+    """Write `blob` to `path` as JSON atomically (tmp + rename), creating the directory.
+    Guarded so a read-only / full disk degrades to in-memory-only rather than raising into a
+    caller."""
+    try:
+        directory = os.path.dirname(path)
+        if not os.path.isdir(directory):
+            os.makedirs(directory)
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as fh:
+            fh.write(json.dumps(blob).encode("utf-8"))
+        # os.rename won't overwrite on Windows/py2.7 -- remove first (small window; guarded).
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        os.rename(tmp, path)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 # --- threshold cache persistence ---------------------------------------------
 
 def _now_epoch():
@@ -639,11 +686,8 @@ def _now_epoch():
 
 
 def _store_path():
-    """Absolute path to the persisted threshold cache, under the client's writable prefs dir.
-    `helpers` is imported lazily so this module imports under pytest (tests monkeypatch)."""
-    import helpers
-    base = helpers.getPreferencesDirPath()
-    return os.path.join(base, "mods_data", "14th_ua_moe", "moe_wgapi_cache.json")
+    """Absolute path to the persisted threshold cache, under the client's writable prefs dir."""
+    return os.path.join(data_dir(), "moe_wgapi_cache.json")
 
 
 def _load_cache():
@@ -651,11 +695,9 @@ def _load_cache():
     no-op on any error / stale envelope."""
     global _updated_at, _fetched_at
     try:
-        path = _store_path()
-        if not os.path.isfile(path):
+        blob = read_json(_store_path())
+        if blob is None:
             return
-        with open(path, "rb") as fh:
-            blob = json.loads(fh.read().decode("utf-8"))
         table = fresh_table(blob, _now_epoch(), REGION)
         if table:
             _table.update(table)
@@ -673,39 +715,20 @@ def _load_cache():
 
 
 def _save_cache():
-    """Persist _table to disk atomically, stamped with the data's updated_at + region. Guarded
-    so a read-only/full disk degrades to in-memory-only rather than raising into a push."""
-    try:
-        path = _store_path()
-        directory = os.path.dirname(path)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
-        blob = {"version": _STORE_VERSION, "updated_at": _updated_at, "fetched_at": _fetched_at,
+    """Persist _table to disk atomically, stamped with the data's updated_at + region."""
+    write_json(_store_path(),
+               {"version": _STORE_VERSION, "updated_at": _updated_at, "fetched_at": _fetched_at,
                 "region": REGION,
                 "table": dict((str(cd), dict((str(k), v) for k, v in row.items()))
-                              for cd, row in _table.items())}
-        tmp = path + ".tmp"
-        with open(tmp, "wb") as fh:
-            fh.write(json.dumps(blob).encode("utf-8"))
-        # os.rename won't overwrite on Windows/py2.7 -- remove first (small window; guarded).
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-        os.rename(tmp, path)
-    except Exception:
-        LOG_CURRENT_EXCEPTION()
+                              for cd, row in _table.items())})
 
 
 # --- persistent fetch list ---------------------------------------------------
 
 def _list_store_path():
     """Absolute path to the persistent fetch list, a sibling of the threshold cache under the
-    client's writable prefs dir. `helpers` imported lazily (imports under pytest)."""
-    import helpers
-    base = helpers.getPreferencesDirPath()
-    return os.path.join(base, "mods_data", "14th_ua_moe", "moe_fetch_list.json")
+    client's writable prefs dir."""
+    return os.path.join(data_dir(), "moe_fetch_list.json")
 
 
 def _load_list():
@@ -713,11 +736,9 @@ def _load_list():
     or region (a fresh, empty list then bootstraps on _ensure_list_ready)."""
     global _want
     try:
-        path = _list_store_path()
-        if not os.path.isfile(path):
+        blob = read_json(_list_store_path())
+        if blob is None:
             return
-        with open(path, "rb") as fh:
-            blob = json.loads(fh.read().decode("utf-8"))
         ids = valid_list(blob, REGION)
         if ids:
             _want = dict(ids)
@@ -727,26 +748,10 @@ def _load_list():
 
 
 def _save_list():
-    """Persist _want to disk atomically (same tmp+rename idiom as _save_cache). Guarded so a
-    read-only/full disk degrades to in-memory-only rather than raising into a mutator."""
-    try:
-        path = _list_store_path()
-        directory = os.path.dirname(path)
-        if not os.path.isdir(directory):
-            os.makedirs(directory)
-        blob = {"version": _LIST_VERSION, "region": REGION,
-                "ids": dict((str(cd), int(rec)) for cd, rec in _want.items())}
-        tmp = path + ".tmp"
-        with open(tmp, "wb") as fh:
-            fh.write(json.dumps(blob).encode("utf-8"))
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-        os.rename(tmp, path)
-    except Exception:
-        LOG_CURRENT_EXCEPTION()
+    """Persist _want to disk atomically (shared write_json)."""
+    write_json(_list_store_path(),
+               {"version": _LIST_VERSION, "region": REGION,
+                "ids": dict((str(cd), int(rec)) for cd, rec in _want.items())})
 
 
 # --- worker thread -----------------------------------------------------------

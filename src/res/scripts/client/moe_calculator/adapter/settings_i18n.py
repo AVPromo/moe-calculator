@@ -75,8 +75,9 @@ def _row(label, header=None, body=None):
 
 # Ordered key list per column -- the wire order of the controls in the MSA template. Used by
 # mod_settings to walk a stored template in lockstep. Column 1 is the grouped In-Battle Widget
-# master + its two children (in that order); column 2 is the standalone In-Garage Widget.
-COL1_KEYS = (u"battleWidget", u"battleAltKey", u"countedAssist")
+# master + its two children (in that order), then the standalone Progress Log checkbox appended
+# after the group; column 2 is the In-Garage Widget plus the drag-position group.
+COL1_KEYS = (u"battleWidget", u"battleAltKey", u"countedAssist", u"progressBar")
 # Column 2: the standalone In-Garage Widget master, then the drag-position group -- a
 # positioning Label header, the X/Y numeric steppers, and the Follow Carousel Mode checkbox
 # (in that exact control order, so _sync_template_text walks the stored template in lockstep).
@@ -104,6 +105,12 @@ _PANEL = {
             u"Adds a third row to the battle overlay showing your counted assistance: the "
             u"higher of tracking, spotting or stun assist, with an icon for whichever is "
             u"leading."),
+        u"progressBar": _row(
+            u"Progress Log", u"Progress log",
+            u"Shows a bar in the centre of the screen when your average damage updates, "
+            u"marking where your projected average sits between the mark you hold and the "
+            u"next mark's requirement. It fades away on its own. Hold Alt to bring it up at "
+            u"any time."),
         # --- drag-to-reposition group (translated across every shipped language; see COL2_KEYS). ---
         u"positioning": _row(
             u"Widget position (px)", u"Widget position",
@@ -143,6 +150,12 @@ _PANEL = {
             u"Fügt der Gefechtsanzeige eine dritte Zeile mit deiner angerechneten "
             u"Unterstützung hinzu: dem höheren Wert aus Ketten-, Aufklärungs- oder "
             u"Betäubungsunterstützung, mit einem Symbol für den führenden Wert."),
+        u"progressBar": _row(
+            u"Fortschrittsprotokoll", u"Fortschrittsprotokoll",
+            u"Zeigt eine Leiste in der Bildschirmmitte, wenn sich dein Durchschnittsschaden "
+            u"aktualisiert. Sie zeigt, wo dein voraussichtlicher Durchschnitt zwischen der "
+            u"Marke, die du hast, und der Anforderung der nächsten Marke liegt. Sie "
+            u"verschwindet von selbst. Halte Alt, um sie jederzeit einzublenden."),
         u"positioning": _row(
             u"Widget-Position (px)", u"Widget-Position",
             u"Ziehe das Garage-Widget mit Strg+Ziehen, um es zu verschieben (halte "
@@ -185,6 +198,12 @@ _PANEL = {
             u"Ajoute une troisième ligne à la superposition de bataille indiquant votre "
             u"assistance comptabilisée : la plus élevée entre l'assistance par chenilles, "
             u"par détection ou par étourdissement, avec une icône pour celle qui domine."),
+        u"progressBar": _row(
+            u"Journal de progression", u"Journal de progression",
+            u"Affiche une barre au centre de l'écran lorsque vos dégâts moyens sont mis à "
+            u"jour. Elle indique où se situe votre moyenne prévue entre la marque que vous "
+            u"possédez et l'exigence de la marque suivante. Elle disparaît d'elle-même. "
+            u"Maintenez Alt pour l'afficher à tout moment."),
         u"positioning": _row(
             u"Position du widget (px)", u"Position du widget",
             u"Ctrl+glisser pour déplacer le widget du garage (maintenez Maj pour le "
@@ -227,6 +246,12 @@ _PANEL = {
             u"Añade una tercera fila a la superposición de batalla que muestra tu "
             u"asistencia contada: la mayor entre la asistencia por orugas, por detección "
             u"o por aturdimiento, con un icono para la que predomine."),
+        u"progressBar": _row(
+            u"Registro de progreso", u"Registro de progreso",
+            u"Muestra una barra en el centro de la pantalla cuando se actualiza tu daño "
+            u"medio. Indica dónde se sitúa tu media prevista entre la marca que tienes y el "
+            u"requisito de la siguiente marca. Desaparece por sí sola. Mantén pulsado Alt "
+            u"para mostrarla en cualquier momento."),
         u"positioning": _row(
             u"Posición del widget (px)", u"Posición del widget",
             u"Ctrl+arrastrar para mover el widget del garaje (mantén Mayús para "
@@ -269,6 +294,12 @@ _PANEL = {
             u"Aggiunge una terza riga alla sovrapposizione di battaglia che mostra la tua "
             u"assistenza conteggiata: la più alta tra assistenza ai cingoli, "
             u"all'avvistamento o allo stordimento, con un'icona per quella prevalente."),
+        u"progressBar": _row(
+            u"Registro dei progressi", u"Registro dei progressi",
+            u"Mostra una barra al centro dello schermo quando i tuoi danni medi si "
+            u"aggiornano. Indica dove si colloca la tua media prevista tra il marchio che "
+            u"possiedi e il requisito del marchio successivo. Scompare da sola. Tieni premuto "
+            u"Alt per mostrarla in qualsiasi momento."),
         u"positioning": _row(
             u"Posizione del widget (px)", u"Posizione del widget",
             u"Ctrl+trascina per spostare il widget del garage (tieni premuto Maiusc per "
@@ -310,6 +341,12 @@ _PANEL = {
             u"Dodaje trzeci wiersz nakładki bitewnej pokazujący twoje zaliczone wsparcie: "
             u"wyższą z wartości wsparcia przez unieruchomienie, wykrycie lub ogłuszenie, z "
             u"ikoną dla przeważającej."),
+        u"progressBar": _row(
+            u"Dziennik postępu", u"Dziennik postępu",
+            u"Pokazuje pasek na środku ekranu, gdy aktualizują się twoje średnie obrażenia. "
+            u"Wskazuje, gdzie twoja przewidywana średnia wypada między znakiem, który "
+            u"posiadasz, a wymaganiem następnego znaku. Znika samoczynnie. Przytrzymaj Alt, "
+            u"aby wyświetlić go w dowolnym momencie."),
         u"positioning": _row(
             u"Pozycja widżetu (px)", u"Pozycja widżetu",
             u"Ctrl+przeciągnij, aby przesunąć widżet garażu (przytrzymaj Shift, aby "
@@ -349,6 +386,12 @@ _PANEL = {
             u"Přidá do bojového překryvu třetí řádek zobrazující tvou započtenou "
             u"asistenci: vyšší z asistence pásy, průzkumem nebo omráčením, s ikonou pro "
             u"převažující."),
+        u"progressBar": _row(
+            u"Záznam postupu", u"Záznam postupu",
+            u"Zobrazí uprostřed obrazovky lištu, když se aktualizuje tvé průměrné poškození. "
+            u"Ukazuje, kde se tvůj předpokládaný průměr nachází mezi znakem, který máš, a "
+            u"požadavkem dalšího znaku. Sama zmizí. Podržením klávesy Alt ji zobrazíš "
+            u"kdykoli."),
         u"positioning": _row(
             u"Pozice widgetu (px)", u"Pozice widgetu",
             u"Ctrl+táhnutím přesuneš widget garáže (podržením Shift jej uzamkneš na jednu "
@@ -388,6 +431,12 @@ _PANEL = {
             u"Добавляет в наложение боя третью строку с вашим засчитанным содействием: "
             u"большее из содействия гусеницами, разведкой или оглушением, со значком для "
             u"преобладающего."),
+        u"progressBar": _row(
+            u"Журнал прогресса", u"Журнал прогресса",
+            u"Показывает полосу в центре экрана, когда обновляется ваш средний урон. Она "
+            u"показывает, где находится ваш прогнозируемый средний урон между имеющейся "
+            u"отметкой и требованием следующей. Полоса исчезает сама. Удерживайте Alt, чтобы "
+            u"показать её в любой момент."),
         u"positioning": _row(
             u"Позиция виджета (px)", u"Позиция виджета",
             u"Ctrl+перетаскивание перемещает виджет ангара (удерживайте Shift, чтобы "
@@ -429,6 +478,12 @@ _PANEL = {
             u"Додає третій рядок до накладання в бою: показує зараховану допомогу, більше "
             u"з допомоги гусеницями, засвітом чи оглушенням, з піктограмою відповідного "
             u"типу."),
+        u"progressBar": _row(
+            u"Журнал прогресу", u"Журнал прогресу",
+            u"Показує смугу в центрі екрана, коли оновлюється ваша середня шкода. Вона "
+            u"показує, де перебуває ваша прогнозована середня шкода між наявною позначкою та "
+            u"вимогою наступної. Смуга зникає сама. Утримуйте Alt, щоб показати її "
+            u"будь-коли."),
         u"positioning": _row(
             u"Позиція віджета (px)", u"Позиція віджета",
             u"Ctrl+перетягування переміщує віджет ангара (утримуйте Shift, щоб "
@@ -470,6 +525,12 @@ _PANEL = {
             u"Egy harmadik sort ad a csataátfedéshez, amely a beszámított segítésedet "
             u"mutatja: a lánctalpas, felderítő vagy kábító segítés közül a nagyobbat, a "
             u"vezető típus ikonjával."),
+        u"progressBar": _row(
+            u"Haladási napló", u"Haladási napló",
+            u"Sávot jelenít meg a képernyő közepén, amikor az átlagsebzésed frissül. "
+            u"Megmutatja, hol áll a várható átlagod a birtokolt jel és a következő jel "
+            u"követelménye között. Magától eltűnik. Tartsd nyomva az Altot, hogy bármikor "
+            u"előhívd."),
         u"positioning": _row(
             u"Widget pozíciója (px)", u"Widget pozíciója",
             u"Ctrl+húzással mozgathatod a garázs-widgetet (tartsd nyomva a Shiftet az egy "
@@ -508,6 +569,12 @@ _PANEL = {
             u"Sayılan yardım", u"Sayılan yardım",
             u"Savaş katmanına, sayılan yardımını gösteren üçüncü bir satır ekler: palet, "
             u"tespit veya sersemletme yardımından en yükseği, öndeki için bir simgeyle."),
+        u"progressBar": _row(
+            u"İlerleme günlüğü", u"İlerleme günlüğü",
+            u"Ortalama hasarın güncellendiğinde ekranın ortasında bir çubuk gösterir. "
+            u"Beklenen ortalamanın, sahip olduğun işaret ile sonraki işaretin gereksinimi "
+            u"arasında nerede olduğunu gösterir. Kendiliğinden kaybolur. Herhangi bir anda "
+            u"görüntülemek için Alt tuşunu basılı tut."),
         u"positioning": _row(
             u"Widget konumu (px)", u"Widget konumu",
             u"Garaj widget'ını taşımak için Ctrl+sürükle (bir eksene kilitlemek için "

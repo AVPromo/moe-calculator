@@ -195,3 +195,66 @@ class BattleMoEVM(ViewModel):
 
     def setAssistVisible(self, v):
         self._setBool(9, v)
+
+
+class ProgressVM(ViewModel):
+    """Root model for the centre-screen transient MoE progress bar (MoEProgressView).
+
+    Its OWN model, not an extension of BattleMoEVM: all ten of that model's slots are in use and
+    the bar needs almost none of them (it works in COMBINED DAMAGE along the mark axis, not in
+    percentiles). Like BattleMoEVM this IS the registered view's root ViewModel -- the JS reads it
+    with a bare ModelObserver() and no unwrap. Read-only (no reverse-channel commands).
+
+    Deliberately NO `rev` push counter: the battle window is a private, always-compositing view
+    (never a cold hangar sub-view), so it has never needed the garage's cold-mount change signal.
+    The "did anything actually change?" test that decides whether to replay the transient is done
+    JS-side by comparing the previously pushed values -- see MoEProgress.js.
+
+    Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME. The two
+    axis ends AND projAvg are Real: _setNumber casts to int(), which would round a requirement off
+    and -- far worse for projAvg -- destroy the whole signal. projAvg moves by k * combined_damage
+    (k ~= 0.02), so a full battle's worth of damage shifts it by a couple of DAMAGE POINTS; the JS
+    change-detect compares pushed values, so an int() there quantised almost every real update away
+    and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
+
+    def __init__(self, properties=8, commands=0):
+        super(ProgressVM, self).__init__(properties=properties, commands=commands)
+
+    def _initialize(self):
+        super(ProgressVM, self)._initialize()
+        self._addBoolProperty("visible", False)      # 0  false -> the bar never appears
+        self._addNumberProperty("marks", 0)          # 1  marks held 0..3 (selects the end glyphs)
+        self._addRealProperty("axisLo", 0.0)         # 2  requirement for the mark HELD (0 at 0 marks)
+        self._addRealProperty("axisHi", 0.0)         # 3  requirement CHASED (the 100 stop at 3 marks)
+        self._addNumberProperty("preAvg", 0)         # 4  career moving-avg combined damage
+        self._addRealProperty("projAvg", 0.0)        # 5  the same, with this battle folded in (EWMA).
+                                                     #    Real, NOT Number: the per-battle nudge is a
+                                                     #    few damage points, so int() quantised the
+                                                     #    JS change-detect signal away entirely
+        self._addBoolProperty("hasData", False)      # 6  the mark axis is usable (axisHi > axisLo)
+        self._addBoolProperty("altHeld", False)      # 7  Alt currently down -> pull the bar up and
+                                                     #    hold it (an ADDITIVE show trigger, not a gate)
+
+    def setVisible(self, v):
+        self._setBool(0, v)
+
+    def setMarks(self, v):
+        self._setNumber(1, v)
+
+    def setAxisLo(self, v):
+        self._setReal(2, v)
+
+    def setAxisHi(self, v):
+        self._setReal(3, v)
+
+    def setPreAvg(self, v):
+        self._setNumber(4, v)
+
+    def setProjAvg(self, v):
+        self._setReal(5, v)
+
+    def setHasData(self, v):
+        self._setBool(6, v)
+
+    def setAltHeld(self, v):
+        self._setBool(7, v)

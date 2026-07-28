@@ -89,6 +89,19 @@ def test_snapshot_carries_assist_split(monkeypatch):
     assert snap.track_assist == 900 and snap.spot_assist == 400
 
 
+def test_snapshot_indexes_the_four_field_moe_read(monkeypatch):
+    # REGRESSION: _read_moe grew a trailing battlesCount (the sample log's pairing aid). This
+    # adapter reads it BY INDEX, so the extra field must not shift the baseline it picks up --
+    # a real >0 in-battle read still trusts itself over the garage cache.
+    _patch_reads(monkeypatch)
+    monkeypatch.setattr(ba.engine_adapter, "_read_moe", lambda c: (2, 73.7, 1800, 1240))
+    baseline_cache.remember(1073, 10.0, 100)      # must NOT win over the live read
+    snap = ba.build_battle_snapshot()
+    assert snap.pre_percentile == 73.7
+    assert snap.pre_avg_damage == 1800
+    assert snap.baseline_known is True
+
+
 def test_snapshot_assist_split_defaults_zero(monkeypatch):
     # With the client closed _read_assist_split fails soft to (0, 0) -> snapshot carries 0/0
     # (the merged live `assist` covers combined damage until the split arrives).

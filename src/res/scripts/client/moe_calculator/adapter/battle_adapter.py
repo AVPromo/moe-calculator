@@ -291,7 +291,10 @@ def build_battle_snapshot():
         # Career baseline. The dossier engine_adapter._read_moe uses is a LOBBY resource --
         # getVehicleDossier returns None in battle, so this reads (0, 0.0) here. Fall back to
         # the baseline snapshotted while the tank was in the garage (see baseline_cache).
-        _marks, pre_percentile, pre_avg = engine_adapter._read_moe(int_cd)
+        # Indexed (not unpacked) so a trailing field added to _read_moe -- it also reports the
+        # career battle count now -- doesn't ripple in here; we only ever wanted these two.
+        moe = engine_adapter._read_moe(int_cd)
+        pre_percentile, pre_avg = moe[1], moe[2]
         # A real >0 in-battle read (rare) trusts itself; otherwise the baseline is trusted iff
         # the garage read this tank this session -- including a genuine 0-career freshly-bought
         # tank (baseline_cache.seen), which the >0 value cache alone can't record. Only a tank

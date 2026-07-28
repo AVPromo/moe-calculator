@@ -16,6 +16,7 @@ from moe_calculator.domain import types as t
 from moe_calculator.domain import moe_estimate
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import baseline_cache
+from moe_calculator.adapter import sample_log
 
 
 def build_snapshot():
@@ -29,10 +30,19 @@ def build_snapshot():
 
         int_cd = _safe_int(lambda: veh.intCD, 0)
         nation = _safe(lambda: veh.nationName, "") or ""
-        marks, percentile, avg_damage = _read_moe(int_cd)
+        # Tolerant unpack: _read_moe also reports battlesCount (a pairing aid for the sample
+        # recorder below), but callers/tests that stub it with the older 3-tuple still work.
+        moe = _read_moe(int_cd)
+        marks, percentile, avg_damage = moe[0], moe[1], moe[2]
+        battles = moe[3] if len(moe) > 3 else 0
         # Snapshot the career baseline for the in-battle overlay -- the dossier this reads is
         # unavailable in battle, so battle_adapter falls back to this cache (see baseline_cache).
         baseline_cache.remember(int_cd, percentile, avg_damage)
+        # Ground truth for the prediction<->outcome recorder: this dossier read IS the actual
+        # outcome, and it already runs on the post-battle items-cache sync. A no-op unless a
+        # prediction for this tank is pending AND these values moved off its pre-battle ones
+        # (adapter/sample_log; diagnostics only, fully guarded).
+        sample_log.resolve(int_cd, percentile, avg_damage, battles)
         thresholds = moe_wgapi.get_thresholds(int_cd)
         # Fallback: if the WG request for this tank completed with no usable data (errored /
         # not in the API), extrapolate from the player's own dossier point (movingAvgDamage @
@@ -75,9 +85,11 @@ def _estimate_thresholds(percentile, avg_damage):
 
 
 def _read_moe(int_cd):
-    """Read (marks 0-3, current percentile float, current moving-avg combined damage)
-    from the vehicle's TOTAL dossier. Guarded/fail-soft to (0, 0.0, 0): a never-played
-    vehicle simply has no records (getRecordValue would KeyError)."""
+    """Read (marks 0-3, current percentile float, current moving-avg combined damage, career
+    battles) from the vehicle's TOTAL dossier. Guarded/fail-soft to (0, 0.0, 0, 0): a
+    never-played vehicle simply has no records (getRecordValue would KeyError). The battle
+    count is only recorded by the sample log (stronger prediction<->battle pairing); nothing
+    in the bar reads it."""
     try:
         from helpers import dependency
         from skeletons.gui.shared import IItemsCache
@@ -85,7 +97,7 @@ def _read_moe(int_cd):
         items = dependency.instance(IItemsCache).items
         dossier = items.getVehicleDossier(int_cd)
         if dossier is None:
-            return 0, 0.0, 0
+            return 0, 0.0, 0, 0
         stats = dossier.getTotalStats()
         mog = stats.getAchievement(MARK_ON_GUN_RECORD)
         marks = _safe_int(lambda: mog.getValue(), 0)
@@ -93,7 +105,8 @@ def _read_moe(int_cd):
         percentile = float(_safe(lambda: mog.getDamageRating(), 0.0) or 0.0)
         avg_damage = _safe_int(
             lambda: dossier.getRecordValue(ACHIEVEMENT_BLOCK.TOTAL, "movingAvgDamage"), 0)
-        return marks, percentile, avg_damage
+        battles = _safe_int(lambda: stats.getBattlesCount(), 0)
+        return marks, percentile, avg_damage, battles
     except Exception:
         LOG_CURRENT_EXCEPTION()
-        return 0, 0.0, 0
+        return 0, 0.0, 0, 0
