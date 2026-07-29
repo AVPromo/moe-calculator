@@ -22,10 +22,20 @@ WHAT IT DOES
     you have selected. In the Garage it draws a percentile bar with
     the 1/2/3-mark milestones (65% / 85% / 95%) and the combined
     damage each one needs, plus your current average combined damage
-    and mark percentage. In battle it adds a small overlay over the
-    HUD showing your live combined damage against your projected
-    average, and your projected MoE percentage with the change versus
-    where you started the battle.
+    and mark percentage. Ctrl+drag the Garage bar to move it anywhere
+    on screen (Shift locks the drag to one axis). In battle it adds a
+    small overlay over the HUD showing your live combined damage
+    against your projected average, and your projected MoE percentage
+    with the change versus where you started the battle.
+
+    It can also show a transient bar in the centre of the screen
+    during battle (OFF by default, turn it on in the settings panel).
+    It fades in, holds for about five seconds and fades out on its
+    own; hold Alt to bring it up at any time. Pick one of two bars:
+    Moving Average (your projected average between the mark you hold
+    and the next mark's requirement, plus this battle's contribution)
+    or Damage Efficiency (this battle's damage against the
+    65 / 85 / 95 / 100 % requirements). Its position is fixed.
 
 INSTALL  (2 steps)
     1) Extract this archive into your World of Tanks folder, so the
@@ -42,9 +52,11 @@ DEPENDENCIES
     it. If you already run it, keep your existing copy.
 
     ModsSettingsAPI is OPTIONAL - it adds the in-game settings panel
-    where you can turn the Garage and Battle widgets on or off. Without
-    it the mod still works with both widgets enabled. Keep your existing
-    copy if you already run it.
+    where you turn the Garage and Battle widgets on or off, enable the
+    centre-screen bar and pick its variant, and set the Garage widget's
+    position. Without it the mod still works with both widgets enabled
+    and the centre-screen bar off. Keep your existing copy if you
+    already run it.
 
 UNINSTALL
     Delete com.14th_ua.moe_calculator_{VERSION}.wotmod from
@@ -63,9 +75,20 @@ UNINSTALL
     В Ангарі малює смугу за перцентилем із позначками 1/2/3 знаків
     (65% / 85% / 95%) та комбінованою шкодою, потрібною для кожного,
     а також вашу поточну середню комбіновану шкоду й відсоток знака.
-    У бою додає невеликий оверлей над HUD: поточна комбінована шкода
-    проти вашого прогнозованого середнього та прогнозований відсоток
-    MoE зі зміною відносно початку бою.
+    Ctrl+перетягування переміщує смугу в Ангарі в будь-яке місце
+    екрана (Shift фіксує перетягування за однією віссю). У бою додає
+    невеликий оверлей над HUD: поточна комбінована шкода проти вашого
+    прогнозованого середнього та прогнозований відсоток MoE зі зміною
+    відносно початку бою.
+
+    Також може показувати тимчасову смугу в центрі екрана під час бою
+    (ВИМКНЕНО за замовчуванням, увімкніть у панелі налаштувань). Вона
+    з'являється, тримається близько п'яти секунд і зникає сама;
+    утримуйте Alt, щоб показати її будь-коли. Виберіть одну з двох
+    смуг: Ковзне середнє (ваша прогнозована середня між наявною
+    позначкою та вимогою наступної, плюс внесок цього бою) або
+    Ефективність шкоди (шкода цього бою відносно вимог
+    65 / 85 / 95 / 100 %). Її позиція незмінна.
 
 ВСТАНОВЛЕННЯ  (2 кроки)
     1) Розпакуйте архів у теку World of Tanks так, щоб файли
@@ -82,9 +105,11 @@ UNINSTALL
     Якщо він уже стоїть, лишіть свою копію.
 
     ModsSettingsAPI НЕОБОВ'ЯЗКОВИЙ - додає ігрову панель налаштувань,
-    де можна вмикати/вимикати віджети в Ангарі та в бою. Без нього мод
-    працює з обома увімкненими віджетами. Якщо він уже стоїть, лишіть
-    свою копію.
+    де можна вмикати/вимикати віджети в Ангарі та в бою, увімкнути
+    смугу в центрі екрана й вибрати її варіант, а також задати позицію
+    віджета в Ангарі. Без нього мод працює з обома увімкненими
+    віджетами й вимкненою смугою в центрі екрана. Якщо він уже стоїть,
+    лишіть свою копію.
 
 ВИДАЛЕННЯ
     Видаліть com.14th_ua.moe_calculator_{VERSION}.wotmod з

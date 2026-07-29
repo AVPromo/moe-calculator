@@ -71,7 +71,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   (`NeedOpenWg`, `uninsneveruninstall`), cleans old builds, WoT-running guard, GitHub
   Atom-feed self-update. Repo `drizzer14/moe-calculator`, base name `MoECalculator-Setup`.
 - **`build_installer.ps1`** — preflights the built `.wotmod` + vendor dep, finds `ISCC.exe`, compiles → `dist/MoECalculator-Setup-<version>.exe`.
-- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip. **`readme.wgmods.txt`** — stub (superseded). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modssettingsapi_1.6.4.wotmod` + `me.poliroid.modslistapi_1.7.8.wotmod`.
+- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip (the only readme template; the old `readme.wgmods.txt` stub was deleted). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modssettingsapi_1.6.4.wotmod` + `me.poliroid.modslistapi_1.7.8.wotmod`.
 
 ## Hot-reload (the split that bites)
 

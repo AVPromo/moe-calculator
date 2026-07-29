@@ -5,10 +5,17 @@ selected vehicle:
 
 - **In the Garage** — a percentile bar with the 1 / 2 / 3-mark milestones (65% / 85% /
   95%), the combined damage each mark needs, and your current average combined damage and
-  mark percentage.
+  mark percentage. **Ctrl+drag** it to move it anywhere on screen (**Shift** locks the drag
+  to one axis).
 - **In battle** — a small overlay over the HUD showing your live combined damage against
   your projected average, and your projected MoE percentage with the change versus where
   you started the battle.
+- **In battle, centre screen** *(off by default)* — a transient progress bar that fades in,
+  holds for about five seconds and fades out on its own; **hold Alt** to bring it up at any
+  time. Two mutually exclusive variants: **Moving Average** (your projected average between
+  the mark you hold and the next mark's requirement, plus this battle's contribution) or
+  **Damage Efficiency** (this battle's damage against the 65 / 85 / 95 / 100 %
+  requirements). Turn it on in Settings.
 
 It uses the game's own mark art.
 
@@ -20,7 +27,7 @@ It uses the game's own mark art.
 |-------------|--------|
 | **Game** | World of Tanks **EU (Wargaming)** client, version **2.3.1.0**. Built and tested against this version. |
 | **Dependency** | **OpenWG GameFace** (required). The installer sets this up for you; for a manual install you add it yourself. |
-| **Optional** | **ModsSettingsAPI** — adds the in-game settings panel for turning the Garage and Battle widgets on/off. The installer adds it if missing; without it the mod still runs with both widgets enabled. |
+| **Optional** | **ModsSettingsAPI** — adds the in-game settings panel: the Garage and Battle widgets on/off, the centre-screen progress bar and its variant, and the Garage widget's position. The installer adds it if missing; without it the mod still runs with both widgets enabled and the progress bar off. |
 
 ---
 
@@ -79,11 +86,29 @@ The `mods\2.3.1.0\` folder then holds the OpenWG GameFace `.wotmod`,
 ## Settings
 
 With **ModsSettingsAPI** installed, open the in-game **Modification list** window (added by
-the bundled Mods List API) and find **14th_ua's MoE Calculator**. Two toggles, both on by
-default:
+the bundled Mods List API) and find **14th_ua's MoE Calculator**. The panel has two columns.
 
-- **Garage Widget Enabled** — the Garage percentile bar.
-- **Battle Widget Enabled** — the in-battle overlay.
+**Column 1 — in battle:**
+
+- **In-Battle Widget** *(on)* — the overlay over the HUD. Its two options below are only
+  available while it's on:
+  - **Show on Alt Key** *(off)* — show the overlay only while **Alt** is held.
+  - **Counted Assistance** *(off)* — add a third overlay row with your counted assistance.
+- **Progress Bar** *(off)* — the transient centre-screen bar. A separate feature from the
+  In-Battle Widget, so it works whether that one is on or off. The two options beneath it
+  pick which bar you get: **Moving Average** (the default) or **Damage Efficiency**. The
+  bar's position is not configurable.
+
+**Column 2 — in the Garage:**
+
+- **In-Garage Widget** *(on)* — the Garage percentile bar.
+- **Widget position (px)** — where the Garage widget is pinned. **Ctrl+drag** the widget to
+  move it (**Shift** locks to one axis); the steppers show the pinned top-left position:
+  - **Horizontal (left X)** / **Vertical (top Y)** — pixels from the left / top screen edge.
+    **0 / 0** is the default bottom-right position, which the panel's per-mod **Reset** also
+    restores.
+  - **Follow Carousel Mode** *(on)* — a dragged widget keeps shifting vertically with the
+    vehicle carousel so it never overlaps it. When off, it stays put.
 
 Changes apply immediately.
 
