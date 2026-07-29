@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>MoEEfficiencyView</title>
+        <!-- Same-origin coui:// assets: `crossorigin` is inert and `defer` is not a valid
+             <link> attribute; the module <script> defers by spec. Kept minimal.
+             ONLY MoEEfficiency.css. Deliberately NOT MoEProgress.css and NOT MoEBattle.css:
+             the tuner's emit reuses #moe-bar-root and the whole .mp-* prefix, IDENTICAL to
+             MoEProgress.css, which is harmless only because each registered view is its own
+             document. Loading both stylesheets here would collide every selector. The
+             @font-face this document needs is carried by MoEEfficiency.css itself. -->
+        <link rel="stylesheet" href="MoEEfficiency.css" />
+    </head>
+    <body>
+        <!-- Registered OpenWG Gameface view (mods/configs/res_map/MoEEfficiencyView.json) opened
+             as a CONTENT-SIZED (NOT full-screen), input-transparent window centred over the battle
+             HUD -- see bridge/efficiency_view.py, and battle_view.py for why full-screen is
+             rejected (it steals the whole-screen mouse hit-test under a raised cursor). The bar
+             root (#moe-bar-root) is created + populated by MoEEfficiency.js, which reads this
+             view's own root ViewModel (EfficiencyVM) via a bare ModelObserver().
+             #moe-bar-box below is the ONLY static markup, and it is NOT part of the bar: it is a
+             pure SIZING SHIM giving this document in-flow content. #moe-bar-root is
+             position:absolute, so it contributes no content size; with an empty body the engine's
+             size calculation has nothing to measure, times out, and applies its "Set the default
+             view size" fallback (256x256) AFTER the JS's resizeViewRem -- clobbering it. It must
+             live HERE and not be JS-created: it has to exist at the FIRST layout pass.
+             THE BOX DOES NOT PREVENT THE TIMEOUT (measured live on the Moving Average bar, whose
+             box is present, in-flow and exactly surface-sized, and whose `Size calculation
+             timeout` + 256x256 clobber still fire). MoEEfficiency.js's re-assert after that
+             deadline (SURFACE_REASSERT_MS) is the only fix and is load-bearing; the JS also keeps
+             the bar hidden until it lands (surfaceSettled), or an early Alt peek reveals a cropped,
+             mis-placed bar.
+             NOTE, unlike MoEProgressView.html: this box is sized by the TUNER'S EMIT
+             (MoEEfficiency.css, 460x51rem == the bar + its two caption rows) and is therefore NOT
+             a third copy of the JS's VIEW_W_REM x VIEW_H_REM surface. Do not "fix" it to match the
+             surface -- it is emitted, and a surface-mirror test must read the .mp-backdrop rule
+             (the composition's true bounding box) instead. -->
+        <div id="moe-bar-box"></div>
+        <script type="module" src="MoEEfficiency.js"></script>
+    </body>
+</html>

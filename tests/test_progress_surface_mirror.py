@@ -110,6 +110,50 @@ def test_the_slide_distance_matches_the_tuner_json():
             [str(rem), "0", "0", str(rem)], "%s: unexpected slide stops" % name
 
 
+def _sole_rule_decls(css, selector, what):
+    """Declarations of the rule whose ENTIRE selector list is `selector`, comments stripped.
+
+    Both halves matter and both have already drawn blood. COMMENTS: a value assertion was once
+    satisfied by a comment merely NAMING the trap -- and the comment above this file's delta rule
+    now spells out `font-size 12rem` and `2.5rem` in prose, so an unstripped search passes with the
+    rule reverted. SCOPING: MoEProgress.css carries a SECOND rule that lists `.mp-cap .mp-d` as the
+    tail of `.mp-cap .mp-v, .mp-cap .mp-d`, so a bare selector search finds THAT one first (in the
+    sibling MoEEfficiency.css it was worse still -- .mp-cap.dn emits the identical
+    `font-size: 12rem` string, and a bare grep for it passed after the delta's size was reverted).
+    Anchoring on `}` (or the file start) is what refuses a selector that is only part of a list,
+    and the count assertion refuses a silent second definition.
+    """
+    bare = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    hits = re.findall(r"(?:^|\})\s*%s\s*\{([^}]*)\}" % re.escape(selector), bare, re.S)
+    assert len(hits) == 1, "%s: expected exactly one `%s` rule, found %d" % (what, selector,
+                                                                            len(hits))
+    return hits[0]
+
+
+def test_the_delta_carries_the_efficiency_bars_size_and_nudge():
+    # A live pass settled the recent-delta's look on the Damage Efficiency bar; the maintainer asked
+    # for the SAME size and nudge here. The values are MoEEfficiency.css's `.mp-cap .mp-d` --
+    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: that bar
+    # anchors its delta out of flow (left:100% + top:0) so one translate() carries the X gap too,
+    # while this bar's delta is an in-flow flex item whose gap is already margin-left: 0.35em == the
+    # same 4.2rem at 12rem. Adding an X term here would DOUBLE the gap.
+    # The tuner is asserted alongside because MoEProgress.css is a -EmitCss output: pinning only the
+    # stylesheet lets the next re-emit revert this silently, which is how it was lost once already.
+    decls = _sole_rule_decls(_read("MoEProgress.css"), ".mp-cap .mp-d", "MoEProgress.css")
+    assert re.search(r"\bfont-size:\s*12rem\s*;", decls), "delta font-size is not 12rem"
+    assert re.search(r"\btransform:\s*translateY\(2\.5rem\)\s*;", decls), "delta Y nudge is not 2.5rem"
+    tuner = _read_tuner()
+    assert tuner.count("font-size: 12rem;\\n") == 1 and \
+        tuner.count("transform: translateY(2.5rem);\\n") == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer emits the delta size/nudge -- a re-emit would revert it"
+
+
+def _read_tuner():
+    with open(os.path.join(os.path.dirname(__file__), "..", "tools", "dev",
+                           "gen_bar_tuner.ps1")) as handle:
+        return handle.read()
+
+
 def test_python_y_offset_cancels_the_js_shift_and_converts_frac_to_viewport():
     # PROGRESS_ANCHOR_Y_OFFSET is TWO summed terms, both owned by the JS:
     #   -SHIFT_Y_REM      cancels the composition's intra-surface downward shift, so the bar stays

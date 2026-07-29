@@ -18,6 +18,12 @@ overlaid onto it PER KEY: a key a language hasn't translated falls back to the E
 text for that key alone (and is underscore-marked when ``i18n.MARK_UNTRANSLATED`` is on,
 matching the widget's diagnostic). An unknown client code degrades to full English.
 
+ONE control is not in ``_PANEL`` at all -- ``VARIANT_KEY``, the Progress Bar's variant radio.
+It renders no label and no tooltip in ANY language, so a per-language row would encode
+nothing; ``build()`` synthesises its blank entry and attaches the one thing about it that IS
+language-dependent, its option tuple (``_VARIANT_OPTIONS``). It still holds its positional slot
+in ``COL1_KEYS``.
+
 NOTE on terminology: the non-English blocks use each locale's natural wording for
 "widget", "Garage", "battle" and "Marks of Excellence". The official Marks-of-Excellence
 noun per language is still worth a spot-check against a running client before a release; the
@@ -73,15 +79,51 @@ def _row(label, header=None, body=None):
     return e
 
 
+# The panel key of the Progress Bar's variant radio -- the one option-bearing control, and the
+# one key that is NOT in _PANEL: it carries no language-dependent text at all, so build()
+# SYNTHESISES its (deliberately blank) label row plus its option tuple. Sole owner of the string,
+# used by COL1_KEYS below, build() and mod_settings._radio.
+VARIANT_KEY = u"progressVariant"
+
 # Ordered key list per column -- the wire order of the controls in the MSA template. Used by
-# mod_settings to walk a stored template in lockstep. Column 1 is the grouped In-Battle Widget
-# master + its two children (in that order), then the standalone Progress Log checkbox appended
-# after the group; column 2 is the In-Garage Widget plus the drag-position group.
-COL1_KEYS = (u"battleWidget", u"battleAltKey", u"countedAssist", u"progressBar")
+# mod_settings to walk a stored template in lockstep. Column 1 is TWO groups spliced together:
+# the In-Battle Widget master + its two children, then the Progress Bar master + its variant
+# radio; column 2 is the In-Garage Widget plus the drag-position group.
+#
+# VARIANT_KEY earns its slot even though it renders NO label and has no _PANEL row: the radio is
+# still a control in the template, and _sync_template_text's zip is POSITIONAL, so a missing key
+# here would pair every later control with the wrong text.
+COL1_KEYS = (u"battleWidget", u"battleAltKey", u"countedAssist",
+             u"progressBar", VARIANT_KEY)
 # Column 2: the standalone In-Garage Widget master, then the drag-position group -- a
 # positioning Label header, the X/Y numeric steppers, and the Follow Carousel Mode checkbox
 # (in that exact control order, so _sync_template_text walks the stored template in lockstep).
 COL2_KEYS = (u"garageWidget", u"positioning", u"posX", u"posY", u"followCarousel")
+
+# The variant radio's OPTION LABELS, in wire (index) order: 0 = Moving Average (the original
+# next-mark bar, the default), 1 = Damage Efficiency. THE ONLY language-dependent thing the radio
+# has -- which is why VARIANT_KEY has no _PANEL row at all and build() synthesises one around this
+# tuple. Its own table, not a _PANEL entry: an option tuple is not a label/tooltip row, and
+# _PANEL's keys are partitioned POSITIONALLY by COL1_KEYS/COL2_KEYS.
+#
+# GOTCHA these labels are STRUCTURAL to MSA, not text: Aslain folds the option tuple into its
+# _settingsStructure signature, and mod_settings._sync_template_text only ever rewrites a
+# stored control's text/tooltip -- never options[].label. So adding, removing OR merely
+# re-wording/re-localizing an option reaches an EXISTING install only through a
+# mod_settings.SETTINGS_VERSION bump, unlike every other string in this module.
+_VARIANT_OPTIONS = {
+    u"en": (u"Moving Average", u"Damage Efficiency"),
+    u"de": (u"Gleitender Durchschnitt", u"Schadenseffizienz"),
+    u"fr": (u"Moyenne glissante", u"Efficacité des dégâts"),
+    u"es": (u"Media móvil", u"Eficiencia de daño"),
+    u"it": (u"Media mobile", u"Efficienza dei danni"),
+    u"pl": (u"Średnia krocząca", u"Efektywność obrażeń"),
+    u"cs": (u"Klouzavý průměr", u"Efektivita poškození"),
+    u"ru": (u"Скользящее среднее", u"Эффективность урона"),
+    u"uk": (u"Ковзне середнє", u"Ефективність шкоди"),
+    u"hu": (u"Mozgóátlag", u"Sebzéshatékonyság"),
+    u"tr": (u"Hareketli ortalama", u"Hasar verimliliği"),
+}
 
 
 # The translation tables, lang-major so each language is one contiguous, translator-
@@ -105,12 +147,17 @@ _PANEL = {
             u"Adds a third row to the battle overlay showing your counted assistance: the "
             u"higher of tracking, spotting or stun assist, with an icon for whichever is "
             u"leading."),
+        # The Progress Bar MASTER (its varName is still progress_bar_enabled -- only the label
+        # changed). Its variant radio is DELIBERATELY label-less (build() synthesises the blank
+        # row; see VARIANT_KEY), so the per-variant detail lives HERE, on the master's tooltip --
+        # the only hoverable surface the group still has.
         u"progressBar": _row(
-            u"Progress Log", u"Progress log",
-            u"Shows a bar in the centre of the screen when your average damage updates, "
-            u"marking where your projected average sits between the mark you hold and the "
-            u"next mark's requirement. It fades away on its own. Hold Alt to bring it up at "
-            u"any time."),
+            u"Progress Bar", u"Progress bar",
+            u"Shows a bar in the centre of the screen while you play, then fades it away on "
+            u"its own. Hold Alt to bring it up at any time. Pick which bar below. "
+            u"Moving Average: marks where your projected average damage sits between the mark "
+            u"you hold and the next mark's requirement. Damage Efficiency: marks your damage "
+            u"this battle against the requirements for the 65 / 85 / 95 / 100 % marks."),
         # --- drag-to-reposition group (translated across every shipped language; see COL2_KEYS). ---
         u"positioning": _row(
             u"Widget position (px)", u"Widget position",
@@ -151,11 +198,14 @@ _PANEL = {
             u"Unterstützung hinzu: dem höheren Wert aus Ketten-, Aufklärungs- oder "
             u"Betäubungsunterstützung, mit einem Symbol für den führenden Wert."),
         u"progressBar": _row(
-            u"Fortschrittsprotokoll", u"Fortschrittsprotokoll",
-            u"Zeigt eine Leiste in der Bildschirmmitte, wenn sich dein Durchschnittsschaden "
-            u"aktualisiert. Sie zeigt, wo dein voraussichtlicher Durchschnitt zwischen der "
-            u"Marke, die du hast, und der Anforderung der nächsten Marke liegt. Sie "
-            u"verschwindet von selbst. Halte Alt, um sie jederzeit einzublenden."),
+            u"Fortschrittsleiste", u"Fortschrittsleiste",
+            u"Zeigt während des Spiels eine Leiste in der Bildschirmmitte, die von selbst "
+            u"wieder verschwindet. Halte Alt, um sie jederzeit einzublenden. Wähle unten, "
+            u"welche Leiste. "
+            u"Gleitender Durchschnitt: zeigt, wo dein voraussichtlicher Durchschnittsschaden "
+            u"zwischen der Marke, die du hast, und der Anforderung der nächsten Marke liegt. "
+            u"Schadenseffizienz: zeigt deinen Schaden in diesem Gefecht im Verhältnis zu den "
+            u"Anforderungen der Marken 65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Widget-Position (px)", u"Widget-Position",
             u"Ziehe das Garage-Widget mit Strg+Ziehen, um es zu verschieben (halte "
@@ -199,11 +249,14 @@ _PANEL = {
             u"assistance comptabilisée : la plus élevée entre l'assistance par chenilles, "
             u"par détection ou par étourdissement, avec une icône pour celle qui domine."),
         u"progressBar": _row(
-            u"Journal de progression", u"Journal de progression",
-            u"Affiche une barre au centre de l'écran lorsque vos dégâts moyens sont mis à "
-            u"jour. Elle indique où se situe votre moyenne prévue entre la marque que vous "
-            u"possédez et l'exigence de la marque suivante. Elle disparaît d'elle-même. "
-            u"Maintenez Alt pour l'afficher à tout moment."),
+            u"Barre de progression", u"Barre de progression",
+            u"Affiche une barre au centre de l'écran pendant la partie, puis la fait "
+            u"disparaître d'elle-même. Maintenez Alt pour l'afficher à tout moment. "
+            u"Choisissez la barre ci-dessous. "
+            u"Moyenne glissante : indique où se situent vos dégâts moyens prévus entre la "
+            u"marque que vous possédez et l'exigence de la marque suivante. Efficacité des "
+            u"dégâts : situe vos dégâts de la bataille en cours par rapport aux exigences des "
+            u"marques 65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Position du widget (px)", u"Position du widget",
             u"Ctrl+glisser pour déplacer le widget du garage (maintenez Maj pour le "
@@ -247,11 +300,13 @@ _PANEL = {
             u"asistencia contada: la mayor entre la asistencia por orugas, por detección "
             u"o por aturdimiento, con un icono para la que predomine."),
         u"progressBar": _row(
-            u"Registro de progreso", u"Registro de progreso",
-            u"Muestra una barra en el centro de la pantalla cuando se actualiza tu daño "
-            u"medio. Indica dónde se sitúa tu media prevista entre la marca que tienes y el "
-            u"requisito de la siguiente marca. Desaparece por sí sola. Mantén pulsado Alt "
-            u"para mostrarla en cualquier momento."),
+            u"Barra de progreso", u"Barra de progreso",
+            u"Muestra una barra en el centro de la pantalla durante la partida y luego la "
+            u"oculta por sí sola. Mantén pulsado Alt para mostrarla en cualquier momento. "
+            u"Elige abajo qué barra. "
+            u"Media móvil: indica dónde se sitúa tu daño medio previsto entre la marca que "
+            u"tienes y el requisito de la siguiente marca. Eficiencia de daño: sitúa tu daño "
+            u"de esta batalla frente a los requisitos de las marcas del 65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Posición del widget (px)", u"Posición del widget",
             u"Ctrl+arrastrar para mover el widget del garaje (mantén Mayús para "
@@ -295,11 +350,14 @@ _PANEL = {
             u"assistenza conteggiata: la più alta tra assistenza ai cingoli, "
             u"all'avvistamento o allo stordimento, con un'icona per quella prevalente."),
         u"progressBar": _row(
-            u"Registro dei progressi", u"Registro dei progressi",
-            u"Mostra una barra al centro dello schermo quando i tuoi danni medi si "
-            u"aggiornano. Indica dove si colloca la tua media prevista tra il marchio che "
-            u"possiedi e il requisito del marchio successivo. Scompare da sola. Tieni premuto "
-            u"Alt per mostrarla in qualsiasi momento."),
+            u"Barra di progresso", u"Barra di progresso",
+            u"Mostra una barra al centro dello schermo durante la partita, poi scompare da "
+            u"sola. Tieni premuto Alt per mostrarla in qualsiasi momento. Scegli sotto quale "
+            u"barra. "
+            u"Media mobile: indica dove si collocano i tuoi danni medi previsti tra il marchio "
+            u"che possiedi e il requisito del marchio successivo. Efficienza dei danni: colloca "
+            u"i tuoi danni di questa battaglia rispetto ai requisiti dei marchi "
+            u"65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Posizione del widget (px)", u"Posizione del widget",
             u"Ctrl+trascina per spostare il widget del garage (tieni premuto Maiusc per "
@@ -342,11 +400,14 @@ _PANEL = {
             u"wyższą z wartości wsparcia przez unieruchomienie, wykrycie lub ogłuszenie, z "
             u"ikoną dla przeważającej."),
         u"progressBar": _row(
-            u"Dziennik postępu", u"Dziennik postępu",
-            u"Pokazuje pasek na środku ekranu, gdy aktualizują się twoje średnie obrażenia. "
-            u"Wskazuje, gdzie twoja przewidywana średnia wypada między znakiem, który "
-            u"posiadasz, a wymaganiem następnego znaku. Znika samoczynnie. Przytrzymaj Alt, "
-            u"aby wyświetlić go w dowolnym momencie."),
+            u"Pasek postępu", u"Pasek postępu",
+            u"Pokazuje pasek na środku ekranu w trakcie gry, a potem znika on samoczynnie. "
+            u"Przytrzymaj Alt, aby wyświetlić go w dowolnym momencie. Wybierz poniżej, który "
+            u"pasek. "
+            u"Średnia krocząca: wskazuje, gdzie twoje przewidywane średnie obrażenia wypadają "
+            u"między znakiem, który posiadasz, a wymaganiem następnego znaku. Efektywność "
+            u"obrażeń: pokazuje twoje obrażenia w tej bitwie na tle wymagań znaków "
+            u"65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Pozycja widżetu (px)", u"Pozycja widżetu",
             u"Ctrl+przeciągnij, aby przesunąć widżet garażu (przytrzymaj Shift, aby "
@@ -387,11 +448,12 @@ _PANEL = {
             u"asistenci: vyšší z asistence pásy, průzkumem nebo omráčením, s ikonou pro "
             u"převažující."),
         u"progressBar": _row(
-            u"Záznam postupu", u"Záznam postupu",
-            u"Zobrazí uprostřed obrazovky lištu, když se aktualizuje tvé průměrné poškození. "
-            u"Ukazuje, kde se tvůj předpokládaný průměr nachází mezi znakem, který máš, a "
-            u"požadavkem dalšího znaku. Sama zmizí. Podržením klávesy Alt ji zobrazíš "
-            u"kdykoli."),
+            u"Lišta postupu", u"Lišta postupu",
+            u"Zobrazuje uprostřed obrazovky lištu během hry a poté sama zmizí. Podržením "
+            u"klávesy Alt ji zobrazíš kdykoli. Níže vyber, kterou lištu. "
+            u"Klouzavý průměr: ukazuje, kde se tvé předpokládané průměrné poškození nachází "
+            u"mezi znakem, který máš, a požadavkem dalšího znaku. Efektivita poškození: "
+            u"ukazuje tvé poškození v této bitvě vůči požadavkům znaků 65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Pozice widgetu (px)", u"Pozice widgetu",
             u"Ctrl+táhnutím přesuneš widget garáže (podržením Shift jej uzamkneš na jednu "
@@ -432,11 +494,13 @@ _PANEL = {
             u"большее из содействия гусеницами, разведкой или оглушением, со значком для "
             u"преобладающего."),
         u"progressBar": _row(
-            u"Журнал прогресса", u"Журнал прогресса",
-            u"Показывает полосу в центре экрана, когда обновляется ваш средний урон. Она "
-            u"показывает, где находится ваш прогнозируемый средний урон между имеющейся "
-            u"отметкой и требованием следующей. Полоса исчезает сама. Удерживайте Alt, чтобы "
-            u"показать её в любой момент."),
+            u"Полоса прогресса", u"Полоса прогресса",
+            u"Показывает полосу в центре экрана во время боя, затем она исчезает сама. "
+            u"Удерживайте Alt, чтобы показать её в любой момент. Выберите ниже, какую полосу. "
+            u"Скользящее среднее: показывает, где находится ваш прогнозируемый средний урон "
+            u"между имеющейся отметкой и требованием следующей. Эффективность урона: "
+            u"показывает ваш урон в этом бою относительно требований отметок "
+            u"65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Позиция виджета (px)", u"Позиция виджета",
             u"Ctrl+перетаскивание перемещает виджет ангара (удерживайте Shift, чтобы "
@@ -479,11 +543,12 @@ _PANEL = {
             u"з допомоги гусеницями, засвітом чи оглушенням, з піктограмою відповідного "
             u"типу."),
         u"progressBar": _row(
-            u"Журнал прогресу", u"Журнал прогресу",
-            u"Показує смугу в центрі екрана, коли оновлюється ваша середня шкода. Вона "
-            u"показує, де перебуває ваша прогнозована середня шкода між наявною позначкою та "
-            u"вимогою наступної. Смуга зникає сама. Утримуйте Alt, щоб показати її "
-            u"будь-коли."),
+            u"Смуга прогресу", u"Смуга прогресу",
+            u"Показує смугу в центрі екрана під час бою, потім вона зникає сама. Утримуйте "
+            u"Alt, щоб показати її будь-коли. Виберіть нижче, яку смугу. "
+            u"Ковзне середнє: показує, де перебуває ваша прогнозована середня шкода між "
+            u"наявною позначкою та вимогою наступної. Ефективність шкоди: показує вашу шкоду "
+            u"в цьому бою відносно вимог позначок 65 / 85 / 95 / 100 %."),
         u"positioning": _row(
             u"Позиція віджета (px)", u"Позиція віджета",
             u"Ctrl+перетягування переміщує віджет ангара (утримуйте Shift, щоб "
@@ -526,11 +591,12 @@ _PANEL = {
             u"mutatja: a lánctalpas, felderítő vagy kábító segítés közül a nagyobbat, a "
             u"vezető típus ikonjával."),
         u"progressBar": _row(
-            u"Haladási napló", u"Haladási napló",
-            u"Sávot jelenít meg a képernyő közepén, amikor az átlagsebzésed frissül. "
-            u"Megmutatja, hol áll a várható átlagod a birtokolt jel és a következő jel "
-            u"követelménye között. Magától eltűnik. Tartsd nyomva az Altot, hogy bármikor "
-            u"előhívd."),
+            u"Haladási sáv", u"Haladási sáv",
+            u"Sávot jelenít meg a képernyő közepén játék közben, majd magától eltűnik. Tartsd "
+            u"nyomva az Altot, hogy bármikor előhívd. Alább válaszd ki, melyik sávot. "
+            u"Mozgóátlag: megmutatja, hol áll a várható átlagsebzésed a birtokolt jel és a "
+            u"következő jel követelménye között. Sebzéshatékonyság: a mostani csatában elért "
+            u"sebzésedet a 65 / 85 / 95 / 100 %-os jelek követelményeihez méri."),
         u"positioning": _row(
             u"Widget pozíciója (px)", u"Widget pozíciója",
             u"Ctrl+húzással mozgathatod a garázs-widgetet (tartsd nyomva a Shiftet az egy "
@@ -570,11 +636,14 @@ _PANEL = {
             u"Savaş katmanına, sayılan yardımını gösteren üçüncü bir satır ekler: palet, "
             u"tespit veya sersemletme yardımından en yükseği, öndeki için bir simgeyle."),
         u"progressBar": _row(
-            u"İlerleme günlüğü", u"İlerleme günlüğü",
-            u"Ortalama hasarın güncellendiğinde ekranın ortasında bir çubuk gösterir. "
-            u"Beklenen ortalamanın, sahip olduğun işaret ile sonraki işaretin gereksinimi "
-            u"arasında nerede olduğunu gösterir. Kendiliğinden kaybolur. Herhangi bir anda "
-            u"görüntülemek için Alt tuşunu basılı tut."),
+            u"İlerleme çubuğu", u"İlerleme çubuğu",
+            u"Oyun sırasında ekranın ortasında bir çubuk gösterir, sonra kendiliğinden "
+            u"kaybolur. Herhangi bir anda görüntülemek için Alt tuşunu basılı tut. Hangi çubuk "
+            u"olacağını aşağıdan seç. "
+            u"Hareketli ortalama: beklenen ortalama hasarının, sahip olduğun işaret ile "
+            u"sonraki işaretin gereksinimi arasında nerede olduğunu gösterir. Hasar "
+            u"verimliliği: bu savaştaki hasarını 65 / 85 / 95 / 100 % işaretlerinin "
+            u"gereksinimlerine göre konumlandırır."),
         u"positioning": _row(
             u"Widget konumu (px)", u"Widget konumu",
             u"Garaj widget'ını taşımak için Ctrl+sürükle (bir eksene kilitlemek için "
@@ -628,16 +697,33 @@ def _render(entry, mark=False):
 
 
 def build(lang):
-    """The rendered panel text for ``lang``: ``{key: {"text", "tooltip"}}`` (PURE).
+    """The rendered panel text for ``lang``: ``{key: {"text", "tooltip"}}`` (PURE), plus an
+    ``"options"`` tuple on the one option-bearing control (``VARIANT_KEY``).
 
     A key the language didn't translate is rendered from English and marked (when
     ``i18n.MARK_UNTRANSLATED`` is on) so English leaks are spottable in-client."""
+    code = _norm(lang)
     en = _PANEL[DEFAULT_LANGUAGE]
-    tbl = _PANEL.get(_norm(lang)) or {}
+    tbl = _PANEL.get(code) or {}
     out = {}
     for k, en_entry in en.items():
         translated = k in tbl
         out[k] = _render(tbl.get(k, en_entry), mark=not translated)
+    # SYNTHESISED, not looked up: the variant radio has no _PANEL row in any language because it
+    # renders no label and no tooltip at all -- its two options read as direct children of the
+    # Progress Bar checkbox, which owns the prose. An empty `text` is the whole entry, and it is
+    # never marked as an English fallback (there is nothing to fall back FROM). `tooltip` is
+    # OMITTED, not empty: mod_settings._radio only emits the key when there is one.
+    # The options ride on this rendered entry (where _radio reads them) rather than in _PANEL, so
+    # the positional COL*_KEYS partition stays label/tooltip-only. WHOLE-TUPLE fallback, not
+    # per-option: the options are one ordered set whose meaning is positional, so a half-translated
+    # tuple would be worse than plain English.
+    opts = _VARIANT_OPTIONS.get(code)
+    out[VARIANT_KEY] = {
+        u"text": u"",
+        u"options": tuple(opts) if opts else tuple(
+            i18n._mark(o) for o in _VARIANT_OPTIONS[DEFAULT_LANGUAGE]),
+    }
     return out
 
 

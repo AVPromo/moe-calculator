@@ -258,3 +258,90 @@ class ProgressVM(ViewModel):
 
     def setAltHeld(self, v):
         self._setBool(7, v)
+
+
+class EfficiencyVM(ViewModel):
+    """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
+    alternative to the Moving Average bar above.
+
+    Its OWN model, and ProgressVM is deliberately left untouched: that bar's two-end mark axis
+    (axisLo/axisHi) must keep working byte-identically, while this one plots THIS BATTLE's
+    combined damage against ALL FOUR requirements at once, so it needs four axis stops rather
+    than two. Like the other two battle models this IS the registered view's root ViewModel (the
+    JS reads it with a bare ModelObserver() and no unwrap). Read-only; no `rev` counter for the
+    same reason as ProgressVM (a private, always-compositing battle view).
+
+    THE FOUR REQUIREMENT STOPS ARE Real, NOT Number: _setNumber casts to int() (ProgressVM's
+    docstring, and the same trap that quantised projAvg away), which would round a requirement
+    off its exact WG value and shift every tick's axis arithmetic. barX is Real for a smooth
+    sub-percent fill edge. `damage` / `band` are genuinely whole -> Number.
+
+    NO `damageDelta`: the bar's "last increment" is derived and latched in MoEEfficiency.js off
+    successive `damage` pushes (it already holds both values for its change-detect), so this model
+    carries no state the bridge has to keep between pushes. Dropping it RENUMBERED every property
+    after it -- barX 3->2 and so on down -- which is exactly the hand-maintained-index hazard this
+    module's header warns about. `battleEpoch` is therefore APPENDED after altHeld rather than
+    filed next to `damage` where it reads best: an append renumbers nothing.
+
+    Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
+
+    def __init__(self, properties=11, commands=0):
+        super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
+
+    def _initialize(self):
+        super(EfficiencyVM, self)._initialize()
+        self._addBoolProperty("visible", False)     # 0  false -> the bar never appears
+        self._addNumberProperty("damage", 0)        # 1  this battle's combined damage (int)
+        self._addRealProperty("barX", 0.0)          # 2  `damage` on the axis, 0..100 % of the bar
+                                                    #    (domain.efficiency_bar_x -- do NOT
+                                                    #    recompute it in JS)
+        self._addNumberProperty("band", 0)          # 3  0..4 highest requirement PASSED, `>=`
+                                                    #    inclusive (domain.efficiency_band);
+                                                    #    selects .mp-b-{w,g,t,v,au}
+        self._addRealProperty("r65", 0.0)           # 4  requirement for 1 mark  (Real, not Number)
+        self._addRealProperty("r85", 0.0)           # 5  requirement for 2 marks (Real)
+        self._addRealProperty("r95", 0.0)           # 6  requirement for 3 marks (Real)
+        self._addRealProperty("r100", 0.0)          # 7  the 100th-pct goalpost  (Real)
+        self._addBoolProperty("hasData", False)     # 8  the five-stop axis is usable (all four
+                                                    #    requirements present + ascending)
+        self._addBoolProperty("altHeld", False)     # 9  Alt currently down -> pull the bar up and
+                                                    #    hold it (ADDITIVE show trigger, not a gate)
+        self._addNumberProperty("battleEpoch", 0)   # 10 a monotonic per-battle counter (NOT the
+                                                    #    arenaUniqueID: _setNumber int-casts and a
+                                                    #    64-bit arena id would be mangled). Only
+                                                    #    needs to DIFFER between battles -- it is
+                                                    #    MoEEfficiency.js's battle-boundary signal
+                                                    #    for resetting its damage-delta latch
+
+    def setVisible(self, v):
+        self._setBool(0, v)
+
+    def setDamage(self, v):
+        self._setNumber(1, v)
+
+    def setBarX(self, v):
+        self._setReal(2, v)
+
+    def setBand(self, v):
+        self._setNumber(3, v)
+
+    def setR65(self, v):
+        self._setReal(4, v)
+
+    def setR85(self, v):
+        self._setReal(5, v)
+
+    def setR95(self, v):
+        self._setReal(6, v)
+
+    def setR100(self, v):
+        self._setReal(7, v)
+
+    def setHasData(self, v):
+        self._setBool(8, v)
+
+    def setAltHeld(self, v):
+        self._setBool(9, v)
+
+    def setBattleEpoch(self, v):
+        self._setNumber(10, v)

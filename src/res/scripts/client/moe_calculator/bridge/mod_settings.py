@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """The user settings, laid out as two columns in the MSA panel: an "In-Battle Widget" master
-grouped with its "Show on Alt Key" + "Counted Assistance" children, followed by the standalone
-"Progress Log" checkbox (column 1), and the "In-Garage Widget" checkbox with the drag-position
-group (column 2).
+grouped with its "Show on Alt Key" + "Counted Assistance" children, followed by a second group
+-- the "Progress Bar" master with its label-less variant radio (Moving Average / Damage
+Efficiency, which read as the master's direct children) -- in column 1, and the "In-Garage
+Widget" checkbox with the drag-position group (column 2).
 
 Surfaced as ModsSettingsAPI (MSA) checkboxes in the game's in-game mod-settings menu. MSA
 (Aslain's gui.aslainMenu preferred, izeberg.modssettingsapi as a legacy fallback) is a SOFT
@@ -48,7 +49,25 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # v7 install -- 6 would not do (a bump needs new > stored). The "Next Mark Progress Bar" ->
 # "Progress Log" rename rides along and is KEPT; on its own it would have been text-only
 # (_sync_template_text) and needed no bump.
-SETTINGS_VERSION = 8
+# Bumped 8 -> 9 for the Progress Bar variant restructure: the "Progress Log" checkbox is
+# RE-PARENTED into its own createControlsGroup as the "Progress Bar" master and gains a
+# RadioButtonGroup child (Moving Average / Damage Efficiency), which is a new varName, a new
+# control and a new nesting -- all structural. The radio's OPTION LABELS are structural too
+# (Aslain folds them into _settingsStructure and _sync_template_text only ever rewrites
+# text/tooltip, never options[].label), so they can reach an existing install ONLY via this
+# bump. register()'s migration branch carries every saved value across it; the new
+# progress_bar_variant key takes its fresh 0 (= Moving Average) default, so an existing user
+# lands exactly on the bar they already had.
+# Bumped 9 -> 10 to DROP the variant radio's own "Bar Type" label row, so its two options read as
+# direct children of the Progress Bar checkbox: the radio's text is now empty and its tooltip is
+# gone (folded into the master's, the only surface left to hover). Version 9 shipped to nobody but
+# the maintainer's own install, and 10 exists purely to re-lay-out THAT install. Strictly, text is
+# NOT part of Aslain's _settingsStructure (only type/varName/options are), so the empty label
+# alone would have travelled text-only via _sync_template_text -- but that helper can only
+# OVERWRITE text/tooltip, never DELETE a key, so a v9 install would keep the stale "Bar Type"
+# tooltip on an invisible row forever. Only setModTemplate replaces the stored control wholesale,
+# and only a bump (new > stored) reaches it. Never go backwards: 10, not a revert to 8.
+SETTINGS_VERSION = 10
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -62,12 +81,25 @@ BATTLE_ALT_KEY = "battle_widget_alt_key"
 # assist this battle (the assist that MoE credits). Opt-in (default OFF).
 COUNTED_ASSIST_KEY = "counted_assistance_enabled"
 
-# Master enable for the transient centre-screen next-mark progress bar ("Progress Log"), shown
-# when the career moving average updates. Its OWN feature, NOT a child of BATTLE_KEY (it renders
-# independently of the In-Battle Widget overlay), so it sits AFTER the grouped column-1 controls
-# and carries no masterVarName.
+# Master enable for the transient centre-screen progress bar ("Progress Bar"), shown when the
+# career moving average updates. Its OWN feature, NOT a child of BATTLE_KEY (it renders
+# independently of the In-Battle Widget overlay), so it is the master of its OWN column-1 group
+# and never carries a masterVarName -- see the comment in _template().
 # Opt-in (default OFF) -- a centre-screen transient is intrusive, so existing users must ask for it.
+# The varName is DELIBERATELY unchanged despite the label going "Progress Log" -> "Progress Bar":
+# merge_settings/_apply iterate DEFAULTS keys only, with no rename/alias map, so renaming a
+# varName would silently reset EVERY existing user's value. The key lives forever.
 PROGRESS_BAR_KEY = "progress_bar_enabled"
+
+# Which bar the Progress Bar master draws -- a CHILD of PROGRESS_BAR_KEY (grouped under it), and
+# the one setting of ours that is NOT a bool: MSA's RadioButtonGroup stores its value as a
+# 0-BASED OPTION INDEX (see templates.createRadioButtonGroup, ":type value: int"). _coerce has a
+# dedicated branch for it, because the default bool() branch would turn index 1 into True.
+# Defaults to Moving Average so every existing user keeps exactly the bar they already had.
+PROGRESS_VARIANT_KEY = "progress_bar_variant"
+PROGRESS_VARIANT_MOVING_AVERAGE = 0   # the original next-mark moving-average bar
+PROGRESS_VARIANT_EFFICIENCY = 1       # the damage-vs-requirements "Damage Efficiency" bar
+# ... and the highest legal index: a stored value outside [0, EFFICIENCY] is corrupt (clamp_variant).
 
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
@@ -91,12 +123,14 @@ POS_MAX = 20000
 
 _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY)
 
-# The two widgets ship ON; the Alt-peek mode, the counted-assistance row and the next-mark
-# progress bar ship OFF (opt-in). The drag position ships at auto (0/0/0/0) and Follow Carousel
-# Mode ships ON. merge_settings only ever overlays these known keys, so an MSA store from a
-# newer/older template can never introduce or drop a flag we act on.
+# The two widgets ship ON; the Alt-peek mode, the counted-assistance row and the progress bar
+# ship OFF (opt-in), with the progress-bar VARIANT on Moving Average (0) so a user who enables
+# the bar gets the behaviour it always had. The drag position ships at auto (0/0/0/0) and Follow
+# Carousel Mode ships ON. merge_settings only ever overlays these known keys, so an MSA store
+# from a newer/older template can never introduce or drop a flag we act on.
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
+            PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             FOLLOW_CAROUSEL_KEY: True}
 
@@ -114,6 +148,26 @@ def clamp_pos(v):
         return POS_MAX
     return v
 
+
+def clamp_variant(v):
+    """Coerce a stored RadioButtonGroup value to a legal 0-based option index.
+    Pure + engine-free (unit-tested).
+
+    This is the mod's ONE non-bool setting, so it is also the one trust boundary where a
+    hostile store could leak the wrong TYPE into the bridge: a bool is never a legal index
+    (bool is an int subclass, so a plain int() would silently pass True through as 1), and
+    neither is a non-numeric, negative or out-of-range value. All of them fall back to 0
+    (Moving Average) -- the safe choice, since that is the behaviour the bar always had."""
+    if isinstance(v, bool):
+        return PROGRESS_VARIANT_MOVING_AVERAGE
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return PROGRESS_VARIANT_MOVING_AVERAGE
+    if 0 <= v <= PROGRESS_VARIANT_EFFICIENCY:
+        return v
+    return PROGRESS_VARIANT_MOVING_AVERAGE
+
 # Live flag state (seeded from MSA in register(); defaults until then / if MSA is absent).
 _settings = dict(DEFAULTS)
 
@@ -128,9 +182,16 @@ _registered = False
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
-    everything else is a bool. Pure + engine-free."""
+    the progress-bar variant is a clamped radio INDEX, everything else is a bool. Pure +
+    engine-free.
+
+    The variant branch is load-bearing: falling through to bool() would turn the radio's
+    index 1 into True and index 0 into False, which then round-trips back to MSA as a bool
+    and destroys the setting."""
     if key in _POS_KEYS:
         return clamp_pos(value)
+    if key == PROGRESS_VARIANT_KEY:
+        return clamp_variant(value)
     return bool(value)
 
 
@@ -177,6 +238,17 @@ def progress_bar_enabled():
     Independent of battle_enabled(): the progress bar is its own feature, not part of the
     In-Battle Widget overlay."""
     return bool(_settings.get(PROGRESS_BAR_KEY, False))
+
+
+def progress_bar_variant():
+    """Which progress bar the master draws, as the radio's 0-based option INDEX:
+    PROGRESS_VARIANT_MOVING_AVERAGE (0, the default) or PROGRESS_VARIANT_EFFICIENCY (1).
+
+    An int, NOT a bool -- callers pick a window off it, so re-clamp on read (like the
+    position getters) and never let a corrupt store leak a bool or an out-of-range index.
+    Meaningless while progress_bar_enabled() is off: the master gates the whole feature."""
+    return clamp_variant(_settings.get(PROGRESS_VARIANT_KEY,
+                                       PROGRESS_VARIANT_MOVING_AVERAGE))
 
 
 def pos_x():
@@ -272,6 +344,39 @@ def _stepper(key, rendered):
     }
 
 
+def _radio(key, rendered):
+    """One MSA RadioButtonGroup descriptor for a mutually-exclusive choice. `varName` matches a
+    DEFAULTS key and `value` is the 0-BASED OPTION INDEX (never a label); `options` is the
+    localized label tuple settings_i18n attached to the rendered entry, in index order.
+
+    Built as a plain dict rather than through Aslain's templates.createRadioButtonGroup -- the
+    same shape that helper emits (type/text/varName/value/tooltip/options) -- for two reasons:
+    it keeps _template() a pure, unit-testable dict with no gui.aslainMenu import, and it means
+    the helper's `inline` kwarg (one horizontal row) is never passed at all, so the TypeError it
+    raises on MSA < 1.6.1 is structurally impossible. The options stay in MSA's default vertical
+    stack, which every build renders. An API that does not know RadioButtonGroup at all (the
+    izeberg fallback) simply skips the control -- the PROGRESS_BAR_KEY master beside it is a
+    plain CheckBox and keeps working, and progress_bar_variant() then reports its 0 default.
+
+    `text` is EMPTY by design (settings_i18n renders the variant row blank in every language) so
+    the panel draws no header row above the options and they read as direct children of the
+    Progress Bar checkbox. `tooltip` is therefore OMITTED, not empty: createBase adds the key only
+    when the tooltip is not None, so a control with nothing to explain simply has no key -- and a
+    label-less row has nothing to hover anyway (the variant prose moved onto the master's
+    tooltip). Emitting "" would hand the panel an empty tooltip to render."""
+    control = {
+        "type": "RadioButtonGroup",
+        "text": rendered["text"],
+        "value": DEFAULTS[key],
+        "varName": key,
+        "options": [{"label": label} for label in rendered["options"]],
+    }
+    tooltip = rendered.get("tooltip")
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
+
+
 def _label(rendered):
     """A plain MSA Label header (no varName -- not a stored value). Carries text + tooltip so
     _sync_template_text can refresh it in lockstep with the column's other controls."""
@@ -283,8 +388,11 @@ def _label(rendered):
 
 
 def _grouped_column1(master, children):
-    """Column 1 = the "In-Battle Widget" master with its two indented children, greyed out
-    while the master is off.
+    """ONE column-1 master with its indented children, greyed out while the master is off.
+    Column 1 calls this TWICE -- once for the "In-Battle Widget" master and once for the
+    "Progress Bar" master -- and splices the two flat lists together (see _template()). The
+    Progress Bar's single child is the label-less variant radio, so this grouping is the ONLY
+    thing that visually files its two options under the master.
 
     Prefer Aslain's templates.createControlsGroup(master, children, indent=True) -- it returns
     the flat [master, child1, child2] list and binds each child to the master (a masterVarName
@@ -302,28 +410,40 @@ def _grouped_column1(master, children):
 
 
 def _template():
-    """The MSA panel descriptor. Column 1 is the "In-Battle Widget" master grouped with its
-    "Show on Alt Key" + "Counted Assistance" children, then the standalone "Progress Log"
-    checkbox; column 2 is the standalone "In-Garage Widget" checkbox followed by the
-    drag-position group: a positioning Label header, the X/Y numeric steppers, and the Follow
-    Carousel Mode checkbox. Every visible label/tooltip comes from settings_i18n at the client's
-    language (English fallback)."""
+    """The MSA panel descriptor. Column 1 is TWO groups: the "In-Battle Widget" master with its
+    "Show on Alt Key" + "Counted Assistance" children, then the "Progress Bar" master with its
+    label-less variant radio; column 2 is the standalone "In-Garage Widget" checkbox followed by
+    the drag-position group: a positioning Label header, the X/Y numeric steppers, and the Follow
+    Carousel Mode checkbox. Two columns ONLY -- a third column does not render in the panel at
+    all (that was tried and reverted; see the SETTINGS_VERSION history). Every visible
+    label/tooltip comes from settings_i18n at the client's language (English fallback)."""
     t = settings_i18n.panel_text()
     battle_master = _checkbox(BATTLE_KEY, t["battleWidget"])
     battle_alt = _checkbox(BATTLE_ALT_KEY, t["battleAltKey"])
     counted = _checkbox(COUNTED_ASSIST_KEY, t["countedAssist"])
+    progress_master = _checkbox(PROGRESS_BAR_KEY, t["progressBar"])
+    progress_variant = _radio(PROGRESS_VARIANT_KEY, t[settings_i18n.VARIANT_KEY])
     garage = _checkbox(GARAGE_KEY, t["garageWidget"])
     return {
         "modDisplayName": MOD_DISPLAY_NAME,
         "enabled": True,
         "settingsVersion": SETTINGS_VERSION,
-        # column1: the grouped In-Battle master + its two children, then the Progress Log
-        # checkbox APPENDED AFTER the group -- outside _grouped_column1 on purpose, so it carries
-        # no masterVarName and stays togglable while the In-Battle Widget is off. Wire order MUST
-        # stay in lockstep with settings_i18n.COL1_KEYS (see _sync_template_text).
-        "column1": _grouped_column1(battle_master, [battle_alt, counted]) + [
-            _checkbox(PROGRESS_BAR_KEY, t["progressBar"]),
-        ],
+        # column1: TWO independent groups spliced together -- the In-Battle master with its two
+        # children, then the Progress Bar master with its variant radio.
+        #
+        # The Progress Bar controls are deliberately NOT passed as children of the In-Battle
+        # group: a grouped child inherits THAT master's varName, so MSA would grey the progress
+        # bar out whenever the unrelated In-Battle Widget is off. That hazard is exactly why the
+        # Progress Log checkbox used to sit outside the group with no masterVarName at all, and
+        # it still holds for BATTLE_KEY. Giving the progress bar its OWN master (a second
+        # _grouped_column1 call) is a deliberate re-parent that keeps the property: the radio
+        # greys out with PROGRESS_BAR_KEY and with nothing else, and PROGRESS_BAR_KEY itself
+        # stays a group MASTER, so it never carries a masterVarName either.
+        #
+        # Wire order MUST stay in lockstep with settings_i18n.COL1_KEYS (see
+        # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
+        "column1": (_grouped_column1(battle_master, [battle_alt, counted])
+                    + _grouped_column1(progress_master, [progress_variant])),
         # column2: the garage master, then the drag-position group. The steppers show 0 (auto)
         # until a drag / edit pins a px; Follow Carousel Mode ships ON. The wire order here MUST
         # stay in lockstep with settings_i18n.COL2_KEYS (see _sync_template_text).

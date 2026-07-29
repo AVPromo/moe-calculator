@@ -1,0 +1,12 @@
+[
+    {
+        "type": "Layout",
+        "path": "coui://gui/gameface/mods/14th_ua/MoECalculator/MoEEfficiencyView.html",
+        "parameters": {
+            "extension": "",
+            "entrance": "MoEEfficiencyView",
+            "impl": "gameface"
+        },
+        "itemID": "MoEEfficiencyView"
+    }
+]

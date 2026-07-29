@@ -27,6 +27,15 @@ GOALPOST_PERCENTILE = 99
 AXIS_MIN = 0
 AXIS_MAX = 100
 
+# The four EQUAL visual quarters the damage-efficiency bar's five damage stops
+# [0, r65, r85, r95, r100] are mapped onto (see battle_builder.efficiency_bar_x). Equal quarters
+# spread the crowded high requirements evenly instead of bunching them at the tail -- the same
+# trick, and the same numbers, as the garage bar's percentile axis (BAR_STOPS in
+# MoECalculator.js:312) and the phase-1 tuner's BAR_STOPS (tools/dev/eff_bar_tuner.html).
+# THE SINGLE PLACE TO CHANGE: the requirement ticks are pinned to these positions in
+# MoEEfficiency.css, so the CSS and this tuple are a wire contract.
+EFFICIENCY_BAR_STOPS = (0, 25, 50, 75, 100)
+
 # --- fetch-list working set --------------------------------------------------
 # The persistent list of owned tank ids we maintain thresholds for is capped at this size
 # (also the WG API's tank_id-per-request cap, so the whole list fits one batch fetch).
@@ -114,3 +123,30 @@ PROGRESS_ANCHOR_X_OFFSET = 0
 # width the view asks for and the composition is symmetric about its own centre, so the
 # horizontal centring self-calibrates (and needs no unit conversion either). Do not fight it.
 PROGRESS_ANCHOR_Y_OFFSET = 36
+
+# The damage-efficiency bar's window anchor -- its OWN three constants, not the progress bar's.
+# Only one of the two centre-screen bars is ever open (they are radio alternatives), but the
+# Y compensation term below is a function of the bar's own surface height, so sharing the
+# progress bar's would silently mis-place whichever composition changed second.
+# Y_FRAC is the phase-1 tuner's settled stage placement (eff_bar_tuner.html `offY` = 86.5vh --
+# the same ribbon-clearing height the Moving Average bar was tuned to); X_OFFSET is its `offX` 0,
+# and anchor_centred's `max_x // 2` centres whatever surface width the JS asks for.
+# Y_OFFSET is the same TWO-term compensation PROGRESS_ANCHOR_Y_OFFSET documents at length above,
+# recomputed against the REAL MoEEfficiency.js (it was seeded provisionally from the progress bar
+# while that file did not exist):
+#   1. -SHIFT_Y_REM == -50. MoEEfficiency.js shifts the whole composition into POSITIVE document
+#      coordinates by PAD_REM - BOX_TOP_REM == 10 - (-40) == 50, so the window moves UP by exactly
+#      that much and the bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in
+#      MoEEfficiency.css (-40rem) -- the composition's topmost edge.
+#   2. +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == +round(0.865 * 116) == +100. UNIT
+#      CONVERSION: anchor_centred applies the fraction to the MOVABLE EXTENT (space_h - surface_h),
+#      not to the viewport, and adding frac*surface_h back cancels the -frac*surface_h the extent
+#      form subtracts, at EVERY resolution. VIEW_H_REM == BOX_H_REM + 2*PAD_REM == 96 + 20 == 116
+#      (.mp-backdrop's height plus the JS's four-sided slack).
+#   sum: -50 + 100 = 50. At 1080 the track top lands at int((1080-116)*0.865) + 50 + 50 = 933,
+#   i.e. 0.865*1080 within the extent term's 1px int() floor -- same as the other bar.
+# COINCIDENCE, NOT A MIRROR: this happens to equal SHIFT_Y_REM (50) because round(0.865*116) is
+# 100 == 2*50. The two terms are independent -- any JS pad/box/frac change moves this value.
+EFFICIENCY_ANCHOR_Y_FRAC = 0.865
+EFFICIENCY_ANCHOR_X_OFFSET = 0
+EFFICIENCY_ANCHOR_Y_OFFSET = 50

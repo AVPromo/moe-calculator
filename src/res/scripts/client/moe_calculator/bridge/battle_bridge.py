@@ -20,10 +20,12 @@ from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import sample_log
 from moe_calculator.domain.battle_builder import (
-    build_battle_model, battle_bar_visible, ewma_project_raw, mark_axis, marks_from_percentile)
+    build_battle_model, battle_bar_visible, efficiency_band, efficiency_bar_x, efficiency_stops,
+    ewma_project_raw, mark_axis, marks_from_percentile)
 from moe_calculator.domain.constants import EFFICIENCY_WIDE_THRESHOLD, EWMA_K
 from moe_calculator.domain.positioning import efficiency_panel_wide
 from moe_calculator.bridge import battle_view
+from moe_calculator.bridge import efficiency_view
 from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge import progress_view
 
@@ -80,6 +82,17 @@ _last_wide = None
 _in_battle = False
 
 
+# A monotonic per-battle counter, bumped once on each battle mount and pushed to the Damage
+# Efficiency bar as EfficiencyVM.battleEpoch. It is that bar's BATTLE-BOUNDARY SIGNAL: its
+# damage-delta latch lives in MoEEfficiency.js and has to drop the previous battle's increment, which
+# it used to INFER from the first total arriving below its high-water mark -- false whenever the new
+# battle's first efficiency tick already reads higher, leaving an Alt peek early in the new battle
+# rendering the last battle's number. This is the explicit signal the deleted Python-side latch reset
+# used to be. Deliberately NOT arenaUniqueID: Wulf's _setNumber int-casts, so a 64-bit arena id
+# arrives mangled -- and nothing needs identity here, only that consecutive battles DIFFER.
+_battle_epoch = 0
+
+
 # Whether Alt is currently held, as reported by the event-driven battle_input hook. TWO readers:
 #  - the corner overlay's "Show on Alt Key" mode -- while the In-Battle Widget master is on AND
 #    that mode is on, the overlay's visible flag follows this (decided in battle_bar_visible);
@@ -91,6 +104,23 @@ _in_battle = False
 _alt_held = False
 
 
+# --- which centre-screen bar is up -------------------------------------------
+
+def _window_gates():
+    """((enabled, module), ...) for all THREE battle windows, in open order.
+
+    One place deciding who may be up, shared by the battle mount and the live settings apply, so
+    the "exactly one centre-screen bar at a time" rule cannot drift between them. The corner
+    overlay has its own master; the two centre-screen bars are radio ALTERNATIVES that split the
+    single progress_bar_enabled master by variant (MOVING_AVERAGE = progress_view, EFFICIENCY =
+    efficiency_view), so at most one of them is ever gated on."""
+    bar_on = mod_settings.progress_bar_enabled()
+    variant = mod_settings.progress_bar_variant()
+    return ((mod_settings.battle_enabled(), battle_view),
+            (bar_on and variant == mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE, progress_view),
+            (bar_on and variant == mod_settings.PROGRESS_VARIANT_EFFICIENCY, efficiency_view))
+
+
 # --- engine event subscriptions ---------------------------------------------
 # Handlers are module-level (stable identity) so the membership-checked _arm is idempotent.
 
@@ -98,26 +128,30 @@ def _on_mount_refresh(*args, **kwargs):
     # Avatar ready -> we're in a battle: open the overlay window, (re)arm the efficiency
     # listener, kick the thresholds loader, and push the initial model. Reset the played-tank
     # record so this battle promotes its vehicle exactly once (see push).
-    global _battle_recorded, _last_wide, _in_battle
+    global _battle_recorded, _last_wide, _in_battle, _battle_epoch
     try:
         _in_battle = True
         _battle_recorded = False
+        # A NEW battle: bump the epoch the efficiency bar's JS delta latch resets on. Bumped BEFORE
+        # the first refresh() below, so this battle's very first push already carries the new value.
+        _battle_epoch += 1
         # Re-evaluate the 5-digit shift from scratch this battle (totals reset to 0).
         _last_wide = None
         # Clear any scoreboard flag left over from a prior battle / relogin / replay teardown,
         # so a stale key can never keep the fresh battle's overlay hidden.
         _open_overlays.clear()
-        # The two windows are independently settings-gated. The In-Battle Widget master being
-        # off means the corner overlay is never shown, so don't open ITS window this battle (the
-        # "Show on Alt Key" child is inert while the master is off) -- but the centre-screen
-        # progress bar has its own checkbox and may still want to open. A live enable of either
-        # opens it mid-battle (see apply_settings); _in_battle stays True so that path fires.
-        if not (mod_settings.battle_enabled() or mod_settings.progress_bar_enabled()):
+        # The windows are independently settings-gated. The In-Battle Widget master being off
+        # means the corner overlay is never shown, so don't open ITS window this battle (the
+        # "Show on Alt Key" child is inert while the master is off) -- but the centre-screen bars
+        # have their own checkbox and may still want to open (exactly one of the two, by variant
+        # -- see _window_gates). A live enable of any of them opens it mid-battle (see
+        # apply_settings); _in_battle stays True so that path fires.
+        gates = _window_gates()
+        if not any(enabled for enabled, _module in gates):
             return
-        if mod_settings.battle_enabled():
-            battle_view.open_window()
-        if mod_settings.progress_bar_enabled():
-            progress_view.open_window()
+        for enabled, module in gates:
+            if enabled:
+                module.open_window()
         install_all_listeners()
         moe_wgapi.start()  # idempotent; the garage path may already have kicked it
         refresh()
@@ -165,15 +199,18 @@ def _on_observed_vehicle_changed(*args, **kwargs):
 
 
 def _on_teardown(*args, **kwargs):
-    # Avatar became non-player (battle exit) -> tear down BOTH windows; the next battle mount
+    # Avatar became non-player (battle exit) -> tear down ALL THREE windows; the next battle mount
     # re-opens whichever is enabled. The event lists are rebuilt by the arena teardown regardless.
-    # The progress bar needs its OWN close here or its window leaks across battles.
+    # Each window needs its OWN close here (its own module-level singleton) or it leaks across
+    # battles -- including the one whose variant is not currently selected: a live radio switch
+    # mid-battle can have opened it earlier this match.
     global _in_battle
     try:
         _in_battle = False
         _flush_prediction()
         battle_view.close_window()
         progress_view.close_window()
+        efficiency_view.close_window()
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -183,10 +220,11 @@ def _on_scale_changed(*args, **kwargs):
     # logical GUI space resized, so re-place the overlay to keep it tracking WG's efficiency
     # panel (the fixed logical anchor is scale-invariant, but the window must be re-applied
     # because the movable extent changed). The bar's anchor is a FRACTION of that extent, so it
-    # needs re-placing for the same reason.
+    # needs re-placing for the same reason -- and so does the efficiency bar (same anchor shape).
     try:
         battle_view.apply_position()
         progress_view.apply_position()
+        efficiency_view.apply_position()
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -397,7 +435,11 @@ def _maybe_replace_for_width():
     """Re-place the overlay when the "efficiency panel is 5-digit wide" state flips (a total
     crossed the threshold), so the right-shift engages/disengages live. Coalesced onto the
     efficiency refresh; a no-op when the state is unchanged (avoids a window.move every tick).
-    Fail-soft: a bad read leaves the position untouched."""
+    Fail-soft: a bad read leaves the position untouched.
+
+    battle_view ONLY, deliberately: this shift exists to clear WG's Flash efficiency panel, which
+    neither centre-screen bar sits near (both are screen-centred by anchor_centred, off their own
+    proportional anchors). Adding them here would only cost a needless window.move."""
     global _last_wide
     try:
         wide = efficiency_panel_wide(battle_adapter.read_damage_log_summary_flags(),
@@ -499,13 +541,17 @@ def _flush_prediction():
 # --- push --------------------------------------------------------------------
 
 def refresh():
-    """Re-push the current battle model into whichever of our two battle windows are open.
+    """Re-push the current battle model into whichever of our THREE battle windows are open.
 
-    ONE snapshot read + ONE model build per call, shared by both pushes: the coalesced
-    efficiency tick must cost a single recompute, not one per window."""
+    ONE snapshot read + ONE model build per call, shared by every push: the coalesced
+    efficiency tick must cost a single recompute, not one per window.
+
+    The windows are hard-named rather than registered: keep the early-return below in lockstep
+    with them, or a window whose two siblings are switched off never gets pushed at all."""
     view = battle_view.active_view()
     bar = progress_view.active_view()
-    if view is None and bar is None:
+    eff = efficiency_view.active_view()
+    if view is None and bar is None and eff is None:
         return False
     try:
         snap = battle_adapter.build_battle_snapshot()
@@ -519,6 +565,8 @@ def refresh():
         push(view.viewModel, snap, model)
     if bar is not None:
         push_progress(bar.viewModel, snap, model)
+    if eff is not None:
+        push_efficiency(eff.viewModel, snap, model)
     return True
 
 
@@ -596,20 +644,76 @@ def push_progress(rvm, snap, model):
         LOG_CURRENT_EXCEPTION()
 
 
+def push_efficiency(rvm, snap, model):
+    """Write the centre-screen DAMAGE EFFICIENCY bar's model into rvm (an EfficiencyVM).
+
+    This bar plots THIS BATTLE's combined damage against all four of the tank's requirements at
+    once, so it takes the four stops plus the damage and its last increment; the axis position and
+    the colour band are computed HERE (domain.efficiency_bar_x / efficiency_band) and pushed as
+    single props -- the `>=`-inclusive band rule must live in exactly one place, and the JS must
+    never re-derive either.
+
+    Unlike push_progress there is NO has_baseline gate: the axis is the tank's requirement table
+    and the plotted value is this battle's own damage, so a missing career baseline (replay /
+    relogin, BUG B) costs this bar nothing. hasData is the only data gate -- and snap.thresholds
+    is all-or-nothing upstream, so it is genuinely all four requirements or none.
+
+    The bar's "last increment" is NOT pushed: MoEEfficiency.js derives it from successive `damage`
+    values and latches it itself (it already compares the two pushes for its change-detect). What IS
+    pushed for it is `battleEpoch` -- the per-battle counter that tells the JS latch a NEW BATTLE
+    started, which it cannot see any other way (see _battle_epoch). It is the push's only read of
+    module state; nothing here is written or remembered between calls."""
+    if rvm is None:
+        return
+    try:
+        stops = efficiency_stops(snap.thresholds)
+        has_data = stops is not None
+        damage = int(model.combined_damage or 0)
+        visible = battle_bar_visible(
+            snap.in_battle, snap.has_vehicle, snap.is_spectating,
+            overlay_open=bool(_open_overlays),
+            enabled=(mod_settings.progress_bar_enabled()
+                     and mod_settings.progress_bar_variant()
+                     == mod_settings.PROGRESS_VARIANT_EFFICIENCY))
+        r = stops if has_data else (0.0, 0.0, 0.0, 0.0, 0.0)
+        bar_x = efficiency_bar_x(damage, stops)
+        band = efficiency_band(damage, stops)
+        LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d" % (
+                      visible, has_data, damage, bar_x, band,
+                      r[1], r[2], r[3], r[4], _alt_held, _battle_epoch))
+        with rvm.transaction() as tx:
+            tx.setVisible(visible)
+            tx.setDamage(damage)
+            tx.setBarX(bar_x)
+            tx.setBand(band)
+            tx.setR65(r[1])
+            tx.setR85(r[2])
+            tx.setR95(r[3])
+            tx.setR100(r[4])
+            tx.setHasData(has_data)
+            tx.setAltHeld(_alt_held)
+            tx.setBattleEpoch(_battle_epoch)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 def apply_settings():
     """Apply the battle settings live (the mod_settings change callback).
 
-    Each of the two windows must exist whenever its own master checkbox is on -- the corner
-    overlay's "In-Battle Widget" (the "Show on Alt Key" child is inert while that master is off,
-    so it never opens the window on its own) and the bar's "Next Mark Progress Bar". Master off
-    -> close that window if open. Master on while in a battle -> open it now (arm + kick data +
-    push) so the toggle takes effect without waiting for the next battle. (Under the Alt-key mode
-    the overlay window opens but stays hidden until Alt is held -- push/battle_bar_visible decides
-    visible.) A trailing re-push makes a live MODE switch, which opens nothing, take effect too."""
+    Each window must exist whenever its own gate is on (see _window_gates) -- the corner overlay's
+    "In-Battle Widget" master (the "Show on Alt Key" child is inert while that master is off, so it
+    never opens the window on its own) and, for the two centre-screen bars, the shared progress-bar
+    master narrowed by the variant. Gate off -> close that window if open. Gate on while in a
+    battle -> open it now (arm + kick data + push) so the toggle takes effect without waiting for
+    the next battle. Because the loop closes as well as opens, flipping the variant live swaps the
+    two bars in one pass: the deselected one is closed and the selected one opened. (Under the
+    Alt-key mode the overlay window opens but stays hidden until Alt is held --
+    push/battle_bar_visible decides visible.) A trailing re-push makes a live MODE switch, which
+    opens nothing, take effect too."""
     try:
         opened = False
-        for enabled, module in ((mod_settings.battle_enabled(), battle_view),
-                                (mod_settings.progress_bar_enabled(), progress_view)):
+        for enabled, module in _window_gates():
             if not enabled:
                 if module.active_view() is not None:
                     module.close_window()

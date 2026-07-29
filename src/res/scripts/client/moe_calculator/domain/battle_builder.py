@@ -15,8 +15,11 @@ The assist component of combined damage is the HIGHER of tracking / spotting / s
 counted_assistance) -- WG credits the greatest stream, not the sum; the server battle-events
 summary supplies the track/spot split (adapter/battle_adapter._read_assist_split).
 """
+import bisect
+
 from moe_calculator.domain import battle_types as bt
-from moe_calculator.domain.constants import EWMA_K, MARK_PERCENTS, GOALPOST_PERCENTILE
+from moe_calculator.domain.constants import (
+    EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS, GOALPOST_PERCENTILE)
 from moe_calculator.domain.moe_estimate import norm_cdf, inv_norm_cdf
 from moe_calculator.domain.rounding import iround_half_away
 
@@ -250,6 +253,74 @@ def mark_axis(thresholds, marks):
     if hi <= lo:
         return 0.0, 0.0
     return lo, hi
+
+
+# --- damage-efficiency bar: the five-stop damage axis -------------------------
+# The ALTERNATIVE centre-screen bar (a radio option against the mark-axis bar above) plots THIS
+# BATTLE's combined damage against all four of the tank's requirements at once: the five damage
+# stops [0, r65, r85, r95, r100] mapped onto four visually EQUAL quarters
+# (constants.EFFICIENCY_BAR_STOPS), piecewise-linear and clamped at both ends. That is exactly
+# barX's algorithm in MoECalculator.js:302-322 -- but barX maps a PERCENTILE, so the damage-keyed
+# form below is the only mirror of it and had no Python home before.
+# Unlike mark_axis this needs NO mark count and NO career baseline: the axis is the tank's
+# requirement table and the plotted value is this battle's damage.
+
+def efficiency_stops(thresholds):
+    """The five damage stops (0.0, r65, r85, r95, r100) as floats, or None when unusable.
+
+    `thresholds` is snap.thresholds, i.e. {1: D65, 2: D85, 3: D95, 100: D100}. Upstream it is
+    ALL-OR-NOTHING (adapter/moe_wgapi drops a whole tank row unless all four percentiles parse,
+    and returns {} on a miss), so there is no partial-axis path to write here: either all four
+    requirements are present and strictly ascending, or this returns None and the caller's
+    has_data gate hides the bar. Non-monotone / zero stops are rejected the same way -- a
+    zero-width segment would divide by zero in efficiency_bar_x."""
+    thresholds = thresholds or {}
+    stops = [0.0]
+    try:
+        for key in (1, 2, 3, 100):
+            d = float(int(thresholds.get(key, 0) or 0))
+            if d <= stops[-1]:
+                return None
+            stops.append(d)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return tuple(stops)
+
+
+def efficiency_bar_x(damage, stops):
+    """Combined `damage` -> its position along the bar, 0..100 %, over the equal quarters.
+
+    Clamped at both ends (damage past r100 pins at 100 %, negative at 0 %). Returns 0.0 on an
+    unusable axis (`stops` None) -- the bar is hidden there anyway."""
+    if not stops:
+        return 0.0
+    d = _clamp(float(damage or 0.0), stops[0], stops[-1])
+    # bisect_left == "first stop >= d", i.e. the segment the clamped d falls in; max(1, ...) folds
+    # the d == stops[0] case (which bisects to 0) into the first segment. `stops` is all floats
+    # (efficiency_stops), so the interpolation is a true float divide with no __future__ import.
+    i = max(1, bisect.bisect_left(stops, d))
+    t = (d - stops[i - 1]) / (stops[i] - stops[i - 1])
+    lo = EFFICIENCY_BAR_STOPS[i - 1]
+    return lo + t * (EFFICIENCY_BAR_STOPS[i] - lo)
+
+
+def efficiency_band(damage, stops):
+    """The colour band index 0..4: the HIGHEST requirement `damage` has passed, `>=` INCLUSIVE
+    -- damage landing exactly on r65 is already band 1. 0 = none passed yet.
+
+    Deliberately Python, not JS: the band drives the fill, the numerals and both glows, so the
+    inclusive rule gets exactly ONE home and is tested by the same fixtures as the axis. It is
+    pushed as a single int VM prop; the front-end must never re-derive it."""
+    if not stops:
+        return 0
+    # bisect_RIGHT is what makes the rule `>=`-inclusive: it inserts AFTER an equal stop, so
+    # damage exactly on r65 counts as passed (bisect_left would read it as band 0).
+    # _clamp IS LOAD-BEARING, not tidiness: bisect drives its search off `x < a[mid]`, which is
+    # False for NaN at every step, so a NaN total would walk all the way right and report the TOP
+    # band (the old highest-passed-stop loop reported 0, since NaN >= x is also False). _clamp maps
+    # NaN to the low bound, restoring that -- and pins a negative/huge total to the axis ends.
+    d = _clamp(float(damage or 0.0), stops[0], stops[-1])
+    return max(0, bisect.bisect_right(stops, d) - 1)
 
 
 def battle_bar_visible(in_battle, has_vehicle, is_spectating=False, overlay_open=False,

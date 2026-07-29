@@ -81,27 +81,59 @@ B.refresh()
 The percent is anchored (`cur = pre_percentile + inc`), so a constant offset cancels —
 read the OLS `residual ~ pct_delta` verdict + the buckets, not the mean alone.
 
+## The shared harness shim (`lib/gf_check_shim.js`)
+Both in-battle bars are thin callers of ONE shared module,
+`src\...\MoECalculator\MoEBarTransient.js`, and both JS behaviour checks below share
+`tools\dev\lib\gf_check_shim.js`: the assertion helpers, the minimal DOM (`El` + a tag-stack
+`parseHTML`), the **virtual clock** (`setTimeout`/`Date.now`/`requestAnimationFrame` driven by
+`advance(ms)`), the `jsConst`/`jsArray` source scraper, `stripComments`, the module-syntax strip +
+concat, and the mutation applier / `main` report block. The two harnesses used to carry a
+byte-identical copy of all of that (~245 lines each); two copies of a harness drift, and a drifted
+harness silently stops asserting (`bar-tuner-selfcheck-is-not-a-gate`).
+Two shim details were once deliberate per-harness differences; both were **strict generalisations**
+in the efficiency copy and both are now shared:
+- `El.querySelector` matches **compound** class selectors (`.mp-tick.r3`, `.mp-cap.up`) — the
+  efficiency bar disambiguates five ticks and five captions that way, and single-class matching would
+  hand back the WRONG node instead of failing loudly.
+- `offsetWidth` is **writable** (default 0), not a constant-0 getter — at a hard 0 the efficiency
+  bar's `capClamp` corridor never binds, so the whole clamp section would be vacuous.
+
+**How the two files are loaded.** Each bar imports OpenWG's `../../libs/model.js` (not in-repo) *and*
+`./MoEBarTransient.js` (in-repo). The shim strips the ES module syntax, concatenates the sources
+**transient FIRST** and evaluates the pair as ONE `new Function` body with every engine global
+injected. Transient first is load-bearing: each bar's top-level `createTransient(...)` call (and
+`MoEProgress.js`'s `const VALUE_SWAP_MS = FADE_IN_MS`) runs at load and would hit the transient's
+`const` TDZ the other way round. The import strip needs the **`g` flag** — each bar now has TWO
+import lines, and a non-global regex left the second one in the evaluated body, which is what broke
+both harnesses when the transient was extracted.
+Every `MUTATIONS` entry is `[WHICH, from, to]`, `WHICH` naming the file that owns the behaviour
+(`"T"` = `MoEBarTransient.js`, `"B"` = the bar). Naming it is deliberate rather than "whichever
+source contains the anchor": a mutation whose anchor has gone stale reports **ANCHOR NOT FOUND** and
+counts as SURVIVED, so a refactor that moves code cannot quietly leave a probe unapplied.
+
 ## Progress-bar JS behaviour check (offline, no client, no browser)
-`MoEProgress.js` is a wall-clock state machine (a 6200ms keyframe seeked with a negative
-`animation-delay`, an `animationend`-or-timer end race, an Alt peek that PAUSES the animation), and
-its window has **no hot-reload** — every timing hypothesis otherwise costs a full client relaunch.
-`check_progress_js.js` runs the real file headlessly in plain Node (zero deps): it strips the one
-OpenWG `import`, evaluates the source with `document` / `viewEnv` / `engine` / `ModelObserver` and a
-**virtual clock** injected as parameters, then drives it and asserts **emitted VALUES** — the
-`resizeViewRem` args, the `animation-delay` string, the armed run class, `animationPlayState`, the
-fill's width `%`, the caption text. (Per `bar-tuner-selfcheck-is-not-a-gate`: a self-check that only
-looks for leftover tokens proves nothing.)
+`MoEProgress.js` + `MoEBarTransient.js` are a wall-clock state machine (a 6200ms keyframe seeked with
+a negative `animation-delay`, an `animationend`-or-timer end race, an Alt peek that PAUSES the
+animation), and the window has **no hot-reload** — every timing hypothesis otherwise costs a full
+client relaunch. `check_progress_js.js` runs the real files headlessly in plain Node (zero deps) via
+the shim above, then drives them and asserts **emitted VALUES** — the `resizeViewRem` args, the
+`animation-delay` string, the armed run class, `animationPlayState`, the fill's width `%`, the
+caption text. (Per `bar-tuner-selfcheck-is-not-a-gate`: a self-check that only looks for leftover
+tokens proves nothing.)
 ```
 node tools\dev\check_progress_js.js                      # the gate: exits 1 on any failure
+node tools\dev\check_progress_js.js --probe-all          # every mutation, as a table
 node tools\dev\check_progress_js.js --list-mutations
 node tools\dev\check_progress_js.js --mutate=<key>       # anti-vacuity: MUST report failures
 ```
+**119 assertions, 37 mutations, all probed and all firing.**
 Covers: the surface push + the post-deadline re-assert, the visible/hasData gate, the
-**`surfaceSettled` show gate** (no trigger may show while the surface is still the engine's 256×256
+**`settled` show gate** (no trigger may show while the surface is still the engine's 256×256
 fallback — cropped and ~142px too high — yet the silent baseline must still run, and a still-held Alt
 must appear the instant the flag flips off the settle's own `render(observer.model)`), the silent
 first baseline, cold show (incl. the rewind→rAF re-aim), warm re-trigger, a stale `animationend` from
-a superseded identity, the fallback end timer with no `animationend` at all, peek hold / release, the
+a superseded identity, **the force-settle**, the fallback end timer with no `animationend` at all,
+peek hold / release, the
 **short Alt tap** (strictly hold-to-show: a release that beats the plateau pause is *mirrored* into
 the fade-out — seek `SEEK_FADE_OUT + inLeft`, identity flips, gone ~550ms after the release instead
 of serving the whole 6200ms transient), **Alt pressed during the fade-out**, the hide→re-show
@@ -111,18 +143,173 @@ neither truncated to the release nor handed a fresh hold — a damage event arri
 gets the hold the warm re-trigger it could not arm would have had, and a peek that interrupted
 nothing (or whose damage hold ran out / ended on `animationend` / was killed by a hide) still takes
 the plain fade-out. Those cases assert **absolute end instants**, not "still armed": both failure
-modes look identical to a visibility check. Each `MUTATIONS` entry breaks one real behaviour; every
-one of them must make the run fail, or the check is vacuous.
-It never writes a timing literal: `SURFACE_REASSERT_MS`, `SURFACE_SETTLE_MS`, `FADE_IN_MS`,
-`HOLD_MS`, `END_MARGIN_MS` and the surface/hit-pad geometry are all **scraped** out of the module
-(and `TOTAL` / `SEEK_FADE_OUT` derived from the scraped pair exactly as the module derives them), so
-a retune moves the shim with it (the same `jsConst` idiom as
-`tests/test_progress_surface_mirror.py`). Its virtual clock starts at a **realistic epoch magnitude**
+modes look identical to a visibility check. It also pins the **rAF asymmetry** that must never be
+flattened into the shared `onCommit` hook — cold wraps `setPos` in `requestAnimationFrame`, warm sets
+it synchronously — with a probe in *both* directions (`cold-commit-loses-its-raf` /
+`warm-commit-gains-a-raf`). Each `MUTATIONS` entry breaks one real behaviour; every one of them must
+make the run fail, or the check is vacuous.
+> **A probe found a vacuous assertion in this very file.** "…and snapped the fill there" sat on the
+> WARM path, where the commit had already set the fill to the target, so deleting `onEnd`'s `setPos`
+> outright failed *nothing*. The force-settle is now probed on a run that ends before **both** its
+> swap and its cold rAF have landed, where the snap is the only thing that can move the fill. Same
+> trap as `unscoped-substring-assertion-is-not-an-assertion`, one layer down: an assertion
+> coincidentally satisfied by a value someone else already wrote. `--probe-all` is what found it.
+
+It never writes a timing literal — and since the extraction the constants live in **two** files, so
+each scrape names its owner: `FADE_IN_MS`, `HOLD_MS`, `FADE_OUT_MS`, `END_MARGIN_MS`,
+`SURFACE_REASSERT_MS`, `SURFACE_SETTLE_MS`, `HIT_MAGIC`, `RUN_CLASSES`/`RUN_NAMES` from
+`MoEBarTransient.js`; the five `BOX_*`/`PAD_REM` surface values (and the hit-pad geometry derived from
+them) from `MoEProgress.js`. `TOTAL` / `SEEK_PLATEAU` / `SEEK_FADE_OUT` are derived from the scraped
+stops exactly as the transient derives them, so a retune moves the shim with it (the same `jsConst`
+idiom as `tests/test_progress_surface_mirror.py`). Its virtual clock starts at a
+**realistic epoch magnitude**
 (`1e12`), not `0`-ish: `dmgPlateauAt == 0` means "no damage hold in flight", which only reads as
 *long ago* while `Date.now() > HOLD_MS`.
 It has no layout, no CSS and no compositor — looks, and whether Coherent honours a given property,
 stay live-verification items. The surface size's HTML/CSS/Python mirror is guarded separately by
 `tests/test_progress_surface_mirror.py`.
+
+## Damage Efficiency bar: the tuner and its headless emit (no client, no browser)
+`eff_bar_tuner.html` is the hand-written, self-contained tuner for the **Damage Efficiency**
+in-battle bar variant (phase 1 of `TASKS/moe-efficiency-phase2.md`; 136 knobs, its own 70-assertion
+`selfCheck()` — it reports `70 passed of 70`). It is the **single source of truth** for every number in that bar — do not copy
+values out of the task note or out of `MoEProgress.css`.
+```
+node tools\dev\emit_eff_css.js [outPath]   # candidate (default TASKS\refs\MoEEfficiency.candidate.css)
+                                          #   AND, in the same pass, candidate + the 2 hand-added
+                                          #   blocks -> src\...\MoEEfficiency.css
+node tools\dev\check_eff_css.js            # the drift gate: shipped == candidate + only those 2 blocks
+```
+The two run in that order. The candidate lands in **`TASKS/refs/`** — the repo's standing home for
+emitted-CSS candidates (wholly gitignored; `gen_bar_tuner.ps1 -EmitCss` writes `MoEProgress.css`
+there too), so there is no second generated directory to ignore. `check_eff_css.js` reads it from
+there and exits 2 with a "run emit_eff_css.js first" hint if it is missing.
+**The emit OVERWRITES the shipped stylesheet** — that is the point (nothing else may write it), and
+the run names both files it wrote. Re-running it blind is safe: the SCHEMA-default assertion below
+makes the output a pure function of the tuner plus the script, never of panel state.
+`emit_eff_css.js` presses the tuner's **Copy CSS** button headlessly: it reads the `<script>` body
+as text, truncates it at its `// ---- panel wiring` marker (everything past that is DOM wiring and
+the `apply()` render pass — the emit path itself is pure in `st`, harvested from `SCHEMA`'s `val`
+defaults), evaluates it with a one-node stub DOM, and calls `cssOut()`. It also runs the tuner's own
+`selfCheck()` headlessly (pure apart from writing its readout to one element) and asserts every knob
+is still at its `SCHEMA` default, so the emit is reproducible rather than "whatever the panel was
+dialled to".
+The emit ends in a JSON `meta` block — the **wire contract** the JS half needs and CSS cannot
+express (axis, `barStops`, band colours, all timings, the `capClamp` corridor in rem, `boxWRem`, the
+glyph ink bboxes). Per `bar-tuner-selfcheck-is-not-a-gate`, that block is `JSON.parse`d and
+**every field type- and shape-checked**: exact key set, numbers that are actually numbers (`"holdMs":
+true` fails by name), `totalMs == fadeIn + hold + fadeOut`, the clamp corridor non-degenerate and
+inside `boxWRem`, glyph bboxes strictly in 0..1. All checks are `assert`-based and mutation-probed.
+**The emit is NOT the whole stylesheet** (same trap as `-EmitCss` for `MoEProgress.css`): it carries
+a `#moe-bar-box { width/height }` rule but **no `@font-face`** and no `mp-life-b` twin. Unlike
+`MoEProgress.css`, though, **nobody hand-copies those in** — the same emit pass splices them, and
+`check_eff_css.js` proves it:
+- the splice makes the emit half byte-identical **by construction** (it is the in-memory `css`, not a
+  re-read). It adds exactly two regions, each fenced by a `HAND-ADDED BLOCK n OF 2` /
+  `END HAND-ADDED BLOCK n` marker pair: the
+  `@font-face` (bare sibling `url(MoEBattle.ttf)` FIRST, as `MoEProgress.css` does — Coherent
+  resolves an `@font-face` src against the DOCUMENT directory only), and the `mp-life-b` /
+  `.mp-run-b` twin, which it **derives** from the emitted `mp-life` / `.mp-run` pair by rename so the
+  twin can never drift from the tuner's timings.
+- `check_eff_css.js` is the independent gate (it does not reuse the generator): it strips those two
+  marked regions back out and asserts the remainder is the candidate **byte-for-byte**, that the twin
+  still matches modulo the rename, and that there is exactly ONE `#moe-bar-box` rule and ONE
+  `@font-face` **declaration** — counted with comments stripped, because a raw `@font-face` grep
+  false-positives on the emit's own header prose
+  (`unscoped-substring-assertion-is-not-an-assertion`). It also pins the four `.mp-backdrop` edges
+  and the `#moe-bar-root` width, i.e. the numbers `MoEEfficiency.js`'s `BOX_*` / `BAR_W_REM` mirror.
+
+The tuner's header comment says to hand-add the `#moe-bar-box` shim; that half is stale for the CSS
+rule (the emit carries it), but the static in-flow `<div id="moe-bar-box">` still has to be cloned
+into the view's `.html` — `MoEEfficiencyView.html:40` does.
+
+## Damage Efficiency bar: the JS behaviour check (offline, no client, no browser)
+`check_efficiency_js.js` is `check_progress_js.js`'s sibling for `MoEEfficiency.js` +
+`MoEBarTransient.js` — **the same shim** (`lib/gf_check_shim.js`, above), same idiom, same
+anti-vacuity rule, and the same reason for existing: the bar lives in a res_map-registered Gameface
+**window**, which has NO hot-reload, so every timing hypothesis otherwise costs a full client
+relaunch.
+```
+node tools\dev\check_efficiency_js.js                      # the gate: exits 1 on any failure
+node tools\dev\check_efficiency_js.js --probe-all          # every mutation, as a table
+node tools\dev\check_efficiency_js.js --list-mutations
+node tools\dev\check_efficiency_js.js --mutate=<key>       # anti-vacuity: MUST report failures
+```
+**135 assertions, 53 mutations, all probed and all firing.**
+
+**IT OWNS THE DELTA LATCH.** `battle_bridge`'s `_eff_last_damage` / `_eff_delta` and
+`EfficiencyVM.damageDelta` were deleted and the latch now lives in `MoEEfficiency.js`, so the pytest
+cases that covered those invariants were retired and **this file is the only gate on them**. `peak` is
+the battle's HIGH-WATER mark, not the previous push (combined damage SUBTRACTS team damage, so the
+total can move DOWN). Asserted: zero before any damage lands; the first increment of a battle is the
+whole damage; a rise latches only the increment; a flat push keeps showing the previous increment; a
+decrease never yields a negative delta *and* the next rise measures from the PEAK, not the dip; and
+the latch **survives a `hasData` gap**, because a mid-battle re-show does not restart the total. Plus
+the ONE intended behaviour change from the Python latch, pinned deliberately: a first push that
+already carries damage **seeds** the mark, so `mount → 800 → 600` showed `+800` before and shows `0`
+now.
+
+**THE BATTLE BOUNDARY IS THE PUSHED `battleEpoch`, not an inference.** Python bumps a monotonic
+counter once per battle mount and pushes it on every tick, and a change in it *is* the boundary — the
+`if (total < peak) delta = 0` guess it replaced was wrong in exactly the case a player notices, so
+that case is asserted **positively**: a boundary whose first total reads **HIGHER** than the previous
+battle's peak (500 → 600) still resets, and re-seeds the mark at *that* total. Probed by
+`epoch-reset-only-when-the-total-dropped` (the deleted inference restored as a guard — the ONLY
+assertion that catches it) and `epoch-never-advances`. The counter lives in module state and
+deliberately **not** in `last`, because the hide branch drops that baseline mid-battle and an epoch
+that died with it would read the re-show as a new battle — probed by `epoch-stored-in-last`. And the
+user-visible symptom has its own case: an **Alt peek right after a boundary** brings the bar up
+reading `0`, never the dead battle's number.
+
+**A DIP OR A FLAT PUSH MUST NOT POP THE BAR.** The show/flash trigger is the latch's `gained`, which
+only a new high-water mark sets: "the value changed" and "the player gained damage" are different
+events, since combined damage SUBTRACTS team damage. Asserted on the branch where the previous run
+has already ended on its own `animationend`, so `T.show()` is the only thing that could arm anything —
+and **both halves** are asserted, quiet (no run armed, no re-flash, the increment still standing) *and
+still repainting* (the dipped total, `barX`, the tick, the band, `.met`, the pulse), because a
+quiet-only check would pass just as well on a bar that is simply broken. Probed by
+`dip-pops-the-bar`.
+
+Covers: the surface push
+(`resizeViewRem` / `setHitAreaPaddingsRem` / the rigid shift) **and the post-deadline re-assert** —
+the engine's 256×256 default-size fallback runs LAST, so the mount push alone proves nothing; the
+silent baseline (which must run *un*gated) versus **pre-settle suppression** (which must gate every
+show trigger, damage and Alt alike, plus the settle's own `render(observer.model)` so a still-held Alt
+lands the instant the flag flips); `band` → exactly ONE `mp-b-*` class with `.met` on tick *i* iff
+*i* ≤ band and `mp-pulse` iff band 4; the delta's display window (`DELTA_HOLD_MS`, on a hit only —
+never on a peek); the **warm re-trigger** (`-600ms` plateau seek **with the identity alternating
+`mp-run` ↔ `mp-run-b`**, which is what the stylesheet's hand-added twin is *for* — a coalesced
+restart on a `both`-filled `opacity:0` root is the "shows once, never again" bug the Moving Average
+bar shipped with); the stale-`animationend` identity guard; the fallback end timer and a later hit
+still showing after it; the Alt peek (pause, never ends while held, `-5600ms` release seek) and
+**both halves of the resume-vs-fade split** — `peekOn`'s phase must come from ELAPSED TIME
+(`Date.now()` vs `plateauAt + HOLD_MS`), never from `showing` (which stays true *through* the
+fade-out, so branching on it freezes the bar at partial opacity), and `peekOff` must RESUME an
+interrupted damage hold to its original absolute end instant while never resurrecting one that
+already died; the `capClamp` corridor's two rem bounds, the icon-gap add-back and the
+degenerate-corridor bail; and that **`barX` / `band` are consumed VERBATIM** — asserted twice over,
+behaviourally (a model whose pushed values are deliberately inconsistent with anything derivable from
+damage and the `r*` stops) and in the SOURCE TEXT with comments stripped and scoped per line (both
+modules' prose is full of the words `damage`, `>=` and `INCLUSIVE`, so a raw grep would pass on the
+commentary alone). The `>=`-inclusive rule is Python's, in `domain/battle_builder`, and unit-tested
+there.
+**The source-text rule is asserted on BOTH files** — `MoEEfficiency.js` *and*
+`MoEBarTransient.js`: no comparison operator may share a line with `damage` or an `r*` stop, because
+the shared transient is as much "the front end" as the bar is. It is also why the delta latch reads
+the total into a `total` local first (it is damage-vs-damage and touches no requirement). Probed from
+both sides — `met-from-damage` in the bar and
+`damage-comparison-smuggled-into-the-transient` in the shared module. A companion assertion pins that
+**nothing reads a `damageDelta` back off the model**, since the VM no longer carries one.
+Like its sibling it writes down **no timing literal**, and each scrape names its owner now that the
+constants live in two files: `FADE_IN_MS`, `HOLD_MS`, `FADE_OUT_MS`, `END_MARGIN_MS`,
+`SURFACE_REASSERT_MS`, `SURFACE_SETTLE_MS`, `HIT_MAGIC`, `RUN_CLASSES`/`RUN_NAMES` from
+`MoEBarTransient.js`; `DELTA_HOLD_MS`, the five `BOX_*`/`PAD_REM`, `BAR_W_REM`,
+`CLAMP_L_REM`/`CLAMP_R_REM`, `ICO_GAP_REM` and `BAND_CLASSES` from `MoEEfficiency.js`. The seeks and
+`TOTAL` are derived exactly as the transient derives them, so a retune moves the shim instead of
+reddening it. The clock starts at a realistic epoch magnitude (`1e12`) for the same reason as its
+sibling: `dmgPlateauAt == 0` must read as "long ago".
+It has no layout, no CSS and no compositor, and **nothing in this bar has been confirmed in-game
+yet** — looks, and whether Coherent honours a given property, stay live-verification items.
 
 ## Browser tuners / pickers (PowerShell generators, no client)
 The in-battle Gameface **window** has no hot-reload (every CSS tweak = a full relaunch), so its

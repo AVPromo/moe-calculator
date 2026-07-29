@@ -281,14 +281,18 @@ $tpl = @'
      (.mp-d-num == .mb-delta-num) -- NOT the delta's parens, which are static text nodes on the
      .mp-d wrapper and keep the plain white treatment, and NOT the other three captions (the two
      requirement ends + pre_avg carry no sign, so JS never puts the class on them). */
-  /* ~= the shipped .mb-delta 4.5rem @14rem. The delta FADES in at the numeral swap: opacity 0 ->
+  /* ~= the shipped .mb-delta 4.5rem @14rem. font-size + translateY are the EFFICIENCY bar's delta
+     values (12rem / the 2.5rem half of its translate(4.2rem, 2.5rem)), carried over after a live
+     pass; HARDCODED like the .35em gap beside them -- no knob, so a re-emit keeps them. Its X half
+     needs no counterpart: 0.35em of the delta's own 12rem IS 4.2rem.
+     The delta FADES in at the numeral swap: opacity 0 ->
      1 with a transition, NOT visibility (which cannot interpolate) and NOT display (which would
      re-centre the translateX(-50%) row mid-animation). opacity leaves the box laid out exactly as
      visibility did, so the centring is as safe as before. No `visibility` alongside it: this is a
      pointer-events:none overlay, so there is nothing to hit-test or focus behind a 0-alpha box.
      ONE transition declaration on .mp-d, naming ONLY opacity -- explicit ms + easing in the
      emitted CSS (Gameface drops a transition whose property starts from an unresolvable var()). */
-  .mp-cap .mp-d{margin-left:.35em;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mp-cap .mp-d{margin-left:.35em;font-size:12rem;transform:translateY(2.5rem);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mp-v.mp-up,.mp-d-num.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mp-v.mp-down,.mp-d-num.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   /* Only the bottom-centre caption animates (it rides proj_avg); pre_avg's stays put. */
@@ -1236,6 +1240,13 @@ $tpl = @'
       "   .mp-up, so they out-specify the .mp-cap .mp-v base rule above.) */\n"+
       "/* em, not rem: the two caption rows have different font-sizes and this gap should track\n"+
       "   them. 0.35em == the shipped .mb-delta's 4.5rem at its 14rem font-size.\n"+
+      "   SIZE + NUDGE ARE THE EFFICIENCY BAR'S, carried over after a live pass (MoEEfficiency.css's\n"+
+      "   `.mp-cap .mp-d`: font-size 12rem, translate(4.2rem, 2.5rem)). The two bars anchor their delta\n"+
+      "   DIFFERENTLY -- there it is out of flow off the numeral (left:100% + top:0) and ONE translate()\n"+
+      "   carries both the X gap and the signed Y; here it is an in-flow flex item of the .mp-cap row, so\n"+
+      "   only the Y half needs a transform. The X half is already identical and must NOT be added again:\n"+
+      "   0.35em of the delta's OWN 12rem font-size IS 4.2rem, which is exactly how that 4.2rem was tuned.\n"+
+      "   So the font-size below is load-bearing for the gap too -- change it and the gap moves with it.\n"+
       "   THE DELTA FADES IN at the numeral swap (valueSwapMs): JS sets opacity 1 there and back to\n"+
       "   0 when it re-runs the transient -- the curve is here, not in JS. OPACITY, not visibility\n"+
       "   (which cannot interpolate) and NOT display (which would drop the box out of the flex row\n"+
@@ -1247,7 +1258,8 @@ $tpl = @'
       "   a var() it cannot resolve, so never express these two through a custom property.\n"+
       "   CANCELLING it (a re-run mid-fade): set transition:none, opacity 0, force a reflow, then\n"+
       "   restore the transition -- the same idiom the fill/tick rewind uses. */\n"+
-      ".mp-cap .mp-d {\n  margin-left: 0.35em;\n  opacity: 0;\n"+
+      ".mp-cap .mp-d {\n  margin-left: 0.35em;\n  font-size: 12rem;\n"+
+      "  transform: translateY(2.5rem);\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       ".mp-v.mp-up,\n.mp-d-num.mp-up {\n  color: #ffffff;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+

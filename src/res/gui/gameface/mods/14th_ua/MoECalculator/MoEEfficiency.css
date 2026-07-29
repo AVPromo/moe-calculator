@@ -1,0 +1,392 @@
+/* MoEEfficiency.css -- the DAMAGE EFFICIENCY in-battle bar variant. Tuned in the browser
+   (tools/dev/eff_bar_tuner.html) and copied VERBATIM; a registered battle window has NO
+   hot-reload, so every tweak in-game costs a full client relaunch.
+   AXIS: damage across the four mark requirements -- five stops [0,r65,r85,r95,r100] mapped
+   onto four visually EQUAL quarters [0,25,50,75,100], piecewise-linear and clamped. JS owns
+   the mapping (same algorithm as MoECalculator.js barX) and sets .mp-fill's width plus the
+   .mp-cur / .mp-cap.up left as percentages; the FOUR requirement ticks + caps are pure CSS at
+   a fixed 25/50/75/100%.
+   COLOUR: JS puts exactly ONE of .mp-b-w / -g / -t / -v / -au on #moe-bar-root, by which
+   requirement the damage has passed (>= is INCLUSIVE). The band drives the fill, the current
+   TOTAL's numerals and both glows (the current tick's and its glyph's) -- the numeral and glyph
+   glows are each tuned PER BAND, the two glow radii and the dark drop are shared. The current
+   tick's own line is STATIC white, so the marker reads the same at every band, and the delta
+   stays white with no glow at all.
+   Position comes from Python (window.move()), NOT from CSS -- tuner stage placement was
+   top 86.5vh, centre offset 0rem. Sizes in rem (1rem == 1 logical px);
+   colours by VALUE -- Gameface drops a declaration whose var() cannot resolve.
+   Font: the bundled MoEBattle numeric subset, 19 glyphs (digits % ( ) + - , . / space) --
+   NO LETTERS, and no thin space -- the thousands separator is a knob, tuned here to "comma".
+   TWO blocks are HAND-ADDED on top of this emit and must survive every re-copy: the
+   @font-face (the tuner inlines the ttf as a data: URI; the shipped file wants the bare
+   sibling url(MoEBattle.ttf)) and the mp-life-b/mp-run-b keyframe twin. The #moe-bar-box
+   sizing rule below IS emitted -- do NOT add a second one by hand. */
+
+/* ===== HAND-ADDED BLOCK 1 OF 2 (everything else in this file is the tuner's emit, VERBATIM --
+   tools/dev/emit_eff_css.js reproduces it byte-for-byte). #moe-bar-root asks for font-family
+   "MoEBattle" but the tuner ran in a browser and inlined the ttf as a data: URI, so the emit
+   carries no face for it; and this document does NOT <link> MoEBattle.css or MoEProgress.css
+   (both would collide on the shared #moe-bar-root / .mp-* namespace). So the declaration is
+   copied verbatim from MoEProgress.css:18-24 -- same family name, same single weight-600 cut,
+   same bare-sibling url FIRST: Coherent resolves an @font-face src against the DOCUMENT
+   directory only, so a subdir-relative path silently falls back to Arial Narrow. That is also
+   why this file must sit right beside MoEBattle.ttf and checker.png (both already shipped
+   siblings -- nothing new to copy). ===== */
+@font-face {
+    font-family: "MoEBattle";
+    font-weight: 600;
+    font-style: normal;
+    src: url(MoEBattle.ttf) format("truetype"),
+         url("coui://gui/gameface/mods/14th_ua/MoECalculator/MoEBattle.ttf") format("truetype");
+}
+/* ===== END HAND-ADDED BLOCK 1 ===== */
+body { margin: 0; }
+#moe-bar-box { width: 460rem; height: 55rem; }
+
+#moe-bar-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* Keep a width the 3rem dash period tiles without a truncated GAP: 300 == 3*100 + 0. A width == 1 (mod 3) ends on a half
+     gap -- move the WIDTH, never the tuned dash/gap. */
+  width: 300rem;
+  z-index: 9000;
+  pointer-events: none;
+  text-align: center;
+  font-family: "MoEBattle", "Arial Narrow", sans-serif;
+  opacity: 0;
+}
+.mp-backdrop {
+  position: absolute;
+  left: -80rem;
+  top: -40rem;
+  width: 460rem;
+  height: 96rem;
+  z-index: 0;
+}
+/* checker.png + MoEBattle.ttf sit RIGHT BESIDE this file -- Coherent resolves a bare url
+   against the DOCUMENT directory only. The tuner previewed THIS EXACT tile, inlined as a
+   data: URI -- the same 4px PNG, 2x2 cells @2px (tools/dev/gen_checker.py). */
+.mp-backdrop::before {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background: url(checker.png) repeat;
+  background-size: auto;
+  image-rendering: pixelated;
+  opacity: 0.1;
+  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+}
+.mp-backdrop::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: -1;
+  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+.mp-track {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 3rem;
+  background: rgba(0,0,0,0.45);
+}
+/* THE DASH GRID MASKS THE FILL: 2rem dash + 1rem OPAQUE gap, ONE period in the gradient
+   tiled by background-size (WG's own idiom). The gap must stay opaque -- at a lower alpha the
+   fill shows through and a gap left of the fill edge reads lighter than one right of it. The
+   "border" is the OUTSET box-shadow on this same pseudo: zero box-model impact, so trackH and
+   every tick anchor stay put, and it survives the pulse rewriting the track's box-shadow.
+   z-index:1 = above the auto-z fill, below the z-index:2 ticks. */
+.mp-track::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: 1;
+  background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2rem,rgba(13,14,16,1) 2rem,rgba(13,14,16,1) 3rem);
+  background-size: 3rem 100%;
+  background-repeat: repeat;
+  box-shadow: 0 0 0 1rem rgba(13,14,16,0.5);
+}
+.mp-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0;
+  background: rgba(237,230,217,0.8);
+  transition: width 400ms cubic-bezier(.2,.8,.2,1);
+}
+/* CENTRED tick geometry (the shipped .mp-tick): the tick CROSSES the track, top:50% +
+   translate(-50%,-50%), so its height is symmetric about the track midline. */
+.mp-tick { position: absolute; top: 50%; width: 2rem; z-index: 2; }
+.mp-tick.mp-req { height: 9rem; background: rgba(237,230,217,0.8);
+                  transform: translate(-50%, -50%) translateY(0rem); }
+.mp-tick.mp-req.met { background: rgba(237,230,217,0.8); }
+.mp-tick.mp-cur {
+  width: 2rem;
+  height: 9rem;
+  background: rgba(255,255,255,1);
+  transform: translate(-50%, -50%) translateY(0rem);
+  transition: left 400ms cubic-bezier(.2,.8,.2,1);
+}
+/* The four requirement ticks + caps are FIXED at the quarter marks -- that IS the axis, and
+   it is why nothing but the current tick/cap/fill needs a JS position. QUALIFIED with the
+   element class on purpose: a bare .rN is ONE class, same as .mp-cap's own `left: 0` below,
+   which would then win on source order and stack all four caps at 0%. */
+.mp-tick.r1, .mp-cap.r1 { left: 25%; }
+.mp-tick.r2, .mp-cap.r2 { left: 50%; }
+.mp-tick.r3, .mp-cap.r3 { left: 75%; }
+.mp-tick.r4, .mp-cap.r4 { left: 100%; }
+/* THE NUMERAL IS WHAT SITS ON THE TICK: .mp-cap's only IN-FLOW child is .mp-v, so
+   translateX(-50%) centres the digits themselves. The icon and the delta hang OFF the numeral
+   out of flow (see .mp-ico / .mp-cap .mp-d below), which is also what stops the delta fading in
+   from shifting the number. NOT a flex row: a row centres icon+number as one box and puts the
+   number right of its tick by half the icon+gap. */
+.mp-cap {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 3;
+}
+/* A TRANSFORM, NOT MARGIN, ON THE `bottom:100%` SIDE: Coherent ignores margin-bottom on an
+   abspos box anchored that way (0/515 precedents in WG's _dist corpus). padding-bottom is the
+   other form Coherent honours, but it would grow this cap's PADDING BOX -- which is what the
+   out-of-flow .mp-ico's top:50% resolves against, dragging the glyph half the gap below the
+   numeral. The `top:100%` twin's margin-top DOES work -- do not unify them. Both gaps are
+   TICK-INCLUSIVE (tick height + the tuned gap) so no calc() mixes units. */
+/* The signed X below is a RESIDUAL nudge (0 by default): the numeral is already on its tick by
+   construction. Composed onto the same transform as the -50% centring. */
+.mp-cap.dn { top: 100%; margin-top: 12rem; font-size: 12rem;
+             transform: translateX(-50%) translateX(0rem); }
+.mp-cap.up { bottom: 100%; font-size: 16rem;
+             transform: translateX(-50%) translateX(0rem) translateY(-12rem);
+             transition: left 400ms cubic-bezier(.2,.8,.2,1); }
+.mp-cap .mp-v {
+  position: relative;
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0em;
+  text-shadow: 0 0 1rem rgba(0,0,0,0.5);
+}
+.mp-cap.dn .mp-v { transform: translateY(0rem); }
+.mp-cap.up .mp-v { transform: translateY(0rem); }
+/* The delta hangs OUT OF FLOW off the numeral's right edge (left:100% + a transform gap, the
+   same idiom as .mp-ico's mirror on the right:100% side), so .on toggling cannot move the
+   number -- and top:0 is an ANCHOR, not a position: the X gap and the signed Y both ride that
+   ONE translate(), in ONE unit (the gap is tuned in em of the delta's own size and resolved to
+   rem, since no Gameface-confirmed stylesheet mixes units in a multi-argument translate).
+   It FADES on opacity, which interpolates; visibility cannot. JS adds .on at the hit
+   and drops it after the hold. It is WHITE with NO band glow -- that glow is the current total's
+   signal alone, so .mp-d-num appears in no band rule and needs no rule of its own; it inherits
+   everything here and JS writes the signed digits into it. The dark text-shadow is legibility
+   over a bright HUD, not a glow -- keep it. The parens are static text nodes on .mp-d. */
+.mp-cap .mp-d {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  transform: translate(4.2rem, 2.5rem);
+  font-size: 12rem;
+  color: #ffffff;
+  font-weight: 600;
+  text-shadow: 0 0 1rem rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: opacity 500ms ease-out;
+}
+.mp-cap .mp-d.on { opacity: 1; }
+
+/* ---- BANDS. Exactly ONE of these classes on #moe-bar-root at a time, chosen by which
+   requirement the current damage has passed (>= INCLUSIVE, so damage on r65 is already green).
+   The fill and the current tick's GLOW share the band's fill colour (the tick's own line is the
+   static colour above, so the marker reads the same at every band); the current TOTAL's numerals
+   and the glyph glow further down take that band's two OWN glow colours, tuned per band. The
+   delta (.mp-d-num) is in NONE of these -- it stays white with only the dark drop. */
+#moe-bar-root.mp-b-w .mp-fill { background: rgba(237,230,217,0.8); }
+#moe-bar-root.mp-b-w .mp-tick.mp-cur { box-shadow: 0 0 6rem rgba(237,230,217,0.8),0 0 2rem rgba(237,230,217,0.8); }
+#moe-bar-root.mp-b-w .mp-cap.up .mp-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(237,230,217,0.5),0 0 2rem rgba(237,230,217,0.5); }
+#moe-bar-root.mp-b-g .mp-fill { background: rgba(123,236,55,0.8); }
+#moe-bar-root.mp-b-g .mp-tick.mp-cur { box-shadow: 0 0 6rem rgba(123,236,55,0.8),0 0 2rem rgba(123,236,55,0.8); }
+#moe-bar-root.mp-b-g .mp-cap.up .mp-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(123,236,55,0.9),0 0 2rem rgba(123,236,55,0.9); }
+#moe-bar-root.mp-b-t .mp-fill { background: rgba(51,146,230,0.8); }
+#moe-bar-root.mp-b-t .mp-tick.mp-cur { box-shadow: 0 0 6rem rgba(51,146,230,0.8),0 0 2rem rgba(51,146,230,0.8); }
+#moe-bar-root.mp-b-t .mp-cap.up .mp-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(90,154,211,1),0 0 2rem rgba(90,154,211,1); }
+#moe-bar-root.mp-b-v .mp-fill { background: rgba(115,23,196,0.8); }
+#moe-bar-root.mp-b-v .mp-tick.mp-cur { box-shadow: 0 0 6rem rgba(115,23,196,0.8),0 0 2rem rgba(115,23,196,0.8); }
+#moe-bar-root.mp-b-v .mp-cap.up .mp-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(115,23,196,1),0 0 2rem rgba(115,23,196,1); }
+#moe-bar-root.mp-b-au .mp-fill { background: rgba(255,205,90,0.8); }
+#moe-bar-root.mp-b-au .mp-tick.mp-cur { box-shadow: 0 0 6rem rgba(255,205,90,0.8),0 0 2rem rgba(255,205,90,0.8); }
+#moe-bar-root.mp-b-au .mp-cap.up .mp-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(255,205,90,0.9),0 0 2rem rgba(255,205,90,0.9); }
+
+/* Icons: GLYPH on ::after, GLOW on ::before at z-index:-1 (an element's own background paints
+   BELOW its pseudos). .mp-ico's transform is the stacking context that scopes that -1 AND it
+   carries the per-role Y nudge AND the gap to the numeral -- never trade it for a margin, which
+   Coherent drops on the `right:100%` anchored side anyway. background-size is DERIVED:
+   100/bbox*0.75 from the ink measured at ALPHA > 32 (the quest_type art's faint halo
+   makes a raw getbbox() read ~2x too big: barrel_mark 0.328, damage 0.219).
+   brightness(3) lifts the flat grey #d1d1d1 quest_type line art; the marksOnGun cuts
+   are 24x24 and already warm cream, so theirs is its OWN knob, at 1 here (1 == identity,
+   no lift). Their canvas is constant and only the WIDTH grows with the count, so mark_1 renders
+   ~1/3 the width of mark_3 on one fixed box -- correct, do not trim per count. They visibly
+   blur above ~24rem.
+   The icon is OUT OF FLOW off the numeral's left edge, and its gap rides in that SAME
+   transform: `right:100%` + margin-right renders a 0 gap in Coherent, and
+   `right: calc(100% + Xrem)` mixes % with rem (0/515 precedents in WG's corpus). */
+.mp-ico {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  display: block;
+  width: 13rem;
+  height: 13rem;
+  transform: translate(-1rem, -50%);
+}
+.mp-cap.dn .mp-ico { transform: translate(-1rem, -50%) translateY(0.25rem); }
+.mp-cap.up .mp-ico { transform: translate(-1rem, -50%) translateY(0.5rem); }
+/* The 100% cap's glyph is a DIFFERENT family from the three marks beside it, so it takes its
+   own Y. (0,4,0) beats the rule above, and it stays on the same transform -- that transform is
+   the stacking context that scopes the ::before glow's z-index:-1. */
+.mp-cap.dn .mp-ico.bm { transform: translate(-1rem, -50%) translateY(-0.25rem); }
+.mp-ico::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 106%;
+  height: 106%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+/* The requirement glyphs and the current one glow independently of that fallback. BACKGROUND
+   ONLY: the base rule keeps the z-index:-1, the 106% box and its own centring, and these target
+   ::before, never .mp-ico. The current cap follows its BAND, at the numeral-glow alpha. */
+.mp-cap.dn .mp-ico::before {
+  background: radial-gradient(circle at 50% 50%, rgba(26,26,26,0.5) 0%, transparent 73%);
+}
+#moe-bar-root.mp-b-w .mp-cap.up .mp-ico::before { background: radial-gradient(circle at 50% 50%, rgba(237,230,217,0.3) 0%, transparent 73%); }
+#moe-bar-root.mp-b-g .mp-cap.up .mp-ico::before { background: radial-gradient(circle at 50% 50%, rgba(123,236,55,0.8) 0%, transparent 73%); }
+#moe-bar-root.mp-b-t .mp-cap.up .mp-ico::before { background: radial-gradient(circle at 50% 50%, rgba(90,154,211,0.8) 0%, transparent 73%); }
+#moe-bar-root.mp-b-v .mp-cap.up .mp-ico::before { background: radial-gradient(circle at 50% 50%, rgba(115,23,196,0.8) 0%, transparent 73%); }
+#moe-bar-root.mp-b-au .mp-cap.up .mp-ico::before { background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.9) 0%, transparent 73%); }
+.mp-ico::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.mp-ico.mk { width: 16rem; height: 16rem; }
+.mp-ico.mk::after { background-size: contain; filter: brightness(1); }
+.mp-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
+.mp-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
+.mp-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
+.mp-ico.bm { width: 14rem; height: 14rem; }
+.mp-ico.bm::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png);
+  background-size: 228.7%;
+  filter: brightness(3);
+}
+.mp-ico.dmg { width: 16rem; height: 16rem; }
+.mp-ico.dmg::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_damage.png);
+  background-size: 342.5%;
+  filter: brightness(3);
+}
+
+/* The transient + the 100% pulse. GAMEFACE: a transform transition needs MATCHING FUNCTION
+   LISTS across every keyframe, so translateY() appears on ALL FOUR stops. Separate in/out
+   easings inside one animation means per-stop animation-timing-function; the middle stop is
+   linear so the hold cannot creep. The exit RETURNS the way it came. */
+@keyframes mp-life{
+  0%{opacity:0;transform:translateY(20rem);animation-timing-function:ease-in}
+  9.68%{opacity:1;transform:translateY(0rem);animation-timing-function:linear}
+  90.32%{opacity:1;transform:translateY(0rem);animation-timing-function:ease-in}
+  100%{opacity:0;transform:translateY(20rem)}}
+#moe-bar-root.mp-run{animation:mp-life 6200ms both}
+@keyframes mp-pulse{
+  0%,100%{box-shadow:0 0 8rem rgba(255,205,90,0.9)}
+  50%{box-shadow:0 0 16rem rgba(255,205,90,1.00)}}
+#moe-bar-root.mp-b-au.mp-pulse .mp-track{animation:mp-pulse 1200ms ease-in-out infinite}
+
+/* Axis + timings for the Python/JS side (the numbers, not just the CSS):
+{
+  "axis": "damage, five stops -> four equal quarters (barX in MoECalculator.js:302-322)",
+  "dmgStopsSource": "snapshot.thresholds{1,2,3,100}",
+  "barStops": [
+    0,
+    25,
+    50,
+    75,
+    100
+  ],
+  "fadeInMs": 600,
+  "holdMs": 5000,
+  "fadeOutMs": 600,
+  "totalMs": 6200,
+  "slideRem": 20,
+  "slideEasingIn": "ease-in",
+  "slideEasingOut": "ease-in",
+  "fillDurationMs": 400,
+  "fillEasing": "cubic-bezier(.2,.8,.2,1)",
+  "deltaHoldMs": 1600,
+  "deltaFadeMs": 500,
+  "deltaFadeEasing": "ease-out",
+  "pulseMs": 1200,
+  "bands": [
+    {
+      "name": "white",
+      "cls": "mp-b-w",
+      "colour": "rgba(237,230,217,0.8)"
+    },
+    {
+      "name": "green",
+      "cls": "mp-b-g",
+      "colour": "rgba(123,236,55,0.8)"
+    },
+    {
+      "name": "teal",
+      "cls": "mp-b-t",
+      "colour": "rgba(51,146,230,0.8)"
+    },
+    {
+      "name": "violet",
+      "cls": "mp-b-v",
+      "colour": "rgba(115,23,196,0.8)"
+    },
+    {
+      "name": "gold",
+      "cls": "mp-b-au",
+      "colour": "rgba(255,205,90,0.8)"
+    }
+  ],
+  "capClamp": {
+    "enabled": true,
+    "leftRem": -76,
+    "rightRem": 376
+  },
+  "boxWRem": 460,
+  "glyphBbox": {
+    "barrel_mark": 0.328,
+    "damage": 0.219,
+    "note": "ink measured at alpha>32 on the 128px canvas (a raw getbbox reads ~2x too big)"
+  }
+}
+*/
+
+/* ===== HAND-ADDED BLOCK 2 OF 2 -- a byte-identical copy of @keyframes mp-life / #moe-bar-root.mp-run
+   above, renamed. NOT tuned, and no tuned value touched.
+   WHY: JS restarts the transient (a hit landing while the bar is already up re-measures the
+   fade-out from that event) with the classic remove-class -> force-reflow -> re-add-class idiom,
+   which is UNPROVEN in Coherent/Gameface. If the engine coalesces the re-add with the run it just
+   cancelled, the restart is a NO-OP -- and because #moe-bar-root rests at opacity 0 under `both`
+   fill, that leaves the bar permanently INVISIBLE after its first appearance. That is not a
+   hypothesis: it is the exact reported symptom the Moving Average bar shipped with, and
+   MoEProgress.css:512-529 carries this same pair for the same reason. So MoEEfficiency.js
+   ALTERNATES between .mp-run and .mp-run-b (armRun): consecutive runs carry DIFFERENT
+   animation-names, which the engine cannot coalesce.
+   Keep the two blocks identical: any tuner change to mp-life must be mirrored here verbatim.
+   Once a launch proves the plain restart works in Coherent, delete this pair and drop armRun's
+   alternation. ===== */
+@keyframes mp-life-b{
+  0%{opacity:0;transform:translateY(20rem);animation-timing-function:ease-in}
+  9.68%{opacity:1;transform:translateY(0rem);animation-timing-function:linear}
+  90.32%{opacity:1;transform:translateY(0rem);animation-timing-function:ease-in}
+  100%{opacity:0;transform:translateY(20rem)}}
+#moe-bar-root.mp-run-b{animation:mp-life-b 6200ms both}
+/* ===== END HAND-ADDED BLOCK 2 ===== */

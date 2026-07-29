@@ -13,15 +13,16 @@ from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge.mod_settings import (
     merge_settings, DEFAULTS, GARAGE_KEY, BATTLE_KEY, BATTLE_ALT_KEY,
     COUNTED_ASSIST_KEY, PROGRESS_BAR_KEY, LINKAGE, SETTINGS_VERSION,
+    PROGRESS_VARIANT_KEY, PROGRESS_VARIANT_MOVING_AVERAGE, PROGRESS_VARIANT_EFFICIENCY,
     battle_alt_key_enabled, battle_enabled, counted_assistance_enabled,
-    progress_bar_enabled,
+    progress_bar_enabled, progress_bar_variant, clamp_variant,
     POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, FOLLOW_CAROUSEL_KEY, POS_MAX,
     clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position)
 from moe_calculator.adapter import settings_i18n
 
 
 def _defaults_with(over):
-    """A fresh copy of the full 10-key DEFAULTS with `over` (a dict) applied -- keeps the
+    """A fresh copy of the full DEFAULTS with `over` (a dict) applied -- keeps the
     exact-equality merge assertions readable now that DEFAULTS carries the position group.
     Takes a dict (not **kwargs) because the keys are runtime varName strings, not identifiers."""
     out = dict(DEFAULTS)
@@ -39,14 +40,19 @@ def _restore_settings():
 
 def test_defaults_when_empty_or_none():
     # No saved store (fresh install / MSA absent) -> both widgets on, Alt-peek, the
-    # counted-assistance row and the Progress Log off (all opt-in), the drag position
-    # at auto (0/0/0/0) and Follow Carousel Mode on.
+    # counted-assistance row and the Progress Bar off (all opt-in), the Progress Bar variant on
+    # Moving Average (0), the drag position at auto (0/0/0/0) and Follow Carousel Mode on.
     assert merge_settings(None) == DEFAULTS
     assert merge_settings({}) == DEFAULTS
     assert DEFAULTS == {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
                         COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
+                        PROGRESS_VARIANT_KEY: 0,
                         POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
                         FOLLOW_CAROUSEL_KEY: True}
+    # The variant default must be the INT 0, not False -- an existing user's Progress Bar keeps
+    # drawing the Moving Average variant, and a bool here would poison every _coerce round-trip.
+    assert DEFAULTS[PROGRESS_VARIANT_KEY] is PROGRESS_VARIANT_MOVING_AVERAGE
+    assert not isinstance(DEFAULTS[PROGRESS_VARIANT_KEY], bool)
 
 
 def test_overlays_known_keys():
@@ -59,10 +65,11 @@ def test_overlays_known_keys():
                            COUNTED_ASSIST_KEY: False,
                            POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                            FOLLOW_CAROUSEL_KEY: False})
-    # A full store overlays every key, position coords coerced to clamped ints. PROGRESS_BAR_KEY
-    # is absent from the input, so it keeps its (False) default.
+    # A full store overlays every key, position coords coerced to clamped ints. The two
+    # progress-bar keys are absent from the input, so they keep their (False / 0) defaults.
     assert out2 == {GARAGE_KEY: True, BATTLE_KEY: False, BATTLE_ALT_KEY: False,
                     COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
+                    PROGRESS_VARIANT_KEY: 0,
                     POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                     FOLLOW_CAROUSEL_KEY: False}
 
@@ -131,6 +138,71 @@ def test_progress_bar_default_off_and_getter():
     assert progress_bar_enabled() is True
     mod_settings._apply({PROGRESS_BAR_KEY: 0})
     assert progress_bar_enabled() is False
+
+
+# --- the Progress Bar variant radio: the mod's ONE non-bool setting --------------------------
+
+def test_clamp_variant_rejects_bools_and_out_of_range():
+    # THE trust boundary. MSA stores a RadioButtonGroup's value as a 0-based INT index, and
+    # _coerce's default branch bools everything it doesn't recognize -- so a missing/incorrect
+    # variant branch would silently turn index 1 into True and round-trip that back into MSA.
+    # Legal indices pass through unchanged, as ints.
+    assert clamp_variant(0) == PROGRESS_VARIANT_MOVING_AVERAGE
+    assert clamp_variant(1) == PROGRESS_VARIANT_EFFICIENCY
+    for good in (0, 1):
+        assert not isinstance(clamp_variant(good), bool)
+    # Numeric strings / floats coerce through int(), like clamp_pos.
+    assert clamp_variant("1") == 1
+    assert clamp_variant("0") == 0
+    assert clamp_variant(1.9) == 1
+    # Hostile / corrupt stores all collapse to 0 (Moving Average = the behaviour the bar always
+    # had), never a crash and never a bool. bool is an int SUBCLASS, so True would otherwise
+    # sneak through a bare int() as index 1 -- a bool is never a legal index, so it is corrupt.
+    for bad in (True, False, 2, -1, PROGRESS_VARIANT_EFFICIENCY + 1, 10 ** 9,
+                None, "abc", "", [1], {}, object()):
+        got = clamp_variant(bad)
+        assert got == PROGRESS_VARIANT_MOVING_AVERAGE, "%r leaked %r" % (bad, got)
+        assert not isinstance(got, bool), "%r leaked a bool" % (bad,)
+
+
+def test_coerce_variant_key_is_not_booled():
+    # The branch is wired to the right key (a regression here is invisible until a user's radio
+    # choice silently becomes True/False in the MSA store).
+    assert mod_settings._coerce(PROGRESS_VARIANT_KEY, 1) == 1
+    assert mod_settings._coerce(PROGRESS_VARIANT_KEY, 1) is not True
+    assert mod_settings._coerce(PROGRESS_VARIANT_KEY, True) == 0
+    assert mod_settings._coerce(PROGRESS_VARIANT_KEY, 99) == 0
+    assert mod_settings._coerce(PROGRESS_VARIANT_KEY, None) == 0
+    # ...while merge_settings, which routes through _coerce, keeps the index intact end to end.
+    assert merge_settings({PROGRESS_VARIANT_KEY: 1})[PROGRESS_VARIANT_KEY] == 1
+    assert merge_settings({PROGRESS_VARIANT_KEY: "1"})[PROGRESS_VARIANT_KEY] == 1
+    assert merge_settings({PROGRESS_VARIANT_KEY: 7})[PROGRESS_VARIANT_KEY] == 0
+
+
+def test_progress_bar_variant_default_and_getter():
+    # Ships on Moving Average (0) so an existing user with the bar enabled lands exactly where
+    # they already were, and the getter tracks live changes. The NAME `progress_bar_variant` is
+    # the contract the progress-bar bridges read -- don't rename it.
+    mod_settings._seed(DEFAULTS)
+    assert progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
+    mod_settings._apply({PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_EFFICIENCY})
+    assert progress_bar_variant() == PROGRESS_VARIANT_EFFICIENCY
+    mod_settings._apply({PROGRESS_VARIANT_KEY: 0})
+    assert progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
+
+
+def test_progress_bar_variant_getter_reclamps_a_corrupt_store():
+    # Like the position getters, the getter re-clamps whatever is cached, so a store corrupted
+    # outside _coerce (a hand-edited .dat, a foreign write) can never leak a bad index or a bool
+    # to the bridge that picks a window off it.
+    mod_settings._seed(dict(DEFAULTS))
+    for junk in (True, 5, -2, None, "x"):
+        mod_settings._settings[PROGRESS_VARIANT_KEY] = junk
+        assert progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
+        assert not isinstance(progress_bar_variant(), bool)
+    # An absent key falls back to the 0 default rather than raising.
+    del mod_settings._settings[PROGRESS_VARIANT_KEY]
+    assert progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
 
 
 # --- the foreign-broadcast bug: a payload with none of our keys must NOT reset us ----------
@@ -207,19 +279,71 @@ def test_template_settings_version_pins_the_current_layout():
     # in-client and mangled the surrounding layout, so the progress-bar checkbox is back at the
     # end of column 1. Going back to 6 would NOT reach a v7 install (a bump needs new > stored),
     # hence 8. The "Progress Log" rename rides along and stays.
-    assert SETTINGS_VERSION == 8
+    # Bumped 8 -> 9 for the Progress Bar variant restructure: the checkbox is re-parented as the
+    # master of its own group and gains a RadioButtonGroup child (new varName, new control, new
+    # nesting). The radio's OPTION LABELS are structural too -- _sync_template_text never
+    # rewrites options[].label -- so this bump is the only way they reach an existing install.
+    # Bumped 9 -> 10 to drop the variant radio's own "Bar Type" label row (empty text, tooltip
+    # removed) so its options read as direct children of the Progress Bar checkbox. Text is NOT in
+    # Aslain's _settingsStructure, so the blank label alone would have travelled text-only -- but
+    # _sync_template_text can only OVERWRITE text/tooltip, never DELETE the tooltip key (proven
+    # below), so a v9 install would keep a stale "Bar Type" tooltip on an invisible row. Only
+    # setModTemplate replaces the control wholesale, and only new > stored reaches it: 10, never a
+    # revert to 8.
+    assert SETTINGS_VERSION == 10
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
-def test_template_column1_is_the_grouped_battle_master_then_the_progress_bar():
+def test_template_column1_is_two_groups_battle_then_progress_bar():
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # FOUR controls, in order: In-Battle master, Alt child, counted-assist child, then the
-    # standalone Progress Log checkbox trailing the group. It briefly lived in a column 3 of its
-    # own; that column never rendered in-client, so it is back here -- appended AFTER
-    # _grouped_column1 rather than passed in as a child (see the masterVarName test below).
-    assert _varnames(col1) == [BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY, PROGRESS_BAR_KEY]
-    assert [c["type"] for c in col1] == ["CheckBox"] * 4
+    # FIVE controls = TWO groups spliced together, in order: In-Battle master, Alt child,
+    # counted-assist child; then the Progress Bar master and its variant radio. The progress-bar
+    # checkbox briefly lived in a column 3 of its own; that column never rendered in-client, so
+    # it is here -- now as a master of its own group rather than a bare trailing checkbox (see
+    # the masterVarName test below for why it is NOT a child of the In-Battle group).
+    assert _varnames(col1) == [BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
+                               PROGRESS_BAR_KEY, PROGRESS_VARIANT_KEY]
+    assert [c["type"] for c in col1] == ["CheckBox"] * 4 + ["RadioButtonGroup"]
+    # ...and still only TWO columns: a third column does not render in the panel at all.
+    assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
+
+
+def test_template_variant_radio_shape(monkeypatch):
+    # The descriptor must match what Aslain's templates.createRadioButtonGroup emits (we build it
+    # by hand to keep _template() import-free): a 0-based INT index in `value` and an `options`
+    # list of {"label": ...} dicts in index order, localized via settings_i18n.
+    radio = mod_settings._template()["column1"][-1]
+    assert radio["type"] == "RadioButtonGroup"
+    assert radio["varName"] == PROGRESS_VARIANT_KEY
+    assert radio["value"] == DEFAULTS[PROGRESS_VARIANT_KEY] == 0
+    assert not isinstance(radio["value"], bool)
+    assert [o["label"] for o in radio["options"]] == ["Moving Average", "Damage Efficiency"]
+    # `inline` is never emitted: we never call createRadioButtonGroup, so its inline kwarg (which
+    # raises TypeError on MSA < 1.6.1) cannot be passed, and the options keep MSA's default
+    # vertical stack that every build renders.
+    assert "inline" not in radio
+    # No label row: the text is EMPTY so the panel draws no "Bar Type" header and the two options
+    # read as direct children of the Progress Bar checkbox above. The key is still PRESENT (MSA's
+    # createBase always emits `text`) -- it is the VALUE that is blank.
+    assert "text" in radio
+    assert radio["text"] == u""
+    # ...and with no label to hover, the tooltip key is OMITTED rather than emitted empty (an ""
+    # tooltip would still be a tooltip to the panel). Its prose moved to the master's tooltip.
+    assert "tooltip" not in radio
+    master = mod_settings._template()["column1"][-2]
+    assert master["varName"] == PROGRESS_BAR_KEY
+    assert u"Moving Average" in master["tooltip"]
+    assert u"Damage Efficiency" in master["tooltip"]
+    # LOCALIZED, not hardcoded here. The old `== list(settings_i18n.variant_options(u"en"))` line
+    # was dropped rather than re-pointed at build(): comparing against build()'s own output can
+    # never fail where the English literal above passes (they move together, and a hardcoded list
+    # in _radio would MATCH build's English), so it was strictly weaker than the literal it sat
+    # beside. This is the claim it was reaching for and the one that mutation-probes: swap the
+    # source tuple and the descriptor must follow.
+    monkeypatch.setitem(settings_i18n._VARIANT_OPTIONS, u"en", (u"AAA", u"BBB"))
+    assert [o["label"] for o in mod_settings._template()["column1"][-1]["options"]] == \
+        [u"AAA", u"BBB"], "the radio's options are not read from settings_i18n"
 
 
 def test_template_column2_garage_then_positioning_group():
@@ -248,22 +372,26 @@ def test_template_steppers_are_bounded_manual_entry():
         assert s["snapInterval"] == 1
 
 
-def test_template_children_bind_to_battle_master_but_progress_bar_does_not():
-    # The two children carry masterVarName == the battle master's varName so MSA groups +
-    # greys them out under the master. Proven via the manual-binding fallback branch (no
-    # gui.aslainMenu under pytest -- see _grouped_column1).
+def test_template_children_bind_to_their_own_master_only():
+    # Each group's children carry masterVarName == THEIR master's varName so MSA groups + greys
+    # them out under it. Proven via the manual-binding fallback branch (no gui.aslainMenu under
+    # pytest -- see _grouped_column1).
     col1 = mod_settings._template()["column1"]
-    master, alt_child, counted_child, progress = col1
+    master, alt_child, counted_child, progress, variant = col1
     assert alt_child["masterVarName"] == BATTLE_KEY
     assert counted_child["masterVarName"] == BATTLE_KEY
-    # The master itself is NOT bound to anything.
+    # Neither master is bound to anything: the Progress Bar is an independent feature and must
+    # stay togglable while the In-Battle master is OFF. That is why it gets its OWN
+    # _grouped_column1 call instead of being passed into the In-Battle group as a third child --
+    # a grouped child inherits THAT master's varName and MSA greys it out with it, which would
+    # tie the progress bar to the unrelated In-Battle Widget.
     assert "masterVarName" not in master
-    # ...and neither is the Progress Log, even though it now shares column 1 with the group: it
-    # is an independent feature and must stay togglable while the In-Battle master is OFF. This
-    # is the whole reason it is appended AFTER _grouped_column1 instead of being passed in as a
-    # third child -- a grouped child inherits masterVarName and MSA greys it out with the master.
     assert progress["varName"] == PROGRESS_BAR_KEY
     assert "masterVarName" not in progress
+    # ...and the variant radio is bound to the PROGRESS BAR master, never to the battle one, so
+    # it greys out with the feature it actually belongs to.
+    assert variant["varName"] == PROGRESS_VARIANT_KEY
+    assert variant["masterVarName"] == PROGRESS_BAR_KEY
 
 
 def test_template_control_defaults_match_defaults_dict():
@@ -276,7 +404,7 @@ def test_template_control_defaults_match_defaults_dict():
             if "varName" not in c:            # a Label header -- not a stored value
                 assert c["type"] == "Label"
                 continue
-            assert c["type"] in ("CheckBox", "NumericStepper")
+            assert c["type"] in ("CheckBox", "NumericStepper", "RadioButtonGroup")
             assert c["value"] == DEFAULTS[c["varName"]]
 
 
@@ -353,12 +481,24 @@ def test_sync_template_text_walks_built_template_in_lockstep():
 
     mod_settings._sync_template_text(_FakeApi())
     text = settings_i18n.panel_text()
+    tipless = 0
     for col, keys in columns:
         for control, key in zip(tmpl[col], keys):
             assert control["text"] == text[key]["text"], (
                 "%s/%s kept its STALE text -- is the column missing from "
                 "_sync_template_text's pair list?" % (col, key))
-            assert control["tooltip"] == text[key]["tooltip"]
+            tip = text[key].get("tooltip")
+            if tip is not None:
+                assert control["tooltip"] == tip
+            else:
+                # A control with NO tooltip (the label-less variant radio) keeps whatever the
+                # stored template held: the sync path only ever OVERWRITES text/tooltip, it never
+                # deletes a key. That gap is precisely why removing the radio's "Bar Type" label
+                # needed a settingsVersion bump (setModTemplate replaces the control wholesale)
+                # rather than riding the text-only path.
+                assert control["tooltip"] == u"STALE"
+                tipless += 1
+    assert tipless == 1, "expected exactly one tooltip-less control (the variant radio)"
     assert saved["called"] is True   # something changed -> state persisted
 
 
@@ -502,7 +642,8 @@ def test_on_reset_ignores_foreign_linkage():
 
 
 def test_coerce_types_per_key():
-    # Position keys coerce to clamped ints; every other key coerces to bool.
+    # Position keys coerce to clamped ints, the progress-bar variant to a clamped radio index
+    # (see test_coerce_variant_key_is_not_booled), every other key to bool.
     assert mod_settings._coerce(POS_X_KEY, "640") == 640
     assert mod_settings._coerce(POS_Y_KEY, -3) == 0
     assert mod_settings._coerce(GARAGE_KEY, 0) is False
@@ -615,8 +756,10 @@ def test_migration_preserves_user_values_drops_removed_key_and_seeds_new_default
     # New-to-v5 keys were absent from the old dict -> fresh defaults.
     assert mod_settings.pos_x() == 0 and mod_settings.pos_y() == 0
     assert mod_settings.follow_carousel() is True
-    # ...and so is the new-to-v6 progress-bar key (opt-in stays off across the bump).
+    # ...and so is the new-to-v6 progress-bar key (opt-in stays off across the bump) and the
+    # new-to-v9 variant index (Moving Average = the behaviour the bar always had).
     assert mod_settings.progress_bar_enabled() is False
+    assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
     # The removed legacy key never leaks into our cache.
     assert "legacyGoneVarName" not in mod_settings._settings
     # Persisted exactly once (reset + overlay coalesce into one debounced write).
@@ -651,6 +794,7 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
         BATTLE_ALT_KEY: True,           # default False
         COUNTED_ASSIST_KEY: True,       # default False
         PROGRESS_BAR_KEY: True,         # default False -- the control the relayout moved
+        PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_EFFICIENCY,   # default 0 (Moving Average)
         POS_X_KEY: 700, POS_Y_KEY: 300, # default 0 (auto)
         POS_W_KEY: 1920, POS_H_KEY: 1080,
         FOLLOW_CAROUSEL_KEY: False,     # default True
@@ -666,6 +810,10 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     assert mod_settings.battle_alt_key_enabled() is True
     assert mod_settings.counted_assistance_enabled() is True
     assert mod_settings.progress_bar_enabled() is True
+    # The one non-bool value: it must come out the bump as the INT index the user chose, not
+    # booled into True by _coerce's default branch.
+    assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_EFFICIENCY
+    assert not isinstance(mod_settings._settings[PROGRESS_VARIANT_KEY], bool)
     assert (mod_settings.pos_x(), mod_settings.pos_y()) == (700, 300)
     assert (mod_settings.pos_w(), mod_settings.pos_h()) == (1920, 1080)
     assert mod_settings.follow_carousel() is False
