@@ -71,6 +71,14 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // digits. The glows are smaller still (8rem .mp-full, 16rem .mp-pulse, 1rem ring). So the BACKDROP
 // is the extreme on both sides with ~18rem to spare -- keep the 80rem, do not trim it to the
 // caption.
+// SINCE THE CENTRE CAPTIONS WERE RE-CENTRED ON THEIR NUMERAL (MoEProgress.css: the icon's width
+// cancelled by a negative margin, the delta hung out of flow) the .side caption is no longer
+// automatically the widest thing out there. At proj_avg == axisHi, .mp-capC's box sits at 100% and
+// only its numeral is centred, so its DELTA now reaches ~58rem past the track's right edge (4-digit
+// numeral, 4.2rem gap, a "(+200)"-sized delta at 12rem) against .mp-capR's ~52rem -- while on the
+// LEFT the same change SHRINKS capC's reach (~35rem, down from ~46). Still ~22rem inside the 80rem
+// on the worst side, so the clearance stands unchanged; it is the "which one is the extreme"
+// conclusion that moved, so re-derive both before ever trimming it.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
 //   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 380     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90

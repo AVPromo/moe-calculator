@@ -173,6 +173,10 @@ const MUTATIONS = {
         "setIco(capR, cur.marks >= 3 ? 4 : cur.marks + 1);", "setIco(capR, cur.marks);"],
     "pre-tick-not-painted": ["B", "    tPre.style.left = pre;", "    void 0;"],
     "pre-caption-not-painted": ["B", "    capP.style.left = pre;", "    void 0;"],
+    // ...and setPos's third write, which had no assertion at all until the captions were re-centred
+    // on their NUMERAL (MoEProgress.css .mp-capP/.mp-capC .mp-ico + .mp-cap .mp-d): the bottom
+    // caption is the one that rides proj_avg, so its painted X is the whole point of that centring.
+    "cur-caption-not-painted": ["B", "    capC.style.left = p;", "    void 0;"],
     // The entry window must CARRY the previous committed sign: put a clear back into the !sw path
     // and a bar that was green blinks neutral for 600ms before re-committing.
     "entry-clears-sign": ["B",
@@ -358,6 +362,12 @@ function run(mutation) {
     eq("settled straight at projAvg", s.fill.style.width, "50.000%");
     eq("the static pre_avg tick is painted", s.pre.style.left, "41.667%");
     eq("...and its caption with it", s.capP.style.left, "41.667%");
+    // setPos writes THREE lefts and only two were ever asserted. The bottom caption's is the one
+    // the numeral-centring in the CSS is about (.mp-capP/.mp-capC .mp-ico cancel the icon's width
+    // and .mp-cap .mp-d hangs the delta out of flow, so translateX(-50%) halves the DIGITS' box):
+    // the percentage below is the tick the digits must sit on.
+    eq("the moving caption rides proj_avg, like the fill and the tick", s.capC.style.left,
+       "50.000%");
     eq("the bottom numeral already shows projAvg", s.capCV.textContent, "2,750");
     eq("axis-end captions carry the requirement values",
        [s.capL.querySelector(".mp-v").textContent, s.capR.querySelector(".mp-v").textContent],

@@ -19,6 +19,7 @@ notice: assert the actual EMITTED VALUES here rather than trusting the comments.
 """
 import os
 import re
+from decimal import Decimal
 
 import pytest
 
@@ -133,10 +134,9 @@ def _sole_rule_decls(css, selector, what):
 def test_the_delta_carries_the_efficiency_bars_size_and_nudge():
     # A live pass settled the recent-delta's look on the Damage Efficiency bar; the maintainer asked
     # for the SAME size and nudge here. The values are MoEEfficiency.css's `.mp-cap .mp-d` --
-    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: that bar
-    # anchors its delta out of flow (left:100% + top:0) so one translate() carries the X gap too,
-    # while this bar's delta is an in-flow flex item whose gap is already margin-left: 0.35em == the
-    # same 4.2rem at 12rem. Adding an X term here would DOUBLE the gap.
+    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: the X gap is
+    # already margin-left: 0.35em == the same 4.2rem at 12rem (see the centring test below, which
+    # pins that gap and the anchor it hangs off). Adding an X term here would DOUBLE the gap.
     # The tuner is asserted alongside because MoEProgress.css is a -EmitCss output: pinning only the
     # stylesheet lets the next re-emit revert this silently, which is how it was lost once already.
     decls = _sole_rule_decls(_read("MoEProgress.css"), ".mp-cap .mp-d", "MoEProgress.css")
@@ -146,6 +146,84 @@ def test_the_delta_carries_the_efficiency_bars_size_and_nudge():
     assert tuner.count("font-size: 12rem;\\n") == 1 and \
         tuner.count("transform: translateY(2.5rem);\\n") == 1, \
         "gen_bar_tuner.ps1 -EmitCss no longer emits the delta size/nudge -- a re-emit would revert it"
+
+
+def _rem(decls, prop, what):
+    """The rem value of `prop` within one rule's declarations, as a Decimal."""
+    match = re.search(r"\b%s:\s*(-?[\d.]+)rem\s*;" % re.escape(prop), decls)
+    assert match, "%s: no %s in `%s`" % (what, prop, decls.strip())
+    return Decimal(match.group(1))
+
+
+def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
+    """.mp-cap's translateX(-50%) must halve the DIGITS' box, not icon+numeral(+delta).
+
+    Both siblings therefore have to leave that box, and each needs its own mechanism:
+
+    THE ICON stays in flow and cancels its own outer width with margin-left == -(its box + the
+    gap), so -box-gap + box + gap == 0 and the numeral starts at the caption's origin. In flow
+    because it must keep .mp-capP/.mp-capC's per-role translateY -- which is also the stacking
+    context scoping the ::before glow's z-index:-1 -- and because an abspos icon would need a
+    top:50% that, on .up, resolves against a PADDING box carrying the 6rem gap and drops the glyph
+    half of it. RE-DERIVED here from the box + gap the emit computes the margin from (dmgPBox /
+    dmgCBox / icoGap), never from the emitted literal: a genuine retune moves all of them together
+    and still passes, while drift in one alone fails. Decimal, not float -- the gap slider steps in
+    0.5 and IEEE754 makes such sums compare unequal.
+
+    THE DELTA cannot use a margin: its text width changes, so any fixed negative would leave the
+    centring drifting with the digits. It goes out of flow off the numeral's right edge instead,
+    and `left: 100%` + margin-left is the pairing Coherent honours (it is the `right:100%` and
+    `bottom:100%` anchors that render a margin as 0).
+
+    The .side captions must NOT be cancelled: they are not centred on anything, they hang off the
+    axis ends by their own gap, so a negative margin there would slide the whole label inwards.
+    """
+    css = _read("MoEProgress.css")
+    gap = _rem(_sole_rule_decls(css, ".mp-cap .mp-ico", "MoEProgress.css"), "margin-right",
+               "MoEProgress.css")
+    for cap, glyph in ((".mp-capP", ".mp-ico.dmgp"), (".mp-capC", ".mp-ico.dmgc")):
+        box = _rem(_sole_rule_decls(css, glyph, "MoEProgress.css"), "width", "MoEProgress.css")
+        decls = _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css")
+        assert _rem(decls, "margin-left", "MoEProgress.css") == -(box + gap), \
+            "%s's icon does not cancel its own %srem box + the %srem gap" % (cap, box, gap)
+        # ...and the per-role Y is still on the SAME rule's transform, not traded for a margin.
+        assert re.search(r"\btransform:\s*translate\(0rem,\s*-?[\d.]+rem\)\s*;", decls), \
+            "%s's icon lost the transform that scopes its glow's z-index" % cap
+    for cap in (".mp-capL", ".mp-capR"):
+        assert "margin-left" not in _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css"), \
+            "%s is a .side caption -- cancelling its icon slides the label over the track" % cap
+    delta = _sole_rule_decls(css, ".mp-cap .mp-d", "MoEProgress.css")
+    assert re.search(r"\bposition:\s*absolute\s*;", delta), "the delta is still in the flex row"
+    assert re.search(r"\bleft:\s*100%\s*;", delta), "the delta is not anchored off the numeral"
+    assert re.search(r"\bmargin-left:\s*0\.35em\s*;", delta), \
+        "the delta's gap must ride margin-left -- the left:100% anchor is the side Coherent honours"
+    assert "right:" not in delta and "margin-right:" not in delta, \
+        "margin is DROPPED on a right:100% anchor -- 0/515 in WG's corpus"
+    # THE TUNER, BOTH HALVES. MoEProgress.css is a -EmitCss output, so pinning only the stylesheet
+    # lets the next re-emit revert the centring silently -- exactly how the delta's size was lost
+    # once. And the tuner's own live-preview <style> is the surface the look is approved on, so a
+    # preview that still centres the whole row would send the next session back to the old bug.
+    tuner = _read_tuner()
+    assert tuner.count('".mp-capP .mp-ico { transform: translate(0rem, "+st.icoYP+"rem); '
+                       'margin-left: "+') == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer cancels the TOP caption's icon width"
+    assert tuner.count('".mp-capC .mp-ico { transform: translate(0rem, "+st.icoYC+"rem); '
+                       'margin-left: "+') == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer cancels the BOTTOM caption's icon width"
+    # TWICE each, once per half: the preview's --dmgpml / --dmgcml custom property and the emitted
+    # literal. Both must DERIVE the margin from the same sliders -- a literal in either half means a
+    # retune of the icon box or the gap silently de-centres that caption.
+    assert tuner.count("(-(st.dmgPBox+st.icoGap))") == 2 and \
+        tuner.count("(-(st.dmgCBox+st.icoGap))") == 2, \
+        "the negative margins must stay DERIVED from the box + gap sliders in BOTH tuner halves"
+    assert tuner.count("margin-left:var(--dmgpml)") == 1 and \
+        tuner.count("margin-left:var(--dmgcml)") == 1, \
+        "the tuner's live preview no longer cancels the centre captions' icon width"
+    assert tuner.count('".mp-cap .mp-d {\\n  position: absolute;\\n  left: 100%;\\n'
+                       '  margin-left: 0.35em;\\n"') == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer hangs the delta out of flow"
+    assert tuner.count(".mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;") == 1, \
+        "the tuner's live preview still lays the delta out in the flex row"
 
 
 def _read_tuner():

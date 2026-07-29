@@ -232,8 +232,15 @@ body { margin: 0; }
    delta), numerals right, margin-right as the single gap -- on the left-hand side label that
    puts the NUMBER nearest the axis it labels, which is the right way round. GAMEFACE: plain
    `flex-direction: row`; the earlier `column-reverse` variant (never verified in Coherent)
-   is gone, so no unverified flex mode remains. translateX(-50%) centres a CENTRE caption's
-   whole row on its tick. */
+   is gone, so no unverified flex mode remains.
+   WHAT translateX(-50%) CENTRES ON THE TICK IS THE NUMERAL, NOT THE ROW. Centring the whole
+   box put the DIGITS left of their own tick by half the icon+gap, and on .dn it drifted as
+   the delta's text width changed. So both siblings are taken OUT of the width the transform
+   halves, each by the mechanism its constraint allows -- the icon by a negative margin that
+   cancels its own box (.mp-capP / .mp-capC .mp-ico), the text-width-dependent delta by going
+   out of flow (.mp-cap .mp-d) -- leaving the numeral as the caption's ONLY in-flow content,
+   so -50% of the box IS -50% of the digits. Same end state as the sibling Damage Efficiency
+   bar, reached differently: there .mp-cap is not a flex row at all. */
 .mp-cap {
   position: absolute;
   left: 0;
@@ -283,6 +290,8 @@ body { margin: 0; }
 /* padding-right, not margin-right -- see the .mp-cap.up note above (right:100% anchor). */
 .mp-cap.side.mp-capL { left: auto; right: 100%; padding-right: 8rem; }
 .mp-cap.side.mp-capR { left: 100%; margin-left: 3rem; }
+/* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
+   width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */
 .mp-cap .mp-ico { margin-right: 1rem; }
 .mp-cap .mp-v,
 .mp-cap .mp-d {
@@ -319,17 +328,27 @@ body { margin: 0; }
 /* em, not rem: the two caption rows have different font-sizes and this gap should track
    them. 0.35em == the shipped .mb-delta's 4.5rem at its 14rem font-size.
    SIZE + NUDGE ARE THE EFFICIENCY BAR'S, carried over after a live pass (MoEEfficiency.css's
-   `.mp-cap .mp-d`: font-size 12rem, translate(4.2rem, 2.5rem)). The two bars anchor their delta
-   DIFFERENTLY -- there it is out of flow off the numeral (left:100% + top:0) and ONE translate()
-   carries both the X gap and the signed Y; here it is an in-flow flex item of the .mp-cap row, so
-   only the Y half needs a transform. The X half is already identical and must NOT be added again:
-   0.35em of the delta's OWN 12rem font-size IS 4.2rem, which is exactly how that 4.2rem was tuned.
-   So the font-size below is load-bearing for the gap too -- change it and the gap moves with it.
+   `.mp-cap .mp-d`: font-size 12rem, translate(4.2rem, 2.5rem)). The X half must NOT be added
+   again: 0.35em of the delta's OWN 12rem font-size IS 4.2rem, which is exactly how that 4.2rem
+   was tuned. So the font-size below is load-bearing for the gap too -- change it and the gap
+   moves with it.
+   OUT OF FLOW off the numeral's right edge -- the second half of the numeral-centring in
+   .mp-cap's note. A negative margin cannot cancel THIS sibling the way it cancels the icon:
+   the digits change, so any fixed value would leave the centring drifting with the delta's
+   text width. `left: 100%` + margin-left is the SAFE anchored pair (Coherent honours the
+   left/top twins; it is `right:100%`+margin-right and `bottom:100%`+margin-bottom that render
+   a 0 gap), and it keeps the 0.35em gap byte-for-byte as tuned. Same idiom as the sibling
+   MoEEfficiency.css, one declaration short of it: NO `top` HERE, ON PURPOSE. An abspos child
+   of a flex container takes its static position as if it were the sole flex item, so
+   align-items: center keeps the vertical placement the in-flow box already had and the
+   translateY below stays the whole Y story. That bar's `top: 0` anchors to the content-box TOP
+   instead, which here would lift the delta by half the row's leftover height -- do not
+   "unify" them.
    THE DELTA FADES IN at the numeral swap (valueSwapMs): JS sets opacity 1 there and back to
    0 when it re-runs the transient -- the curve is here, not in JS. OPACITY, not visibility
-   (which cannot interpolate) and NOT display (which would drop the box out of the flex row
-   and visibly re-centre the translateX(-50%) caption mid-animation -- opacity keeps the box
-   laid out exactly as visibility did, so that centring is as safe as it was). No
+   (which cannot interpolate). display:none would no longer disturb the centring now that the
+   box is out of flow -- it DID before, and that is why opacity was picked -- but opacity is
+   what interpolates, so it stays. No
    `visibility` alongside: this whole widget is pointer-events:none, so a 0-alpha box has
    nothing to hit-test or focus. ONE transition declaration here, naming ONLY opacity, with
    EXPLICIT ms + easing -- Gameface drops a transition on a property whose value starts from
@@ -337,6 +356,8 @@ body { margin: 0; }
    CANCELLING it (a re-run mid-fade): set transition:none, opacity 0, force a reflow, then
    restore the transition -- the same idiom the fill/tick rewind uses. */
 .mp-cap .mp-d {
+  position: absolute;
+  left: 100%;
   margin-left: 0.35em;
   font-size: 12rem;
   transform: translateY(2.5rem);
@@ -392,10 +413,22 @@ body { margin: 0; }
    stacking context and so scopes the ::before glow's z-index:-1 -- swap it for a margin and
    the glow escapes and paints under the whole caption. ::before is centred INSIDE this
    transformed box (left/top 50% + its OWN translate(-50%,-50%)), so the glow travels with
-   the glyph and its centring is unaffected at any Y. */
+   the glyph and its centring is unaffected at any Y.
+   ...AND, ON THE TWO CENTRE CAPTIONS ONLY, THE ICON'S WIDTH CANCELLED -- the first half of the
+   numeral-centring in .mp-cap's note. margin-left is -(this caption's own icon box + the gap),
+   so the icon's OUTER width is exactly 0 (-box-gap + box + gap): the numeral starts at the
+   caption's origin and the glyph still paints 1rem to its left, unmoved. A MARGIN and not
+   position:absolute precisely so the icon stays IN FLOW -- it keeps the transform above (both
+   the Y and the stacking context), and out of flow it would need a top:50% that, on .up,
+   resolves against a PADDING box carrying 6rem and would drop the glyph half that gap.
+   PER CAPTION because the box is per caption (dmgP / dmgC are independent sliders), and
+   DERIVED from those sliders + icoGap -- a literal would break the centring on the next
+   retune. NOT on the two .side captions: they are not centred on anything, they are pushed
+   off the axis ends by their own gap, so cancelling their icon would just slide the label
+   inwards over the track. */
 .mp-capL .mp-ico { transform: translate(0rem, 0.5rem); }
-.mp-capP .mp-ico { transform: translate(0rem, 0rem); }
-.mp-capC .mp-ico { transform: translate(0rem, 1rem); }
+.mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15rem; }
+.mp-capC .mp-ico { transform: translate(0rem, 1rem); margin-left: -17rem; }
 .mp-capR .mp-ico { transform: translate(0rem, 0.5rem); }
 .mp-ico::before {
   content: "";
