@@ -110,9 +110,10 @@ const PAD_REM = 10;                                  // slack for the shadow/glo
 // Build the root once and cache it. Markup shape is the tuner's stage verbatim
 // (eff_bar_tuner.html:333-351): backdrop, then the track carrying the fill, the four FIXED
 // requirement ticks, the one moving current tick, the four requirement captions (three marksOnGun
-// glyphs + the barrel_mark at 100 %) and the current caption with its parenthesised delta. The
-// delta's PARENS are static text nodes on the wrapper so they carry no band glow (the .mp-d /
-// .mp-d-num split in the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
+// glyphs + the barrel_mark at 100 %) and the current caption with its BARE signed delta -- no
+// parens on this bar, unlike the Moving Average one. The .mp-d / .mp-d-num split stays anyway: the
+// wrapper carries the gap, size and fade, the inner numeral is what JS writes the digits into (see
+// the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
 function ensureRoot() {
     let root = document.getElementById("moe-bar-root");
@@ -137,7 +138,7 @@ function ensureRoot() {
         '  <div class="mp-cap dn r4"><i class="mp-ico bm"></i>' +
         '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap up mp-capC"><i class="mp-ico dmg"></i><span class="mp-v"></span>' +
-        '<span class="mp-d">(<span class="mp-d-num"></span>)</span></div>' +
+        '<span class="mp-d"><span class="mp-d-num"></span></span></div>' +
         '</div>';
     document.body.appendChild(root);
     return root;
