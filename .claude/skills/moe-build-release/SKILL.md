@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.5.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.6.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +95,8 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.5.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.5.0 (2026-07-25) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
+**v0.1.0 through v1.6.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.6.0 (2026-07-29) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
 client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
@@ -121,7 +121,34 @@ and drifted as damage accrued. `_fit_from_thresholds` now returns the usable sto
 through both stops, so `f(D_i) == 100*p_i` at every stop while the curve still rides WG's normal
 shape between them; the end segments extend for both tails (no truncation above D100). Unusable WG
 stops are dropped **individually** (`d <= 0`, or `d <=` the last kept `d`), so a bad interior stop
-costs resolution, not `has_data`.
+costs resolution, not `has_data`; **1.6.0 (2026-07-29)** is a minor bump carrying **two new
+mutually exclusive centre-screen in-battle progress bars**, both **off by default** behind a new
+independent `progress_bar_enabled` MSA master ("Progress Bar", its own column-1 group, never a
+child of the In-Battle Widget) with an int-valued `progress_bar_variant` RadioButtonGroup child
+(`0 = Moving Average`, the default, so an existing user lands on the original bar; `1 = Damage
+Efficiency`). **Moving Average** (`MoEProgress.js/.css` + `MoEProgressView.html`,
+`bridge/progress_view.py`, `res_map/MoEProgressView.json`) plots the career projected average
+between the held mark and the next mark's requirement, plus this battle's signed delta; it is gated
+on `model.has_baseline`, so it stays hidden in replays and after a relogin until a Garage visit
+populates the baseline. **Damage Efficiency** (`MoEEfficiency.js/.css` + `MoEEfficiencyView.html`,
+`bridge/efficiency_view.py`, `res_map/MoEEfficiencyView.json`) plots this battle's damage against
+all four mark requirements on four equal quarters (`EFFICIENCY_BAR_STOPS = (0, 25, 50, 75, 100)`)
+and auto-shows only on a new high-water damage mark; it has **no** baseline gate, only `hasData`.
+`battle_bridge._window_gates()` is the single place that decides who may be up and opens **at most
+one** centre bar — the only reason both stylesheets can own `#moe-bar-root` / `.mp-*` without
+colliding. Shared transient behaviour (the fade/hold/fade life cycle, `HOLD_MS = 5000`) lives in
+`MoEBarTransient.js`, instantiated once per document; **Alt is an ADDITIVE show trigger** for both
+bars and is deliberately NOT gated by the overlay's "Show on Alt Key", and the bars' centre-screen
+position is fixed, not configurable. `SETTINGS_VERSION` went **5 → 10** across the feature's
+iterations (6 = the checkbox, 7 = a column-3 relayout, 8 = its revert plus the "Next Mark Progress
+Bar" label rename, 9 = the re-parent into its own group + the variant radio, 10 = dropping the
+radio's own "Bar Type" label row) — 6–9 shipped to nobody but the maintainer's install. Saved
+values migrate across every step and no `varName` was renamed. Cosmetics: the Damage Efficiency
+delta renders **without parentheses** (Moving Average and the corner overlay keep theirs) and
+caption centring was fixed to sit on the numeral, not the row. Player docs were **resynced** this
+release (`README.md` / `INSTALL.md` / `installer/readme.moe.txt`, both language halves), and
+`installer/readme.wgmods.txt` was **DELETED** as a superseded stub — `readme.moe.txt` is now the
+single portal-readme template, and `build/build_moe_zip.py` was already its only consumer.
 Both channels now ship the **same single build** (WG-API threshold source): the GitHub release
 carries `MoECalculator-Setup-<ver>.exe` + the bare `.wotmod`, and `MoECalculator_<ver>.zip`
 (same `.wotmod` + vendor deps) is uploaded manually to
@@ -132,6 +159,14 @@ from izeberg 1.7.0 in v1.3.0) alongside OpenWG GameFace, plus **Mods List API**
 settings in the in-game "Modification list" window. The installer self-update reads the GitHub Atom
 feed, so keep the `vX.Y.Z` tag + `MoECalculator-Setup-<ver>.exe` asset-name convention. Follow
 `wotmod-release` for the bump→tag→build→publish flow.
+
+**Every release cut MUST reconcile the player docs** — `README.md`, `INSTALL.md` and
+`installer/readme.moe.txt` — against the user-facing surface shipped since the last tag: new or
+renamed settings controls, changed defaults, new widgets. Walk `git log <lasttag>..HEAD` for those
+three, and apply **every** edit to **BOTH language halves** of the bilingual files (EN + UA). This
+is required, same as bumping the version files: player docs have silently missed two feature
+releases (1.4.0's garage drag-to-reposition, 1.6.0's two centre-screen bars) precisely because no
+step checked them.
 
 **Every release cut MUST refresh this "Release state" prose** to the newly published version —
 promote it to "current Latest", add the prior version to the history line, and correct the
