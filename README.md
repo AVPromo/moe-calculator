@@ -9,8 +9,10 @@ of the interface rather than an add-on.
 
 |  |  |
 |:--:|:--:|
-| ![Garage MoE bar](assets/screenshots/garage.png) | ![In-battle MoE overlay](assets/screenshots/battle.png) |
-| Garage MoE bar | In-battle overlay |
+| ![In-battle MoE overlay](assets/screenshots/battle.png) | ![Garage MoE bar](assets/screenshots/garage.png) |
+| In-battle overlay | Garage MoE bar |
+| ![Progress bar — Moving Average](assets/screenshots/progress_moving_average.png) | ![Progress bar — Damage Efficiency](assets/screenshots/progress_damage_efficiency.png) |
+| Progress bar — Moving Average | Progress bar — Damage Efficiency |
 
 ## What it shows
 
@@ -88,44 +90,27 @@ The mod adds a settings panel to the in-game **mod-settings menu**, provided by
 **ModsSettingsAPI (MSA)** — the standard settings host bundled with the installer. If MSA
 isn't loaded, the mod still runs with both widgets on by default; you just won't see the panel.
 
-The panel has two columns.
+Column 1 holds the in-battle options, column 2 the Garage ones:
 
-**Column 1 — in battle.**
+| Setting | Default | What it does |
+|---|---|---|
+| **In-Battle Widget** | On | Shows the live MoE overlay during battle. |
+| ↳ **Show on Alt Key** | Off | Shows the overlay only while **Alt** is held; when off it is visible at all times. |
+| ↳ **Counted Assistance** | Off | Adds a third overlay row: the higher of tracking, spotting or stun assist, with an icon for whichever leads. |
+| **Progress Bar** | Off | Shows the centre-screen bar, which fades out on its own; hold **Alt** to bring it back. Pick the mode below. |
+| ↳ **Mode** | Moving Average | Picks between the two mutually exclusive modes, **Moving Average** and **Damage Efficiency** — the panel shows them as an unlabelled pair of radio buttons. |
+| **In-Garage Widget** | On | Shows the MoE percentile bar in the Garage, on the selected vehicle. |
+| **Widget position (px)** | — | Header only: **Ctrl+drag** the Garage widget to pin it (hold **Shift** to lock to one axis). |
+| **Horizontal (left X)** | 0 = auto | The pinned widget's distance from the left screen edge, in pixels. |
+| **Vertical (top Y)** | 0 = auto | The same for the top screen edge. |
+| **Follow Carousel Mode** | On | A pinned widget keeps shifting vertically with the vehicle carousel (single / double rows) so it never overlaps it. |
 
-**In-Battle Widget** *(on by default)* — shows the live MoE overlay during battle. Uncheck to
-hide it and disable the two options below. When it's on, these become available:
-
-- **Show on Alt Key** *(off by default)* — shows the in-battle overlay only while the **Alt**
-  key is held. When off, the overlay is shown at all times.
-- **Counted Assistance** *(off by default)* — adds a third row to the battle overlay showing
-  your counted assistance: the higher of tracking, spotting or stun assist, with an icon for
-  whichever is leading.
-
-**Progress Bar** *(off by default)* — shows the transient centre-screen bar. It's a separate
-feature from the In-Battle Widget, so it works whether that one is on or off. Beneath it, two
-options pick which bar you get:
-
-- **Moving Average** *(default)* — your projected average against the next mark's requirement.
-- **Damage Efficiency** — this battle's damage against the 65 / 85 / 95 / 100 % requirements.
-
-**Column 2 — in the Garage.**
-
-**In-Garage Widget** *(on by default)* — shows the MoE percentile bar in the Garage, on the
-selected vehicle. Uncheck to hide it.
-
-**Widget position (px)** — where the Garage widget is pinned. **Ctrl+drag** the widget to move
-it (hold **Shift** to lock to one axis); the two steppers below show the pinned top-left
-position in pixels:
-
-- **Horizontal (left X)** / **Vertical (top Y)** — distance from the left / top screen edge.
-  **0 / 0** means the default bottom-right position, which is also what the panel's per-mod
-  **Reset** restores.
-- **Follow Carousel Mode** *(on by default)* — a dragged widget keeps shifting vertically with
-  the vehicle carousel (single / double rows) so it never overlaps it. When off, a pinned
-  widget stays put regardless of the carousel.
-
-These position settings apply to the Garage widget only — the in-battle overlay and the
-centre-screen progress bar are not movable.
+Unchecking a master (**In-Battle Widget**, **Progress Bar**) greys out its indented children; the
+Garage settings have no master. **0 / 0** is the default bottom-right position, which is also what
+the panel's per-mod **Reset** restores. The position settings apply to the Garage widget only —
+the in-battle overlay and the centre-screen progress bar are not movable. What each progress-bar
+mode shows, and the career baseline **Moving Average** needs, is described under *In-battle
+progress bar* above.
 
 ## Notes
 
@@ -160,6 +145,13 @@ Building, deploying, testing, and the repo layout are documented in
 стороннє доповнення.
 
 [English](#14th_uas-moe-calculator--world-of-tanks-mod) · **Українська**
+
+|  |  |
+|:--:|:--:|
+| ![Смуга класності в Ангарі](assets/screenshots/garage.png) | ![Оверлей у бою](assets/screenshots/battle.png) |
+| Смуга класності в Ангарі | Оверлей у бою |
+| ![Смуга прогресу — Ковзне середнє](assets/screenshots/progress_moving_average.png) | ![Смуга прогресу — Ефективність шкоди](assets/screenshots/progress_damage_efficiency.png) |
+| Смуга прогресу — Ковзне середнє | Смуга прогресу — Ефективність шкоди |
 
 ## Що показує
 
@@ -237,46 +229,27 @@ Building, deploying, testing, and the repo layout are documented in
 Якщо MSA не завантажено, мод усе одно працює з увімкненими за замовчуванням віджетами — просто
 не буде панелі.
 
-Панель складається з двох стовпців.
+Стовпець 1 містить параметри для бою, стовпець 2 — для Ангара:
 
-**Стовпець 1 — у бою.**
+| Налаштування | За замовчуванням | Що робить |
+|---|---|---|
+| **Віджет у бою** | Увімк. | Показує накладання класності наживо під час бою. |
+| ↳ **Показувати по клавіші Alt** | Вимк. | Показує накладання лише поки утримується **Alt**; коли вимкнено — показує постійно. |
+| ↳ **Зарахована допомога** | Вимк. | Додає третій рядок накладання: більше з допомоги гусеницями, засвітом чи оглушенням, з піктограмою переважного типу. |
+| **Смуга прогресу** | Вимк. | Показує смугу в центрі екрана, яка зникає сама; утримуйте **Alt**, щоб повернути її. Режим виберіть нижче. |
+| ↳ **Режим** | Ковзне середнє | Вибір між двома взаємовиключними режимами — **Ковзне середнє** та **Ефективність шкоди**; у панелі це пара радіокнопок без підпису. |
+| **Віджет в ангарі** | Увімк. | Показує смугу процентиля класності в Ангарі на вибраній машині. |
+| **Позиція віджета (px)** | — | Лише заголовок: **Ctrl+перетягування** закріплює віджет Ангара (**Shift** фіксує за однією віссю). |
+| **Горизонталь (лівий X)** | 0 = авто | Відстань закріпленого віджета від лівого краю екрана в пікселях. |
+| **Вертикаль (верхній Y)** | 0 = авто | Те саме для верхнього краю екрана. |
+| **Слідувати за каруселлю** | Увімк. | Закріплений віджет продовжує зміщуватися по вертикалі разом із каруселлю техніки (один / два ряди), щоб ніколи її не перекривати. |
 
-**Віджет у бою** *(увімкнено за замовчуванням)* — показує накладання класності наживо в бою.
-Зніміть позначку, щоб сховати його та вимкнути два параметри нижче. Коли він увімкнений, стають
-доступними:
-
-- **Показувати по клавіші Alt** *(вимкнено за замовчуванням)* — показує бойове накладання лише
-  поки утримується клавіша **Alt**. Коли вимкнено, накладання показується постійно.
-- **Зарахована допомога** *(вимкнено за замовчуванням)* — додає третій рядок до накладання в
-  бою: показує зараховану допомогу, більше з допомоги гусеницями, засвітом чи оглушенням, з
-  піктограмою відповідного типу.
-
-**Смуга прогресу** *(вимкнено за замовчуванням)* — показує тимчасову смугу в центрі екрана. Це
-окрема функція від Віджета в бою, тож вона працює незалежно від того, увімкнений той чи ні. Нижче
-два варіанти вибирають, яку смугу ви отримаєте:
-
-- **Ковзне середнє** *(за замовчуванням)* — ваша прогнозована середня шкода відносно вимоги
-  наступної позначки.
-- **Ефективність шкоди** — шкода цього бою відносно вимог 65 / 85 / 95 / 100 %.
-
-**Стовпець 2 — в Ангарі.**
-
-**Віджет в ангарі** *(увімкнено за замовчуванням)* — показує смугу процентиля класності в
-Ангарі на вибраній машині. Зніміть позначку, щоб сховати.
-
-**Позиція віджета (px)** — де закріплений віджет Ангара. **Ctrl+перетягування** переміщує віджет
-(утримуйте **Shift**, щоб зафіксувати за однією віссю); два лічильники нижче показують
-закріплену позицію верхнього лівого кута в пікселях:
-
-- **Горизонталь (лівий X)** / **Вертикаль (верхній Y)** — відстань від лівого / верхнього краю
-  екрана. **0 / 0** означає стандартну позицію в правому нижньому куті, яку також повертає
-  кнопка **скидання** мода в панелі.
-- **Слідувати за каруселлю** *(увімкнено за замовчуванням)* — перетягнутий віджет продовжує
-  зміщуватися по вертикалі разом із каруселлю техніки (один / два ряди), щоб ніколи її не
-  перекривати. Коли вимкнено, закріплений віджет залишається на місці незалежно від каруселі.
-
-Ці параметри позиції стосуються лише віджета в Ангарі — накладання в бою та смугу прогресу в
-центрі екрана переміщувати не можна.
+Знята позначка з головного параметра (**Віджет у бою**, **Смуга прогресу**) робить його вкладені
+рядки неактивними; параметри Ангара головного не мають. **0 / 0** — стандартна позиція в правому
+нижньому куті, яку також повертає кнопка **скидання** мода в панелі. Параметри позиції стосуються
+лише віджета в Ангарі — накладання в бою та смугу прогресу в центрі екрана переміщувати не можна.
+Що показує кожен режим смуги прогресу і яке базове значення кар'єри потрібне для **Ковзного
+середнього** — описано вище в розділі *Смуга прогресу в бою*.
 
 ## Примітки
 
