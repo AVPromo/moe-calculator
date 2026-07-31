@@ -136,7 +136,7 @@ function fmt(n) {
 //   onEnd()                       OPTIONAL. endRun's force-settle tail.
 //   onIdle()                      OPTIONAL. reset's tail (the resting/hidden state).
 //
-// Returns { mount, settled, show, peek, reset, disarm }.
+// Returns { mount, settled, show, peek, size, anim, reset, disarm }.
 export function createTransient(cfg) {
     const root = cfg.root;
     const nop = function () {};
@@ -188,6 +188,21 @@ export function createTransient(cfg) {
     let plateauAt = 0;
     let dmgPlateauAt = 0;
 
+    // THE TRANSITION SWITCHES (mod_settings.progress_transitions_events / _manual, pushed as the
+    // VM's transEvents / transManual -- the master is already ANDed in Python, so these two ARE the
+    // effective flags). One per trigger AREA: an event show takes `animEvents`, an Alt peek takes
+    // `animManual`. Default true == the shipped animated bar.
+    //
+    // `animated` is the LIVE RUN's copy, decided AT ARM TIME by the area that triggered it and then
+    // kept for the whole run, so the EXIT follows the same switch as the entry (an event hold that a
+    // peek interrupted still exits the event's way -- see peekOff's resume branch). Un-animated is
+    // NOT a second code path: the entry simply arms at SEEK_PLATEAU (already opacity 1 and
+    // translateY(0), so there is nothing left to play) and the exit simply ends the run at the end of
+    // the hold, where disarm()'s base #moe-bar-root{opacity:0} applies in the same frame.
+    let animEvents = true;
+    let animManual = true;
+    let animated = true;
+
     // The live run's id, and the last id already ended. endRun is idempotent on this pair:
     // whichever of animationend / the fallback timer arrives first wins and the other becomes a
     // no-op, and a timer left over from a superseded run can never end a newer one.
@@ -220,7 +235,16 @@ export function createTransient(cfg) {
         void root.offsetWidth;
         root.classList.add(RUN_CLASSES[armIdx]);
         clearTimeout(endT);
-        endT = setTimeout(function () { endRun(id); }, TOTAL_MS - seekMs + END_MARGIN_MS);
+        // For an ANIMATED run this is the FALLBACK end timer: the run's own remaining duration plus
+        // slack, so a working animationend always wins it. For an UN-ANIMATED one it is the REAL end
+        // and must WIN, so it carries no margin and fires at the END OF THE HOLD instead --
+        // SEEK_FADE_OUT is the 90.32% stop (the instant the fade-out begins), so SEEK_FADE_OUT -
+        // seekMs is exactly the ms left until it. endRun's disarm() drops the run class there and the
+        // base #moe-bar-root{opacity:0} applies the same frame, so the fade-out never plays; the real
+        // animationend arriving later is a no-op through the endedId guard.
+        endT = setTimeout(function () { endRun(id); },
+                          animated ? TOTAL_MS - seekMs + END_MARGIN_MS
+                                   : Math.max(0, SEEK_FADE_OUT - seekMs));
         // THE run clock, maintained in ONE place so every arming path agrees: the seek makes the
         // run start `seekMs` in, so it reaches the plateau FADE_IN_MS - seekMs from now (in the past
         // for a seek past it). Gameface exposes no readable playback position, so this is how the
@@ -236,11 +260,20 @@ export function createTransient(cfg) {
     // slide).
     function coldShow(fromDamage) {
         clearTimeout(peekT);
-        onRewind(!fromDamage);
-        armRun(SEEK_NONE);                   // a cold show plays the entry in full (plateauAt too)
+        // WHICH AREA IS ARMING THIS RUN -- the one place the run's `animated` is decided for an
+        // entry, and it covers both cold entries (peekOn's own is fromDamage == false).
+        animated = fromDamage ? animEvents : animManual;
+        // An UN-ANIMATED entry must also SNAP THE VALUES: with no 600ms fade there is no window for
+        // the pre->current climb to happen in, and VALUE_SWAP_MS / the cold rAF both assume one. So
+        // reuse the Alt entry's existing "open ALREADY committed" rewind (onRewind(true)) and skip
+        // onCommit entirely -- there is nothing left to commit. No second snap mechanism.
+        onRewind(!fromDamage || !animated);
+        // A cold show plays the entry in full (plateauAt too) -- unless it is un-animated, where
+        // arming AT the plateau (opacity 1, translateY(0) both complete) IS the instant appearance.
+        armRun(animated ? SEEK_NONE : SEEK_PLATEAU);
         if (fromDamage) dmgPlateauAt = plateauAt;
         showing = true;
-        if (fromDamage) onCommit(true);      // cold: the target must land in a LATER frame
+        if (fromDamage && animated) onCommit(true);   // cold: the target must land in a LATER frame
     }
 
     // WARM RE-TRIGGER (the debounce): a change arrived while the bar is ALREADY up. Do NOT replay
@@ -250,6 +283,10 @@ export function createTransient(cfg) {
     // (SEEK_PLATEAU, the 9.68% stop, where both the opacity fade and the slide have completed). The
     // bar stays visibly put and gets a fresh hold + fade-out.
     function warmShow() {
+        // AN EVENT IS RE-ARMING THIS RUN, so the run's `animated` becomes the events switch -- the
+        // entry itself is already the plateau seek and needs no branch, but the EXIT does (an
+        // animated peek that a switched-off event re-triggers must now leave instantly).
+        animated = animEvents;
         if (!peeking) {
             armRun(SEEK_PLATEAU);        // the seek lands us AT the plateau (armRun sets plateauAt)
         }
@@ -282,6 +319,9 @@ export function createTransient(cfg) {
             // (reads as a flicker). Seeking to the plateau snaps it back to full opacity -- "caught
             // it". armRun also re-establishes the run identity, the runId guard and the endT
             // fallback, so the superseded run's animationend/timer cannot end this one.
+            // ALT IS ARMING THIS RUN, so it takes the manual switch (the "caught it" seek IS already
+            // instant either way -- what this decides is the exit).
+            animated = animManual;
             armRun(SEEK_PLATEAU);
         }
         peeking = true;
@@ -320,7 +360,17 @@ export function createTransient(cfg) {
         if (!peeking) return;
         peeking = false;
         if (dmgPlateauAt + HOLD_MS > Date.now()) {
+            // The run being resumed is the EVENT's hold, so it exits the EVENT's way.
+            animated = animEvents;
             armRun(SEEK_PLATEAU + (Date.now() - dmgPlateauAt));
+            return;
+        }
+        // ...otherwise this release IS the exit of the run Alt armed, so it follows `animated`: end
+        // it outright rather than arming a fade-out. endRun does the disarm (base opacity 0, same
+        // frame) plus the bookkeeping every other end does, and the endedId guard makes the late real
+        // animationend a no-op.
+        if (!animated) {
+            endRun(runId);
             return;
         }
         const inLeft = Math.min(FADE_IN_MS, Math.max(0, plateauAt - Date.now()));
@@ -440,6 +490,20 @@ export function createTransient(cfg) {
         pushSurfaceSize();
     }
 
+    // The pushed transition switches (VM `transEvents` / `transManual`). Plumbed exactly like
+    // applySize -- idempotent and safe on every render -- but it needs no flip guard and touches
+    // nothing: it only records which switch the NEXT arming reads, so a live settings change lands on
+    // the next show rather than mutating the run in flight.
+    // ABSENT MEANS ANIMATED, which is why this is `!== false` and not `!!`: a model that does not
+    // carry the field at all (a pre-push frame, a harness fixture, a marshal that dropped it) must
+    // degrade to the SHIPPED behaviour, and `!!undefined` would silently degrade to instant instead --
+    // the fail-soft direction every other read in this codebase takes. A real pushed false is the
+    // only thing that turns a transition off.
+    function applyAnim(events, manual) {
+        animEvents = events !== false;
+        animManual = manual !== false;
+    }
+
     // Wire the bar up, ONCE, on engine ready. Three parts, in this order:
     //
     //  (1) THE RIGID TRANSLATION (unconditional -- an origin overflow is clipped at ANY surface
@@ -511,6 +575,9 @@ export function createTransient(cfg) {
         // POST-DEADLINE re-assert -- which is fine precisely because `settled` hides the bar until
         // then (see SURFACE_REASSERT_MS).
         size: applySize,
+        // The pushed transition switches (VM transEvents / transManual, master already folded in
+        // Python). Read every render, like size.
+        anim: applyAnim,
         reset: reset,
         disarm: disarm,
     };

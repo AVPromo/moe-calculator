@@ -324,6 +324,12 @@ function render(model) {
     // surface) and is idempotent, so this is just "keep it in sync".
     large = Number(model.barSize) === 1;
     T.size(large);
+    // The pushed TRANSITION switches (mod_settings.progress_transitions_events / _manual, with the
+    // Transitions master already ANDed in Python -- there is no master field to read here). The
+    // transient only records them; the arming path decides per run. Passed RAW, deliberately: the
+    // transient reads an ABSENT field as animated (see applyAnim), which is the fail-soft direction --
+    // a `!!` here would turn a missing prop into "instant" instead.
+    T.anim(model.transEvents, model.transManual);
 
     cur = {
         damage: Number(model.damage) || 0,

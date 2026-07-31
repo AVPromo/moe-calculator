@@ -140,12 +140,14 @@ def test_counted_assist_ukrainian_translated():
 def test_progress_bar_group_is_the_tail_of_col1():
     # The progress-bar control briefly had a column 3 of its own; that column never rendered
     # in-client, so it is back in column 1 -- now as the "Battle Progress" CATEGORY: a bare header
-    # row, the master, then its variant and size radios, which are therefore the LAST two column-1
-    # keys. The TABLE KEY `progressBar` never changed through any of those moves, so no translation
-    # was ever orphaned.
+    # row, the Progress Bar master with its variant and size radios, then the Transitions master
+    # with its Events and Manual children (a SECOND group under the SAME header, so it adds no cat*
+    # row). SEVEN keys, and they are the contiguous TAIL of column 1. The TABLE KEY `progressBar`
+    # never changed through any of those moves, so no translation was ever orphaned.
     assert u"progressBar" in S._PANEL[u"en"]
-    assert _col1_slice(u"catBattleProgress", u"progressBar", S.VARIANT_KEY, u"progressSize") == \
-        tuple(range(len(S.COL1_KEYS) - 4, len(S.COL1_KEYS))), \
+    _cat = (u"catBattleProgress", u"progressBar", S.VARIANT_KEY, u"progressSize",
+            u"progressTransitions", u"progressTransEvents", u"progressTransManual")
+    assert _col1_slice(*_cat) == tuple(range(len(S.COL1_KEYS) - len(_cat), len(S.COL1_KEYS))), \
         u"the Battle Progress category is no longer the contiguous tail of COL1_KEYS: %r" % (
             S.COL1_KEYS,)
     assert S.VARIANT_KEY == u"progressVariant"
@@ -311,6 +313,40 @@ def test_size_options_unknown_language_falls_back_to_english_marked(monkeypatch)
     monkeypatch.setattr(i18n, u"MARK_UNTRANSLATED", True)
     assert all(o.startswith(u"_") for o in S.build(u"xx")[u"progressSize"][u"options"])
     assert not any(o.startswith(u"_") for o in S.build(u"de")[u"progressSize"][u"options"])
+
+
+def test_the_transitions_group_is_one_tooltip_on_the_master_and_two_label_only_children():
+    # The group's prose lives ENTIRELY on the master: "Events" / "Manual" are one-word switches the
+    # master's tooltip already explains, so they are LABEL-ONLY rows and _render must emit no
+    # "tooltip" key for them (mod_settings._checkbox then omits it -- the hard-indexed
+    # rendered["tooltip"] that used to sit there raised KeyError on exactly these two rows).
+    #
+    # Existence of the three keys in all 11 blocks is NOT re-asserted here:
+    # test_every_shipped_language_covers_all_keys already derives _KEYS from the English master and
+    # demands every block match it exactly, so a missing row fails there.
+    master, children = u"progressTransitions", (u"progressTransEvents", u"progressTransManual")
+    en = S._PANEL[u"en"]
+    for code in S._PANEL:
+        entry = S._PANEL[code][master]
+        assert entry[u"label"], u"%s has an empty %s label" % (code, master)
+        assert entry[u"ttHeader"] and entry[u"ttBody"], (
+            u"%s/%s lost the tooltip that is the whole group's only prose" % (code, master))
+        assert S.build(code)[master][u"tooltip"]
+        if code != u"en":
+            # The LABEL is deliberately not guarded against English: "Transitions" is genuinely
+            # French and "Manual" genuinely Spanish. The long prose is where a copy-pasted English
+            # block would actually show, so guard THAT.
+            for part in (u"ttHeader", u"ttBody"):
+                assert entry[part] != en[master][part], (
+                    u"%s/%s/%s is still the English string" % (code, master, part))
+        for key in children:
+            child = S._PANEL[code][key]
+            assert child[u"label"], u"%s has an empty %s label" % (code, key)
+            assert u"ttHeader" not in child and u"ttBody" not in child, (
+                u"%s/%s grew a tooltip -- it is a one-word switch the master's prose already "
+                u"explains, and a tooltip written into a stored template can never be REMOVED "
+                u"again (_sync_template_text only overwrites)" % (code, key))
+            assert u"tooltip" not in S.build(code)[key]
 
 
 def test_the_three_category_headers_are_label_only_in_every_language():

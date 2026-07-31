@@ -141,13 +141,14 @@ def _push(damage, **snap_over):
 
 # --- the marshalling ----------------------------------------------------------
 
-def test_push_writes_exactly_the_view_models_twelve_properties():
+def test_push_writes_exactly_every_view_model_property():
     # The bridge is this model's only producer: a prop added on one side without the other would
-    # silently leave the JS reading a default forever. TWELVE: the ten that survived `damageDelta`'s
-    # removal (which RENUMBERED every property after it), then `battleEpoch` and now `barSize`, both
-    # APPENDED after altHeld for exactly that reason -- an append renumbers nothing.
+    # silently leave the JS reading a default forever. FOURTEEN: the ten that survived
+    # `damageDelta`'s removal (which RENUMBERED every property after it), then `battleEpoch`,
+    # `barSize`, and now `transEvents` / `transManual` -- every one APPENDED after altHeld for
+    # exactly that reason, since an append renumbers nothing.
     assert set(_push(2000)) == _VM_PROPS
-    assert len(_VM_PROPS) == 12
+    assert len(_VM_PROPS) == 14
 
 
 def test_the_push_keeps_no_state_between_calls(epoch):
@@ -214,6 +215,40 @@ def test_the_bar_is_hidden_while_the_master_is_off(monkeypatch):
 
 def test_the_bar_is_visible_with_the_master_on_and_the_variant_selected():
     assert _push(2000)["visible"] is True
+
+
+def test_push_writes_the_two_transition_flags_master_folded(monkeypatch):
+    # The two effective transition flags, on the SECOND bar. Proven separately from the Moving
+    # Average bar's (tests/test_progress_bridge.py) because the two pushes are independent code:
+    # one bar could easily gain the fields while the other silently keeps animating.
+    #
+    # The settings CACHE is seeded rather than the getters patched, so the master-folding under test
+    # is the shipped AND in mod_settings and not a stub of it. The autouse fixture patches
+    # progress_bar_enabled, so this seed cannot disturb this file's visibility gates.
+    saved = dict(mod_settings._settings)
+    try:
+        def _trans(master, events, manual):
+            mod_settings._apply({mod_settings.PROGRESS_TRANSITIONS_KEY: master,
+                                 mod_settings.PROGRESS_TRANS_EVENTS_KEY: events,
+                                 mod_settings.PROGRESS_TRANS_MANUAL_KEY: manual})
+            return _push(2000)
+
+        props = _trans(True, True, True)
+        assert props["transEvents"] is True and props["transManual"] is True
+        # Each child flips its OWN field only.
+        assert _trans(True, False, True)["transEvents"] is False
+        assert _trans(True, False, True)["transManual"] is True
+        assert _trans(True, True, False)["transManual"] is False
+        assert _trans(True, True, False)["transEvents"] is True
+        # ...and the master forces BOTH off with the children left ON -- the fold lives in Python
+        # precisely so the JS has no AND of its own to get wrong.
+        props = _trans(False, True, True)
+        assert props["transEvents"] is False and props["transManual"] is False
+        # The master itself is never pushed under any name.
+        assert mod_settings.PROGRESS_TRANSITIONS_KEY not in props
+        assert "transitions" not in props and "transEnabled" not in props
+    finally:
+        mod_settings._seed(saved)
 
 
 def test_the_bar_needs_no_career_baseline():

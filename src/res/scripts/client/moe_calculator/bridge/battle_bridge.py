@@ -642,6 +642,10 @@ def push_progress(rvm, snap, model):
             tx.setHasData(has_data)
             tx.setAltHeld(_alt_held)
             tx.setBarSize(bar_size)
+            # The two effective transition flags -- the Transitions MASTER is already ANDed in by
+            # the getters, so the widget never sees it (mod_settings).
+            tx.setTransEvents(mod_settings.progress_transitions_events())
+            tx.setTransManual(mod_settings.progress_transitions_manual())
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -698,6 +702,10 @@ def push_efficiency(rvm, snap, model):
             tx.setAltHeld(_alt_held)
             tx.setBattleEpoch(_battle_epoch)
             tx.setBarSize(bar_size)
+            # The two effective transition flags -- the Transitions MASTER is already ANDed in by
+            # the getters, so the widget never sees it (mod_settings).
+            tx.setTransEvents(mod_settings.progress_transitions_events())
+            tx.setTransManual(mod_settings.progress_transitions_manual())
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

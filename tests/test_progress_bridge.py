@@ -1,0 +1,149 @@
+# -*- coding: utf-8 -*-
+"""Engine-free tests for the MOVING AVERAGE bar's push marshalling (`push_progress`).
+
+The sibling test_efficiency_bridge covers the OTHER centre-screen bar; this file is the same seam
+for ProgressVM, which had no pytest coverage of its own. `push_progress` is that model's only
+producer, so a property declared on one side without the other leaves the JS reading a default
+forever -- and, unlike a missing setter, nothing raises: the push wraps its whole transaction in
+`except Exception: LOG_CURRENT_EXCEPTION()`, so a desync is SILENT in the client.
+
+Technique is test_efficiency_bridge's: install bare stub modules for the game imports battle_bridge
+pulls in transitively, then drive push_progress directly into a recording fake whose accepted setter
+names are cross-checked against the real ProgressVM, so a typo'd setter cannot pass silently. The
+window WIRING (does the engine actually open it) needs the live client and is out of scope.
+"""
+import sys
+import types
+
+
+def _stub(name, **attrs):
+    parts = name.split(".")
+    for i in range(1, len(parts) + 1):
+        p = ".".join(parts[:i])
+        if p not in sys.modules:
+            sys.modules[p] = types.ModuleType(p)
+    mod = sys.modules[name]
+    for key, value in attrs.items():
+        if not hasattr(mod, key):
+            setattr(mod, key, value)
+    return mod
+
+
+class _Permissive(object):
+    def __init__(self, *a, **k):
+        pass
+
+
+_stub("frameworks.wulf", ViewModel=_Permissive, Array=_Permissive, ViewSettings=_Permissive,
+      ViewFlags=object(), WindowFlags=object(), WindowLayer=object(), PositionAnchor=object())
+_stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
+_stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1),
+      gf_mod_inject=lambda *a, **k: None)
+
+import pytest                                            # noqa: E402
+
+from moe_calculator.bridge import battle_bridge          # noqa: E402
+from moe_calculator.bridge import mod_settings           # noqa: E402
+from moe_calculator.bridge.view_models import ProgressVM  # noqa: E402
+from moe_calculator.domain import battle_types as bt     # noqa: E402
+
+THR = {65: 2450, 85: 3050, 95: 3620, 100: 4400}   # keyed by PERCENTILE, not by mark count
+
+# The property names ProgressVM actually declares, derived from its OWN setters -- so this fake can
+# never accept a set*() the shipped model does not have (nor miss one it does).
+_VM_PROPS = frozenset(name[3].lower() + name[4:]
+                      for name in dir(ProgressVM) if name.startswith("set"))
+
+
+class _FakeVM(object):
+    """Records what a push writes. Stands in for the Wulf-backed ProgressVM."""
+
+    def __init__(self):
+        self.props = {}
+
+    def transaction(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __getattr__(self, name):
+        if not name.startswith("set"):
+            raise AttributeError(name)
+        key = name[3].lower() + name[4:]
+        assert key in _VM_PROPS, "ProgressVM has no set%s" % name[3:]
+        return lambda v: self.props.__setitem__(key, v)
+
+
+def _snap(**over):
+    kwargs = dict(vehicle_int_cd=1073, thresholds=dict(THR),
+                  has_vehicle=True, in_battle=True, is_spectating=False, baseline_known=True,
+                  pre_avg_damage=1850, pre_percentile=73.67)
+    kwargs.update(over)
+    return bt.BattleSnapshot(**kwargs)
+
+
+def _model(**over):
+    kwargs = dict(combined_damage=2000, proj_avg_damage=1867, cur_percent=74.3,
+                  pct_delta=0.63, has_data=True, has_baseline=True,
+                  counted_assist=0, assist_kind="")
+    kwargs.update(over)
+    return bt.BattleMoEModel(**kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_battle(monkeypatch):
+    """A fresh battle with the Moving Average bar enabled and no scoreboard up, and the settings
+    cache restored afterwards (these tests SEED it rather than patching the getters, so the
+    master-folding logic under test is the shipped one)."""
+    monkeypatch.setattr(battle_bridge, "_open_overlays", set())
+    saved = dict(mod_settings._settings)
+    mod_settings._apply({mod_settings.PROGRESS_BAR_KEY: True})
+    yield
+    mod_settings._seed(saved)
+
+
+def _push(**settings_over):
+    """push_progress's written props, with `settings_over` overlaid on the live settings cache."""
+    if settings_over:
+        mod_settings._apply(settings_over)
+    vm = _FakeVM()
+    battle_bridge.push_progress(vm, _snap(), _model())
+    return vm.props
+
+
+def test_push_writes_exactly_every_view_model_property():
+    # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
+    # side only is invisible in the client. ELEVEN: the nine through barSize, then transEvents /
+    # transManual, both APPENDED after barSize so nothing above them is renumbered.
+    assert set(_push()) == _VM_PROPS
+    assert len(_VM_PROPS) == 11
+
+
+def test_push_writes_the_two_transition_flags_master_folded():
+    # The widget never sees the Transitions MASTER: the getters AND it in, so the two pushed fields
+    # are the EFFECTIVE values. Prove the fold reaches the wire, not just the getter -- patching the
+    # getters here would prove only that the push calls them.
+    props = _push(**{mod_settings.PROGRESS_TRANSITIONS_KEY: True,
+                     mod_settings.PROGRESS_TRANS_EVENTS_KEY: True,
+                     mod_settings.PROGRESS_TRANS_MANUAL_KEY: True})
+    assert props["transEvents"] is True and props["transManual"] is True
+    # Each child flips its OWN field and leaves the other alone.
+    props = _push(**{mod_settings.PROGRESS_TRANS_EVENTS_KEY: False})
+    assert props["transEvents"] is False and props["transManual"] is True
+    props = _push(**{mod_settings.PROGRESS_TRANS_EVENTS_KEY: True,
+                     mod_settings.PROGRESS_TRANS_MANUAL_KEY: False})
+    assert props["transEvents"] is True and props["transManual"] is False
+    # ...and the master forces BOTH off with the children left ON, which is the whole reason the
+    # fold lives in Python: no JS-side AND to get wrong.
+    props = _push(**{mod_settings.PROGRESS_TRANSITIONS_KEY: False,
+                     mod_settings.PROGRESS_TRANS_EVENTS_KEY: True,
+                     mod_settings.PROGRESS_TRANS_MANUAL_KEY: True})
+    assert props["transEvents"] is False and props["transManual"] is False
+    # The master is NEVER pushed under any name -- the widget must not be able to honour a child
+    # while the master is off.
+    assert mod_settings.PROGRESS_TRANSITIONS_KEY not in props
+    assert "transitions" not in props and "transEnabled" not in props

@@ -217,7 +217,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=9, commands=0):
+    def __init__(self, properties=11, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -242,6 +242,15 @@ class ProgressVM(ViewModel):
                                                      #    re-derived surface push
                                                      #    (MoEBarTransient.applySize); Python's half
                                                      #    is PROGRESS_ANCHOR_Y_OFFSET_LARGE
+        self._addBoolProperty("transEvents", True)    # 9  animate the enter/exit when a BATTLE EVENT
+                                                     #    pulls the bar up / lets it go. APPENDED.
+                                                     #    The MASTER checkbox is already folded in by
+                                                     #    mod_settings.progress_transitions_events(),
+                                                     #    so the JS never sees it -- false here means
+                                                     #    "instant", full stop. Default True == what
+                                                     #    shipped (an animated bar)
+        self._addBoolProperty("transManual", True)    # 10 the same for the ALT PEEK's enter/exit
+                                                     #    (progress_transitions_manual())
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -270,6 +279,12 @@ class ProgressVM(ViewModel):
     def setBarSize(self, v):
         self._setNumber(8, v)
 
+    def setTransEvents(self, v):
+        self._setBool(9, v)
+
+    def setTransManual(self, v):
+        self._setBool(10, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -296,7 +311,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=12, commands=0):
+    def __init__(self, properties=14, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -331,6 +346,14 @@ class EfficiencyVM(ViewModel):
                                                     #    ROOT FONT, the .mp-lg body class, a
                                                     #    re-derived surface AND (this bar only) the
                                                     #    caption clamp's px<->rem factor
+        self._addBoolProperty("transEvents", True)   # 12 animate the enter/exit when a BATTLE EVENT
+                                                    #    pulls the bar up / lets it go. APPENDED.
+                                                    #    Same wire meaning as ProgressVM's: the
+                                                    #    Transitions MASTER is already folded in by
+                                                    #    mod_settings.progress_transitions_events(),
+                                                    #    so false here means "instant", full stop
+        self._addBoolProperty("transManual", True)   # 13 the same for the ALT PEEK's enter/exit
+                                                    #    (progress_transitions_manual())
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -367,3 +390,9 @@ class EfficiencyVM(ViewModel):
 
     def setBarSize(self, v):
         self._setNumber(11, v)
+
+    def setTransEvents(self, v):
+        self._setBool(12, v)
+
+    def setTransManual(self, v):
+        self._setBool(13, v)

@@ -165,7 +165,7 @@ node tools\dev\check_progress_js.js --probe-all          # every mutation, as a 
 node tools\dev\check_progress_js.js --list-mutations
 node tools\dev\check_progress_js.js --mutate=<key>       # anti-vacuity: MUST report failures
 ```
-**119 assertions, 37 mutations, all probed and all firing.**
+**164 assertions, 59 mutations, all probed and all firing.**
 Covers: the surface push + the post-deadline re-assert, the visible/hasData gate, the
 **`settled` show gate** (no trigger may show while the surface is still the engine's 256×256
 fallback — cropped and ~142px too high — yet the silent baseline must still run, and a still-held Alt
@@ -193,6 +193,21 @@ make the run fail, or the check is vacuous.
 > swap and its cold rAF have landed, where the snap is the only thing that can move the fill. Same
 > trap as `unscoped-substring-assertion-is-not-an-assertion`, one layer down: an assertion
 > coincidentally satisfied by a value someone else already wrote. `--probe-all` is what found it.
+
+**THE TRANSITION SWITCHES** (`transEvents` / `transManual`) are asserted in BOTH harnesses, because
+they live in the shared transient: one flag per trigger AREA, and the live run's copy decided **at arm
+time**, so the exit follows the same switch as the entry. An un-animated run arms at `SEEK_PLATEAU`
+instead of `SEEK_NONE`, its end timer stops being a *fallback* and becomes the **real** end at
+`HOLD_MS` (no fade-out, no `END_MARGIN_MS`), and an Alt release ends it outright instead of arming a
+fade-out. The end instants are absolute — "still armed" cannot tell `TOTAL_MS + END_MARGIN_MS` from
+`HOLD_MS`, so both directions of the timer ternary are probed
+(`unanimated-end-timer-still-fades-out` / `animated-end-timer-loses-its-fade-out`). The progress
+harness additionally owns the VALUE half (the snap through `onRewind(atCurrent=true)` and the SKIPPED
+`onCommit`, whose absence shows as the fill keeping its `transition:none` across a `flushFrames`);
+the efficiency bar passes neither hook, so it cannot see that. And the **fail-soft direction is pinned
+explicitly**: both flags are read `!== false`, so an absent field degrades to ANIMATED — which is why
+every other fixture in either file, none of which carries either field, still asserts the shipped
+behaviour (`absent-flag-degrades-to-instant`).
 
 It never writes a timing literal — and since the extraction the constants live in **two** files, so
 each scrape names its owner: `FADE_IN_MS`, `HOLD_MS`, `FADE_OUT_MS`, `END_MARGIN_MS`,
@@ -274,7 +289,7 @@ node tools\dev\check_efficiency_js.js --probe-all          # every mutation, as 
 node tools\dev\check_efficiency_js.js --list-mutations
 node tools\dev\check_efficiency_js.js --mutate=<key>       # anti-vacuity: MUST report failures
 ```
-**135 assertions, 53 mutations, all probed and all firing.**
+**184 assertions, 76 mutations, all probed and all firing.**
 
 **IT OWNS THE DELTA LATCH.** `battle_bridge`'s `_eff_last_damage` / `_eff_delta` and
 `EfficiencyVM.damageDelta` were deleted and the latch now lives in `MoEEfficiency.js`, so the pytest

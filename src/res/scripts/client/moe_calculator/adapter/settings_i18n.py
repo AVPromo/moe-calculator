@@ -96,14 +96,17 @@ VARIANT_KEY = u"progressVariant"
 # mod_settings to walk a stored template in lockstep. Column 1 is TWO CATEGORIES, each a bare
 # label header followed by that feature's group: "Battle Calculator" (the In-Battle Widget master
 # + its two children), then "Battle Progress" (the Progress Bar master + its variant and size
-# radios). Column 2 is the "Garage Widget" category header, the garage master, then the
-# drag-position group. Only two columns -- a third does not render in the panel at all.
+# radios, then the Transitions master + its Events and Manual children -- a SECOND group under the
+# same category header, so it adds no cat* row). Column 2 is the "Garage Widget" category header,
+# the garage master, then the drag-position group. Only two columns -- a third does not render in
+# the panel at all.
 #
 # VARIANT_KEY earns its slot even though it renders NO label and has no _PANEL row: the radio is
 # still a control in the template, and _sync_template_text's zip is POSITIONAL, so a missing key
 # here would pair every later control with the wrong text. Same for the three cat* label rows.
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
-             u"catBattleProgress", u"progressBar", VARIANT_KEY, u"progressSize")
+             u"catBattleProgress", u"progressBar", VARIANT_KEY, u"progressSize",
+             u"progressTransitions", u"progressTransEvents", u"progressTransManual")
 # Column 2: the category header, the standalone In-Garage Widget master, then the drag-position
 # group -- a positioning Label header, the X/Y numeric steppers, and the Follow Carousel Mode
 # checkbox (in that exact control order, so _sync_template_text walks it in lockstep).
@@ -194,6 +197,17 @@ _PANEL = {
         # The size radio DOES carry a label (unlike the variant radio), but no tooltip -- the two
         # option labels say it all. Its options come from _SIZE_OPTIONS via build().
         u"progressSize": _row(u"Size"),
+        # The Transitions master + its two children. Only the MASTER carries a tooltip: the two
+        # children are one-word switches whose meaning the master's prose spells out, so they are
+        # label-only rows (no tt* -> _render emits no tooltip key).
+        u"progressTransitions": _row(
+            u"Transitions", u"Bar transitions",
+            u"The bar fades and slides when it appears and disappears. Turn a switch off to make "
+            u"it appear and disappear instantly instead. Events covers the bar reacting to what "
+            u"happens in battle; Manual covers bringing it up with the Alt key, matching the "
+            u"game's own interface, which does not animate on Alt."),
+        u"progressTransEvents": _row(u"Events"),
+        u"progressTransManual": _row(u"Manual"),
         # --- drag-to-reposition group (translated across every shipped language; see COL2_KEYS). ---
         u"positioning": _row(
             u"Widget position (px)", u"Widget position",
@@ -246,6 +260,15 @@ _PANEL = {
             u"zwischen der Marke, die du hast, und der Anforderung der nächsten Marke liegt. "
             u"Schadenseffizienz: zeigt deinen Schaden in diesem Gefecht im Verhältnis zu den "
             u"Anforderungen der Marken 65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Übergänge", u"Übergänge der Leiste",
+            u"Die Leiste blendet ein und gleitet, wenn sie erscheint und verschwindet. Deaktiviere "
+            u"einen Schalter, damit sie stattdessen sofort erscheint und verschwindet. Ereignisse "
+            u"betrifft die Reaktion der Leiste auf das Geschehen im Gefecht; Manuell betrifft das "
+            u"Einblenden mit der Alt-Taste, wie in der Spieloberfläche selbst, die bei Alt nichts "
+            u"animiert."),
+        u"progressTransEvents": _row(u"Ereignisse"),
+        u"progressTransManual": _row(u"Manuell"),
         u"positioning": _row(
             u"Widget-Position (px)", u"Widget-Position",
             u"Ziehe das Garage-Widget mit Strg+Ziehen, um es zu verschieben (halte "
@@ -301,6 +324,15 @@ _PANEL = {
             u"marque que vous possédez et l'exigence de la marque suivante. Efficacité des "
             u"dégâts : situe vos dégâts de la bataille en cours par rapport aux exigences des "
             u"marques 65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Transitions", u"Transitions de la barre",
+            u"La barre s'estompe et glisse lorsqu'elle apparaît et disparaît. Désactivez un "
+            u"interrupteur pour qu'elle apparaisse et disparaisse instantanément. Événements "
+            u"concerne la réaction de la barre à ce qui se passe en bataille ; Manuel concerne son "
+            u"affichage avec la touche Alt, comme l'interface du jeu elle-même, qui n'anime rien "
+            u"avec Alt."),
+        u"progressTransEvents": _row(u"Événements"),
+        u"progressTransManual": _row(u"Manuel"),
         u"positioning": _row(
             u"Position du widget (px)", u"Position du widget",
             u"Ctrl+glisser pour déplacer le widget du garage (maintenez Maj pour le "
@@ -355,6 +387,14 @@ _PANEL = {
             u"Media móvil: indica dónde se sitúa tu daño medio previsto entre la marca que "
             u"tienes y el requisito de la siguiente marca. Eficiencia de daño: sitúa tu daño "
             u"de esta batalla frente a los requisitos de las marcas del 65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Transiciones", u"Transiciones de la barra",
+            u"La barra se atenúa y desliza al aparecer y desaparecer. Desactiva un interruptor "
+            u"para que aparezca y desaparezca al instante. Eventos se refiere a la barra "
+            u"reaccionando a lo que ocurre en la batalla; Manual se refiere a mostrarla con la "
+            u"tecla Alt, igual que la interfaz del propio juego, que no anima nada con Alt."),
+        u"progressTransEvents": _row(u"Eventos"),
+        u"progressTransManual": _row(u"Manual"),
         u"positioning": _row(
             u"Posición del widget (px)", u"Posición del widget",
             u"Ctrl+arrastrar para mover el widget del garaje (mantén Mayús para "
@@ -410,6 +450,14 @@ _PANEL = {
             u"che possiedi e il requisito del marchio successivo. Efficienza dei danni: colloca "
             u"i tuoi danni di questa battaglia rispetto ai requisiti dei marchi "
             u"65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Transizioni", u"Transizioni della barra",
+            u"La barra sfuma e scorre quando appare e scompare. Disattiva un interruttore perché "
+            u"appaia e scompaia istantaneamente. Eventi riguarda la barra che reagisce a ciò che "
+            u"accade in battaglia; Manuale riguarda il richiamarla con il tasto Alt, come "
+            u"l'interfaccia del gioco stesso, che con Alt non anima nulla."),
+        u"progressTransEvents": _row(u"Eventi"),
+        u"progressTransManual": _row(u"Manuale"),
         u"positioning": _row(
             u"Posizione del widget (px)", u"Posizione del widget",
             u"Ctrl+trascina per spostare il widget del garage (tieni premuto Maiusc per "
@@ -464,6 +512,14 @@ _PANEL = {
             u"między znakiem, który posiadasz, a wymaganiem następnego znaku. Efektywność "
             u"obrażeń: pokazuje twoje obrażenia w tej bitwie na tle wymagań znaków "
             u"65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Przejścia", u"Przejścia paska",
+            u"Pasek pojawia się i znika z przygaszeniem oraz przesunięciem. Wyłącz przełącznik, "
+            u"aby pojawiał się i znikał natychmiast. Zdarzenia dotyczą reakcji paska na to, co "
+            u"dzieje się w bitwie; Ręcznie dotyczy wywołania go klawiszem Alt, tak jak w "
+            u"interfejsie samej gry, który przy Alt nic nie animuje."),
+        u"progressTransEvents": _row(u"Zdarzenia"),
+        u"progressTransManual": _row(u"Ręcznie"),
         u"positioning": _row(
             u"Pozycja widżetu (px)", u"Pozycja widżetu",
             u"Ctrl+przeciągnij, aby przesunąć widżet garażu (przytrzymaj Shift, aby "
@@ -514,6 +570,14 @@ _PANEL = {
             u"Klouzavý průměr: ukazuje, kde se tvé předpokládané průměrné poškození nachází "
             u"mezi znakem, který máš, a požadavkem dalšího znaku. Efektivita poškození: "
             u"ukazuje tvé poškození v této bitvě vůči požadavkům znaků 65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Přechody", u"Přechody lišty",
+            u"Lišta se při zobrazení a zmizení prolíná a posouvá. Vypnutím přepínače se bude "
+            u"zobrazovat a mizet okamžitě. Události se týkají reakce lišty na to, co se děje v "
+            u"bitvě; Ručně se týká jejího vyvolání klávesou Alt, stejně jako v rozhraní samotné "
+            u"hry, které při Altu nic neanimuje."),
+        u"progressTransEvents": _row(u"Události"),
+        u"progressTransManual": _row(u"Ručně"),
         u"positioning": _row(
             u"Pozice widgetu (px)", u"Pozice widgetu",
             u"Ctrl+táhnutím přesuneš widget garáže (podržením Shift jej uzamkneš na jednu "
@@ -565,6 +629,14 @@ _PANEL = {
             u"между имеющейся отметкой и требованием следующей. Эффективность урона: "
             u"показывает ваш урон в этом бою относительно требований отметок "
             u"65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Переходы", u"Переходы полосы",
+            u"Полоса появляется и исчезает с плавным затуханием и сдвигом. Отключите "
+            u"переключатель, чтобы она появлялась и исчезала мгновенно. События отвечают за "
+            u"реакцию полосы на то, что происходит в бою; Вручную отвечает за её вызов клавишей "
+            u"Alt, как в самом интерфейсе игры, который при Alt ничего не анимирует."),
+        u"progressTransEvents": _row(u"События"),
+        u"progressTransManual": _row(u"Вручную"),
         u"positioning": _row(
             u"Позиция виджета (px)", u"Позиция виджета",
             u"Ctrl+перетаскивание перемещает виджет ангара (удерживайте Shift, чтобы "
@@ -617,6 +689,14 @@ _PANEL = {
             u"Ковзне середнє: показує, де перебуває ваша прогнозована середня шкода між "
             u"наявною позначкою та вимогою наступної. Ефективність шкоди: показує вашу шкоду "
             u"в цьому бою відносно вимог позначок 65 / 85 / 95 / 100 %."),
+        u"progressTransitions": _row(
+            u"Переходи", u"Переходи смуги",
+            u"Смуга з'являється та зникає з плавним затуханням і зсувом. Вимкніть перемикач, щоб "
+            u"вона з'являлася та зникала миттєво. Події відповідають за реакцію смуги на те, що "
+            u"відбувається в бою; Вручну відповідає за її виклик клавішею Alt, як в інтерфейсі "
+            u"самої гри, який при Alt нічого не анімує."),
+        u"progressTransEvents": _row(u"Події"),
+        u"progressTransManual": _row(u"Вручну"),
         u"positioning": _row(
             u"Позиція віджета (px)", u"Позиція віджета",
             u"Ctrl+перетягування переміщує віджет ангара (утримуйте Shift, щоб "
@@ -669,6 +749,14 @@ _PANEL = {
             u"Mozgóátlag: megmutatja, hol áll a várható átlagsebzésed a birtokolt jel és a "
             u"következő jel követelménye között. Sebzéshatékonyság: a mostani csatában elért "
             u"sebzésedet a 65 / 85 / 95 / 100 %-os jelek követelményeihez méri."),
+        u"progressTransitions": _row(
+            u"Átmenetek", u"A sáv átmenetei",
+            u"A sáv elhalványulva és elcsúszva jelenik meg és tűnik el. Kapcsolj ki egy váltót, "
+            u"hogy azonnal jelenjen meg és tűnjön el. Az Események a sávnak a csatában "
+            u"történtekre adott reakciójára vonatkozik; a Kézi az Alt billentyűvel való "
+            u"előhívásra, ahogy a játék saját felülete is teszi, amely Altra nem animál semmit."),
+        u"progressTransEvents": _row(u"Események"),
+        u"progressTransManual": _row(u"Kézi"),
         u"positioning": _row(
             u"Widget pozíciója (px)", u"Widget pozíciója",
             u"Ctrl+húzással mozgathatod a garázs-widgetet (tartsd nyomva a Shiftet az egy "
@@ -720,6 +808,14 @@ _PANEL = {
             u"sonraki işaretin gereksinimi arasında nerede olduğunu gösterir. Hasar "
             u"verimliliği: bu savaştaki hasarını 65 / 85 / 95 / 100 % işaretlerinin "
             u"gereksinimlerine göre konumlandırır."),
+        u"progressTransitions": _row(
+            u"Geçişler", u"Çubuğun geçişleri",
+            u"Çubuk göründüğünde ve kaybolduğunda soluklaşarak kayar. Anında görünüp kaybolması "
+            u"için bir anahtarı kapat. Olaylar, çubuğun savaşta olanlara verdiği tepkiyi kapsar; "
+            u"Elle ise Alt tuşuyla çağırmayı kapsar, tıpkı Alt ile hiçbir şeyi canlandırmayan "
+            u"oyunun kendi arayüzü gibi."),
+        u"progressTransEvents": _row(u"Olaylar"),
+        u"progressTransManual": _row(u"Elle"),
         u"positioning": _row(
             u"Widget konumu (px)", u"Widget konumu",
             u"Garaj widget'ını taşımak için Ctrl+sürükle (bir eksene kilitlemek için "

@@ -359,6 +359,12 @@ function render(model) {
     // surface. Nothing in THIS file measures px, so there is nothing else to scale here (contrast
     // MoEEfficiency.js's capClampPct, which mixes offsetWidth with rem literals).
     T.size(Number(model.barSize) === 1);
+    // The pushed TRANSITION switches (mod_settings.progress_transitions_events / _manual, with the
+    // Transitions master already ANDed in Python -- there is no master field to read here). The
+    // transient only records them; the arming path decides per run. Passed RAW, deliberately: the
+    // transient reads an ABSENT field as animated (see applyAnim), which is the fail-soft direction --
+    // a `!!` here would turn a missing prop into "instant" instead.
+    T.anim(model.transEvents, model.transManual);
 
     cur = {
         marks: Number(model.marks) || 0,

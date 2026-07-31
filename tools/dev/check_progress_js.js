@@ -91,8 +91,12 @@ const MUTATIONS = {
     "no-identity-guard": ["T",
         "        if (e.animationName !== RUN_NAMES[armIdx]) return;\n", ""],
     // The H2 guard: without the fallback timer a missing animationend wedges `showing` forever.
+    // RE-HOMED when the timer grew its un-animated branch: the statement is three lines now, and the
+    // old one-line anchor silently stopped applying (which probeAll reports as STALE, not caught).
     "no-end-timer": ["T",
-        "        endT = setTimeout(function () { endRun(id); }, TOTAL_MS - seekMs + END_MARGIN_MS);",
+        "        endT = setTimeout(function () { endRun(id); },\n" +
+        "                          animated ? TOTAL_MS - seekMs + END_MARGIN_MS\n" +
+        "                                   : Math.max(0, SEEK_FADE_OUT - seekMs));",
         "        endT = null;"],
     // The peek is held open by PAUSING the animation at the plateau...
     "peek-no-pause": ["T",
@@ -137,6 +141,52 @@ const MUTATIONS = {
         "        endedId = runId;"],
     // fmt() moved with the transient; the numerals are this bar's only readout of it.
     "no-thousands-sep": ["T", '.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",")', ""],
+
+    // ===== THE TRANSITION SWITCHES (VM transEvents / transManual) =============================
+    // Six halves, each separately invisible: the per-AREA choice, the entry seek, the end timer, the
+    // value snap, the missing commit, the instant release -- plus the fail-soft default.
+    // The run's `animated` is decided by WHICH AREA armed it; collapsing that to the events flag
+    // makes an Alt peek follow the wrong switch (and vice versa).
+    "cold-entry-ignores-the-trigger-area": ["T",
+        "        animated = fromDamage ? animEvents : animManual;",
+        "        animated = animEvents;"],
+    // An un-animated entry arms AT the plateau -- opacity 1 and translateY(0) both complete, so there
+    // is nothing left to play. Arm at SEEK_NONE and the "instant" bar fades and slides in anyway.
+    "unanimated-entry-replays-the-fade": ["T",
+        "        armRun(animated ? SEEK_NONE : SEEK_PLATEAU);", "        armRun(SEEK_NONE);"],
+    // ...and its end timer stops being a FALLBACK: it is the REAL end, at the end of the hold, so it
+    // carries no margin and the fade-out never plays.
+    "unanimated-end-timer-still-fades-out": ["T",
+        "                          animated ? TOTAL_MS - seekMs + END_MARGIN_MS\n" +
+        "                                   : Math.max(0, SEEK_FADE_OUT - seekMs));",
+        "                          TOTAL_MS - seekMs + END_MARGIN_MS);"],
+    // ...and the MIRROR, so "still armed through the fade-out" is not a vacuous line: an ANIMATED run
+    // must keep its fallback margin and NOT end where the un-animated one does.
+    "animated-end-timer-loses-its-fade-out": ["T",
+        "                          animated ? TOTAL_MS - seekMs + END_MARGIN_MS\n" +
+        "                                   : Math.max(0, SEEK_FADE_OUT - seekMs));",
+        "                          Math.max(0, SEEK_FADE_OUT - seekMs));"],
+    // The VALUE half of an un-animated entry: with no 600ms fade there is no window for the
+    // pre->current climb, so it reuses the Alt entry's "open ALREADY committed" rewind...
+    "unanimated-does-not-snap-the-values": ["T",
+        "        onRewind(!fromDamage || !animated);", "        onRewind(!fromDamage);"],
+    // ...and skips onCommit entirely -- there is nothing left to commit, and a rAF-deferred retarget
+    // would hand the fill back its transition and animate the snap after all.
+    "unanimated-still-commits": ["T",
+        "        if (fromDamage && animated) onCommit(true);",
+        "        if (fromDamage) onCommit(true);"],
+    // An Alt release on an un-animated run ENDS it outright rather than arming a fade-out.
+    "unanimated-release-arms-a-fade-out": ["T",
+        "        if (!animated) {\n            endRun(runId);\n            return;\n        }\n", ""],
+    // FAIL-SOFT DIRECTION: an ABSENT field must degrade to ANIMATED (the shipped bar), which is why
+    // both reads are `!== false` and not `!!`. Every fixture in this file that carries neither field
+    // depends on it.
+    "absent-flag-degrades-to-instant": ["T",
+        "        animEvents = events !== false;\n        animManual = manual !== false;",
+        "        animEvents = !!events;\n        animManual = !!manual;"],
+    // THIS BAR's one line: the two pushed flags have to reach the transient at all.
+    "trans-flags-never-pushed": ["B",
+        "    T.anim(model.transEvents, model.transManual);", "    void 0;"],
 
     // ===== THIS BAR ==========================================================================
     "no-change-gate": ["B", "} else if (changed && T.settled()) {", "} else if (changed) {"],
@@ -876,6 +926,142 @@ function run(mutation) {
     s.push(M({ barSize: 1 }));
     eq("a scale update seen at the shipped size is not remembered as the base",
        s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+    // --- THE TRANSITION SWITCHES (mod_settings.progress_transitions_events / _manual, pushed as
+    // --- the VM's transEvents / transManual) --------------------------------------------------
+    // TWO pushed bools, one per trigger AREA (a damage/event show takes the events flag, an Alt peek
+    // the manual one), and the LIVE RUN's copy is decided AT ARM TIME so the EXIT follows the same
+    // switch as the entry. Un-animated is NOT a second code path: the entry arms at SEEK_PLATEAU
+    // (opacity 1 and translateY(0) both already complete, so there is nothing left to play), the end
+    // timer stops being a FALLBACK and becomes the REAL end at the end of the hold (no fade-out, no
+    // margin), and the value half reuses the Alt entry's "open ALREADY committed" rewind instead of
+    // the pre->current climb.
+    // WHAT MATTERS IS *WHEN IT ENDS*, so every end instant is absolute (stepped to with `at`) and
+    // DERIVED from the scraped timings -- "still armed" alone cannot tell TOTAL_MS + END_MARGIN_MS
+    // from HOLD_MS.
+    const F = (flags, extra) => M(Object.assign({}, flags, extra));
+    const EV_ON = { transEvents: true, transManual: true };
+    const EV_OFF = { transEvents: false };
+    const MAN_OFF = { transManual: false };
+    const MAN_ON = { transManual: true };
+    const MIX = { transEvents: false, transManual: true };   // events instant, Alt animated
+    let armAt = 0;
+
+    section("transitions: events ON");
+    s = mount(srcs);
+    s.push(F(EV_ON));                                 // silent baseline, resting at projAvg == 50%
+    armAt = s.clock.now();
+    s.push(F(EV_ON, { projAvg: 2900 }));
+    eq("an explicit events:true entry still plays from the top", s.root.style.animationDelay, "0ms");
+    eq("...opening on pre_avg (onRewind(false)), NOT snapped to the target",
+       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity], ["41.667%", "2,700", "0"]);
+    s.clock.flushFrames();
+    eq("...and onCommit(true) re-aims it in a LATER frame, with the transition handed back",
+       [s.fill.style.width, s.fill.style.transition], ["75.000%", ""]);
+    at(s, armAt + TOTAL);
+    eq("...and it is still armed all the way through the fade-out", s.run(), RUN_CLASSES[0]);
+    at(s, armAt + TOTAL + MARGIN - 1);
+    eq("...right up to its own FALLBACK end timer", s.run(), RUN_CLASSES[0]);
+    at(s, armAt + TOTAL + MARGIN);
+    eq("...which sits TOTAL_MS + END_MARGIN_MS after the arm", s.run(), null);
+
+    section("transitions: events OFF");
+    s = mount(srcs);
+    s.push(F(EV_OFF));
+    armAt = s.clock.now();
+    s.push(F(EV_OFF, { projAvg: 2900 }));
+    eq("an un-animated entry arms AT the plateau instead of playing the entry",
+       s.root.style.animationDelay, "-" + SEEK_PLATEAU + "ms");
+    eq("...and SNAPS the values through the Alt entry's rewind (onRewind(atCurrent=true)): numeral, "
+       + "delta and fill are already committed",
+       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity, s.capDN.textContent],
+       ["75.000%", "2,900", "1", "+200"]);
+    s.clock.flushFrames();
+    eq("...with NO onCommit at all -- nothing re-aims the fill, so the snap's transition:none stands",
+       [s.fill.style.width, s.fill.style.transition], ["75.000%", "none"]);
+    at(s, armAt + HOLD - 1);
+    eq("still armed one tick short of the hold's own end", s.run(), RUN_CLASSES[0]);
+    at(s, armAt + HOLD);
+    eq("...and DISARMED exactly at HOLD_MS: the end timer is the REAL end now, so it carries neither "
+       + "a fade-out nor END_MARGIN_MS", s.run(), null);
+
+    section("transitions: manual OFF");
+    s = mount(srcs);
+    s.push(F(MAN_OFF));
+    s.push(F(MAN_OFF, { altHeld: true }));
+    eq("an un-animated Alt entry arms AT the plateau too", s.root.style.animationDelay,
+       "-" + SEEK_PLATEAU + "ms");
+    s.push(F(MAN_OFF, { altHeld: false }));
+    eq("the release ENDS the run in the SAME TICK -- no fade-out is armed", s.run(), null);
+    eq("...unpaused, with nothing at all left pending on the clock",
+       [s.root.style.animationPlayState, s.clock.pending()], ["", 0]);
+    s.push(F(MAN_OFF, { projAvg: 2900 }));
+    eq("...and it went through endRun (onEnd and all), not a bare disarm: `showing` was cleared, so "
+       + "the next event is a fresh COLD show and not a warm re-trigger",
+       s.root.style.animationDelay, "0ms");
+
+    // REGRESSION GUARD: an explicit manual:true must still take the shipped mirrored fade-out. The
+    // sections above this block carry NEITHER field, so without this one nothing pins the peek's exit
+    // against a `true` that is actually read.
+    section("transitions: manual ON");
+    s = mount(srcs);
+    s.push(F(MAN_ON));
+    s.push(F(MAN_ON, { altHeld: true }));
+    s.clock.advance(FADE_IN);
+    eq("precondition: an animated peek reached its plateau pause",
+       s.root.style.animationPlayState, "paused");
+    s.push(F(MAN_ON, { altHeld: false }));
+    eq("the release still seeks straight to the fade-out stop", s.root.style.animationDelay,
+       "-" + SEEK_FADE_OUT + "ms");
+    eq("...and the bar is still up, on a fresh identity, unpaused",
+       [s.run(), s.root.style.animationPlayState], [RUN_CLASSES[1], ""]);
+    s.clock.advance(FADE_OUT + MARGIN);
+    eq("...gone only a fade-out later", s.run(), null);
+
+    // THE MIXED CASE: the two flags are independent, so an ANIMATED Alt peek can interrupt an
+    // UN-ANIMATED event hold. The run's `animated` is the ARMING AREA's, kept for the whole run, so
+    // the resumed hold still exits the EVENT's way -- instantly, at the instant the untouched
+    // un-animated hold would have ended.
+    section("transitions: an animated peek across an un-animated event hold");
+    s = mount(srcs);
+    s.push(F(MIX));
+    armAt = s.clock.now();
+    s.push(F(MIX, { projAvg: 2900 }));
+    eq("precondition: the event hold armed at the plateau", s.root.style.animationDelay,
+       "-" + SEEK_PLATEAU + "ms");
+    s.clock.advance(PRESS);
+    s.push(F(MIX, { projAvg: 2900, altHeld: true }));
+    s.clock.advance(0);                         // the pause is due immediately (already at plateau)
+    eq("precondition: the peek pinned it at the plateau", s.root.style.animationPlayState, "paused");
+    s.clock.advance(HELD);
+    s.push(F(MIX, { projAvg: 2900, altHeld: false }));
+    eq("the release RESUMES the event hold at its true elapsed position",
+       s.root.style.animationDelay, "-" + (SEEK_PLATEAU + PRESS + HELD) + "ms");
+    at(s, armAt + HOLD - 1);
+    eq("...for exactly the REMAINING hold, not a fresh one", s.run(), RUN_CLASSES[1]);
+    at(s, armAt + HOLD);
+    eq("...and the exit is INSTANT at the original hold's end -- the peek did not buy the event a "
+       + "fade-out it had switched off", s.run(), null);
+
+    // THE FAIL-SOFT DIRECTION, pinned explicitly. `!== false` is why a model that does not carry the
+    // fields (a pre-push frame, a marshal that dropped them, every fixture above) degrades to the
+    // SHIPPED animated bar; `!!undefined` would silently degrade to instant instead.
+    section("transitions: an absent flag degrades to ANIMATED");
+    s = mount(srcs);
+    const NONE = { transEvents: undefined, transManual: undefined };
+    s.push(F(NONE));
+    s.push(F(NONE, { projAvg: 2900 }));
+    eq("T.anim(undefined, undefined) leaves the EVENT half animated: a full entry from pre_avg",
+       [s.root.style.animationDelay, s.fill.style.width], ["0ms", "41.667%"]);
+    s.clock.advance(TOTAL + MARGIN);
+    eq("precondition: that run is over (so the peek below is a cold entry)", s.run(), null);
+    s.push(F(NONE, { projAvg: 2900, altHeld: true }));
+    s.clock.advance(FADE_IN);
+    eq("...and the MANUAL half animated too: the Alt entry played and paused at the plateau",
+       s.root.style.animationPlayState, "paused");
+    s.push(F(NONE, { projAvg: 2900, altHeld: false }));
+    eq("...so its release still MIRRORS into the fade-out instead of ending outright",
+       [s.root.style.animationDelay, s.run() !== null], ["-" + SEEK_FADE_OUT + "ms", true]);
 }
 
 S.main("MoEProgress.js + MoEBarTransient.js", MUTATIONS, run);

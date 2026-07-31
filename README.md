@@ -44,7 +44,8 @@ A wide bar in the **centre of the screen**, separate from the corner overlay. It
 when there is something new to show, holds for about five seconds, then fades out on its own.
 **Hold Alt** to bring it up at any time — that works regardless of the overlay's "Show on Alt
 Key" setting. The bar never takes mouse input, and it stays hidden while the **Tab**
-scoreboard is open, while you are spectating, and before you have a vehicle.
+scoreboard is open, while you are spectating, and before you have a vehicle. Settings let you
+draw it **Large** and switch the fades off so it appears and disappears instantly.
 
 Turn it on in Settings and pick **one** of two bars — they are mutually exclusive:
 
@@ -90,27 +91,38 @@ The mod adds a settings panel to the in-game **mod-settings menu**, provided by
 **ModsSettingsAPI (MSA)** — the standard settings host bundled with the installer. If MSA
 isn't loaded, the mod still runs with both widgets on by default; you just won't see the panel.
 
-Column 1 holds the in-battle options, column 2 the Garage ones:
+The panel is grouped into named **categories**, each a plain header row followed by that
+feature's controls — so a feature's own on/off switch is simply labelled **Show**. Column 1
+holds the two in-battle features, column 2 the Garage one:
 
 | Setting | Default | What it does |
 |---|---|---|
-| **In-Battle Widget** | On | Shows the live MoE overlay during battle. |
+| *Battle Calculator* | — | Category header for the in-battle overlay. |
+| **Show** | On | Shows the live MoE overlay during battle. |
 | ↳ **Show on Alt Key** | Off | Shows the overlay only while **Alt** is held; when off it is visible at all times. |
 | ↳ **Counted Assistance** | Off | Adds a third overlay row: the higher of tracking, spotting or stun assist, with an icon for whichever leads. |
-| **Progress Bar** | Off | Shows the centre-screen bar, which fades out on its own; hold **Alt** to bring it back. Pick the mode below. |
-| ↳ **Mode** | Moving Average | Picks between the two mutually exclusive modes, **Moving Average** and **Damage Efficiency** — the panel shows them as an unlabelled pair of radio buttons. |
-| **In-Garage Widget** | On | Shows the MoE percentile bar in the Garage, on the selected vehicle. |
+| *Battle Progress* | — | Category header for the centre-screen progress bar. |
+| **Show** | Off | Shows the centre-screen bar, which fades out on its own; hold **Alt** to bring it back. Pick the mode and size below. |
+| ↳ *(mode)* | Moving Average | The two mutually exclusive modes, **Moving Average** and **Damage Efficiency** — the panel shows them as an unlabelled pair of radio buttons. |
+| ↳ **Size** | Default | **Default** or **Large**. Large redraws the whole bar half again as tall and twice as wide — same layout, just bigger. |
+| **Transitions** | On | The bar fades and slides as it appears and disappears. Turn a switch below off to make it appear and disappear **instantly** instead; the bar still shows and still hides, only the motion is skipped. |
+| ↳ **Events** | On | Animates the bar when something in battle brings it up (a damage tick) and lets it go again. |
+| ↳ **Manual** | On | Animates the **Alt** peek. Off matches the game's own interface, which does not animate on Alt. |
+| *Garage Widget* | — | Category header for the Garage bar. |
+| **Show** | On | Shows the MoE percentile bar in the Garage, on the selected vehicle. |
 | **Widget position (px)** | — | Header only: **Ctrl+drag** the Garage widget to pin it (hold **Shift** to lock to one axis). |
 | **Horizontal (left X)** | 0 = auto | The pinned widget's distance from the left screen edge, in pixels. |
 | **Vertical (top Y)** | 0 = auto | The same for the top screen edge. |
 | **Follow Carousel Mode** | On | A pinned widget keeps shifting vertically with the vehicle carousel (single / double rows) so it never overlaps it. |
 
-Unchecking a master (**In-Battle Widget**, **Progress Bar**) greys out its indented children; the
-Garage settings have no master. **0 / 0** is the default bottom-right position, which is also what
-the panel's per-mod **Reset** restores. The position settings apply to the Garage widget only —
-the in-battle overlay and the centre-screen progress bar are not movable. What each progress-bar
-mode shows, and the career baseline **Moving Average** needs, is described under *In-battle
-progress bar* above.
+Unchecking a checkbox that has indented children (the two **Show** boxes in column 1, and
+**Transitions**) greys those children out; the Garage settings have no such master. **Transitions**
+sits alongside the progress bar's own **Show** rather than under it, so it stays clickable while the
+bar is off — it simply has nothing to affect until you switch the bar on. **0 / 0** is the default
+bottom-right position, which is also what the panel's per-mod **Reset** restores. The position
+settings apply to the Garage widget only — the in-battle overlay and the centre-screen progress bar
+are not movable. What each progress-bar mode shows, and the career baseline **Moving Average**
+needs, is described under *In-battle progress bar* above.
 
 ## Notes
 

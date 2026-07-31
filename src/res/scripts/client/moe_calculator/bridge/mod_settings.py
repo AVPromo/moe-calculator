@@ -4,8 +4,9 @@ a bare label header row followed by that feature's controls (MSA renders only tw
 a category cannot be a column of its own -- see _template()). Column 1 holds "Battle Calculator"
 (the In-Battle Widget master, labelled "Show", grouped with its "Show on Alt Key" + "Counted
 Assistance" children) then "Battle Progress" (the Progress Bar master, also "Show", with its
-label-less variant radio and its "Size" radio as children). Column 2 holds "Garage Widget" -- the
-garage master plus the standalone drag-position group.
+label-less variant radio and its "Size" radio as children, followed by the "Transitions" master
+with its "Events" + "Manual" children). Column 2 holds "Garage Widget" -- the garage master plus
+the standalone drag-position group.
 
 Surfaced as ModsSettingsAPI (MSA) checkboxes in the game's in-game mod-settings menu. MSA
 (Aslain's gui.aslainMenu preferred, izeberg.modssettingsapi as a legacy fallback) is a SOFT
@@ -77,7 +78,13 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # setModTemplate, so neither the new rows nor the new control can reach an existing install without
 # this forward bump; the migration branch carries every saved value across it and progress_bar_size
 # takes its fresh 0 (= Default) default.
-SETTINGS_VERSION = 11
+# Bumped 11 -> 12 for the "Transitions" group: a THIRD grouped master in the "Battle Progress"
+# category (progress_transitions_enabled) with two children (progress_transitions_events,
+# progress_transitions_manual) -- three new varNames and three new rows at the end of column 1, all
+# structural. As always register()'s saved-truthy path never calls setModTemplate, so only a forward
+# bump reaches an existing install; the migration branch carries every saved value across and the
+# three new keys take their fresh True (= animated, what shipped) defaults.
+SETTINGS_VERSION = 12
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -118,6 +125,19 @@ PROGRESS_SIZE_KEY = "progress_bar_size"
 PROGRESS_SIZE_DEFAULT = 0             # the shipped size -- every existing user keeps it
 PROGRESS_SIZE_LARGE = 1               # ... and the highest legal index (see clamp_variant)
 
+# The Progress Bar's ENTER/EXIT TRANSITIONS (its fade + slide), as a THIRD grouped master in the
+# "Battle Progress" category with one child per trigger AREA. Plain bools, all defaulting True --
+# the animated bar is what shipped. Turning a child OFF makes that area's appearance AND
+# disappearance INSTANT: the bar still shows and still hides, only the motion is skipped. That
+# mimics the game's own HUD, which does not animate its elements on Alt.
+#   events  the bar reacting to what happens in battle (a damage / efficiency tick)
+#   manual  the Alt-key peek
+# The MASTER is folded in by the getters below and is deliberately NEVER pushed to the JS -- the
+# widget only ever sees the two effective flags.
+PROGRESS_TRANSITIONS_KEY = "progress_transitions_enabled"
+PROGRESS_TRANS_EVENTS_KEY = "progress_transitions_events"
+PROGRESS_TRANS_MANUAL_KEY = "progress_transitions_manual"
+
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
 # widget keeps its CSS bottom-right default (resolution-relative), so it re-derives correctly at
@@ -142,13 +162,16 @@ _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY)
 
 # The two widgets ship ON; the Alt-peek mode, the counted-assistance row and the progress bar
 # ship OFF (opt-in), with the progress-bar VARIANT on Moving Average (0) so a user who enables
-# the bar gets the behaviour it always had. The drag position ships at auto (0/0/0/0) and Follow
-# Carousel Mode ships ON. merge_settings only ever overlays these known keys, so an MSA store
-# from a newer/older template can never introduce or drop a flag we act on.
+# the bar gets the behaviour it always had, and all three TRANSITION switches ON (the animated bar
+# is what shipped). The drag position ships at auto (0/0/0/0) and Follow Carousel Mode ships ON.
+# merge_settings only ever overlays these known keys, so an MSA store from a newer/older template
+# can never introduce or drop a flag we act on.
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
             PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,
             PROGRESS_SIZE_KEY: PROGRESS_SIZE_DEFAULT,
+            PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
+            PROGRESS_TRANS_MANUAL_KEY: True,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             FOLLOW_CAROUSEL_KEY: True}
 
@@ -284,6 +307,25 @@ def progress_bar_size():
                          PROGRESS_SIZE_LARGE)
 
 
+def progress_transitions_events():
+    """Whether the progress bar ANIMATES (fade + slide) when a battle event pulls it up and lets
+    it go again (default True). False -> both are instant; the bar still shows and still hides.
+
+    FOLDS THE MASTER IN, which is the whole point of these two getters: the JS never sees
+    PROGRESS_TRANSITIONS_KEY at all, so there is exactly one place that ANDs the group together and
+    no chance of the widget honouring a child while the master is off."""
+    return (bool(_settings.get(PROGRESS_TRANSITIONS_KEY, True))
+            and bool(_settings.get(PROGRESS_TRANS_EVENTS_KEY, True)))
+
+
+def progress_transitions_manual():
+    """Whether the progress bar ANIMATES when the Alt-key peek brings it up and releases it
+    (default True). False -> both are instant, matching the game's own HUD, which does not animate
+    on Alt. Folds the master in -- see progress_transitions_events()."""
+    return (bool(_settings.get(PROGRESS_TRANSITIONS_KEY, True))
+            and bool(_settings.get(PROGRESS_TRANS_MANUAL_KEY, True)))
+
+
 def pos_x():
     """The pinned widget top-left x (px), or 0 for auto (CSS bottom-right default)."""
     return clamp_pos(_settings.get(POS_X_KEY, 0))
@@ -350,14 +392,23 @@ def _apply(saved):
 def _checkbox(key, rendered):
     """One MSA CheckBox descriptor. `varName` matches a DEFAULTS key so the dict MSA returns
     maps straight through merge_settings; text/tooltip come from settings_i18n (English
-    fallback per key)."""
-    return {
+    fallback per key).
+
+    The tooltip key is OMITTED rather than emitted empty when the rendered row has none (same shape
+    as _radio / _label): the Transitions group's "Events" / "Manual" children are LABEL-ONLY rows --
+    one-word switches the master's tooltip already explains -- and handing the panel an empty tooltip
+    to render is not the same as having none. _sync_template_text tolerates it (its `tip is not None`
+    guard skips a tipless rendered entry, so it never writes the key back on)."""
+    control = {
         "type": "CheckBox",
         "text": rendered["text"],
         "value": DEFAULTS[key],
-        "tooltip": rendered["tooltip"],
         "varName": key,
     }
+    tooltip = rendered.get("tooltip")
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
 
 
 def _stepper(key, rendered):
@@ -454,7 +505,8 @@ def _template():
     SETTINGS_VERSION history), so a category is not a column but a bare Label header row followed
     by that feature's controls. Column 1: "Battle Calculator" (the In-Battle Widget master + its
     "Show on Alt Key" and "Counted Assistance" children), then "Battle Progress" (the Progress Bar
-    master + its label-less variant radio and its Size radio). Column 2: "Garage Widget" (the
+    master + its label-less variant radio and its Size radio, then the Transitions master + its
+    Events and Manual children). Column 2: "Garage Widget" (the
     garage master), then the drag-position group -- a positioning Label header, the X/Y numeric
     steppers, and the Follow Carousel Mode checkbox. Because the header names the feature, each
     master's own label is just "Show". Every visible label/tooltip comes from settings_i18n at the
@@ -466,6 +518,9 @@ def _template():
     progress_master = _checkbox(PROGRESS_BAR_KEY, t["progressBar"])
     progress_variant = _radio(PROGRESS_VARIANT_KEY, t[settings_i18n.VARIANT_KEY])
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
+    trans_master = _checkbox(PROGRESS_TRANSITIONS_KEY, t["progressTransitions"])
+    trans_events = _checkbox(PROGRESS_TRANS_EVENTS_KEY, t["progressTransEvents"])
+    trans_manual = _checkbox(PROGRESS_TRANS_MANUAL_KEY, t["progressTransManual"])
     garage = _checkbox(GARAGE_KEY, t["garageWidget"])
     return {
         "modDisplayName": MOD_DISPLAY_NAME,
@@ -486,10 +541,15 @@ def _template():
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL1_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
+        #
+        # The Transitions master is a THIRD _grouped_column1 call spliced on, for the same reason
+        # the Progress Bar one is its own group: its two children must grey out with IT and with
+        # nothing else. Same "Battle Progress" category, so it gets NO header row of its own.
         "column1": ([_label(t["catBattleCalc"])]
                     + _grouped_column1(battle_master, [battle_alt, counted])
                     + [_label(t["catBattleProgress"])]
-                    + _grouped_column1(progress_master, [progress_variant, progress_size])),
+                    + _grouped_column1(progress_master, [progress_variant, progress_size])
+                    + _grouped_column1(trans_master, [trans_events, trans_manual])),
         # column2: the category header, the garage master, then the drag-position group. The
         # steppers stay STANDALONE (no masterVarName), so they keep working -- and stay ungreyed --
         # while the garage widget is off. They show 0 (auto) until a drag / edit pins a px; Follow
