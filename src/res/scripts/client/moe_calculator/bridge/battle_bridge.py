@@ -629,8 +629,9 @@ def push_progress(rvm, snap, model):
         pre_avg = snap.pre_avg_damage or 0
         proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
         has_data = axis_hi > axis_lo
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s" % (
-            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, _alt_held))
+        bar_size = mod_settings.progress_bar_size()
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s size=%d" % (
+            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, _alt_held, bar_size))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -640,6 +641,7 @@ def push_progress(rvm, snap, model):
             tx.setProjAvg(proj_avg)
             tx.setHasData(has_data)
             tx.setAltHeld(_alt_held)
+            tx.setBarSize(bar_size)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -678,10 +680,11 @@ def push_efficiency(rvm, snap, model):
         r = stops if has_data else (0.0, 0.0, 0.0, 0.0, 0.0)
         bar_x = efficiency_bar_x(damage, stops)
         band = efficiency_band(damage, stops)
+        bar_size = mod_settings.progress_bar_size()
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
-                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d" % (
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d size=%d" % (
                       visible, has_data, damage, bar_x, band,
-                      r[1], r[2], r[3], r[4], _alt_held, _battle_epoch))
+                      r[1], r[2], r[3], r[4], _alt_held, _battle_epoch, bar_size))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -694,6 +697,7 @@ def push_efficiency(rvm, snap, model):
             tx.setHasData(has_data)
             tx.setAltHeld(_alt_held)
             tx.setBattleEpoch(_battle_epoch)
+            tx.setBarSize(bar_size)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

@@ -22,7 +22,14 @@ ONE control is not in ``_PANEL`` at all -- ``VARIANT_KEY``, the Progress Bar's v
 It renders no label and no tooltip in ANY language, so a per-language row would encode
 nothing; ``build()`` synthesises its blank entry and attaches the one thing about it that IS
 language-dependent, its option tuple (``_VARIANT_OPTIONS``). It still holds its positional slot
-in ``COL1_KEYS``.
+in ``COL1_KEYS``. The sibling ``progressSize`` radio DOES have a label ("Size"), so it keeps a
+normal ``_PANEL`` row and ``build()`` only attaches its options (``_SIZE_OPTIONS``).
+
+The panel is grouped into three CATEGORIES, each a bare label header row (``catBattleCalc`` /
+``catBattleProgress`` in column 1, ``catGarage`` in column 2) followed by that feature's
+controls. A category row is text-only: no ``varName`` and NO tooltip, so its ``_row`` carries a
+label alone and ``_render`` emits no ``tooltip`` key. Because the header names the feature, each
+feature's master checkbox is simply labelled "Show".
 
 NOTE on terminology: the non-English blocks use each locale's natural wording for
 "widget", "Garage", "battle" and "Marks of Excellence". The official Marks-of-Excellence
@@ -86,19 +93,22 @@ def _row(label, header=None, body=None):
 VARIANT_KEY = u"progressVariant"
 
 # Ordered key list per column -- the wire order of the controls in the MSA template. Used by
-# mod_settings to walk a stored template in lockstep. Column 1 is TWO groups spliced together:
-# the In-Battle Widget master + its two children, then the Progress Bar master + its variant
-# radio; column 2 is the In-Garage Widget plus the drag-position group.
+# mod_settings to walk a stored template in lockstep. Column 1 is TWO CATEGORIES, each a bare
+# label header followed by that feature's group: "Battle Calculator" (the In-Battle Widget master
+# + its two children), then "Battle Progress" (the Progress Bar master + its variant and size
+# radios). Column 2 is the "Garage Widget" category header, the garage master, then the
+# drag-position group. Only two columns -- a third does not render in the panel at all.
 #
 # VARIANT_KEY earns its slot even though it renders NO label and has no _PANEL row: the radio is
 # still a control in the template, and _sync_template_text's zip is POSITIONAL, so a missing key
-# here would pair every later control with the wrong text.
-COL1_KEYS = (u"battleWidget", u"battleAltKey", u"countedAssist",
-             u"progressBar", VARIANT_KEY)
-# Column 2: the standalone In-Garage Widget master, then the drag-position group -- a
-# positioning Label header, the X/Y numeric steppers, and the Follow Carousel Mode checkbox
-# (in that exact control order, so _sync_template_text walks the stored template in lockstep).
-COL2_KEYS = (u"garageWidget", u"positioning", u"posX", u"posY", u"followCarousel")
+# here would pair every later control with the wrong text. Same for the three cat* label rows.
+COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
+             u"catBattleProgress", u"progressBar", VARIANT_KEY, u"progressSize")
+# Column 2: the category header, the standalone In-Garage Widget master, then the drag-position
+# group -- a positioning Label header, the X/Y numeric steppers, and the Follow Carousel Mode
+# checkbox (in that exact control order, so _sync_template_text walks it in lockstep).
+COL2_KEYS = (u"catGarage", u"garageWidget", u"positioning", u"posX", u"posY",
+             u"followCarousel")
 
 # The variant radio's OPTION LABELS, in wire (index) order: 0 = Moving Average (the original
 # next-mark bar, the default), 1 = Damage Efficiency. THE ONLY language-dependent thing the radio
@@ -125,17 +135,40 @@ _VARIANT_OPTIONS = {
     u"tr": (u"Hareketli ortalama", u"Hasar verimliliği"),
 }
 
+# The size radio's OPTION LABELS, in wire (index) order: 0 = Default (the shipped size), 1 =
+# Large. Same table shape, same whole-tuple fallback and the same STRUCTURAL-to-MSA gotcha as
+# _VARIANT_OPTIONS above -- re-wording one needs a mod_settings.SETTINGS_VERSION bump. Unlike the
+# variant radio this control DOES carry a label ("Size"), so it has a normal _PANEL row too.
+_SIZE_OPTIONS = {
+    u"en": (u"Default", u"Large"),
+    u"de": (u"Standard", u"Groß"),
+    u"fr": (u"Par défaut", u"Grande"),
+    u"es": (u"Predeterminada", u"Grande"),
+    u"it": (u"Predefinita", u"Grande"),
+    u"pl": (u"Domyślny", u"Duży"),
+    u"cs": (u"Výchozí", u"Velká"),
+    u"ru": (u"Стандартная", u"Большая"),
+    u"uk": (u"Стандартна", u"Велика"),
+    u"hu": (u"Alapértelmezett", u"Nagy"),
+    u"tr": (u"Varsayılan", u"Büyük"),
+}
+
 
 # The translation tables, lang-major so each language is one contiguous, translator-
 # editable block. 'en' is the master (every key present); the rest are overlaid per key.
 _PANEL = {
     u"en": {
+        # The three CATEGORY headers -- text only, no tooltip (a bare header row has nothing to
+        # explain and nothing to hover). They name the feature, so each master below reads "Show".
+        u"catGarage": _row(u"Garage Widget"),
+        u"catBattleCalc": _row(u"Battle Calculator"),
+        u"catBattleProgress": _row(u"Battle Progress"),
         u"garageWidget": _row(
-            u"In-Garage Widget", u"In-Garage widget",
+            u"Show", u"In-Garage widget",
             u"Shows the Marks of Excellence percentile bar in the Garage, on the "
             u"selected vehicle. Uncheck to hide it."),
         u"battleWidget": _row(
-            u"In-Battle Widget", u"In-Battle widget",
+            u"Show", u"In-Battle widget",
             u"Shows the live Marks of Excellence overlay during battle. Uncheck to "
             u"hide it and disable the options below."),
         u"battleAltKey": _row(
@@ -152,12 +185,15 @@ _PANEL = {
         # row; see VARIANT_KEY), so the per-variant detail lives HERE, on the master's tooltip --
         # the only hoverable surface the group still has.
         u"progressBar": _row(
-            u"Progress Bar", u"Progress bar",
+            u"Show", u"Progress bar",
             u"Shows a bar in the centre of the screen while you play, then fades it away on "
             u"its own. Hold Alt to bring it up at any time. Pick which bar below. "
             u"Moving Average: marks where your projected average damage sits between the mark "
             u"you hold and the next mark's requirement. Damage Efficiency: marks your damage "
             u"this battle against the requirements for the 65 / 85 / 95 / 100 % marks."),
+        # The size radio DOES carry a label (unlike the variant radio), but no tooltip -- the two
+        # option labels say it all. Its options come from _SIZE_OPTIONS via build().
+        u"progressSize": _row(u"Size"),
         # --- drag-to-reposition group (translated across every shipped language; see COL2_KEYS). ---
         u"positioning": _row(
             u"Widget position (px)", u"Widget position",
@@ -180,12 +216,16 @@ _PANEL = {
     },
 
     u"de": {
+        u"catGarage": _row(u"Garage-Widget"),
+        u"catBattleCalc": _row(u"Gefechtsrechner"),
+        u"catBattleProgress": _row(u"Gefechtsfortschritt"),
+        u"progressSize": _row(u"Größe"),
         u"garageWidget": _row(
-            u"Garage-Widget", u"Garage-Widget",
+            u"Anzeigen", u"Garage-Widget",
             u"Zeigt die Marken-Prozentanzeige in der Garage beim ausgewählten Fahrzeug. "
             u"Zum Ausblenden abwählen."),
         u"battleWidget": _row(
-            u"Gefechts-Widget", u"Gefechts-Widget",
+            u"Anzeigen", u"Gefechts-Widget",
             u"Zeigt die Live-Marken-Anzeige im Gefecht. Zum Ausblenden abwählen; die "
             u"Optionen unten werden dann deaktiviert."),
         u"battleAltKey": _row(
@@ -198,7 +238,7 @@ _PANEL = {
             u"Unterstützung hinzu: dem höheren Wert aus Ketten-, Aufklärungs- oder "
             u"Betäubungsunterstützung, mit einem Symbol für den führenden Wert."),
         u"progressBar": _row(
-            u"Fortschrittsleiste", u"Fortschrittsleiste",
+            u"Anzeigen", u"Fortschrittsleiste",
             u"Zeigt während des Spiels eine Leiste in der Bildschirmmitte, die von selbst "
             u"wieder verschwindet. Halte Alt, um sie jederzeit einzublenden. Wähle unten, "
             u"welche Leiste. "
@@ -230,12 +270,16 @@ _PANEL = {
     },
 
     u"fr": {
+        u"catGarage": _row(u"Widget du garage"),
+        u"catBattleCalc": _row(u"Calculateur de bataille"),
+        u"catBattleProgress": _row(u"Progression en bataille"),
+        u"progressSize": _row(u"Taille"),
         u"garageWidget": _row(
-            u"Widget du garage", u"Widget du garage",
+            u"Afficher", u"Widget du garage",
             u"Affiche la barre de centile des marques d'excellence dans le garage, sur le "
             u"véhicule sélectionné. Décochez pour la masquer."),
         u"battleWidget": _row(
-            u"Widget de bataille", u"Widget de bataille",
+            u"Afficher", u"Widget de bataille",
             u"Affiche la superposition des marques d'excellence en direct pendant la "
             u"bataille. Décochez pour la masquer et désactiver les options ci-dessous."),
         u"battleAltKey": _row(
@@ -249,7 +293,7 @@ _PANEL = {
             u"assistance comptabilisée : la plus élevée entre l'assistance par chenilles, "
             u"par détection ou par étourdissement, avec une icône pour celle qui domine."),
         u"progressBar": _row(
-            u"Barre de progression", u"Barre de progression",
+            u"Afficher", u"Barre de progression",
             u"Affiche une barre au centre de l'écran pendant la partie, puis la fait "
             u"disparaître d'elle-même. Maintenez Alt pour l'afficher à tout moment. "
             u"Choisissez la barre ci-dessous. "
@@ -281,12 +325,16 @@ _PANEL = {
     },
 
     u"es": {
+        u"catGarage": _row(u"Widget del garaje"),
+        u"catBattleCalc": _row(u"Calculadora de batalla"),
+        u"catBattleProgress": _row(u"Progreso en batalla"),
+        u"progressSize": _row(u"Tamaño"),
         u"garageWidget": _row(
-            u"Widget del garaje", u"Widget del garaje",
+            u"Mostrar", u"Widget del garaje",
             u"Muestra la barra de percentil de las marcas de excelencia en el garaje, en "
             u"el vehículo seleccionado. Desmarca para ocultarla."),
         u"battleWidget": _row(
-            u"Widget de batalla", u"Widget de batalla",
+            u"Mostrar", u"Widget de batalla",
             u"Muestra la superposición de marcas de excelencia en directo durante la "
             u"batalla. Desmarca para ocultarla y desactivar las opciones de abajo."),
         u"battleAltKey": _row(
@@ -300,7 +348,7 @@ _PANEL = {
             u"asistencia contada: la mayor entre la asistencia por orugas, por detección "
             u"o por aturdimiento, con un icono para la que predomine."),
         u"progressBar": _row(
-            u"Barra de progreso", u"Barra de progreso",
+            u"Mostrar", u"Barra de progreso",
             u"Muestra una barra en el centro de la pantalla durante la partida y luego la "
             u"oculta por sí sola. Mantén pulsado Alt para mostrarla en cualquier momento. "
             u"Elige abajo qué barra. "
@@ -331,12 +379,16 @@ _PANEL = {
     },
 
     u"it": {
+        u"catGarage": _row(u"Widget del garage"),
+        u"catBattleCalc": _row(u"Calcolatore di battaglia"),
+        u"catBattleProgress": _row(u"Progresso in battaglia"),
+        u"progressSize": _row(u"Dimensione"),
         u"garageWidget": _row(
-            u"Widget del garage", u"Widget del garage",
+            u"Mostra", u"Widget del garage",
             u"Mostra la barra di percentile dei marchi di merito nel garage, sul veicolo "
             u"selezionato. Deseleziona per nasconderla."),
         u"battleWidget": _row(
-            u"Widget di battaglia", u"Widget di battaglia",
+            u"Mostra", u"Widget di battaglia",
             u"Mostra la sovrapposizione dei marchi di merito in tempo reale durante la "
             u"battaglia. Deseleziona per nasconderla e disattivare le opzioni "
             u"sottostanti."),
@@ -350,7 +402,7 @@ _PANEL = {
             u"assistenza conteggiata: la più alta tra assistenza ai cingoli, "
             u"all'avvistamento o allo stordimento, con un'icona per quella prevalente."),
         u"progressBar": _row(
-            u"Barra di progresso", u"Barra di progresso",
+            u"Mostra", u"Barra di progresso",
             u"Mostra una barra al centro dello schermo durante la partita, poi scompare da "
             u"sola. Tieni premuto Alt per mostrarla in qualsiasi momento. Scegli sotto quale "
             u"barra. "
@@ -382,12 +434,16 @@ _PANEL = {
     },
 
     u"pl": {
+        u"catGarage": _row(u"Widżet w garażu"),
+        u"catBattleCalc": _row(u"Kalkulator bitewny"),
+        u"catBattleProgress": _row(u"Postęp w bitwie"),
+        u"progressSize": _row(u"Rozmiar"),
         u"garageWidget": _row(
-            u"Widżet w garażu", u"Widżet w garażu",
+            u"Pokaż", u"Widżet w garażu",
             u"Pokazuje pasek percentyla znaków doskonałości w garażu, na wybranym "
             u"pojeździe. Odznacz, aby ukryć."),
         u"battleWidget": _row(
-            u"Widżet w bitwie", u"Widżet w bitwie",
+            u"Pokaż", u"Widżet w bitwie",
             u"Pokazuje nakładkę znaków doskonałości na żywo podczas bitwy. Odznacz, aby "
             u"ją ukryć i wyłączyć opcje poniżej."),
         u"battleAltKey": _row(
@@ -400,7 +456,7 @@ _PANEL = {
             u"wyższą z wartości wsparcia przez unieruchomienie, wykrycie lub ogłuszenie, z "
             u"ikoną dla przeważającej."),
         u"progressBar": _row(
-            u"Pasek postępu", u"Pasek postępu",
+            u"Pokaż", u"Pasek postępu",
             u"Pokazuje pasek na środku ekranu w trakcie gry, a potem znika on samoczynnie. "
             u"Przytrzymaj Alt, aby wyświetlić go w dowolnym momencie. Wybierz poniżej, który "
             u"pasek. "
@@ -430,12 +486,16 @@ _PANEL = {
     },
 
     u"cs": {
+        u"catGarage": _row(u"Widget v garáži"),
+        u"catBattleCalc": _row(u"Bitevní kalkulátor"),
+        u"catBattleProgress": _row(u"Postup v bitvě"),
+        u"progressSize": _row(u"Velikost"),
         u"garageWidget": _row(
-            u"Widget v garáži", u"Widget v garáži",
+            u"Zobrazit", u"Widget v garáži",
             u"Zobrazuje percentilovou lištu znaků cti v garáži u vybraného vozidla. "
             u"Zrušením zaškrtnutí ji skryjete."),
         u"battleWidget": _row(
-            u"Widget v bitvě", u"Widget v bitvě",
+            u"Zobrazit", u"Widget v bitvě",
             u"Zobrazuje živý překryv znaků cti během bitvy. Zrušením zaškrtnutí jej "
             u"skryjete a vypnete možnosti níže."),
         u"battleAltKey": _row(
@@ -448,7 +508,7 @@ _PANEL = {
             u"asistenci: vyšší z asistence pásy, průzkumem nebo omráčením, s ikonou pro "
             u"převažující."),
         u"progressBar": _row(
-            u"Lišta postupu", u"Lišta postupu",
+            u"Zobrazit", u"Lišta postupu",
             u"Zobrazuje uprostřed obrazovky lištu během hry a poté sama zmizí. Podržením "
             u"klávesy Alt ji zobrazíš kdykoli. Níže vyber, kterou lištu. "
             u"Klouzavý průměr: ukazuje, kde se tvé předpokládané průměrné poškození nachází "
@@ -476,12 +536,16 @@ _PANEL = {
     },
 
     u"ru": {
+        u"catGarage": _row(u"Виджет в ангаре"),
+        u"catBattleCalc": _row(u"Боевой калькулятор"),
+        u"catBattleProgress": _row(u"Прогресс в бою"),
+        u"progressSize": _row(u"Размер"),
         u"garageWidget": _row(
-            u"Виджет в ангаре", u"Виджет в ангаре",
+            u"Показывать", u"Виджет в ангаре",
             u"Показывает полосу процентиля отметок классности в ангаре на выбранной "
             u"машине. Снимите галочку, чтобы скрыть."),
         u"battleWidget": _row(
-            u"Виджет в бою", u"Виджет в бою",
+            u"Показывать", u"Виджет в бою",
             u"Показывает наложение отметок классности в реальном времени в бою. Снимите "
             u"галочку, чтобы скрыть его и отключить параметры ниже."),
         u"battleAltKey": _row(
@@ -494,7 +558,7 @@ _PANEL = {
             u"большее из содействия гусеницами, разведкой или оглушением, со значком для "
             u"преобладающего."),
         u"progressBar": _row(
-            u"Полоса прогресса", u"Полоса прогресса",
+            u"Показывать", u"Полоса прогресса",
             u"Показывает полосу в центре экрана во время боя, затем она исчезает сама. "
             u"Удерживайте Alt, чтобы показать её в любой момент. Выберите ниже, какую полосу. "
             u"Скользящее среднее: показывает, где находится ваш прогнозируемый средний урон "
@@ -525,12 +589,16 @@ _PANEL = {
     },
 
     u"uk": {
+        u"catGarage": _row(u"Віджет в ангарі"),
+        u"catBattleCalc": _row(u"Бойовий калькулятор"),
+        u"catBattleProgress": _row(u"Прогрес у бою"),
+        u"progressSize": _row(u"Розмір"),
         u"garageWidget": _row(
-            u"Віджет в ангарі", u"Віджет в ангарі",
+            u"Показувати", u"Віджет в ангарі",
             u"Показує смугу процентиля позначок класності в ангарі на вибраній машині. "
             u"Зніміть позначку, щоб сховати."),
         u"battleWidget": _row(
-            u"Віджет у бою", u"Віджет у бою",
+            u"Показувати", u"Віджет у бою",
             u"Показує накладання позначок класності в реальному часі в бою. Зніміть "
             u"позначку, щоб сховати його та вимкнути параметри нижче."),
         u"battleAltKey": _row(
@@ -543,7 +611,7 @@ _PANEL = {
             u"з допомоги гусеницями, засвітом чи оглушенням, з піктограмою відповідного "
             u"типу."),
         u"progressBar": _row(
-            u"Смуга прогресу", u"Смуга прогресу",
+            u"Показувати", u"Смуга прогресу",
             u"Показує смугу в центрі екрана під час бою, потім вона зникає сама. Утримуйте "
             u"Alt, щоб показати її будь-коли. Виберіть нижче, яку смугу. "
             u"Ковзне середнє: показує, де перебуває ваша прогнозована середня шкода між "
@@ -573,12 +641,16 @@ _PANEL = {
     },
 
     u"hu": {
+        u"catGarage": _row(u"Garázs-widget"),
+        u"catBattleCalc": _row(u"Csata-kalkulátor"),
+        u"catBattleProgress": _row(u"Haladás a csatában"),
+        u"progressSize": _row(u"Méret"),
         u"garageWidget": _row(
-            u"Garázs-widget", u"Garázs-widget",
+            u"Megjelenítés", u"Garázs-widget",
             u"Megjeleníti a kiválósági jelek percentilis sávját a garázsban, a "
             u"kiválasztott járművön. Vedd ki a pipát az elrejtéshez."),
         u"battleWidget": _row(
-            u"Csata-widget", u"Csata-widget",
+            u"Megjelenítés", u"Csata-widget",
             u"Megjeleníti az élő kiválósági jelek átfedést a csatában. Vedd ki a pipát az "
             u"elrejtéshez és az alábbi beállítások letiltásához."),
         u"battleAltKey": _row(
@@ -591,7 +663,7 @@ _PANEL = {
             u"mutatja: a lánctalpas, felderítő vagy kábító segítés közül a nagyobbat, a "
             u"vezető típus ikonjával."),
         u"progressBar": _row(
-            u"Haladási sáv", u"Haladási sáv",
+            u"Megjelenítés", u"Haladási sáv",
             u"Sávot jelenít meg a képernyő közepén játék közben, majd magától eltűnik. Tartsd "
             u"nyomva az Altot, hogy bármikor előhívd. Alább válaszd ki, melyik sávot. "
             u"Mozgóátlag: megmutatja, hol áll a várható átlagsebzésed a birtokolt jel és a "
@@ -619,12 +691,16 @@ _PANEL = {
     },
 
     u"tr": {
+        u"catGarage": _row(u"Garaj widget'ı"),
+        u"catBattleCalc": _row(u"Savaş hesaplayıcı"),
+        u"catBattleProgress": _row(u"Savaş ilerlemesi"),
+        u"progressSize": _row(u"Boyut"),
         u"garageWidget": _row(
-            u"Garaj widget'ı", u"Garaj widget'ı",
+            u"Göster", u"Garaj widget'ı",
             u"Seçili araçta, garajda üstünlük işaretleri yüzdelik çubuğunu gösterir. "
             u"Gizlemek için işareti kaldır."),
         u"battleWidget": _row(
-            u"Savaş widget'ı", u"Savaş widget'ı",
+            u"Göster", u"Savaş widget'ı",
             u"Savaş sırasında canlı üstünlük işaretleri katmanını gösterir. Gizlemek ve "
             u"aşağıdaki seçenekleri devre dışı bırakmak için işareti kaldır."),
         u"battleAltKey": _row(
@@ -636,7 +712,7 @@ _PANEL = {
             u"Savaş katmanına, sayılan yardımını gösteren üçüncü bir satır ekler: palet, "
             u"tespit veya sersemletme yardımından en yükseği, öndeki için bir simgeyle."),
         u"progressBar": _row(
-            u"İlerleme çubuğu", u"İlerleme çubuğu",
+            u"Göster", u"İlerleme çubuğu",
             u"Oyun sırasında ekranın ortasında bir çubuk gösterir, sonra kendiliğinden "
             u"kaybolur. Herhangi bir anda görüntülemek için Alt tuşunu basılı tut. Hangi çubuk "
             u"olacağını aşağıdan seç. "
@@ -696,9 +772,20 @@ def _render(entry, mark=False):
     return out
 
 
+def _options(table, code):
+    """The localized option tuple for one option-bearing control (PURE). WHOLE-TUPLE fallback,
+    not per-option: the options are one ordered set whose meaning is positional, so a
+    half-translated tuple would be worse than plain English (marked when the diagnostic is on)."""
+    opts = table.get(code)
+    if opts:
+        return tuple(opts)
+    return tuple(i18n._mark(o) for o in table[DEFAULT_LANGUAGE])
+
+
 def build(lang):
     """The rendered panel text for ``lang``: ``{key: {"text", "tooltip"}}`` (PURE), plus an
-    ``"options"`` tuple on the one option-bearing control (``VARIANT_KEY``).
+    ``"options"`` tuple on each of the two option-bearing controls (``VARIANT_KEY`` and
+    ``"progressSize"``).
 
     A key the language didn't translate is rendered from English and marked (when
     ``i18n.MARK_UNTRANSLATED`` is on) so English leaks are spottable in-client."""
@@ -714,16 +801,11 @@ def build(lang):
     # Progress Bar checkbox, which owns the prose. An empty `text` is the whole entry, and it is
     # never marked as an English fallback (there is nothing to fall back FROM). `tooltip` is
     # OMITTED, not empty: mod_settings._radio only emits the key when there is one.
-    # The options ride on this rendered entry (where _radio reads them) rather than in _PANEL, so
-    # the positional COL*_KEYS partition stays label/tooltip-only. WHOLE-TUPLE fallback, not
-    # per-option: the options are one ordered set whose meaning is positional, so a half-translated
-    # tuple would be worse than plain English.
-    opts = _VARIANT_OPTIONS.get(code)
-    out[VARIANT_KEY] = {
-        u"text": u"",
-        u"options": tuple(opts) if opts else tuple(
-            i18n._mark(o) for o in _VARIANT_OPTIONS[DEFAULT_LANGUAGE]),
-    }
+    # The options ride on the rendered entry (where _radio reads them) rather than in _PANEL, so
+    # the positional COL*_KEYS partition stays label/tooltip-only. The size radio DOES have a
+    # _PANEL row (it carries a "Size" label), so it only needs its options attached.
+    out[VARIANT_KEY] = {u"text": u"", u"options": _options(_VARIANT_OPTIONS, code)}
+    out[u"progressSize"][u"options"] = _options(_SIZE_OPTIONS, code)
     return out
 
 

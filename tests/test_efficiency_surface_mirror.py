@@ -42,13 +42,15 @@ JSON out of the raw text.
 import json
 import os
 import re
+from decimal import Decimal, ROUND_HALF_UP
 
 import pytest
 
 from moe_calculator.domain.constants import (
     EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_OFFSET,
-    EFFICIENCY_BAR_STOPS)
+    EFFICIENCY_ANCHOR_Y_OFFSET_LARGE, EFFICIENCY_BAR_STOPS)
 from moe_calculator.domain.positioning import anchor_centred
+from moe_calculator.domain.rounding import iround_half_away
 
 _WIDGET = os.path.join(os.path.dirname(__file__), "..", "src", "res", "gui", "gameface", "mods",
                        "14th_ua", "MoECalculator")
@@ -146,6 +148,19 @@ def _tconst(name):
     return _js_const(_transient(), name, "MoEBarTransient.js")
 
 
+def _size_factor(name):
+    """One of the LARGE size mode's two factors, out of the SHARED MoEBarTransient.js.
+
+    They are FRACTIONAL (1.5 and 4 / 3), so they cannot ride `_js_const`'s integer shape -- and
+    SIZE_XF is not even a literal, it is the expression `4 / 3`. Read as a Decimal on purpose: `4/3`
+    is not representable, the implementer hit `949.9999999999999` deriving THIS bar's large surface
+    from it in float, and everything below compares CSS lengths for exact equality."""
+    match = re.search(r"(?m)^const %s = (\d+(?:\.\d+)?)(?:\s*/\s*(\d+))?;" % name, _transient())
+    assert match, "MoEBarTransient.js: const %s not found" % name
+    value = Decimal(match.group(1))
+    return value / Decimal(match.group(2)) if match.group(2) else value
+
+
 def _derivation(src, line, what):
     """One whole derivation line, anywhere in `src` (the shared module's are indented inside
     createTransient, so this is NOT anchored at column 0 -- only at a line start)."""
@@ -203,13 +218,20 @@ def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
     # the whole surface contract, so a re-tune of the box or the pad propagates instead of drifting.
     # They live in the SHARED module now, keyed to its cfg (which the test above proves is fed from
     # this bar's consts); the old VIEW_*/SHIFT_*/HIT_PAD_REM consts are those same five expressions.
+    #
+    # FOUR of the five became `let` for the LARGE size mode (applySize re-derives whatever carries a
+    # factor), so the DERIVATION is what is pinned, not the keyword -- `(?:const|let)`. shiftY is the
+    # exception and stays pinned as a `const`: it is a pure y/uniform rem length that the 1.5x root
+    # font scales for free, so a size mode that starts rewriting it is rewriting the wrong axis.
     src = _transient()
-    for line in ("const viewW = cfg.boxW + 2 * cfg.pad;",
-                 "const viewH = cfg.boxH + 2 * cfg.pad;",
-                 "const shiftX = cfg.pad - cfg.boxLeft;",
-                 "const shiftY = cfg.pad - cfg.boxTop;",
-                 "const hitPad = Math.ceil(Math.max(viewW, viewH) / 2);"):
-        _derivation(src, line, "MoEBarTransient.js")
+    for line in ("viewW = cfg.boxW + 2 * cfg.pad;",
+                 "viewH = cfg.boxH + 2 * cfg.pad;",
+                 "shiftX = cfg.pad - cfg.boxLeft;",
+                 "hitPad = Math.ceil(Math.max(viewW, viewH) / 2);"):
+        assert re.search(r"(?m)^\s*(?:const|let) " + re.escape(line), src), \
+            "MoEBarTransient.js: lost the derivation `%s`" % line
+    assert re.search(r"(?m)^\s*const shiftY = cfg\.pad - cfg\.boxTop;", src), \
+        "MoEBarTransient.js: shiftY must stay a pure-y const -- the root font scales it"
 
 
 def _surface_wh(js):
@@ -219,6 +241,25 @@ def _surface_wh(js):
 
 def _shift_y(js):
     return _js_const(js, "PAD_REM") - _js_const(js, "BOX_TOP_REM")
+
+
+def _large_surface_wh(js):
+    """The surface pushed in the LARGE size mode, derived exactly as MoEBarTransient.applySize
+    does it: the x half takes BOTH factors, the y half only SIZE_F, and each is ROUNDED because
+    4/3 is not representable (Math.round, so half-AWAY, not py3's banker's rule -- and on THIS
+    bar the x term really does land on 949.9999999999999 in float). PAD_REM is slack on both axes
+    and takes no x factor."""
+    f, xf = _size_factor("SIZE_F"), _size_factor("SIZE_XF")
+    pad = _js_const(js, "PAD_REM")
+    return (iround_half_away((Decimal(_js_const(js, "BOX_W_REM")) * xf + 2 * pad) * f),
+            iround_half_away((Decimal(_js_const(js, "BOX_H_REM")) + 2 * pad) * f))
+
+
+def _large_shift_y(js):
+    """SHIFT_Y_REM in LOGICAL PX under the large mode. The JS never rewrites it -- it is a pure
+    y/uniform rem length in `root.style.top`, so the 1.5x root font scales it for free; this
+    conversion is what the Python constant has to carry (it is logical px, not rem)."""
+    return iround_half_away(Decimal(_shift_y(js)) * _size_factor("SIZE_F"))
 
 
 def test_the_js_pushes_that_surface_to_the_engine():
@@ -380,6 +421,18 @@ def test_python_y_offset_cancels_the_js_shift_and_converts_frac_to_viewport():
         -_shift_y(js) + int(round(EFFICIENCY_ANCHOR_Y_FRAC * surface_h))
 
 
+def test_python_large_y_offset_is_the_same_two_terms_scaled_by_size_f():
+    # The LARGE twin (mod_settings.progress_bar_size == 1), derived the SAME two ways from the SAME
+    # shipped JS -- only every length is in logical px now, so both terms carry SIZE_F and NEITHER
+    # carries SIZE_XF (this is the Y axis). No literal 76 here. Unlike the 1x pair there is not even
+    # a coincidence to trip over: -(50*1.5) == -75 and round(0.865*116*1.5) == 151 share nothing.
+    js = _js()
+    surface_h = Decimal(_surface_wh(js)[1])
+    assert EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == \
+        -_large_shift_y(js) + iround_half_away(Decimal(str(EFFICIENCY_ANCHOR_Y_FRAC))
+                                               * surface_h * _size_factor("SIZE_F"))
+
+
 @pytest.mark.parametrize("space_h", [1080, 1440])
 def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(space_h):
     # THE invariant the offset's second term exists for: the track's top edge lands at
@@ -388,11 +441,27 @@ def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(sp
     # anchor_centred the movable extent, and the track then sits SHIFT_Y_REM below the window's
     # top edge. Slack is 1.5px: anchor_centred's int() floor loses up to 1, and the offset's own
     # round() up to 0.5.
+    #
+    # ...AND THE SAME UNDER THE LARGE SIZE MODE, which is that mode's whole point: it is a pure
+    # scale-up, so the bar must not MOVE. Every length on the large side is bigger -- the surface,
+    # the intra-surface shift, hence the Y compensation -- and the track's top edge still has to
+    # come out at the SAME fraction of the same viewport, asserted both against the fraction and
+    # directly against the 1x placement.
     js = _js()
     surface_w, surface_h = _surface_wh(js)
     _x, y = anchor_centred(1920 - surface_w, space_h - surface_h, EFFICIENCY_ANCHOR_Y_FRAC,
                            EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_OFFSET)
-    assert abs((y + _shift_y(js)) - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5
+    top = y + _shift_y(js)
+    assert abs(top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5
+    lw, lh = _large_surface_wh(js)
+    _lx, ly = anchor_centred(1920 - lw, space_h - lh, EFFICIENCY_ANCHOR_Y_FRAC,
+                             EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_OFFSET_LARGE)
+    large_top = ly + _large_shift_y(js)
+    assert abs(large_top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5, \
+        "the LARGE bar's track lands at %s of the viewport, not %s" % (
+            large_top / float(space_h), EFFICIENCY_ANCHOR_Y_FRAC)
+    assert abs(large_top - top) <= 2, \
+        "the size mode MOVED the bar: 1x track top %s vs large %s" % (top, large_top)
 
 
 # --- the tuner's meta block: the third leg of every timing -------------------
@@ -512,6 +581,234 @@ def test_the_dash_grids_gap_stripe_stays_fully_OPAQUE():
             "the dash grid's GAP stripe must be fully opaque, not %r" % (gap,)
     # ...while the outset ring stays at the garage bar's 0.5 -- it sits OUTSIDE the fill.
     assert _decl(_css(), ".mp-track::after", "box-shadow") == "0 0 0 1rem rgba(13,14,16,0.5)"
+
+
+# --- THE "LARGE" SIZE MODE: HAND-ADDED BLOCK 3's .mp-lg rules ---------------------------------
+# mod_settings.progress_bar_size == 1. The mode is delivered by the ROOT FONT SIZE (SIZE_F == 1.5,
+# which IS the rem->px factor in Gameface), so it needs NO CSS at all for anything uniform -- height,
+# fonts, icon boxes, glow radii, the caption offsets and mp-life's slide all follow the root font.
+# What is left is the HORIZONTAL x2: an x-length carries an extra SIZE_XF == 4/3 on top of that 1.5,
+# and the appended block re-declares X-LENGTHS AND NOTHING ELSE.
+#
+# The sibling tests/test_progress_surface_mirror.py runs the identical three claims over
+# MoEProgress.css -- COMPLETE (every base x-length has a twin, and nothing else does), CORRECT (each
+# twin is its base counterpart times 4/3, re-derived here rather than transcribed) and CLEAN (no
+# non-x property and no non-rem value was scaled, since scaling any of those DOUBLE-applies SIZE_F).
+# The helpers are duplicated per bar exactly like _read / _js_const / _surface_wh above: these two
+# mirror files have never shared a module, and each bar's guards belong where its reader looks.
+#
+# ONE difference from that file: this stylesheet has NO re-derived exception. Its #moe-bar-box is the
+# tuner's own emit and coincides with .mp-backdrop's width, so the plain x4/3 holds for every single
+# declaration -- which is itself asserted (the box gets its own independent re-derivation below).
+#
+# Decimal throughout, never float: the repo lesson
+# `css-em-arithmetic-needs-decimal-not-float-equality`.
+_LG = ".mp-lg "
+
+
+def _x4_3(text):
+    """`text` with every rem length multiplied by SIZE_XF, at the stylesheet's own 3dp."""
+    xf = _size_factor("SIZE_XF")
+
+    def _one(match):
+        scaled = (Decimal(match.group(1)) * xf).quantize(Decimal("0.001"),
+                                                         rounding=ROUND_HALF_UP)
+        return format(scaled.normalize(), "f") + "rem"
+
+    return re.sub(r"(-?[\d.]+)rem", _one, text)
+
+
+# WHICH PROPERTIES CARRY THE X FACTOR, and how much of their value is horizontal. Doubling as the
+# CLEAN check: a `.mp-lg` rule declaring anything NOT in here fails, which is what refuses a
+# font-size / height / line-height / vertical margin sneaking in.
+_X_SCALE = {
+    "width": _x4_3, "left": _x4_3, "right": _x4_3,
+    "margin-left": _x4_3, "margin-right": _x4_3,
+    "padding-left": _x4_3, "padding-right": _x4_3,
+    # ONLY the first translate() argument is horizontal. This bar leans on that hard: `.mp-cap
+    # .mp-d`'s translate carries the caption gap in x AND the delta's Y nudge in y, and each
+    # `.mp-ico` transform chains a per-role translateY -- scaling either would move a glyph
+    # vertically, which the root font has already done.
+    "transform": lambda v: re.sub(r"(translate\(\s*)(-?[\d.]+rem)",
+                                  lambda m: m.group(1) + _x4_3(m.group(2)), v),
+    # `<x> <y>`: only the x term tiles horizontally; the y term is `100%` and must stay untouched.
+    "background-size": lambda v: " ".join([_x4_3(v.split()[0])] + v.split()[1:]),
+    # A 90deg repeating gradient -- every stop is a horizontal offset. The colours carry no rem, so
+    # _x4_3 leaves them (and the `90deg`) alone, which is itself part of the CLEAN claim.
+    "background-image": _x4_3,
+}
+
+
+def _rules(css):
+    """[(selector, declarations)] for every flat rule in already-comment-stripped `css`.
+
+    Deliberately NOT anchored on the preceding `}`: consuming it makes the regex skip every OTHER
+    rule. `[^{}@;]` keeps `@font-face` / `@keyframes` headers out, and a keyframe STOP
+    (`9.68%{...}`) is dropped by the percentage filter."""
+    out = []
+    for match in re.finditer(r"([^{}@;]+?)\s*\{([^{}]*)\}", css):
+        selector = " ".join(match.group(1).split())
+        if not re.match(r"^[\d.]+%$", selector):
+            out.append((selector, match.group(2)))
+    return out
+
+
+def _decls(body):
+    """[(property, value)] of one rule's declaration block, whitespace-normalized."""
+    out = []
+    for chunk in body.split(";"):
+        prop, sep, value = chunk.partition(":")
+        if sep:
+            out.append((prop.strip(), " ".join(value.split())))
+    return out
+
+
+def _cascade():
+    """({base selector: decls}, {.mp-lg selector: decls}) for MoEEfficiency.css."""
+    base, large = {}, {}
+    for selector, body in _rules(_css()):
+        (large if selector.startswith(_LG) else base)[selector] = body
+    return base, large
+
+
+def _rem_d(body, prop):
+    """One rem declaration of an already-extracted rule body, as a Decimal (the file's `_rem`
+    reads whole rem only, and every large value is fractional)."""
+    match = re.search(r"\b%s:\s*(-?[\d.]+)rem\s*;" % re.escape(prop), body)
+    assert match, "MoEEfficiency.css: no %s in `%s`" % (prop, body.strip())
+    return Decimal(match.group(1))
+
+
+def _x_props(body):
+    """The properties of one BASE rule that declare a HORIZONTAL rem length.
+
+    Mechanical, not a hand-kept list -- a hand-kept list is how the next x-length gets added with
+    no twin and nothing notices:
+      * a left/right margin or padding, and `left`/`right` itself, are always x;
+      * a `width` in rem is x UNLESS the same rule gives `height` the same value -- that is a
+        SQUARE icon box, a uniform length the root font already scales (this bar has four of them:
+        .mp-ico, .mp-ico.mk, .mp-ico.bm, .mp-ico.dmg);
+      * a translate()'s FIRST argument, when it is a NONZERO rem (0 is invariant under any factor,
+        which is what keeps .mp-tick.mp-req's `translateY(0rem)` chain out of this);
+      * a background-size / background-image carrying rem (the dash grid's period and stops).
+    """
+    values = dict(_decls(body))
+    out = []
+    for prop, value in _decls(body):
+        if prop in ("margin-left", "margin-right", "padding-left", "padding-right",
+                    "left", "right"):
+            hit = re.search(r"-?[\d.]+rem", value)
+        elif prop == "width":
+            hit = (re.match(r"^-?[\d.]+rem$", value) and values.get("height") != value)
+        elif prop == "transform":
+            hit = re.search(r"\btranslate\(\s*-?[\d.]*[1-9][\d.]*rem", value)
+        elif prop in ("background-size", "background-image"):
+            hit = re.search(r"[\d.]+rem", value)
+        else:
+            hit = None
+        if hit:
+            out.append(prop)
+    return out
+
+
+def test_the_large_block_twins_exactly_the_base_cascades_x_lengths():
+    # COMPLETE, both directions. A base x-length with no twin renders half-scaled horizontally under
+    # the large mode; a twin with no base x-length is a rule scaling something the root font already
+    # handled (or a selector typo that silently styles nothing).
+    base, large = _cascade()
+    want = {s for s, body in base.items() if _x_props(body)}
+    got = {s[len(_LG):] for s in large}
+    assert got == want, "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
+        sorted(want - got), sorted(got - want))
+
+
+def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
+    # CORRECT + CLEAN, in one pass: for every twin declaration, re-derive the expected value from
+    # the BASE rule (the independent source) and compare. Because the derivation only ever rewrites
+    # rem numbers, this equally asserts that no %, em, `contain`, colour, `90deg` or background-size
+    # y-ratio was scaled, and the _X_SCALE lookup refuses any property that is not an x-length.
+    # NO exception list, unlike the Moving Average bar's: on this stylesheet the plain x4/3 holds
+    # for every declaration, and the count is pinned so a twin cannot go missing here either.
+    base, large = _cascade()
+    checked = 0
+    for selector, body in large.items():
+        bare = selector[len(_LG):]
+        assert bare in base, "%s overrides a rule that does not exist" % selector
+        base_decls = dict(_decls(base[bare]))
+        for prop, value in _decls(body):
+            assert prop in _X_SCALE, \
+                "%s { %s } is not an x-length -- the root font already scales it, so a .mp-lg " \
+                "rule DOUBLE-applies SIZE_F" % (selector, prop)
+            assert prop in base_decls, "%s { %s } has no base counterpart" % (selector, prop)
+            assert value == _X_SCALE[prop](base_decls[prop]), \
+                "%s { %s: %s } is not the base `%s` times 4/3" % (selector, prop, value,
+                                                                  base_decls[prop])
+            checked += 1
+    assert checked == 13, "expected 13 x4/3 declarations, checked %d" % checked
+
+
+def test_the_large_block_carries_no_keyframe_and_no_vertical_length():
+    # The CLEAN claim's other half, on the raw text: _X_SCALE above refuses a vertical PROPERTY, but
+    # a `@keyframes` (mp-life's slide is a y length, and its identity is what the twin blocks exist
+    # for) would not be a rule at all and would slip past the walk entirely. Read from the RAW file
+    # so the block's own markers are visible.
+    block = _read("MoEEfficiency.css").split('HAND-ADDED BLOCK 3 OF 3')[-1]
+    assert "@keyframes" not in block and "%{" not in block, \
+        "the .mp-lg block grew a keyframe -- the root font already scales mp-life's slide"
+
+
+def test_the_large_sizing_box_still_tracks_the_backdrop_not_the_surface():
+    # The 1x pin (test_the_sizing_box_stays_the_tuners_emit_and_is_not_the_surface) is that
+    # #moe-bar-box's width IS BOX_W_REM -- .mp-backdrop's width, the emit's own rectangle -- and
+    # deliberately NOT the surface. Re-derive the large twin the same way, off the large BACKDROP
+    # rather than off the base box, so the two stay the same rectangle under the mode; and refuse a
+    # restated height, which 92/116rem at a 1.5x root font already delivers.
+    _base, large = _cascade()
+    assert _rem_d(large[_LG + "#moe-bar-box"], "width") == \
+        _rem_d(large[_LG + ".mp-backdrop"], "width")
+    assert (_rem_d(large[_LG + "#moe-bar-box"], "width"),
+            _rem_d(large[_LG + ".mp-backdrop"], "width")) != _large_surface_wh(_js()), \
+        "#moe-bar-box is the tuner's emit, not the surface -- see MoEEfficiencyView.html"
+    assert "height" not in dict(_decls(large[_LG + "#moe-bar-box"])), \
+        "the large sizing box must not restate a height -- the root font scales the base 55rem"
+
+
+def test_the_large_block_matches_the_generators_own_copy_of_it():
+    # THE OTHER DIRECTION of the splice. check_eff_css.js proves the shipped file is the tuner's emit
+    # plus exactly three MARKED regions -- but it STRIPS those regions, so it never looks inside
+    # them: a hand-edit to the shipped .mp-lg rules passes it, and then the next
+    # `node tools/dev/emit_eff_css.js` silently reverts the edit from the generator's own `LARGE`
+    # literal. Pin the rules on BOTH sides, the same shape as the Moving Average bar's tuner pins.
+    # Rules only, not the prose: the two comment blocks are allowed to drift in wording.
+    _base, large = _cascade()
+    generator = _no_css_comments(
+        open(os.path.join(os.path.dirname(__file__), "..", "tools", "dev",
+                          "emit_eff_css.js")).read())
+    for selector, body in large.items():
+        for prop, value in _decls(body):
+            assert re.search(r"(?m)^" + re.escape(selector) + r"\s*\{[^}]*" +
+                             re.escape("%s: %s" % (prop, value)), generator), (
+                "tools/dev/emit_eff_css.js does not emit `%s { %s: %s }` -- a re-emit would "
+                "revert it" % (selector, prop, value))
+
+
+def test_the_large_backdrop_stays_symmetric_about_the_track():
+    # LOAD-BEARING, and silent when it breaks: there is NO X compensation term in Python, so
+    # anchor_centred's `max_x // 2` only centres the bar because the backdrop brackets the track
+    # with EQUAL bleed each side (the 1x half of this is
+    # test_the_backdrop_brackets_the_track_symmetrically). Break the symmetry under the large mode
+    # and X drifts by half the error at every resolution, with every other assertion still green.
+    # Tolerance is 0.002rem, not exact: each of the three values is independently rounded to the
+    # stylesheet's 3dp (the bleed twice over), so the sum cannot close exactly. It is ~4 orders of
+    # magnitude below the smallest real error (a dropped x factor moves the bleed by 26.667rem).
+    _base, large = _cascade()
+    bleed = -_rem_d(large[_LG + ".mp-backdrop"], "left")
+    width = _rem_d(large[_LG + ".mp-backdrop"], "width")
+    track = _rem_d(large[_LG + "#moe-bar-root"], "width")
+    assert bleed > 0, "the backdrop must start LEFT of the track, not inside it"
+    assert abs(width - (track + 2 * bleed)) <= Decimal("0.002"), (
+        "the large backdrop is %srem around a %srem track with %srem of left bleed -- "
+        "asymmetric, so `max_x // 2` no longer centres the bar" % (width, track, bleed))
 
 
 def test_the_cap_clamp_corridor_sits_inside_the_backdrop():

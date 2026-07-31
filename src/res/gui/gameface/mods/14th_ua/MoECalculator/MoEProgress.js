@@ -354,6 +354,11 @@ function render(model) {
         return;
     }
     root.style.display = "";
+    // The pushed size mode (mod_settings.progress_bar_size). Idempotent in the transient, so this is
+    // just "keep it in sync"; it owns the root-font write, the .mp-lg body class and the re-derived
+    // surface. Nothing in THIS file measures px, so there is nothing else to scale here (contrast
+    // MoEEfficiency.js's capClampPct, which mixes offsetWidth with rem literals).
+    T.size(Number(model.barSize) === 1);
 
     cur = {
         marks: Number(model.marks) || 0,

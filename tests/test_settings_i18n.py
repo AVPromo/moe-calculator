@@ -17,6 +17,19 @@ _KEYS = set(S._PANEL[u"en"].keys())
 _SHIPPED = [c for c in S._PANEL if c != u"en"]
 
 
+def _col1_slice(*keys):
+    """The COL1_KEYS indices of `keys`, in the order given.
+
+    Every positional pin below goes through this instead of an index literal: COL*_KEYS' pairing
+    with the built template is POSITIONAL (mod_settings._sync_template_text zips them), so a
+    reorder does not error -- it retitles the WRONG control on every existing install. Naming the
+    key makes the next reorder report itself; an absent key raises here rather than reading as
+    "index moved"."""
+    for key in keys:
+        assert key in S.COL1_KEYS, u"%s left COL1_KEYS entirely" % key
+    return tuple(S.COL1_KEYS.index(key) for key in keys)
+
+
 # --- resolve ---------------------------------------------------------------
 
 def test_resolve_en_has_all_keys_shaped():
@@ -33,9 +46,15 @@ def test_resolve_de_differs_from_english():
     en = S.resolve(u"en")
     de = S.resolve(u"de")
     assert set(de.keys()) == _KEYS
-    assert de[u"garageWidget"][u"label"] != en[u"garageWidget"][u"label"]
-    assert de[u"garageWidget"][u"label"] == u"Garage-Widget"
-    assert en[u"garageWidget"][u"label"] == u"In-Garage Widget"
+    # The masters' own labels all became the bare "Show" (the CATEGORY header above names the
+    # feature), so the garage master is no longer a useful English-vs-German comparison -- "Show" /
+    # "Anzeigen" still differ, but the interesting per-language string moved to the header row.
+    # Assert on the CATEGORY, which is where the feature name lives now, AND keep the master pair.
+    assert de[u"catGarage"][u"label"] != en[u"catGarage"][u"label"]
+    assert de[u"catGarage"][u"label"] == u"Garage-Widget"
+    assert en[u"catGarage"][u"label"] == u"Garage Widget"
+    assert de[u"garageWidget"][u"label"] == u"Anzeigen"
+    assert en[u"garageWidget"][u"label"] == u"Show"
 
 
 def test_resolve_unknown_is_full_english():
@@ -65,8 +84,10 @@ def test_every_shipped_language_covers_all_keys():
 def test_battle_alt_key_present_in_master_and_col1():
     assert u"battleAltKey" in S._PANEL[u"en"]
     assert u"battleAltKey" in S.COL1_KEYS
-    # The Alt child is the SECOND column-1 control -- between the master and counted assist.
-    assert S.COL1_KEYS[1] == u"battleAltKey"
+    # POSITION, named rather than an index literal: the Alt child sits between the In-Battle master
+    # and counted assist, and the whole group now follows the catBattleCalc header row. Naming the
+    # neighbours means the next reorder reports which key moved instead of retitling a control.
+    assert _col1_slice(u"catBattleCalc", u"battleWidget", u"battleAltKey") == (0, 1, 2)
     en = S.resolve(u"en")
     assert en[u"battleAltKey"][u"label"] == u"Show on Alt Key"
     assert u"ttHeader" in en[u"battleAltKey"] and u"ttBody" in en[u"battleAltKey"]
@@ -96,12 +117,12 @@ def test_battle_alt_key_ukrainian_translated():
 
 def test_counted_assist_present_in_master_and_col1():
     assert u"countedAssist" in S._PANEL[u"en"]
-    # THIRD control in column 1 -- the second child under the In-Battle master in
-    # mod_settings._template() ([battle master, alt child, counted child, progress bar]). It is
-    # the last of the GROUP, not of the column; the length is pinned by the template<->COL1_KEYS
-    # pairing test in test_mod_settings, not restated here.
-    assert u"countedAssist" in S.COL1_KEYS
-    assert S.COL1_KEYS[2] == u"countedAssist"
+    # The SECOND child under the In-Battle master, i.e. the LAST key of the Battle Calculator
+    # category -- the next key starts the Battle Progress one. It is the last of the GROUP, not of
+    # the column; the column length is pinned by the template<->COL1_KEYS pairing test in
+    # test_mod_settings, not restated here.
+    alt, counted, next_cat = _col1_slice(u"battleAltKey", u"countedAssist", u"catBattleProgress")
+    assert (counted, next_cat) == (alt + 1, counted + 1)
     en = S.resolve(u"en")
     assert en[u"countedAssist"][u"label"] == u"Counted Assistance"
     assert u"ttHeader" in en[u"countedAssist"] and u"ttBody" in en[u"countedAssist"]
@@ -118,11 +139,15 @@ def test_counted_assist_ukrainian_translated():
 
 def test_progress_bar_group_is_the_tail_of_col1():
     # The progress-bar control briefly had a column 3 of its own; that column never rendered
-    # in-client, so it is back in column 1 -- now as a MASTER followed by its variant radio, so
-    # the radio's key is the LAST column-1 key. The TABLE KEY `progressBar` never changed through
-    # any of those moves, so no translation was ever orphaned.
+    # in-client, so it is back in column 1 -- now as the "Battle Progress" CATEGORY: a bare header
+    # row, the master, then its variant and size radios, which are therefore the LAST two column-1
+    # keys. The TABLE KEY `progressBar` never changed through any of those moves, so no translation
+    # was ever orphaned.
     assert u"progressBar" in S._PANEL[u"en"]
-    assert S.COL1_KEYS[-2:] == (u"progressBar", u"progressVariant")
+    assert _col1_slice(u"catBattleProgress", u"progressBar", S.VARIANT_KEY, u"progressSize") == \
+        tuple(range(len(S.COL1_KEYS) - 4, len(S.COL1_KEYS))), \
+        u"the Battle Progress category is no longer the contiguous tail of COL1_KEYS: %r" % (
+            S.COL1_KEYS,)
     assert S.VARIANT_KEY == u"progressVariant"
     # ...and the radio is the ONE control with no _PANEL row in any language (build() synthesises
     # it, see below), so it must NOT be in the English master either -- a re-added row would
@@ -132,9 +157,13 @@ def test_progress_bar_group_is_the_tail_of_col1():
     # phantom column to mod_settings._sync_template_text's walk.
     assert not hasattr(S, u"COL3_KEYS")
     en = S.resolve(u"en")
-    # Retitled "Progress Log" -> "Progress Bar" (the master of the two variants); text-only, so
-    # it reaches an existing install through _sync_template_text with no version bump.
-    assert en[u"progressBar"][u"label"] == u"Progress Bar"
+    # The master's LABEL went "Next Mark Progress Bar" -> "Progress Log" -> "Progress Bar" -> the
+    # bare "Show", because the "Battle Progress" category header above it now carries the feature
+    # name. All of those are text-only, so each reached an existing install through
+    # _sync_template_text with no version bump; the varName never moved (there is no rename map --
+    # a renamed varName silently resets every user's value).
+    assert en[u"catBattleProgress"][u"label"] == u"Battle Progress"
+    assert en[u"progressBar"][u"label"] == u"Show"
     assert u"ttHeader" in en[u"progressBar"] and u"ttBody" in en[u"progressBar"]
     # The radio's own "Bar Type" label row is GONE -- an empty label so the panel draws no header
     # above the options and they read as direct children of the master checkbox. The KEY survives
@@ -239,14 +268,89 @@ def test_variant_options_unknown_language_falls_back_to_english_marked(monkeypat
     assert not any(o.startswith(u"_") for o in _options(u"de"))
 
 
-def test_build_attaches_options_only_to_the_variant_control():
+def test_build_attaches_options_to_exactly_the_two_radio_controls():
     # mod_settings._radio reads the option labels off the rendered entry, so build() must attach
-    # them there -- and NOWHERE else, or a checkbox would grow a phantom options key.
+    # them there -- and NOWHERE else, or a checkbox would grow a phantom options key. There are TWO
+    # option-bearing controls now, and they are named: the label-less variant radio (which has no
+    # _PANEL row at all -- build() synthesises it) and the "Size" radio (a normal _PANEL row that
+    # only needs its options bolted on). Naming them both is the point: a third options key
+    # appearing anywhere, or one of these two losing its own, fails here.
     b = S.build(u"de")
+    assert {k for k, entry in b.items() if u"options" in entry} == {S.VARIANT_KEY, u"progressSize"}
     assert b[S.VARIANT_KEY][u"options"] == S._VARIANT_OPTIONS[u"de"]
-    for key, entry in b.items():
-        if key != S.VARIANT_KEY:
-            assert u"options" not in entry, u"%s grew an options key" % key
+    assert b[u"progressSize"][u"options"] == S._SIZE_OPTIONS[u"de"]
+    # ...and the size radio keeps its own translated LABEL beside them (the variant's is blank).
+    assert b[u"progressSize"][u"text"] == S._PANEL[u"de"][u"progressSize"][u"label"]
+
+
+def test_size_options_translated_in_every_shipped_language():
+    # The size radio's option labels get the same guard as the variant's: they live in their OWN
+    # table (structural to MSA -- only a settingsVersion bump carries them to an existing install),
+    # so a dropped or copy-pasted-English tuple would leak English for that one language only.
+    assert set(S._SIZE_OPTIONS) == set(S._PANEL), (
+        u"a language block has no size option tuple (or vice versa)")
+    en_opts = S.build(u"en")[u"progressSize"][u"options"]
+    assert en_opts == (u"Default", u"Large")
+    for code in S._SIZE_OPTIONS:
+        opts = S.build(code)[u"progressSize"][u"options"]
+        assert len(opts) == 2 and all(opts), u"%s does not have two non-empty size options" % code
+        assert opts == S._SIZE_OPTIONS[code]     # its OWN tuple, not just something two long
+        if code == u"en":
+            continue
+        for i, opt in enumerate(opts):
+            assert opt != en_opts[i], u"%s size option %d is still English" % (code, i)
+
+
+def test_size_options_unknown_language_falls_back_to_english_marked(monkeypatch):
+    # The WHOLE-TUPLE fallback the shared _options() helper implements, on the second table: the
+    # options are one ordered set whose meaning is positional, so half-English is worse than all of
+    # it. Same contract as the variant radio's -- proven separately because a per-table regression
+    # in one is invisible from the other.
+    assert S.build(u"xx")[u"progressSize"][u"options"] == \
+        S.build(u"en")[u"progressSize"][u"options"]
+    monkeypatch.setattr(i18n, u"MARK_UNTRANSLATED", True)
+    assert all(o.startswith(u"_") for o in S.build(u"xx")[u"progressSize"][u"options"])
+    assert not any(o.startswith(u"_") for o in S.build(u"de")[u"progressSize"][u"options"])
+
+
+def test_the_three_category_headers_are_label_only_in_every_language():
+    # A category header is TEXT ONLY -- no varName and NO tooltip (a bare feature name has nothing
+    # to explain, and mod_settings._label() omits the key rather than emitting u""). It must also be
+    # really translated in all 11 blocks, since it is now the row that CARRIES the feature name:
+    # the masters below it all read the bare "Show".
+    cats = (u"catGarage", u"catBattleCalc", u"catBattleProgress")
+    en = S._PANEL[u"en"]
+    for key in cats:
+        assert key in S.COL1_KEYS or key in S.COL2_KEYS, u"%s is in no column tuple" % key
+        for code in S._PANEL:
+            entry = S._PANEL[code][key]
+            assert entry[u"label"], u"%s has an empty %s label" % (code, key)
+            assert u"ttHeader" not in entry and u"ttBody" not in entry, (
+                u"%s/%s grew a tooltip -- a bare category header has nothing to hover, and a "
+                u"tooltip written into a stored template can never be REMOVED again "
+                u"(_sync_template_text only overwrites)" % (code, key))
+            assert u"tooltip" not in S.build(code)[key]
+            if code != u"en":
+                assert entry[u"label"] != en[key][u"label"], (
+                    u"%s/%s is still the English string" % (code, key))
+
+
+def test_every_masters_label_is_the_bare_show_in_every_language():
+    # The three feature masters read just "Show" because the category header above each one names
+    # the feature. That is a set: if one of them keeps a feature name the panel reads
+    # "Garage Widget / Garage Widget". Asserted per language against that language's OWN word, taken
+    # from the garage master (they are the same string in every block by construction), so it cannot
+    # be satisfied by leftover English.
+    for code in S._PANEL:
+        show = S._PANEL[code][u"garageWidget"][u"label"]
+        for key in (u"garageWidget", u"battleWidget", u"progressBar"):
+            assert S._PANEL[code][key][u"label"] == show, (
+                u"%s/%s reads %r, not the shared %r -- the category header already names the "
+                u"feature" % (code, key, S._PANEL[code][key][u"label"], show))
+        # ...and the tooltips were deliberately LEFT ALONE, so each master still explains itself.
+        for key in (u"garageWidget", u"battleWidget", u"progressBar"):
+            assert S._PANEL[code][key][u"ttHeader"] and S._PANEL[code][key][u"ttBody"], (
+                u"%s/%s lost the tooltip that is now its only prose" % (code, key))
 
 
 def test_progress_bar_ukrainian_translated():
@@ -338,4 +442,8 @@ def test_panel_text_uses_client_language(monkeypatch):
     fake.getClientLanguage = lambda: u"de"
     monkeypatch.setitem(sys.modules, u"helpers", fake)
     t = S.panel_text()
-    assert t[u"garageWidget"][u"text"] == u"Garage-Widget"
+    # Read the CATEGORY header, not the master: every master's label is now the bare "Show", whose
+    # German is "Anzeigen" -- still language-dependent, but the header is where the feature NAME
+    # lives, so it is the stronger witness that the whole panel followed the client language.
+    assert t[u"catGarage"][u"text"] == u"Garage-Widget"
+    assert t[u"garageWidget"][u"text"] == u"Anzeigen"

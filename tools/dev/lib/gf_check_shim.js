@@ -181,6 +181,30 @@ function jsArray(src, name, where) {
     return JSON.parse(m[1]);
 }
 
+// `const NAME = <a>;` OR `const NAME = <a> / <b>;`. The LARGE size mode's SIZE_XF is written as the
+// EXPRESSION `4 / 3` (deliberately -- it is "the rest of x2 after the root font's 1.5"), which
+// jsConst's single-literal shape cannot read; and hardcoding 1.3333 in a harness is exactly the
+// transcription this scraper section exists to avoid.
+function jsFactor(src, name, where) {
+    const m = new RegExp("^const " + name + " = (-?[\\d.]+)(?:\\s*/\\s*(-?[\\d.]+))?;", "m")
+        .exec(src);
+    if (!m) throw new Error((where || "source") + ": const " + name + " not found");
+    return m[2] === undefined ? Number(m[1]) : Number(m[1]) / Number(m[2]);
+}
+
+// --- the document ROOT element + getComputedStyle -------------------------------------------
+// The LARGE size mode's whole SIZE_F half is ONE write: MoEBarTransient.setRootFont() puts
+// `base * SIZE_F` on documentElement.style.fontSize, having read `base` back ONCE through
+// getComputedStyle. Neither global existed here, so that write was unobservable (and the function's
+// fail-soft try/catch meant a missing documentElement looked exactly like a working shipped size).
+// `base` is deliberately NOT 1: at 1 the expected value would equal SIZE_F itself, so a module that
+// wrote the bare factor instead of base*factor would pass.
+function makeRootFont(base) {
+    const documentElement = new El("html");
+    const getComputedStyle = (el) => ({ fontSize: (el === documentElement ? base : 0) + "px" });
+    return { documentElement, getComputedStyle };
+}
+
 // Comments OUT before any source-text assertion. This repo has had a check satisfied by a COMMENT
 // naming the trap (`unscoped-substring-assertion-is-not-an-assertion`), and both bars' prose is
 // full of the very words the text rules forbid in code.
@@ -308,8 +332,8 @@ function probeAll(label, MUTATIONS) {
 module.exports = {
     WIDGET, read,
     counts, section, eq, ok, fail,
-    El, parseHTML, makeClock,
-    jsConst, jsArray, stripComments,
+    El, parseHTML, makeClock, makeRootFont,
+    jsConst, jsArray, jsFactor, stripComments,
     stripModuleSyntax, concatModules, applyMutation,
     main,
 };

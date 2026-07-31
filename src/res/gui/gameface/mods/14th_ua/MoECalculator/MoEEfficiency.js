@@ -41,7 +41,7 @@ import { ModelObserver } from "../../libs/model.js";
 // end race and the surface re-assert -- is SHARED with MoEProgress.js. Every behaviour in there cost
 // a client relaunch to find; read its header before changing anything that touches timing.
 // Separate documents, so this module is instantiated twice with no cross-talk.
-import { createTransient, fmt } from "./MoEBarTransient.js";
+import { createTransient, fmt, SIZE_F, SIZE_XF } from "./MoEBarTransient.js";
 
 // No feature name -> observe this view's OWN root model (window.model == EfficiencyVM).
 const observer = ModelObserver();
@@ -65,6 +65,12 @@ const ICO_GAP_REM = 1;
 // band -> the ONE class that goes on #moe-bar-root, in meta.bands order (white/green/teal/violet/
 // gold). Python's `band` indexes straight into this.
 const BAND_CLASSES = ["mp-b-w", "mp-b-g", "mp-b-t", "mp-b-v", "mp-b-au"];
+
+// The pushed LARGE size mode (VM `barSize`), mirrored here because capClampPct needs it -- it is the
+// one place on either bar that mixes a MEASURED px width with rem literals, so the 1rem == 1 logical
+// px identity it rests on breaks under the large mode's 1.5x root font. The transient owns everything
+// else about the flag (see its SIZE_F / SIZE_XF).
+let large = false;
 
 // --- the surface, and the rigid shift into it ----------------------------------------------
 // A Gameface view PUSHES its own size to C++ through the `viewEnv` global
@@ -202,18 +208,32 @@ let deltaT = null;
 // left and its delta off the right, so at 100 % the delta would overflow. Reproduces the tuner's
 // capLeft() (eff_bar_tuner.html:716-729) in meta.capClamp's rem corridor -- and .mp-cap's
 // offsetWidth is the NUMERAL only (the icon and the delta are out of flow), which is why the larger
-// of the two overhangs is added back, the icon's with its transform gap. 1rem == 1 logical px in
-// Gameface, so offsetWidth needs no scale division. A zero measured width (nothing laid out yet)
-// simply degrades to no clamp.
+// of the two overhangs is added back, the icon's with its transform gap. A zero measured width
+// (nothing laid out yet) simply degrades to no clamp.
+//
+// THE TWO SIZE FACTORS BOTH LAND HERE, and this is the ONE function on either bar where the
+// 1rem == 1 logical px identity is load-bearing rather than incidental:
+//   * every rem CONSTANT above is an x-length (the bar's width, the corridor's two bounds, the icon's
+//     transform gap), so each takes SIZE_XF -- the corridor bounds included, since they are the
+//     backdrop inset by an equal x-length each side and so scale with it;
+//   * offsetWidth is MEASURED PX, and under the large mode's 1.5x root font 1rem is SIZE_F px, so
+//     every measurement is divided back into document rem. A caption's width in rem is unchanged by
+//     the root font (its font-size is a rem too), which is exactly why this cannot be normalised
+//     away: the corridor scales by SIZE_XF while the caption inside it does not.
 function capClampPct(p) {
-    const w = function (q) { const n = capC.querySelector(q); return (n && n.offsetWidth) || 0; };
-    const half = (capC.offsetWidth || 0) / 2 +
-                 Math.max(w(".mp-ico") + ICO_GAP_REM, w(".mp-d"));
-    const lo = CLAMP_L_REM + half;
-    const hi = CLAMP_R_REM - half;
-    let x = p / 100 * BAR_W_REM;
+    const xf = large ? SIZE_XF : 1;
+    const px = large ? SIZE_F : 1;
+    const w = function (q) {
+        const n = capC.querySelector(q);
+        return ((n && n.offsetWidth) || 0) / px;
+    };
+    const half = (capC.offsetWidth || 0) / 2 / px +
+                 Math.max(w(".mp-ico") + ICO_GAP_REM * xf, w(".mp-d"));
+    const lo = CLAMP_L_REM * xf + half;
+    const hi = CLAMP_R_REM * xf - half;
+    let x = p / 100 * BAR_W_REM * xf;
     if (lo <= hi) x = Math.max(lo, Math.min(hi, x));
-    return x / BAR_W_REM * 100;
+    return x / (BAR_W_REM * xf) * 100;
 }
 
 // Position the fill, the moving tick and its caption from the PUSHED barX (never recomputed here).
@@ -299,6 +319,11 @@ function render(model) {
         return;
     }
     root.style.display = "";
+    // The pushed size mode (mod_settings.progress_bar_size), BEFORE setPos: capClampPct reads it. The
+    // transient owns the rest of the flag (the root-font write, the .mp-lg body class, the re-derived
+    // surface) and is idempotent, so this is just "keep it in sync".
+    large = Number(model.barSize) === 1;
+    T.size(large);
 
     cur = {
         damage: Number(model.damage) || 0,

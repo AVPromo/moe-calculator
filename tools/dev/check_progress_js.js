@@ -34,7 +34,7 @@
 "use strict";
 
 const S = require("./lib/gf_check_shim.js");
-const { section, eq, ok, El, parseHTML, makeClock, jsConst, jsArray } = S;
+const { section, eq, ok, El, parseHTML, makeClock, makeRootFont, jsConst, jsArray, jsFactor } = S;
 
 const T_SRC = S.read("MoEBarTransient.js");         // the shared transient  -> "T"
 const B_SRC = S.read("MoEProgress.js");             // this bar              -> "B"
@@ -186,6 +186,52 @@ const MUTATIONS = {
     // The glow must key off the delta AS ROUNDED, or a +0.4 shows a green "(+0)".
     "raw-sign-gate": ["B",
         "const glows = Math.round(Math.abs(d)) !== 0;", "const glows = d !== 0;"],
+
+    // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
+    // Each half is separately invisible in-client (the CSS half is guarded by
+    // tests/test_progress_surface_mirror.py, the Python anchor by its constants), so each gets its
+    // own anchor.
+    "size-no-root-font": ["T",
+        'document.documentElement.style.fontSize = large ? (baseFont * SIZE_F) + "px" : "";',
+        "void 0;"],
+    // ...and the base must be the PRE-EXISTING root font, not the factor itself.
+    "size-root-font-ignores-the-base": ["T",
+        '(baseFont * SIZE_F) + "px"', 'SIZE_F + "px"'],
+    // The class MUST land on the BODY: #moe-bar-box is a body-level SIBLING of the JS-created root,
+    // so a class on the root could never reach the sizing shim.
+    "size-no-body-class": ["T", 'document.body.classList.toggle("mp-lg", large);', "void 0;"],
+    // The x-lengths carry SIZE_XF on top of the root font's SIZE_F; drop it and the surface is
+    // 1.5x wide instead of 2x, cropping the composition.
+    "size-surface-loses-the-x-factor": ["T",
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
+        "viewW = Math.round((cfg.boxW + 2 * cfg.pad) * f);"],
+    // PAD_REM is slack on BOTH axes and must not take the x factor.
+    "size-pad-wrongly-takes-the-x-factor": ["T",
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
+        "viewW = Math.round((cfg.boxW + 2 * cfg.pad) * xf * f);"],
+    // The y/uniform half must NOT take the x factor (that is what keeps the bar's height right).
+    "size-height-wrongly-takes-the-x-factor": ["T",
+        "viewH = Math.round((cfg.boxH + 2 * cfg.pad) * f);",
+        "viewH = Math.round((cfg.boxH * xf + 2 * cfg.pad) * f);"],
+    "size-shift-not-re-derived": ["T",
+        "shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
+    // The CSS side and the surface must be re-pushed together: the engine round-trips the resize
+    // back into Python's _place, which is what makes the two agree on where the bar sits.
+    "size-no-surface-repush": ["T",
+        '        root.style.left = shiftX + "rem";\n        pushSurfaceSize();\n    }',
+        '        root.style.left = shiftX + "rem";\n    }'],
+    // Idempotent, because both bars call T.size() on EVERY render: without the guard every push
+    // re-pushes the surface to the engine.
+    "size-not-idempotent": ["T", "        if (flag === large) return;", "        if (false) return;"],
+    // WG re-writes the root font off this event; if it ever reaches a registered view we must take
+    // the pushed scale as the new base rather than keep compounding the mount-time capture.
+    "size-ignores-a-scale-update": ["T",
+        "                    baseFont = parseFloat(scale) || baseFont || 1;", "                    void 0;"],
+    // ...and it must stay scoped to the large mode: the shipped size never touches the root font.
+    "size-scale-update-not-gated": ["T",
+        "                    if (!large) return;", "                    if (false) return;"],
+    // THIS BAR's one line: the pushed flag has to reach the transient at all.
+    "size-flag-never-pushed": ["B", "    T.size(Number(model.barSize) === 1);", "    void 0;"],
 };
 
 // --- the modules' own constants, SCRAPED (never written down here) ---------------------------
@@ -202,12 +248,25 @@ const MUTATIONS = {
 // stayed in MoEProgress.js; every TIMING, the re-assert pair, END_MARGIN_MS, HIT_MAGIC and the
 // run class/name pairs moved into MoEBarTransient.js with the machinery that uses them.
 const PAD = jsConst(B_SRC, "PAD_REM", "MoEProgress.js");
-const SURFACE = [jsConst(B_SRC, "BOX_W_REM", "MoEProgress.js") + 2 * PAD,
-                 jsConst(B_SRC, "BOX_H_REM", "MoEProgress.js") + 2 * PAD];
+const BOX_W = jsConst(B_SRC, "BOX_W_REM", "MoEProgress.js");
+const BOX_H = jsConst(B_SRC, "BOX_H_REM", "MoEProgress.js");
+const BOX_LEFT = jsConst(B_SRC, "BOX_LEFT_REM", "MoEProgress.js");
+const SURFACE = [BOX_W + 2 * PAD, BOX_H + 2 * PAD];
 const HIT_PAD = Math.ceil(Math.max(SURFACE[0], SURFACE[1]) / 2);
-const SHIFT = [PAD - jsConst(B_SRC, "BOX_LEFT_REM", "MoEProgress.js") + "rem",
+const SHIFT = [PAD - BOX_LEFT + "rem",
                PAD - jsConst(B_SRC, "BOX_TOP_REM", "MoEProgress.js") + "rem"];
 const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
+// THE LARGE SIZE MODE (VM `barSize` == 1). Both factors are scraped, and every large expectation is
+// DERIVED here exactly as MoEBarTransient.applySize derives it -- x-lengths take BOTH factors, the
+// y/uniform half only SIZE_F, and each surface arg is Math.round()ed because 4/3 is not
+// representable. `ROOT_FONT_PX` is the harness's own pretend base root font, deliberately not 1.
+const SIZE_F = jsFactor(T_SRC, "SIZE_F", "MoEBarTransient.js");
+const SIZE_XF = jsFactor(T_SRC, "SIZE_XF", "MoEBarTransient.js");
+const ROOT_FONT_PX = 2;
+const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
+                    Math.round((BOX_H + 2 * PAD) * SIZE_F)];
+const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
+const LG_SHIFT_X = Math.round((PAD - BOX_LEFT * SIZE_XF) * 1000) / 1000 + "rem";
 // The show gate's two timings, scraped for the same reason: they are TUNED numbers (the re-assert
 // only has to land after the engine's observed ~2.2s clobber, the slack only after the resize's C++
 // round-trip), so a retune must move this shim with them and not redden it.
@@ -244,8 +303,11 @@ function mount(srcs, unsettled) {
     const clock = makeClock(1e12);
     const bodyEl = new El("body");
     parseHTML(VIEW_HTML.replace(/<!--[\s\S]*?-->/g, ""), bodyEl);  // the view's own static markup
+    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write.
+    const { documentElement, getComputedStyle } = makeRootFont(ROOT_FONT_PX);
     const document = {
         body: bodyEl,
+        documentElement,
         createElement: (tag) => new El(tag),
         getElementById: (id) => bodyEl.byId(id),
     };
@@ -261,18 +323,25 @@ function mount(srcs, unsettled) {
         onUpdate(fn) { render = fn; },
         subscribe() { observer.subscribed = true; },
     };
-    const engine = { whenReady: { then: (fn) => fn() } };
+    // engine.on carries WG's own `self.onScaleUpdated`, which the transient re-reads the base root
+    // font from (the one thing about the size mode that is not knowable from source).
+    const engineHandlers = {};
+    const engine = {
+        whenReady: { then: (fn) => fn() },
+        on(name, fn) { engineHandlers[name] = fn; },
+    };
 
     new Function("document", "viewEnv", "engine", "ModelObserver", "setTimeout", "clearTimeout",
-                 "Date", "requestAnimationFrame", body)(
+                 "Date", "requestAnimationFrame", "getComputedStyle", body)(
         document, viewEnv, engine, () => observer, clock.setTimeout, clock.clearTimeout,
-        { now: clock.now }, clock.raf);
+        { now: clock.now }, clock.raf, getComputedStyle);
 
     const root = document.getElementById("moe-bar-root");
     const q = (sel) => root.querySelector(sel);
     if (!unsettled) clock.advance(SETTLE);
     return {
-        clock, calls, root, document, body: bodyEl, observer,
+        clock, calls, root, document, body: bodyEl, observer, documentElement,
+        scaleUpdate: (v) => engineHandlers["self.onScaleUpdated"](v),
         // A real ModelObserver updates .model and THEN notifies, and the surface-settle re-render
         // reads .model back -- so pushing has to do both, or that path sees a stale/empty model.
         push: (m) => { observer.model = m; render(m); },
@@ -752,6 +821,61 @@ function run(mutation) {
     eq("...and only the swap clears it, because this delta rounds to zero",
        [s.capCV, s.capDN, s.fill, s.proj].map((e) => e.classList.contains("mp-up")),
        [false, false, false, false]);
+
+    // --- THE LARGE SIZE MODE (mod_settings.progress_bar_size, pushed as `barSize`) -----------
+    // Everything the flag DOES lives in MoEBarTransient.applySize, and none of it is visible to the
+    // static mirror test: the root-font write (the whole SIZE_F half -- one line that re-lays the
+    // composition 1.5x), the .mp-lg body class the stylesheet's appended block hangs off, and the
+    // re-derived surface / hit rect / rigid shift. Every expectation is DERIVED from the scraped
+    // factors (LG_* above), never written down, so a retune of either factor moves this section
+    // with the module.
+    section("large size mode");
+    s = mount(srcs);
+    s.push(M());
+    eq("at the shipped size the root font is NEVER written (not even to an empty string)",
+       s.documentElement.style.fontSize, undefined);
+    eq("...and the body carries no size class", s.body.classList.contains("mp-lg"), false);
+    const resizes = s.calls.resize.length, hits = s.calls.hit.length;
+
+    s.push(M({ barSize: 1 }));
+    eq("barSize 1 writes the ROOT FONT as base * SIZE_F -- the whole 1.5x half of the mode",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * SIZE_F) + "px");
+    ok("...and puts mp-lg on the BODY, where #moe-bar-box (a sibling of our root) can see it",
+       s.body.classList.contains("mp-lg"));
+    eq("...and re-pushes the surface with BOTH factors on x and only SIZE_F on y",
+       s.calls.resize.slice(resizes), [LG_SURFACE]);
+    eq("...and re-collapses the hit rect off the new larger dimension",
+       s.calls.hit.slice(hits), [[LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, HIT_MAGIC]]);
+    eq("...and re-derives the rigid shift in document rem (3dp, matching the .mp-lg block)",
+       s.root.style.left, LG_SHIFT_X);
+    eq("...while the vertical shift is untouched -- it is a rem the root font already scaled",
+       s.root.style.top, SHIFT[1]);
+
+    const settled = s.calls.resize.length;
+    s.push(M({ barSize: 1, projAvg: 2900 }));
+    eq("a second render at the same size is a NO-OP: the surface is not re-pushed every push",
+       s.calls.resize.length, settled);
+
+    s.scaleUpdate(ROOT_FONT_PX * 4);
+    eq("self.onScaleUpdated takes the PUSHED scale as the new base and re-applies the factor",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+    s.push(M({ barSize: 0 }));
+    eq("flipping BACK clears the inline root font entirely (not a 1x px value)",
+       s.documentElement.style.fontSize, "");
+    eq("...drops the body class", s.body.classList.contains("mp-lg"), false);
+    eq("...restores the shipped surface", s.calls.resize.slice(-1), [SURFACE]);
+    eq("...and the shipped rigid shift", s.root.style.left, SHIFT[0]);
+    s.scaleUpdate(ROOT_FONT_PX * 8);
+    eq("...and at the shipped size a scale update leaves the root font alone",
+       s.documentElement.style.fontSize, "");
+    // ...and it must not even RECORD that scale: the handler's `if (!large) return;` is what keeps
+    // the shipped size from touching the root font at all. Without the gate the ignored 8x above
+    // would silently become the base, so the next flip to large would apply 8x * SIZE_F -- which is
+    // invisible until the flip, hence this last push.
+    s.push(M({ barSize: 1 }));
+    eq("a scale update seen at the shipped size is not remembered as the base",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
 }
 
 S.main("MoEProgress.js + MoEBarTransient.js", MUTATIONS, run);

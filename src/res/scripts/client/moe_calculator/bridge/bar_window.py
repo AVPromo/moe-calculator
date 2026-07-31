@@ -51,6 +51,7 @@ from frameworks.wulf import ViewSettings, ViewFlags, WindowFlags, WindowLayer, P
 from gui.impl.pub import ViewImpl, WindowImpl
 from openwg_gameface import ModDynAccessor
 
+from moe_calculator.bridge import mod_settings
 from moe_calculator.domain.positioning import anchor_centred
 
 # A large sentinel offset used to clamp the window to the far corner (LEFT/TOP anchor) so we can
@@ -124,14 +125,19 @@ class BarHost(object):
     and keep it DISTINCT from every other entry's (the positional resId collision above).
     ``vm_factory`` is called per open to build a fresh root ViewModel. ``y_frac`` / ``x_off`` /
     ``y_off`` are the bar's anchor constants (domain/constants), and ``tag`` prefixes its log lines.
+    ``y_off_large`` is the same compensation for the LARGE size mode -- a bigger surface needs a
+    different Y term (see the constants' derivations), and it is read LATE, inside _place, NOT frozen
+    here: these arguments are bound at MODULE IMPORT, so a size chosen after that (or changed between
+    battles) would otherwise keep using whichever value was current at first load, forever.
     """
 
-    def __init__(self, item_id, vm_factory, y_frac, x_off, y_off, tag):
+    def __init__(self, item_id, vm_factory, y_frac, x_off, y_off, y_off_large, tag):
         self.item_id = item_id
         self._vm_factory = vm_factory
         self._y_frac = y_frac
         self._x_off = x_off
         self._y_off = y_off
+        self._y_off_large = y_off_large
         self._tag = tag
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
         self._active = None                         # (window, view) while open
@@ -143,12 +149,16 @@ class BarHost(object):
         max_x // 2 centres whatever surface width the JS asked for, without needing to know it here.
         The y offset cancels the composition's intra-surface top offset (the JS shifts the whole bar
         into positive document coordinates) and converts the fraction from "of the movable extent"
-        to "of the viewport" -- see the constant's own comment.
+        to "of the viewport" -- see the constant's own comment. It is picked HERE, per placement, off
+        the live size setting: the JS pushes the LARGE surface on its post-deadline re-assert, which
+        round-trips back as onSizeChanged -> _place, so this read is what makes the two agree.
         Fail-soft: a positioning error must never blank the bar."""
         try:
+            large = mod_settings.progress_bar_size() == mod_settings.PROGRESS_SIZE_LARGE
+            y_off = self._y_off_large if large else self._y_off
             window.move(_FAR, _FAR, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
             max_x, max_y = window.position
-            x, y = anchor_centred(max_x, max_y, self._y_frac, self._x_off, self._y_off)
+            x, y = anchor_centred(max_x, max_y, self._y_frac, self._x_off, y_off)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
         except Exception:
             LOG_CURRENT_EXCEPTION()

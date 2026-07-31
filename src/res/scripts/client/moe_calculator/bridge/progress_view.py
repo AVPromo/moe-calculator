@@ -13,7 +13,8 @@ PC-only (needs the live client); not imported under pytest without stubs. Python
 from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import ProgressVM
 from moe_calculator.domain.constants import (
-    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET)
+    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET,
+    PROGRESS_ANCHOR_Y_OFFSET_LARGE)
 
 # itemID registered in mods/configs/res_map/MoEProgressView.json -- keep in lockstep. It MUST
 # differ from every other entry's: OpenWG assigns the numeric resId positionally when it rebuilds
@@ -22,7 +23,7 @@ RES_MAP_ITEM_ID = "MoEProgressView"
 
 _host = BarHost(RES_MAP_ITEM_ID, ProgressVM,
                 PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_OFFSET,
-                "[moe-bar]")
+                PROGRESS_ANCHOR_Y_OFFSET_LARGE, "[moe-bar]")
 
 open_window = _host.open_window
 close_window = _host.close_window

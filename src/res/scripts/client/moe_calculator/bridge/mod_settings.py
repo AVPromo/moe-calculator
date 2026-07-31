@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""The user settings, laid out as two columns in the MSA panel: an "In-Battle Widget" master
-grouped with its "Show on Alt Key" + "Counted Assistance" children, followed by a second group
--- the "Progress Bar" master with its label-less variant radio (Moving Average / Damage
-Efficiency, which read as the master's direct children) -- in column 1, and the "In-Garage
-Widget" checkbox with the drag-position group (column 2).
+"""The user settings, laid out as two columns of NAMED CATEGORIES in the MSA panel. A category is
+a bare label header row followed by that feature's controls (MSA renders only two columns here, so
+a category cannot be a column of its own -- see _template()). Column 1 holds "Battle Calculator"
+(the In-Battle Widget master, labelled "Show", grouped with its "Show on Alt Key" + "Counted
+Assistance" children) then "Battle Progress" (the Progress Bar master, also "Show", with its
+label-less variant radio and its "Size" radio as children). Column 2 holds "Garage Widget" -- the
+garage master plus the standalone drag-position group.
 
 Surfaced as ModsSettingsAPI (MSA) checkboxes in the game's in-game mod-settings menu. MSA
 (Aslain's gui.aslainMenu preferred, izeberg.modssettingsapi as a legacy fallback) is a SOFT
@@ -67,7 +69,15 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # OVERWRITE text/tooltip, never DELETE a key, so a v9 install would keep the stale "Bar Type"
 # tooltip on an invisible row forever. Only setModTemplate replaces the stored control wholesale,
 # and only a bump (new > stored) reaches it. Never go backwards: 10, not a revert to 8.
-SETTINGS_VERSION = 10
+# Bumped 10 -> 11 for the three-category relayout PLUS a new key, either of which alone would
+# already require it: the panel gains three bare Label header rows ("Battle Calculator", "Battle
+# Progress", "Garage Widget") that shift every following control's position, and the Progress Bar
+# group gains a second RadioButtonGroup child (progress_bar_size, with its own option labels --
+# structural to Aslain's _settingsStructure). register()'s saved-truthy path never calls
+# setModTemplate, so neither the new rows nor the new control can reach an existing install without
+# this forward bump; the migration branch carries every saved value across it and progress_bar_size
+# takes its fresh 0 (= Default) default.
+SETTINGS_VERSION = 11
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -101,6 +111,13 @@ PROGRESS_VARIANT_MOVING_AVERAGE = 0   # the original next-mark moving-average ba
 PROGRESS_VARIANT_EFFICIENCY = 1       # the damage-vs-requirements "Damage Efficiency" bar
 # ... and the highest legal index: a stored value outside [0, EFFICIENCY] is corrupt (clamp_variant).
 
+# How large the Progress Bar draws -- the SECOND child radio of PROGRESS_BAR_KEY and the mod's
+# second non-bool setting, so _coerce needs its own branch here too (falling through to bool()
+# would turn index 1 into True and destroy the setting, exactly as for the variant).
+PROGRESS_SIZE_KEY = "progress_bar_size"
+PROGRESS_SIZE_DEFAULT = 0             # the shipped size -- every existing user keeps it
+PROGRESS_SIZE_LARGE = 1               # ... and the highest legal index (see clamp_variant)
+
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
 # widget keeps its CSS bottom-right default (resolution-relative), so it re-derives correctly at
@@ -131,6 +148,7 @@ _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY)
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
             PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,
+            PROGRESS_SIZE_KEY: PROGRESS_SIZE_DEFAULT,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             FOLLOW_CAROUSEL_KEY: True}
 
@@ -149,24 +167,26 @@ def clamp_pos(v):
     return v
 
 
-def clamp_variant(v):
-    """Coerce a stored RadioButtonGroup value to a legal 0-based option index.
-    Pure + engine-free (unit-tested).
+def clamp_variant(v, max_index=PROGRESS_VARIANT_EFFICIENCY):
+    """Coerce a stored RadioButtonGroup value to a legal 0-based option index in
+    [0, max_index]. Pure + engine-free (unit-tested).
 
-    This is the mod's ONE non-bool setting, so it is also the one trust boundary where a
-    hostile store could leak the wrong TYPE into the bridge: a bool is never a legal index
-    (bool is an int subclass, so a plain int() would silently pass True through as 1), and
-    neither is a non-numeric, negative or out-of-range value. All of them fall back to 0
-    (Moving Average) -- the safe choice, since that is the behaviour the bar always had."""
+    Shared by BOTH radios -- `max_index` defaults to the variant radio's ceiling, and the size
+    radio passes PROGRESS_SIZE_LARGE. These are the mod's only non-bool settings, so this is
+    also the one trust boundary where a hostile store could leak the wrong TYPE into the bridge:
+    a bool is never a legal index (bool is an int subclass, so a plain int() would silently pass
+    True through as 1), and neither is a non-numeric, negative or out-of-range value. All of them
+    fall back to 0 -- the safe choice for either radio, since index 0 is in both cases the
+    behaviour the bar always had (Moving Average / the shipped size)."""
     if isinstance(v, bool):
-        return PROGRESS_VARIANT_MOVING_AVERAGE
+        return 0
     try:
         v = int(v)
     except (TypeError, ValueError):
-        return PROGRESS_VARIANT_MOVING_AVERAGE
-    if 0 <= v <= PROGRESS_VARIANT_EFFICIENCY:
+        return 0
+    if 0 <= v <= max_index:
         return v
-    return PROGRESS_VARIANT_MOVING_AVERAGE
+    return 0
 
 # Live flag state (seeded from MSA in register(); defaults until then / if MSA is absent).
 _settings = dict(DEFAULTS)
@@ -182,16 +202,18 @@ _registered = False
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
-    the progress-bar variant is a clamped radio INDEX, everything else is a bool. Pure +
-    engine-free.
+    the progress-bar variant and size are clamped radio INDEXes, everything else is a bool.
+    Pure + engine-free.
 
-    The variant branch is load-bearing: falling through to bool() would turn the radio's
+    The two radio branches are load-bearing: falling through to bool() would turn a radio's
     index 1 into True and index 0 into False, which then round-trips back to MSA as a bool
     and destroys the setting."""
     if key in _POS_KEYS:
         return clamp_pos(value)
     if key == PROGRESS_VARIANT_KEY:
         return clamp_variant(value)
+    if key == PROGRESS_SIZE_KEY:
+        return clamp_variant(value, PROGRESS_SIZE_LARGE)
     return bool(value)
 
 
@@ -249,6 +271,17 @@ def progress_bar_variant():
     Meaningless while progress_bar_enabled() is off: the master gates the whole feature."""
     return clamp_variant(_settings.get(PROGRESS_VARIANT_KEY,
                                        PROGRESS_VARIANT_MOVING_AVERAGE))
+
+
+def progress_bar_size():
+    """How large the progress bar draws, as the radio's 0-based option INDEX:
+    PROGRESS_SIZE_DEFAULT (0, the default) or PROGRESS_SIZE_LARGE (1).
+
+    An int, NOT a bool -- so re-clamp on read (mirroring progress_bar_variant) and never let a
+    corrupt store leak a bool or an out-of-range index to the widget. Meaningless while
+    progress_bar_enabled() is off: the master gates the whole feature."""
+    return clamp_variant(_settings.get(PROGRESS_SIZE_KEY, PROGRESS_SIZE_DEFAULT),
+                         PROGRESS_SIZE_LARGE)
 
 
 def pos_x():
@@ -378,13 +411,19 @@ def _radio(key, rendered):
 
 
 def _label(rendered):
-    """A plain MSA Label header (no varName -- not a stored value). Carries text + tooltip so
-    _sync_template_text can refresh it in lockstep with the column's other controls."""
-    return {
-        "type": "Label",
-        "text": rendered["text"],
-        "tooltip": rendered.get("tooltip", u""),
-    }
+    """A plain MSA Label header (no varName -- not a stored value). Carries text, and a tooltip
+    only when there IS one, so _sync_template_text can refresh it in lockstep with the column's
+    other controls.
+
+    The tooltip key is OMITTED rather than emitted empty (same shape as _radio): the three
+    CATEGORY headers are text-only, and handing the panel an empty tooltip to render is not the
+    same as having none. _sync_template_text already tolerates it -- its `tip is not None` guard
+    skips a rendered entry with no tooltip, so it never writes a key back onto a tipless row."""
+    control = {"type": "Label", "text": rendered["text"]}
+    tooltip = rendered.get("tooltip")
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
 
 
 def _grouped_column1(master, children):
@@ -410,26 +449,31 @@ def _grouped_column1(master, children):
 
 
 def _template():
-    """The MSA panel descriptor. Column 1 is TWO groups: the "In-Battle Widget" master with its
-    "Show on Alt Key" + "Counted Assistance" children, then the "Progress Bar" master with its
-    label-less variant radio; column 2 is the standalone "In-Garage Widget" checkbox followed by
-    the drag-position group: a positioning Label header, the X/Y numeric steppers, and the Follow
-    Carousel Mode checkbox. Two columns ONLY -- a third column does not render in the panel at
-    all (that was tried and reverted; see the SETTINGS_VERSION history). Every visible
-    label/tooltip comes from settings_i18n at the client's language (English fallback)."""
+    """The MSA panel descriptor, grouped into three NAMED CATEGORIES. Two columns ONLY -- a third
+    column does not render in the panel at all (that was tried and reverted; see the
+    SETTINGS_VERSION history), so a category is not a column but a bare Label header row followed
+    by that feature's controls. Column 1: "Battle Calculator" (the In-Battle Widget master + its
+    "Show on Alt Key" and "Counted Assistance" children), then "Battle Progress" (the Progress Bar
+    master + its label-less variant radio and its Size radio). Column 2: "Garage Widget" (the
+    garage master), then the drag-position group -- a positioning Label header, the X/Y numeric
+    steppers, and the Follow Carousel Mode checkbox. Because the header names the feature, each
+    master's own label is just "Show". Every visible label/tooltip comes from settings_i18n at the
+    client's language (English fallback)."""
     t = settings_i18n.panel_text()
     battle_master = _checkbox(BATTLE_KEY, t["battleWidget"])
     battle_alt = _checkbox(BATTLE_ALT_KEY, t["battleAltKey"])
     counted = _checkbox(COUNTED_ASSIST_KEY, t["countedAssist"])
     progress_master = _checkbox(PROGRESS_BAR_KEY, t["progressBar"])
     progress_variant = _radio(PROGRESS_VARIANT_KEY, t[settings_i18n.VARIANT_KEY])
+    progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
     garage = _checkbox(GARAGE_KEY, t["garageWidget"])
     return {
         "modDisplayName": MOD_DISPLAY_NAME,
         "enabled": True,
         "settingsVersion": SETTINGS_VERSION,
-        # column1: TWO independent groups spliced together -- the In-Battle master with its two
-        # children, then the Progress Bar master with its variant radio.
+        # column1: TWO categories, each a bare Label header followed by that feature's group --
+        # the In-Battle master with its two children, then the Progress Bar master with its
+        # variant + size radios. The header rows carry no varName and no tooltip.
         #
         # The Progress Bar controls are deliberately NOT passed as children of the In-Battle
         # group: a grouped child inherits THAT master's varName, so MSA would grey the progress
@@ -442,12 +486,17 @@ def _template():
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL1_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
-        "column1": (_grouped_column1(battle_master, [battle_alt, counted])
-                    + _grouped_column1(progress_master, [progress_variant])),
-        # column2: the garage master, then the drag-position group. The steppers show 0 (auto)
-        # until a drag / edit pins a px; Follow Carousel Mode ships ON. The wire order here MUST
-        # stay in lockstep with settings_i18n.COL2_KEYS (see _sync_template_text).
+        "column1": ([_label(t["catBattleCalc"])]
+                    + _grouped_column1(battle_master, [battle_alt, counted])
+                    + [_label(t["catBattleProgress"])]
+                    + _grouped_column1(progress_master, [progress_variant, progress_size])),
+        # column2: the category header, the garage master, then the drag-position group. The
+        # steppers stay STANDALONE (no masterVarName), so they keep working -- and stay ungreyed --
+        # while the garage widget is off. They show 0 (auto) until a drag / edit pins a px; Follow
+        # Carousel Mode ships ON. The wire order here MUST stay in lockstep with
+        # settings_i18n.COL2_KEYS (see _sync_template_text).
         "column2": [
+            _label(t["catGarage"]),
             garage,
             _label(t["positioning"]),
             _stepper(POS_X_KEY, t["posX"]),

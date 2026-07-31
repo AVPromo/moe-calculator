@@ -141,13 +141,13 @@ def _push(damage, **snap_over):
 
 # --- the marshalling ----------------------------------------------------------
 
-def test_push_writes_exactly_the_view_models_eleven_properties():
+def test_push_writes_exactly_the_view_models_twelve_properties():
     # The bridge is this model's only producer: a prop added on one side without the other would
-    # silently leave the JS reading a default forever. ELEVEN: the ten that survived `damageDelta`'s
-    # removal (which RENUMBERED every property after it) plus `battleEpoch`, APPENDED after altHeld
-    # for exactly that reason -- an append renumbers nothing.
+    # silently leave the JS reading a default forever. TWELVE: the ten that survived `damageDelta`'s
+    # removal (which RENUMBERED every property after it), then `battleEpoch` and now `barSize`, both
+    # APPENDED after altHeld for exactly that reason -- an append renumbers nothing.
     assert set(_push(2000)) == _VM_PROPS
-    assert len(_VM_PROPS) == 11
+    assert len(_VM_PROPS) == 12
 
 
 def test_the_push_keeps_no_state_between_calls(epoch):
@@ -239,6 +239,67 @@ def test_push_never_raises_into_the_refresh():
     vm = _FakeVM()
     battle_bridge.push_efficiency(vm, object(), None)   # no snapshot / model attributes at all
     assert vm.props == {}
+
+
+# --- BarHost reads the SIZE setting LATE ---------------------------------------
+# Not specific to this bar -- BarHost is shared with the Moving Average one -- but this is the
+# module that already carries the stub modules bar_window needs (it imports battle_bridge, which
+# pulls efficiency_view -> bar_window), so the test lives beside them rather than in a second
+# stub tree.
+
+class _FakeBarWindow(object):
+    """Just enough window for BarHost._place: it clamps to the far corner, reads `position` back
+    as the movable extent, then moves for real. The extent is FIXED here, so the only thing that
+    can move the second `move` is the y offset _place chose."""
+
+    def __init__(self, extent):
+        self._extent = extent
+        self.moves = []
+
+    def move(self, x, y, xAnchor=None, yAnchor=None):
+        self.moves.append((x, y))
+
+    @property
+    def position(self):
+        return self._extent
+
+
+def test_bar_host_reads_the_size_setting_inside_place_not_at_import(monkeypatch):
+    # THE REGRESSION TEST FOR THE BUG THAT SHIPPED IN THE FIRST DRAFT. BarHost's arguments are bound
+    # where progress_view / efficiency_view construct it -- i.e. AT MODULE IMPORT, once per client
+    # process. Choosing the y offset there would freeze it at whatever the size setting happened to
+    # be at first load, so a user flipping "Size" (or the JS's post-deadline LARGE surface
+    # round-tripping back as onSizeChanged -> _place) would keep placing against the other size's
+    # compensation, forever. So the read has to happen INSIDE _place: flip the getter between two
+    # _place calls on the SAME host and the placement must follow.
+    from moe_calculator.bridge import bar_window
+
+    # PositionAnchor is stubbed as a bare object() at the top of this file (it only has to satisfy
+    # the import), and _place's blanket except would SWALLOW the resulting AttributeError into a
+    # silent no-op -- so give it the two members and assert both moves actually landed.
+    anchor = types.SimpleNamespace(LEFT=0, TOP=1)
+    monkeypatch.setattr(bar_window, "PositionAnchor", anchor)
+    monkeypatch.setattr(bar_window, "LOG_CURRENT_EXCEPTION",
+                        lambda *a: pytest.fail("_place swallowed an exception"))
+
+    small, large = 36, 53                       # two DISTINCT offsets; the values are irrelevant
+    host = bar_window.BarHost("ItemId", object, 0.865, 0, small, large, "[test]")
+    window = _FakeBarWindow((970, 906))
+
+    monkeypatch.setattr(mod_settings, "progress_bar_size",
+                        lambda: mod_settings.PROGRESS_SIZE_DEFAULT)
+    host._place(window)
+    monkeypatch.setattr(mod_settings, "progress_bar_size",
+                        lambda: mod_settings.PROGRESS_SIZE_LARGE)
+    host._place(window)
+
+    assert len(window.moves) == 4, "each _place is a far-corner clamp plus the real move"
+    default_y, large_y = window.moves[1][1], window.moves[3][1]
+    assert large_y - default_y == large - small, (
+        "the size flag was not re-read: the same host placed at y=%d then y=%d, a delta of %d "
+        "instead of %d" % (default_y, large_y, large_y - default_y, large - small))
+    # ...and X is untouched by the size, which is what lets `max_x // 2` centre either surface.
+    assert window.moves[1][0] == window.moves[3][0]
 
 
 # --- exactly one centre-screen bar at a time ----------------------------------

@@ -217,7 +217,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=8, commands=0):
+    def __init__(self, properties=9, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -234,6 +234,14 @@ class ProgressVM(ViewModel):
         self._addBoolProperty("hasData", False)      # 6  the mark axis is usable (axisHi > axisLo)
         self._addBoolProperty("altHeld", False)      # 7  Alt currently down -> pull the bar up and
                                                      #    hold it (an ADDITIVE show trigger, not a gate)
+        self._addNumberProperty("barSize", 0)        # 8  mod_settings.progress_bar_size(): 0 = the
+                                                     #    shipped size, 1 = LARGE (x2 wide, x1.5 tall,
+                                                     #    fonts + icons x1.5). APPENDED, so nothing
+                                                     #    above is renumbered. The JS turns it into a
+                                                     #    1.5x ROOT FONT, the .mp-lg body class and a
+                                                     #    re-derived surface push
+                                                     #    (MoEBarTransient.applySize); Python's half
+                                                     #    is PROGRESS_ANCHOR_Y_OFFSET_LARGE
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -258,6 +266,9 @@ class ProgressVM(ViewModel):
 
     def setAltHeld(self, v):
         self._setBool(7, v)
+
+    def setBarSize(self, v):
+        self._setNumber(8, v)
 
 
 class EfficiencyVM(ViewModel):
@@ -285,7 +296,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=11, commands=0):
+    def __init__(self, properties=12, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -312,6 +323,14 @@ class EfficiencyVM(ViewModel):
                                                     #    needs to DIFFER between battles -- it is
                                                     #    MoEEfficiency.js's battle-boundary signal
                                                     #    for resetting its damage-delta latch
+        self._addNumberProperty("barSize", 0)       # 11 mod_settings.progress_bar_size(): 0 = the
+                                                    #    shipped size, 1 = LARGE (x2 wide, x1.5 tall,
+                                                    #    fonts + icons x1.5). APPENDED, so nothing
+                                                    #    above is renumbered. Same wire meaning as
+                                                    #    ProgressVM's -- the JS turns it into a 1.5x
+                                                    #    ROOT FONT, the .mp-lg body class, a
+                                                    #    re-derived surface AND (this bar only) the
+                                                    #    caption clamp's px<->rem factor
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -345,3 +364,6 @@ class EfficiencyVM(ViewModel):
 
     def setBattleEpoch(self, v):
         self._setNumber(10, v)
+
+    def setBarSize(self, v):
+        self._setNumber(11, v)

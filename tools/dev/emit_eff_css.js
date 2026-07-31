@@ -9,8 +9,8 @@
  *   1. the candidate at [outPath] -- the repo's standing home for emitted-CSS candidates
  *      (TASKS/refs/, wholly gitignored; same place gen_bar_tuner.ps1 -EmitCss writes
  *      MoEProgress.css). check_eff_css.js reads it from there.
- *   2. src/.../MoECalculator/MoEEfficiency.css -- that candidate byte-for-byte, plus exactly two
- *      explicitly-marked HAND-ADDED regions (FONT and TWIN below), so the emit half is identical
+ *   2. src/.../MoECalculator/MoEEfficiency.css -- that candidate byte-for-byte, plus exactly three
+ *      explicitly-marked HAND-ADDED regions (FONT, TWIN and LARGE below), so the emit half is identical
  *      BY CONSTRUCTION rather than by careful copying (the repo lesson
  *      `emitcss-is-not-the-whole-shipped-stylesheet`: a naive hand-copy silently drops the
  *      hand-added blocks, and each one has already cost a client relaunch).
@@ -44,9 +44,10 @@
  * here too, since it is pure apart from writing its readout into one element.
  *
  * NOT COVERED: this proves the emit reproduces, not that the bar looks right. The emit omits
- * exactly TWO things, both spliced in by FONT / TWIN below: @font-face (the tuner inlines the ttf
- * as a data: URI) and the mp-life-b/mp-run-b keyframe twin. The #moe-bar-box sizing rule IS
- * emitted -- see the emitted header comment.
+ * exactly THREE things, all spliced in by FONT / TWIN / LARGE below: @font-face (the tuner inlines
+ * the ttf as a data: URI), the mp-life-b/mp-run-b keyframe twin, and the `.mp-lg` size-mode block
+ * (the tuner has no size mode at all). The #moe-bar-box sizing rule IS emitted -- see the emitted
+ * header comment.
  */
 "use strict";
 
@@ -196,7 +197,7 @@ console.log("meta: " + Object.keys(meta).length + " fields checked, " + meta.ban
 const cutHdr = css.indexOf("*/\n") + "*/\n".length;
 
 const FONT = `
-/* ===== HAND-ADDED BLOCK 1 OF 2 (everything else in this file is the tuner's emit, VERBATIM --
+/* ===== HAND-ADDED BLOCK 1 OF 3 (everything else in this file is the tuner's emit, VERBATIM --
    tools/dev/emit_eff_css.js reproduces it byte-for-byte). #moe-bar-root asks for font-family
    "MoEBattle" but the tuner ran in a browser and inlined the ttf as a data: URI, so the emit
    carries no face for it; and this document does NOT <link> MoEBattle.css or MoEProgress.css
@@ -217,7 +218,7 @@ const FONT = `
 `;
 
 const TWIN = `
-/* ===== HAND-ADDED BLOCK 2 OF 2 -- a byte-identical copy of @keyframes mp-life / #moe-bar-root.mp-run
+/* ===== HAND-ADDED BLOCK 2 OF 3 -- a byte-identical copy of @keyframes mp-life / #moe-bar-root.mp-run
    above, renamed. NOT tuned, and no tuned value touched.
    WHY: JS restarts the transient (a hit landing while the bar is already up re-measures the
    fade-out from that event) with the classic remove-class -> force-reflow -> re-add-class idiom,
@@ -240,8 +241,49 @@ const life = /@keyframes mp-life\{[\s\S]*?\}\}\n#moe-bar-root\.mp-run\{animation
 assert.ok(life, "the emit's mp-life / .mp-run pair no longer matches -- re-check");
 const twinRules = life[0].replace(/mp-life/g, "mp-life-b").replace(/mp-run/g, "mp-run-b");
 
+// BLOCK 3: the LARGE size mode (mod_settings.progress_bar_size == 1). The tuner has no size mode, so
+// every declaration here is hand-added -- but there are very few of them, because the mode is
+// delivered by the ROOT FONT SIZE (MoEBarTransient.js's SIZE_F == 1.5, the rem->px factor in
+// Gameface) and only the HORIZONTAL x2 needs CSS: an x-length carries an extra SIZE_XF == 4/3 on top
+// of that root font to reach 2x total. So this block re-declares X-LENGTHS AND NOTHING ELSE.
+const LARGE = `
+/* ===== HAND-ADDED BLOCK 3 OF 3 -- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size == 1).
+   NOT tuned, and no tuned value above is touched. The tuner has no size mode at all, which is why
+   this cannot come out of the emit.
+   WHY SO LITTLE CSS: the mode is delivered by the ROOT FONT SIZE (MoEBarTransient.js's SIZE_F ==
+   1.5, which IS the rem->px factor in Gameface -- WG's own bootstrap writes it from
+   self.onScaleUpdated, and our registered views never load that bootstrap, hence every
+   "1rem == 1 logical px" comment in this mod). That single write re-lays the whole composition 1.5x
+   larger, CRISPLY, and correctly leaves every %, em, \`contain\`, gradient stop and derived icon
+   background-size ratio alone -- so height, every font, every icon box, every glow radius, the
+   vertical gaps and mp-life's 20rem slide all scale with NO rule below. What is left is the
+   HORIZONTAL x2: an x-length must carry an extra SIZE_XF == 4/3 (1.5 * 4/3 == 2), so EVERY
+   declaration below is an x-length and nothing else. Do NOT add a font-size, a height or a keyframe
+   here -- that would double-apply SIZE_F.
+   SCOPE: \`.mp-lg\` goes on the BODY (MoEBarTransient.applySize), WG's own ancestor-class idiom
+   (.mediaLargeWidth ...). It cannot go on #moe-bar-root: #moe-bar-box is a body-level SIBLING of the
+   JS-created root. Every selector is its base rule plus one class, so it out-specifies it (the .bm
+   glyph needs its own line: without it the .mp-cap.dn .mp-ico rule below, being LATER in the file at
+   equal specificity, would swallow that glyph's own Y). ===== */
+.mp-lg #moe-bar-box { width: 613.333rem; }
+.mp-lg #moe-bar-root { width: 400rem; }
+.mp-lg .mp-backdrop { left: -106.667rem; width: 613.333rem; }
+.mp-lg .mp-track::after {
+  background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem);
+  background-size: 4rem 100%;
+}
+.mp-lg .mp-tick { width: 2.667rem; }
+.mp-lg .mp-tick.mp-cur { width: 2.667rem; }
+.mp-lg .mp-cap .mp-d { transform: translate(5.6rem, 2.5rem); }
+.mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
+.mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
+.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.5rem); }
+.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.333rem, -50%) translateY(-0.25rem); }
+/* ===== END HAND-ADDED BLOCK 3 ===== */
+`;
+
 const shipped = css.slice(0, cutHdr) + FONT + css.slice(cutHdr) + TWIN + twinRules +
-                "/* ===== END HAND-ADDED BLOCK 2 ===== */\n";
+                "/* ===== END HAND-ADDED BLOCK 2 ===== */\n" + LARGE;
 fs.writeFileSync(SHIPPED, shipped);
 console.log("OVERWROTE " + SHIPPED + " (" + Buffer.byteLength(shipped) +
-            " bytes = the emit + the 2 marked hand-added blocks)");
+            " bytes = the emit + the 3 marked hand-added blocks)");

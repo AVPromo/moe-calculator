@@ -85,6 +85,26 @@ const END_MARGIN_MS = 250;
 // it if the 5-argument form is rejected.
 const HIT_MAGIC = 15;
 
+// --- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size, pushed as the VM's `barSize`) -----
+// TWO factors, one per axis, and they are the only two numbers the whole feature has. Defined HERE,
+// once, for both bars (Python's half is the two *_ANCHOR_Y_OFFSET_LARGE constants).
+//
+// SIZE_F IS DELIVERED BY THE ROOT FONT SIZE AND NOTHING ELSE. The rem->px factor in Gameface IS the
+// root font size, and WG's own bootstrap (gui/gameface/js/index.js) ends by writing it from
+// `self.onScaleUpdated` -- a bootstrap our REGISTERED views never load, which is exactly why every
+// comment in this mod asserts 1rem == 1 logical px. So one write of `base * SIZE_F` re-lays the whole
+// composition 1.5x larger, CRISPLY (a real reflow, not a bitmap upscale), and leaves every %, em,
+// `contain`, gradient stop and derived icon background-size ratio correctly untouched: height, fonts,
+// icon boxes, glow radii, vertical gaps and mp-life's slide all scale with NO CSS edit at all.
+// SIZE_XF is what is left over: an x-length must reach 2x TOTAL, and the root font already gives it
+// SIZE_F, so the stylesheets' one appended `.mp-lg` block re-declares ONLY the x-lengths, multiplied
+// by this. 1.5 * 4/3 == 2 exactly.
+// THE ENGINE APIs ARE NOT AFFECTED BY OUR ROOT FONT: resizeViewRem / setHitAreaPaddingsRem are C++
+// and take logical px, so their arguments carry BOTH factors (see applySize). The CSS `left`/`top`
+// rigid shift stays in rem and self-scales, which is why shiftY needs no term at all.
+const SIZE_F = 1.5;
+const SIZE_XF = 4 / 3;
+
 // Two interchangeable arming classes, each bound to its OWN identically-tuned @keyframes (the
 // second is each stylesheet's marked HAND-ADDED mp-life-b block), so consecutive runs never share
 // an animation-name and the engine has nothing to coalesce a restart with.
@@ -132,12 +152,22 @@ export function createTransient(cfg) {
     // res_map lever for this (bridge/bar_window.py). The surface is the composition's box plus
     // `pad` on all four sides, and the whole composition is rigidly translated by that much so
     // NOTHING sits at a negative coordinate -- an origin overflow is clipped at ANY surface size.
-    const viewW = cfg.boxW + 2 * cfg.pad;
-    const viewH = cfg.boxH + 2 * cfg.pad;
-    const shiftX = cfg.pad - cfg.boxLeft;
+    // `let`, not `const`, ONLY because of the large size mode: applySize re-derives the four that
+    // carry a factor (see it for the arithmetic). At the shipped size these ARE the four expressions
+    // below and nothing rewrites them. shiftY stays const: it is a pure y/uniform rem length, so the
+    // root font scales it and the value never changes.
+    let viewW = cfg.boxW + 2 * cfg.pad;
+    let viewH = cfg.boxH + 2 * cfg.pad;
+    let shiftX = cfg.pad - cfg.boxLeft;
     const shiftY = cfg.pad - cfg.boxTop;      // MIRRORED (negated, plus the fraction-unit term) in
                                               // Python as domain/constants.*_ANCHOR_Y_OFFSET
-    const hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+    let hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+
+    // THE LARGE SIZE MODE's state. `large` is the pushed flag; `baseFont` is the document's root
+    // font-size as it was BEFORE we ever touched it, captured ONCE so repeated application cannot
+    // compound (and never read back off our own inline write). 0 == not captured yet.
+    let large = false;
+    let baseFont = 0;
 
     // Animation state. `showing` = the bar is visibly up (running or peek-held). `peeking` = Alt is
     // held, so the bar is pinned at the hold plateau with no fade-out. `plateauAt` = the wall-clock
@@ -365,6 +395,51 @@ export function createTransient(cfg) {
         }
     }
 
+    // THE ROOT FONT WRITE -- the whole SIZE_F half of the large mode (see the constant's note).
+    // Captures the base ONCE and never reads back our own inline value, so applying it twice cannot
+    // compound. Fail-soft like every other engine touch: no getComputedStyle / no documentElement
+    // (a shim, a stripped document) simply leaves the size alone.
+    function setRootFont() {
+        try {
+            if (!baseFont) {
+                baseFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 1;
+            }
+            document.documentElement.style.fontSize = large ? (baseFont * SIZE_F) + "px" : "";
+        } catch (e) { /* fail-soft: the shipped size beats a dead view */ }
+    }
+
+    // Apply the pushed size flag. Idempotent (a no-op unless it actually FLIPPED), so the bars can
+    // call it on every render. Order matters: the CSS side first, then the surface push, because the
+    // engine round-trips the resize back into Python's _place.
+    //   x-lengths     carry SIZE_XF in the stylesheet AND here (boxLeft / boxW are x-lengths)
+    //   y/uniform     carry nothing here -- the root font does them
+    //   engine args   carry SIZE_F on top, because resizeViewRem's rem is C++'s, not our document's
+    function applySize(flag) {
+        flag = !!flag;
+        if (flag === large) return;
+        large = flag;
+        const xf = large ? SIZE_XF : 1;
+        const f = large ? SIZE_F : 1;
+        // ROUNDED, because 4/3 is not representable: (460 * 4/3 + 20) * 1.5 evaluates to
+        // 949.9999999999999, and the engine takes whole logical px (a floor there would hand us a
+        // 1px-narrow surface). Both factors are exact at the shipped size, so this is identity there.
+        viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);
+        viewH = Math.round((cfg.boxH + 2 * cfg.pad) * f);
+        // rem, so it self-scales with the root font -- 3dp to match the stylesheet's own x-lengths,
+        // which keeps shiftX + the .mp-lg backdrop's `left` exactly `pad`.
+        shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;
+        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+        setRootFont();
+        try {
+            // WG's own ancestor-class idiom (.mediaLargeWidth ...). It MUST go on the BODY: the
+            // sizing shim #moe-bar-box is a body-level SIBLING of the JS-created root, so a class on
+            // the root could never reach it.
+            document.body.classList.toggle("mp-lg", large);
+        } catch (e) { /* fail-soft */ }
+        root.style.left = shiftX + "rem";
+        pushSurfaceSize();
+    }
+
     // Wire the bar up, ONCE, on engine ready. Three parts, in this order:
     //
     //  (1) THE RIGID TRANSLATION (unconditional -- an origin overflow is clipped at ANY surface
@@ -386,6 +461,18 @@ export function createTransient(cfg) {
             root.style.left = shiftX + "rem";
             root.style.top = shiftY + "rem";
             pushSurfaceSize();
+            // ROBUSTNESS ON THE ROOT FONT (the one unknown): we do not know from source whether the
+            // engine also initialises / overwrites the root font per view. WG's bootstrap re-writes it
+            // from this event, so if it reaches a registered view we take the PUSHED scale as the new
+            // base and re-apply -- and if it never fires, the mount-time capture already stands.
+            // Only while large: the shipped size never touches the root font at all.
+            try {
+                engine.on("self.onScaleUpdated", function (scale) {
+                    if (!large) return;
+                    baseFont = parseFloat(scale) || baseFont || 1;
+                    setRootFont();          // guarded in there -- this runs in an engine callback
+                });
+            } catch (e) { /* fail-soft: the event is optional */ }
             setTimeout(function () {
                 pushSurfaceSize();
                 setTimeout(function () {
@@ -419,6 +506,11 @@ export function createTransient(cfg) {
                 peekOff();
             }
         },
+        // The pushed size flag (VM `barSize` == 1). Idempotent, so it is safe on every render; the
+        // flag arrives AFTER the mount-time surface push, so the correct size lands on the
+        // POST-DEADLINE re-assert -- which is fine precisely because `settled` hides the bar until
+        // then (see SURFACE_REASSERT_MS).
+        size: applySize,
         reset: reset,
         disarm: disarm,
     };
@@ -426,6 +518,7 @@ export function createTransient(cfg) {
 
 export {
     fmt,
+    SIZE_F, SIZE_XF,
     FADE_IN_MS, HOLD_MS, FADE_OUT_MS, TOTAL_MS,
     SEEK_NONE, SEEK_PLATEAU, SEEK_FADE_OUT,
     SURFACE_REASSERT_MS, SURFACE_SETTLE_MS, END_MARGIN_MS, HIT_MAGIC,

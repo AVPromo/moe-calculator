@@ -40,7 +40,7 @@
 "use strict";
 
 const S = require("./lib/gf_check_shim.js");
-const { section, eq, ok, El, parseHTML, makeClock, jsConst, jsArray } = S;
+const { section, eq, ok, El, parseHTML, makeClock, makeRootFont, jsConst, jsArray, jsFactor } = S;
 
 const T_SRC = S.read("MoEBarTransient.js");         // the shared transient  -> "T"
 const B_SRC = S.read("MoEEfficiency.js");           // this bar              -> "B"
@@ -235,12 +235,65 @@ const MUTATIONS = {
     "clamp-degenerate-clamps": ["B",
         "    if (lo <= hi) x = Math.max(lo, Math.min(hi, x));",
         "    x = Math.max(lo, Math.min(hi, x));"],
-    "clamp-left-bound": ["B", "    const lo = CLAMP_L_REM + half;", "    const lo = 0 + half;"],
+    // The `* xf` on each rem literal is the LARGE size mode (MoEBarTransient's SIZE_XF): every
+    // constant in the corridor is an x-length, and at the shipped size xf == 1, so these anchors are
+    // the same behaviour they always guarded.
+    "clamp-left-bound": ["B",
+        "    const lo = CLAMP_L_REM * xf + half;", "    const lo = 0 + half;"],
     "clamp-right-bound": ["B",
-        "    const hi = CLAMP_R_REM - half;", "    const hi = BAR_W_REM - half;"],
+        "    const hi = CLAMP_R_REM * xf - half;", "    const hi = BAR_W_REM - half;"],
     "no-ico-gap": ["B",
-                 'Math.max(w(".mp-ico") + ICO_GAP_REM, w(".mp-d"));',
+                 'Math.max(w(".mp-ico") + ICO_GAP_REM * xf, w(".mp-d"));',
                  'Math.max(w(".mp-ico"), w(".mp-d"));'],
+
+    // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
+    // The shared halves are anchored identically in check_progress_js.js; this bar adds the ONE
+    // place on either bar that mixes a MEASURED px width with rem literals, so it needs the px<->rem
+    // division too.
+    "size-no-root-font": ["T",
+        'document.documentElement.style.fontSize = large ? (baseFont * SIZE_F) + "px" : "";',
+        "void 0;"],
+    "size-root-font-ignores-the-base": ["T",
+        '(baseFont * SIZE_F) + "px"', 'SIZE_F + "px"'],
+    "size-no-body-class": ["T", 'document.body.classList.toggle("mp-lg", large);', "void 0;"],
+    "size-surface-loses-the-x-factor": ["T",
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
+        "viewW = Math.round((cfg.boxW + 2 * cfg.pad) * f);"],
+    // THE 4/3 REPRESENTABILITY TRAP, on the bar that actually hits it: (460*4/3 + 20)*1.5 evaluates
+    // to 949.9999999999999, so a floor hands the engine a 1px-narrow surface.
+    "size-surface-floored-not-rounded": ["T",
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
+        "viewW = Math.floor((cfg.boxW * xf + 2 * cfg.pad) * f);"],
+    "size-shift-not-re-derived": ["T",
+        "shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
+    "size-no-surface-repush": ["T",
+        '        root.style.left = shiftX + "rem";\n        pushSurfaceSize();\n    }',
+        '        root.style.left = shiftX + "rem";\n    }'],
+    "size-not-idempotent": ["T", "        if (flag === large) return;", "        if (false) return;"],
+    "size-ignores-a-scale-update": ["T",
+        "                    baseFont = parseFloat(scale) || baseFont || 1;", "                    void 0;"],
+    "size-scale-update-not-gated": ["T",
+        "                    if (!large) return;", "                    if (false) return;"],
+    // THIS BAR's two lines: the flag has to reach the transient, and capClampPct's own mirror of it
+    // has to be kept in sync (the clamp is the one thing the transient does NOT own).
+    "size-flag-never-pushed": ["B", "    T.size(large);", "    void 0;"],
+    "size-flag-not-mirrored-for-the-clamp": ["B",
+        "    large = Number(model.barSize) === 1;", "    large = false;"],
+    // ...and the px<->rem division on every MEASURED width: under the 1.5x root font 1rem is
+    // SIZE_F px, while the caption's width IN REM is unchanged (its font-size is a rem too), so the
+    // corridor scales by SIZE_XF and the caption inside it does not. Two halves -- the querySelector
+    // helper's measurement and .mp-cap's own offsetWidth -- because either alone mis-centres.
+    "clamp-measured-icon-not-normalised": ["B",
+        "        return ((n && n.offsetWidth) || 0) / px;", "        return (n && n.offsetWidth) || 0;"],
+    "clamp-measured-numeral-not-normalised": ["B",
+        "    const half = (capC.offsetWidth || 0) / 2 / px +",
+        "    const half = (capC.offsetWidth || 0) / 2 +"],
+    // The axis the clamped x is expressed against must take the x factor too, or the returned
+    // PERCENTAGE is off by 4/3.
+    "clamp-axis-not-scaled": ["B",
+        "    let x = p / 100 * BAR_W_REM * xf;", "    let x = p / 100 * BAR_W_REM;"],
+    "clamp-return-axis-not-scaled": ["B",
+        "    return x / (BAR_W_REM * xf) * 100;", "    return x / BAR_W_REM * 100;"],
 };
 
 // --- the modules' own constants, SCRAPED (never written down here) ---------------------------
@@ -255,12 +308,27 @@ const MUTATIONS = {
 // re-assert pair, END_MARGIN_MS, HIT_MAGIC and the run class/name pairs moved into
 // MoEBarTransient.js with the machinery that uses them.
 const PAD = jsConst(B_SRC, "PAD_REM", "MoEEfficiency.js");
-const SURFACE = [jsConst(B_SRC, "BOX_W_REM", "MoEEfficiency.js") + 2 * PAD,
-                 jsConst(B_SRC, "BOX_H_REM", "MoEEfficiency.js") + 2 * PAD];
+const BOX_W = jsConst(B_SRC, "BOX_W_REM", "MoEEfficiency.js");
+const BOX_H = jsConst(B_SRC, "BOX_H_REM", "MoEEfficiency.js");
+const BOX_LEFT = jsConst(B_SRC, "BOX_LEFT_REM", "MoEEfficiency.js");
+const SURFACE = [BOX_W + 2 * PAD, BOX_H + 2 * PAD];
 const HIT_PAD = Math.ceil(Math.max(SURFACE[0], SURFACE[1]) / 2);
-const SHIFT = [PAD - jsConst(B_SRC, "BOX_LEFT_REM", "MoEEfficiency.js") + "rem",
+const SHIFT = [PAD - BOX_LEFT + "rem",
                PAD - jsConst(B_SRC, "BOX_TOP_REM", "MoEEfficiency.js") + "rem"];
 const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
+// THE LARGE SIZE MODE (VM `barSize` == 1). Both factors are scraped, and every large expectation is
+// DERIVED here exactly as MoEBarTransient.applySize derives it -- x-lengths take BOTH factors, the
+// y/uniform half only SIZE_F, and each surface arg is Math.round()ed because 4/3 is not
+// representable (on THIS bar the x term really does land on 949.9999999999999). `ROOT_FONT_PX` is
+// the harness's own pretend base root font, deliberately not 1 so `base * SIZE_F` cannot be
+// satisfied by writing the bare factor.
+const SIZE_F = jsFactor(T_SRC, "SIZE_F", "MoEBarTransient.js");
+const SIZE_XF = jsFactor(T_SRC, "SIZE_XF", "MoEBarTransient.js");
+const ROOT_FONT_PX = 2;
+const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
+                    Math.round((BOX_H + 2 * PAD) * SIZE_F)];
+const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
+const LG_SHIFT_X = Math.round((PAD - BOX_LEFT * SIZE_XF) * 1000) / 1000 + "rem";
 const REASSERT = jsConst(T_SRC, "SURFACE_REASSERT_MS", "MoEBarTransient.js");
 const SETTLE = REASSERT + jsConst(T_SRC, "SURFACE_SETTLE_MS", "MoEBarTransient.js");
 // mp-life's shape. Only the three tuned stops are scraped -- TOTAL and the two seeks are DERIVED
@@ -298,8 +366,11 @@ function mount(srcs, unsettled) {
     const clock = makeClock(1e12);
     const body = new El("body");
     parseHTML(VIEW_HTML.replace(/<!--[\s\S]*?-->/g, ""), body);   // the view's own static markup
+    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write.
+    const { documentElement, getComputedStyle } = makeRootFont(ROOT_FONT_PX);
     const document = {
         body,
+        documentElement,
         createElement: (tag) => new El(tag),
         getElementById: (id) => body.byId(id),
     };
@@ -315,22 +386,29 @@ function mount(srcs, unsettled) {
         onUpdate(fn) { render = fn; },
         subscribe() { observer.subscribed = true; },
     };
-    const engine = { whenReady: { then: (fn) => fn() } };
+    // engine.on carries WG's own `self.onScaleUpdated`, which the transient re-reads the base root
+    // font from (the one thing about the size mode that is not knowable from source).
+    const engineHandlers = {};
+    const engine = {
+        whenReady: { then: (fn) => fn() },
+        on(name, fn) { engineHandlers[name] = fn; },
+    };
 
     // requestAnimationFrame is injected for parity with the progress harness even though neither
     // this bar nor the transient ever calls it (the cold-only rAF is MoEProgress.js's alone -- see
     // its commitClimb). An unused global costs nothing and keeps the two mounts comparable.
     new Function("document", "viewEnv", "engine", "ModelObserver", "setTimeout", "clearTimeout",
-                 "Date", "requestAnimationFrame", src)(
+                 "Date", "requestAnimationFrame", "getComputedStyle", src)(
         document, viewEnv, engine, () => observer, clock.setTimeout, clock.clearTimeout,
-        { now: clock.now }, clock.raf);
+        { now: clock.now }, clock.raf, getComputedStyle);
 
     const root = document.getElementById("moe-bar-root");
     const q = (sel) => root.querySelector(sel);
     const capC = q(".mp-cap.up");
     if (!unsettled) clock.advance(SETTLE);
     return {
-        clock, calls, root, document, body, observer,
+        clock, calls, root, document, body, observer, documentElement,
+        scaleUpdate: (v) => engineHandlers["self.onScaleUpdated"](v),
         // A real ModelObserver updates .model and THEN notifies, and the surface-settle re-render
         // reads .model back -- so pushing has to do both, or that path sees a stale/empty model.
         push: (m) => { observer.model = m; render(m); },
@@ -819,6 +897,90 @@ function run(mutation) {
     // back off the model -- a stale read would silently shadow the latch.
     eq("nothing reads a damageDelta off the model (the latch replaced it)",
        code.filter((l) => /damageDelta/.test(l)), []);
+
+    // --- THE LARGE SIZE MODE (mod_settings.progress_bar_size, pushed as `barSize`) -----------
+    // The shared half (root font, body class, re-derived surface / hit rect / shift, idempotence,
+    // the scale-update re-apply) is identical to check_progress_js.js's -- it lives in the shared
+    // transient, so BOTH harnesses assert it, on their OWN surface constants. Every expectation is
+    // DERIVED from the scraped factors (LG_* above), never written down.
+    section("large size mode");
+    s = mount(srcs);
+    s.push(M());
+    eq("at the shipped size the root font is NEVER written (not even to an empty string)",
+       s.documentElement.style.fontSize, undefined);
+    eq("...and the body carries no size class", s.body.classList.contains("mp-lg"), false);
+    const resizes = s.calls.resize.length, hits = s.calls.hit.length;
+
+    s.push(M({ barSize: 1 }));
+    eq("barSize 1 writes the ROOT FONT as base * SIZE_F -- the whole 1.5x half of the mode",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * SIZE_F) + "px");
+    ok("...and puts mp-lg on the BODY, where #moe-bar-box (a sibling of our root) can see it",
+       s.body.classList.contains("mp-lg"));
+    eq("...and re-pushes the surface with BOTH factors on x and only SIZE_F on y (ROUNDED: the " +
+       "x term is 949.9999999999999 in float)", s.calls.resize.slice(resizes), [LG_SURFACE]);
+    eq("...and re-collapses the hit rect off the new larger dimension",
+       s.calls.hit.slice(hits), [[LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, HIT_MAGIC]]);
+    eq("...and re-derives the rigid shift in document rem (3dp, matching the .mp-lg block)",
+       s.root.style.left, LG_SHIFT_X);
+    eq("...while the vertical shift is untouched -- it is a rem the root font already scaled",
+       s.root.style.top, SHIFT[1]);
+
+    const settled = s.calls.resize.length;
+    s.push(M({ barSize: 1, damage: 1600 }));
+    eq("a second render at the same size is a NO-OP: the surface is not re-pushed every push",
+       s.calls.resize.length, settled);
+
+    s.scaleUpdate(ROOT_FONT_PX * 4);
+    eq("self.onScaleUpdated takes the PUSHED scale as the new base and re-applies the factor",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+    s.push(M({ barSize: 0 }));
+    eq("flipping BACK clears the inline root font entirely (not a 1x px value)",
+       s.documentElement.style.fontSize, "");
+    eq("...drops the body class", s.body.classList.contains("mp-lg"), false);
+    eq("...restores the shipped surface", s.calls.resize.slice(-1), [SURFACE]);
+    eq("...and the shipped rigid shift", s.root.style.left, SHIFT[0]);
+    s.scaleUpdate(ROOT_FONT_PX * 8);
+    eq("...and at the shipped size a scale update leaves the root font alone",
+       s.documentElement.style.fontSize, "");
+    s.push(M({ barSize: 1 }));
+    eq("a scale update seen at the shipped size is not remembered as the base",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+    // --- THE CLAMP CORRIDOR UNDER THE LARGE MODE ---------------------------------------------
+    // capClampPct is the ONE function on either bar that mixes a MEASURED px width with rem
+    // literals, so it is the one place the "1rem == 1 logical px" identity is load-bearing rather
+    // than incidental -- and the large mode breaks it: 1rem is SIZE_F px now. Two independent
+    // corrections, and they pull in OPPOSITE directions, which is why neither can be normalised
+    // away: every rem CONSTANT is an x-length and takes SIZE_XF, while every MEASUREMENT is divided
+    // back into document rem by SIZE_F. The same three measured widths as the 1x section above, each
+    // scaled by SIZE_F so the caption is the SAME size in rem -- so the only thing moving the result
+    // is the corridor's own x factor.
+    section("cap clamp corridor under the large size mode");
+    s = mount(srcs);
+    s.push(M({ barSize: 1 }));
+    s.capC.offsetWidth = 100 * SIZE_F;          // 100 document rem -> half is 50
+    s.capIco.offsetWidth = 60 * SIZE_F;         // 60 document rem
+    s.capD.offsetWidth = 0;
+    const LG_HALF = 100 / 2 + 60 + ICO_GAP * SIZE_XF;
+    const LG_LO = ((CLAMP_L * SIZE_XF + LG_HALF) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
+    const LG_HI = ((CLAMP_R * SIZE_XF - LG_HALF) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
+    s.push(M({ barSize: 1, barX: 0 }));
+    eq("at barX 0 the caption is held off the LEFT bound, scaled by SIZE_XF",
+       s.capC.style.left, LG_LO);
+    ok("...and that is NOT the 1x answer -- the corridor really did scale",
+       s.capC.style.left !== ((CLAMP_L + 100 / 2 + 60 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%");
+    eq("...while the fill and tick are still NOT clamped -- only the caption is",
+       [s.fill.style.width, s.tCur.style.left], ["0.000%", "0.000%"]);
+    s.push(M({ barSize: 1, barX: 100 }));
+    eq("at barX 100 it is held off the RIGHT bound", s.capC.style.left, LG_HI);
+    s.push(M({ barSize: 1, barX: 50 }));
+    eq("mid-axis it rides its tick untouched, at ANY size", s.capC.style.left, "50.000%");
+    // A caption WIDER than the corridor still bails instead of inverting the bounds.
+    s.capC.offsetWidth = 1000 * SIZE_F;
+    s.push(M({ barSize: 1, barX: 100 }));
+    eq("a degenerate corridor bails out of the clamp entirely, at ANY size",
+       s.capC.style.left, "100.000%");
 }
 
 S.main("MoEEfficiency.js + MoEBarTransient.js", MUTATIONS, run);
