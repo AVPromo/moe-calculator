@@ -36,7 +36,7 @@ def test_build_snapshot_happy_path_and_remembers_baseline(monkeypatch):
     monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
     monkeypatch.setattr(ea, "_read_moe", lambda cd: (2, 73.7, 1800))
     monkeypatch.setattr(ea.moe_wgapi, "get_thresholds",
-                        lambda cd: {1: 1, 2: 2, 3: 3, 100: 4})
+                        lambda cd: {65: 1, 85: 2, 95: 3, 100: 4})
     snap = ea.build_snapshot()
     assert snap.has_vehicle is True
     assert snap.vehicle_int_cd == 1073
@@ -44,7 +44,7 @@ def test_build_snapshot_happy_path_and_remembers_baseline(monkeypatch):
     assert snap.marks == 2
     assert snap.cur_percentile == 73.7
     assert snap.cur_avg_damage == 1800
-    assert snap.thresholds == {1: 1, 2: 2, 3: 3, 100: 4}
+    assert snap.thresholds == {65: 1, 85: 2, 95: 3, 100: 4}
     # The career baseline is snapshotted for the in-battle overlay (garage -> battle bridge).
     assert baseline_cache.get(1073) == (73.7, 1800)
 
@@ -58,9 +58,9 @@ def test_build_snapshot_estimates_when_request_errored(monkeypatch):
     monkeypatch.setattr(ea.moe_wgapi, "needs_estimate", lambda cd: True)
     calls = []
     monkeypatch.setattr(ea, "_estimate_thresholds",
-                        lambda pct, dmg: calls.append((pct, dmg)) or {1: 11, 2: 22, 3: 33, 100: 44})
+                        lambda pct, dmg: calls.append((pct, dmg)) or {65: 11, 85: 22, 95: 33, 100: 44})
     snap = ea.build_snapshot()
-    assert snap.thresholds == {1: 11, 2: 22, 3: 33, 100: 44}
+    assert snap.thresholds == {65: 11, 85: 22, 95: 33, 100: 44}
     assert calls == [(60.0, 1500)]
 
 
@@ -101,7 +101,7 @@ def _spy_resolve(monkeypatch):
     calls = []
     monkeypatch.setattr(ea.sample_log, "resolve",
                         lambda *a: calls.append(a) or False)
-    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", lambda cd: {1: 1, 2: 2, 3: 3, 100: 4})
+    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", lambda cd: {65: 1, 85: 2, 95: 3, 100: 4})
     monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
     return calls
 

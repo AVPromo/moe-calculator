@@ -7,7 +7,8 @@ blanking the whole bar. Symbols verified against the EU 2.3 decompiled client:
 - vehicle dossier TOTAL block: MarkOnGunAchievement.getValue()/getDamageRating() and
   the movingAvgDamage record (gui/shared/gui_items/dossier/achievements/mark_on_gun.py;
   read pattern from gui/impl/lobby/tooltips/carousel_vehicle_tooltip.py).
-- the 65/85/95% damage thresholds come from adapter/moe_wgapi (the official Wargaming API).
+- the percentile-keyed damage thresholds come from adapter/moe_wgapi (the official Wargaming
+  API), which returns the 8 anchors WG stores; the bar reads 65/85/95 + the 100 goalpost.
 """
 from CurrentVehicle import g_currentVehicle
 
@@ -69,7 +70,7 @@ def build_snapshot():
 
 
 def _estimate_thresholds(percentile, avg_damage):
-    """Extrapolate {1,2,3,100: dmg} from the player's single dossier point (avg_damage at
+    """Extrapolate {65,85,95,100: dmg} from the player's single dossier point (avg_damage at
     `percentile`) using the offline estimator's universal prior -- the WG-request-error
     fallback. Returns {} when the point is unusable (never-played / degenerate). Pure math,
     guarded."""

@@ -17,9 +17,10 @@ branch 2.3; see the wotmod-debug-repl harness skill for the clone location):
 
 Still confirm live (behaviour, not symbol names): ARENA_PERIOD gating and that a played
 tank has thresholds. The dossier baseline (pre_avg / pre_percentile) and the MoE thresholds
-are the SAME reads the garage path uses -- we reuse engine_adapter._read_moe and moe_wgapi
-(the official Wargaming API). Battle reads only the thresholds the garage path already
-cached (the dossier / garage roster is unreadable here).
+are the SAME reads the garage path uses -- we reuse engine_adapter._read_moe, moe_wgapi (the
+official Wargaming API) and, when a WG request errored for this tank, engine_adapter's offline
+_estimate_thresholds fallback. Battle reads only the thresholds the garage path already cached
+(the dossier / garage roster is unreadable here).
 """
 import BigWorld
 
@@ -312,6 +313,12 @@ def build_battle_snapshot():
             else:
                 LOG_DEBUG("[moe-battle] no baseline (tank not seen in garage this session)")
         thresholds = moe_wgapi.get_thresholds(int_cd)
+        # Same fallback the garage path takes (engine_adapter.build_snapshot): a tank whose WG
+        # request COMPLETED with no usable data extrapolates from the career point instead. Without
+        # it, that tank rendered numbers in the garage and NOTHING in battle -- the garage estimated
+        # while every battle widget sat on an empty table. A still-pending fetch does not trigger it.
+        if not thresholds and moe_wgapi.needs_estimate(int_cd):
+            thresholds = engine_adapter._estimate_thresholds(pre_percentile, pre_avg)
         nation = _player_nation(descr)
 
         return bt.BattleSnapshot(

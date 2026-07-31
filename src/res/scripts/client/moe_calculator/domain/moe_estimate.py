@@ -22,7 +22,7 @@ weakest in the tails, and extrapolating far above the player's current standing 
 """
 import math
 
-from moe_calculator.domain.constants import MARK_PERCENTS, MARK_COUNTS, GOALPOST_PERCENTILE
+from moe_calculator.domain.constants import MARK_PERCENTS, GOALPOST_PERCENTILE
 from moe_calculator.domain.rounding import iround_half_away
 
 # Minimum distinct samples needed for a per-tank least-squares fit; below this we use the
@@ -98,18 +98,6 @@ def inv_norm_cdf(p):
     return x
 
 
-def norm_cdf(z):
-    """Forward standard-normal CDF: Phi(z), the probability mass at or below z. The inverse
-    of inv_norm_cdf. Used by the in-battle overlay to map a combined-damage value to a
-    percentile over the per-segment (mu, sigma) solved through the surrounding threshold stops
-    (percent = 100*norm_cdf((d-mu)/sigma); see battle_builder._smooth_percent), so the
-    projection rides WG's smooth distribution SHAPE instead of straight chords.
-
-    erfc-based (same idiom as the Halley step above); math.erfc exists in Python 2.7+ and 3.x.
-    Always finite in (0.0, 1.0) for a finite z."""
-    return 0.5 * math.erfc(-float(z) / math.sqrt(2.0))
-
-
 # --- fitting -----------------------------------------------------------------
 
 def _valid_samples(samples):
@@ -170,15 +158,20 @@ def _prior_mu_sigma(pts):
 
 
 def _targets(mu, sigma):
-    """Map a fitted (mu, sigma) to the {1,2,3,100: damage} threshold dict. Returns None unless
-    every value is positive and strictly ascending (a sane distribution)."""
+    """Map a fitted (mu, sigma) to the {percentile: damage} threshold dict -- the SAME shape the
+    WG-API path emits (keyed by percentile: 65/85/95 + the 100 goalpost), so every consumer reads
+    one contract whichever source supplied it. Returns None unless every value is positive and
+    strictly ascending (a sane distribution)."""
     if sigma <= 0.0:
         return None
     out = {}
-    for percent, count in zip(MARK_PERCENTS, MARK_COUNTS):
-        out[count] = iround_half_away(mu + sigma * inv_norm_cdf(percent / 100.0))
+    for percent in MARK_PERCENTS:
+        out[percent] = iround_half_away(mu + sigma * inv_norm_cdf(percent / 100.0))
+    # Key 100 carries the GOALPOST_PERCENTILE (99th) damage, not the true 100th: Phi^-1(1) is
+    # +infinity. The 1pp of slope that costs the top segment is accepted -- this is the
+    # WG-request-errored fallback.
     out[100] = iround_half_away(mu + sigma * inv_norm_cdf(GOALPOST_PERCENTILE / 100.0))
-    ordered = [out[1], out[2], out[3], out[100]]
+    ordered = [out[percent] for percent in MARK_PERCENTS] + [out[100]]
     prev = 0
     for v in ordered:
         if v <= 0 or v <= prev:
@@ -188,7 +181,7 @@ def _targets(mu, sigma):
 
 
 def thresholds_from_samples(samples):
-    """Estimate {1,2,3,100: combined-damage} from the accumulated (damage, percentile-fraction)
+    """Estimate {65,85,95,100: combined-damage} from the accumulated (damage, percentile-fraction)
     samples for one tank. Uses the OLS fit when the samples span enough percentile range, else
     the single-sample universal prior. Returns {} when nothing usable is available (e.g. a
     never-played tank), so the widget degrades to no per-mark labels."""

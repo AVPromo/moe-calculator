@@ -29,7 +29,8 @@ def build_model(snapshot):
     ticks = []
     has_data = False
     for percent, count in zip(MARK_PERCENTS, MARK_COUNTS):
-        required = int(thresholds.get(count, 0) or 0)
+        # `thresholds` is keyed by PERCENTILE (the WG API's own anchors), not by mark count.
+        required = int(thresholds.get(percent, 0) or 0)
         if required > 0:
             has_data = True
         ticks.append(t.MarkTick(

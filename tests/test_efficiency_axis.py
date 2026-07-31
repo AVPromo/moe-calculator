@@ -11,7 +11,9 @@ import pytest
 from moe_calculator.domain.battle_builder import (
     efficiency_band, efficiency_bar_x, efficiency_stops)
 
-THR = {1: 2450, 2: 3050, 3: 3620, 100: 4400}
+# Keyed by PERCENTILE (the WG API's own anchors), not by mark count: 65/85/95 are the
+# 1/2/3-mark requirements and 100 is the goalpost.
+THR = {65: 2450, 85: 3050, 95: 3620, 100: 4400}
 STOPS = (0.0, 2450.0, 3050.0, 3620.0, 4400.0)
 
 # NOTE the visual axis itself (domain/constants.EFFICIENCY_BAR_STOPS, which efficiency_bar_x now
@@ -32,10 +34,11 @@ def test_stops_are_unusable_without_a_threshold_table():
 
 
 @pytest.mark.parametrize("thresholds", [
-    {2: 3050, 3: 3620, 100: 4400},                 # r65 missing
-    {1: 2450, 3: 3620, 100: 4400},                 # r85 missing
-    {1: 2450, 2: 3050, 100: 4400},                 # r95 missing
-    {1: 2450, 2: 3050, 3: 3620},                   # the 100 goalpost missing
+    {85: 3050, 95: 3620, 100: 4400},               # r65 missing
+    {65: 2450, 95: 3620, 100: 4400},               # r85 missing
+    {65: 2450, 85: 3050, 100: 4400},               # r95 missing
+    {65: 2450, 85: 3050, 95: 3620},                # the 100 goalpost missing
+    {1: 2450, 2: 3050, 3: 3620, 100: 4400},        # MARK-COUNT keys (a stale v3 cache row)
 ])
 def test_stops_are_unusable_when_any_requirement_is_missing(thresholds):
     # snap.thresholds is all-or-nothing upstream, so this is belt-and-braces: there is no
@@ -44,10 +47,10 @@ def test_stops_are_unusable_when_any_requirement_is_missing(thresholds):
 
 
 @pytest.mark.parametrize("thresholds", [
-    {1: 0, 2: 3050, 3: 3620, 100: 4400},           # a zero stop
-    {1: 2450, 2: 2450, 3: 3620, 100: 4400},        # equal stops -> a zero-width segment
-    {1: 2450, 2: 3050, 3: 3000, 100: 4400},        # non-monotone
-    {1: -10, 2: 3050, 3: 3620, 100: 4400},         # negative
+    {65: 0, 85: 3050, 95: 3620, 100: 4400},        # a zero stop
+    {65: 2450, 85: 2450, 95: 3620, 100: 4400},     # equal stops -> a zero-width segment
+    {65: 2450, 85: 3050, 95: 3000, 100: 4400},     # non-monotone
+    {65: -10, 85: 3050, 95: 3620, 100: 4400},      # negative
 ])
 def test_stops_are_unusable_when_not_strictly_ascending(thresholds):
     # A zero-width segment would divide by zero in efficiency_bar_x, so it must never get there.
@@ -55,9 +58,17 @@ def test_stops_are_unusable_when_not_strictly_ascending(thresholds):
 
 
 def test_stops_fail_soft_on_unreadable_values():
-    assert efficiency_stops({1: "x", 2: 3050, 3: 3620, 100: 4400}) is None
-    assert efficiency_stops({1: None, 2: 3050, 3: 3620, 100: 4400}) is None
+    assert efficiency_stops({65: "x", 85: 3050, 95: 3620, 100: 4400}) is None
+    assert efficiency_stops({65: None, 85: 3050, 95: 3620, 100: 4400}) is None
     assert efficiency_stops("not a dict") is None
+
+
+def test_stops_ignore_the_enrichment_anchors():
+    # WG's 20/40/55/75 anchors ride along in the same dict, but this bar's four visual quarters
+    # ARE the four requirements -- the extra anchors must not become extra stops.
+    enriched = dict(THR)
+    enriched.update({20: 528, 40: 1163, 55: 1549, 75: 2104})
+    assert efficiency_stops(enriched) == STOPS
 
 
 # --- efficiency_bar_x ----------------------------------------------------------

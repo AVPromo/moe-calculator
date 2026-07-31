@@ -17,9 +17,10 @@ class MoESnapshot(object):
     - `cur_percentile` : current damage rating as a percentile 0.0..100.0
                          (dossier damageRating; how far toward the next mark).
     - `cur_avg_damage` : current moving-average combined damage (dossier movingAvgDamage).
-    - `thresholds`     : {1: dmg, 2: dmg, 3: dmg, 100: dmg} combined-damage required for
-                         each mark plus the 100th-percentile goalpost (key 100), fetched
-                         from the external table; {} when unknown/not loaded yet.
+    - `thresholds`     : {percentile: dmg} combined-damage anchors keyed by PERCENTILE -- the
+                         mark requirements 65/85/95 plus the 100th-percentile goalpost, and
+                         possibly the 20/40/55/75 enrichment anchors the in-battle interpolator
+                         uses; {} when unknown/not loaded yet.
     - `nation`         : nation id string for the mark art ('germany', 'ussr', ...); ''.
     - `has_vehicle`    : whether a vehicle is actually selected (False -> bar hidden).
     """

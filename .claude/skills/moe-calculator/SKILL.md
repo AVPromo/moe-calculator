@@ -20,7 +20,7 @@ features and the build each have their own project skill:
 - **Client:** WoT **EU 2.3.1.0**. Runtime **Python 2.7** (BigWorld); tests on **Python 3.13**.
 - **Hard dep:** OpenWG GameFace ≥ 1.1.6 (`import openwg_gameface` raises if absent). Soft dep:
   ModsSettingsAPI 1.7.0 (bundled; absent → mod runs with default settings, no panel). See `moe-settings`.
-- **MoE data source (official WG API, single build):** per-tank combined-damage thresholds `{1,2,3,100}` keyed by intCD come from the Wargaming public API's `wot/tanks/mastery` method (`distribution=damage&percentile=65,85,95,100`), via the `adapter/moe_data.py` facade over the sole provider `adapter/moe_wgapi.py`. On garage entry it fetches the selected tank, then warms the 100 most-recently-played owned vehicles (`adapter/garage_roster.py`, ranked by dossier `getLastBattleTime()`); an uncached selection fetches that one tank. Worker-thread fetch + `BigWorld.callback` poll; results persisted (`mods_data/14th_ua_moe/moe_wgapi_cache.json`) and revalidated 24h after the reply's `updated_at`. On a request error, `engine_adapter` extrapolates from the player's own dossier point via `domain/moe_estimate.py`. GitHub and WGMods ship the identical build. See [[moe-build-release]].
+- **MoE data source (official WG API, single build):** per-tank combined-damage thresholds keyed by intCD, each row keyed by **PERCENTILE** `{20,40,55,65,75,85,95,100}` (the 8 anchors WG actually stores; 65/85/95/100 required all-or-nothing, the rest optional enrichment), come from the Wargaming public API's `wot/tanks/mastery` method (`distribution=damage&percentile=20,40,55,65,75,85,95,100`) via `adapter/moe_wgapi.py` — the sole provider, no facade. On garage entry it fetches the selected tank, then warms the 100 most-recently-played owned vehicles (`adapter/garage_roster.py`, ranked by dossier `getLastBattleTime()`); an uncached selection fetches that one tank. Worker-thread fetch + `BigWorld.callback` poll; results persisted (`mods_data/14th_ua_moe/moe_wgapi_cache.json`) and revalidated 24h after the reply's `updated_at`. On a request error, `engine_adapter` extrapolates from the player's own dossier point via `domain/moe_estimate.py`. GitHub and WGMods ship the identical build. See [[moe-build-release]].
 
 ## The tree
 
@@ -37,17 +37,18 @@ src/res/scripts/client/
       moe_estimate.py                    error-fallback threshold estimator (inv-CDF + OLS + prior)
       rounding.py                        py2/py3-stable rounding
       fetch_list.py                      WG-API warm-fetch ranking
-      k_estimator.py                     self-calibrating EWMA-k
     adapter/    the ONLY read-side layer touching live game symbols (fail-soft via _safe)
       engine_adapter.py   garage dossier read      battle_adapter.py  in-battle efficiency read
-      moe_data.py         source facade            moe_wgapi.py       WG-API fetch/parse/cache
+      moe_wgapi.py        WG-API fetch/parse/cache (the SOLE threshold source; no facade)
       garage_roster.py    selected + recent intCDs format.py          pure formatters
       baseline_cache.py   garage→battle baseline   i18n.py            localized label bundle
-      battle_input.py     Alt-key peek input        calib_cache.py     persists observed EWMA-k
+      battle_input.py     Alt-key peek input       sample_log.py      battle_samples.jsonl append
       settings_i18n.py    MSA panel prose bundle
     bridge/     marshals model → Wulf ViewModels (PC-only)
       gameface_bridge.py  garage inject+push        battle_bridge.py   battle lifecycle+push
       battle_view.py      registered window host    view_models.py     MoEVM/MarkTickVM/BattleMoEVM
+      bar_window.py       shared bar window host    progress_view.py   mark-axis bar view
+      efficiency_view.py  damage-efficiency bar view
       mod_settings.py     MSA registration + flag getters
       wulf_args.py        (reverse-channel helpers; unused — v1 is read-only)
     build_config.py       build-injected WG_APPLICATION_ID
@@ -58,8 +59,8 @@ src/res/mods/configs/res_map/MoEBattleView.json    registers the in-battle view
 
 ## Shared (cross-feature) modules
 
-`domain/constants.py` (mark percents, EWMA, anchors), `adapter/moe_data.py` (threshold source
-facade → `moe_wgapi`), `adapter/format.py` (`thousands`/`percent`/
+`domain/constants.py` (mark percents, EWMA, anchors), `adapter/moe_wgapi.py` (the threshold
+source), `adapter/format.py` (`thousands`/`percent`/
 `signed_percent`/`mark_icon_url`), `adapter/i18n.py` (label bundle), `adapter/baseline_cache.py`
 (career baseline keyed by intCD, bridging garage read → battle read), `_compat.py`. Everything
 else is feature-specific.

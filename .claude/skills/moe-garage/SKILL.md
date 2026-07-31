@@ -28,7 +28,7 @@ concrete wiring. All paths under `src/res/`.
 5. **Push** — `bridge/view_models.py::MoEVM` (see slots below).
 
 **Lifecycle guard:** `attach()` caches `_active=(host_vm, rvm)` and nothing clears it (no
-view-destroy hook is wired). Session-persistent listeners — the `moe_data` ready hook and
+view-destroy hook is wired). Session-persistent listeners — the `moe_wgapi` ready hook and
 `IItemsCache.onSyncCompleted` — can fire AFTER battle entry tears the hangar down, so `refresh()`
 early-returns via `_host_alive()` (lobby state machine present) instead of pushing into the dead
 VM. `_arm` uses `getattr(holder, attr, None)` so a renamed WG event degrades quietly. A full

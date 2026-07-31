@@ -21,6 +21,8 @@ MARK_COUNTS = (1, 2, 3)
 # as-is. GOALPOST_PERCENTILE is used ONLY by the offline estimator fallback (moe_estimate),
 # which fires when a WG-API request errors: the true 100th percentile is +infinity under a
 # continuous distribution, so the estimator reads the goalpost off a high-but-finite percentile.
+# (Literally only there now -- the in-battle interpolator used to borrow it for its top stop;
+# since it went piecewise-linear over WG's own anchors it uses the real 100 key value.)
 GOALPOST_PERCENTILE = 99
 
 # The full percentile axis the bar spans.

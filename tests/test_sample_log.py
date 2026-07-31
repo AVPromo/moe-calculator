@@ -41,7 +41,7 @@ def _pred(int_cd=1073, **over):
     """A plausible end-of-battle prediction, as bridge/battle_bridge._flush_prediction emits it."""
     pred = {
         "int_cd": int_cd, "ewma_k": 0.02,
-        "thresholds": {1: 2544, 2: 3634, 3: 4512, 100: 5229},
+        "thresholds": {65: 2544, 85: 3634, 95: 4512, 100: 5229},
         "pre_percentile": 73.67, "pre_avg_damage": 1850, "baseline_known": True,
         "damage": 2400, "track_assist": 300, "spot_assist": 100, "stun": 0, "team_damage": 0,
         "combined_damage": 2700, "counted_assist": 300, "assist_kind": "track",
@@ -289,12 +289,14 @@ def test_resolve_is_falsey_when_data_dir_raises(monkeypatch):
 # --- field fidelity ----------------------------------------------------------
 
 def test_thresholds_round_trip_as_string_keys(monkeypatch, tmp_path):
-    # JSON has no int keys: the stops come back as "1"/"2"/"3"/"100". Pinned so the offline
-    # fitting script can rely on it (and so a future "keep ints" change is a deliberate one).
+    # JSON has no int keys: the anchors come back as "65"/"85"/"95"/"100" -- the PERCENTILE keys,
+    # stringified. Pinned so the offline analysis script can rely on it (and so a future "keep
+    # ints" change is a deliberate one).
     _use_tmp(monkeypatch, tmp_path)
     sample_log.stash(_pred())
     sample_log.resolve(1073, 74.10, 1866)
-    assert _samples(tmp_path)[0]["thresholds"] == {"1": 2544, "2": 3634, "3": 4512, "100": 5229}
+    assert _samples(tmp_path)[0]["thresholds"] == {"65": 2544, "85": 3634, "95": 4512,
+                                                   "100": 5229}
 
 
 def test_missing_prediction_field_logs_null_rather_than_raising(monkeypatch, tmp_path):

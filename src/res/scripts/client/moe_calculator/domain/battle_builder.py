@@ -5,9 +5,9 @@ The four in-battle readouts (see TASKS/in-battle-moe-panel.md):
   1. live combined damage  C = damage + max(track, spot, stun) - team_damage   (WG #15060: MAX)
   2. projected moving-average combined damage  avgWithCD = prevAvg + k*(C - prevAvg)  (EWMA)
   3. current percent  = WG's real career standing (pre_percentile) + this battle's increment
-     f(avgWithCD) - f(prevAvg), where f maps combined damage to percentile via a piecewise
-     normal curve pinned EXACTLY to the per-tank thresholds (matches WG's smooth distribution
-     shape while reproducing every known stop).
+     f(avgWithCD) - f(prevAvg), where f maps combined damage to percentile by piecewise-LINEAR
+     interpolation over the tank's percentile anchors plus a (0, 0) origin -- which is EXACTLY
+     how WG computes damageRating itself (see _fit_from_thresholds).
   4. percent delta    = current percent - pre-battle standing percentile   (signed)
 
 Metrics 2-4 ride on the EWMA coefficient k (community-reverse-engineered, not WG-confirmed).
@@ -18,9 +18,7 @@ summary supplies the track/spot split (adapter/battle_adapter._read_assist_split
 import bisect
 
 from moe_calculator.domain import battle_types as bt
-from moe_calculator.domain.constants import (
-    EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS, GOALPOST_PERCENTILE)
-from moe_calculator.domain.moe_estimate import norm_cdf, inv_norm_cdf
+from moe_calculator.domain.constants import EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS
 from moe_calculator.domain.rounding import iround_half_away
 
 
@@ -75,55 +73,50 @@ def combined_damage(damage, track, spot, stun, team_damage, merged_assist=0):
 
 
 def _fit_from_thresholds(thresholds):
-    """Build the damage->percent fit from the per-tank threshold points. The stops are known
-    points on the tank's combined-damage -> percentile curve: (D1,0.65),(D2,0.85),(D3,0.95)
-    and the goalpost D100 mapped to the 99th percentile (NOT 100 -- Phi^-1(1) is +infinity;
-    mirrors moe_estimate._targets).
+    """Build the damage->percent fit from the per-tank threshold points -- WG's OWN curve.
 
-    Returns the usable stops as [(damage, z), ...] ascending, or None when fewer than 2 remain
-    (missing / unusable table -> the caller's has_data False path). A single global (mu, sigma)
-    least-squares fit CANNOT pass through 4 stops: on the live EU tables its residuals were
-    sign-identical on every tank (D1 -3.1, D2 +1.6, D3 +0.9, D100 -0.25 percentile points), so
-    the 1-mark stop read ~61.9% instead of 65% and the slope just above a mark was ~50% too
-    steep -- an error the pre_percentile anchor does NOT cancel (it cancels only the level).
-    So the fit is solved EXACTLY per segment at evaluation time instead (see _smooth_percent).
+    `thresholds` is keyed by PERCENTILE (adapter/moe_wgapi): the four legacy anchors 65/85/95/100
+    always, plus 20/40/55/75 whenever WG returned them. Each entry is a known point on the tank's
+    combined-damage -> percentile curve, and WG's damageRating is EXACTLY piecewise-LINEAR
+    interpolation over those anchors plus an implicit (0 damage, 0 percent) origin -- confirmed by
+    back-test over 118 logged battles (level error mean +0.05pp, stdev 0.09, max 0.24; the
+    superseded piecewise-normal fit was mean +1.85, stdev 3.16, max 11.9, nearly all of it below
+    the lowest fitted stop). See tools/dev/analyze_battle_samples.py --backtest. So the fit IS the
+    anchor list -- nothing is solved, no z-space, no probit.
 
-    WG's API can return missing, zero, equal or non-monotone stops: keep only the strictly
-    increasing-in-damage ones. That both drops garbage and guarantees every segment has
-    d_hi > d_lo and z_hi > z_lo, hence sigma > 0 by construction."""
+    Returns [(damage, percent), ...] ascending with the origin first, or None when NO real anchor
+    survived (missing / unusable table -> the caller's has_data False path). WG's API can return
+    missing, zero, equal or non-monotone anchors: keep only the strictly increasing-in-damage ones,
+    which drops garbage and guarantees d_hi > d_lo on every segment (no zero divide)."""
     if not thresholds:
         return None
-    stops = []
-    for key, percent in zip((1, 2, 3, 100), MARK_PERCENTS + (GOALPOST_PERCENTILE,)):
-        try:
-            d = float(int(thresholds.get(key, 0) or 0))
-        except (TypeError, ValueError, AttributeError):
-            return None
-        if d <= 0.0 or (stops and d <= stops[-1][0]):
-            continue
-        stops.append((d, inv_norm_cdf(percent / 100.0)))
+    try:
+        anchors = sorted((int(pct), float(int(dmg or 0))) for pct, dmg in thresholds.items())
+    except (TypeError, ValueError, AttributeError):
+        return None
+    stops = [(0.0, 0.0)]
+    for percent, d in anchors:
+        if d > stops[-1][0]:
+            stops.append((d, float(percent)))
     if len(stops) < 2:
         return None
     return stops
 
 
 def _smooth_percent(damage, fit):
-    """Combined `damage` -> percent (0..100) on the piecewise-normal curve `fit`: pick the
-    bracketing stop pair, solve that segment's (mu, sigma) EXACTLY through both stops, then
-    100 * Phi((damage - mu) / sigma). So f(D_i) == 100*p_i at every stop, and within a segment
-    the curve still rides WG's normal distribution SHAPE instead of a straight chord.
-
-    Outside the stop range the nearest end segment's line is extended (no truncation, no
-    special case), so above D100 the curve keeps asymptoting smoothly toward 100."""
-    d = float(damage or 0.0)
-    i = 0
-    while i < len(fit) - 2 and d > fit[i + 1][0]:
-        i += 1
-    d_lo, z_lo = fit[i]
-    d_hi, z_hi = fit[i + 1]
-    sigma = (d_hi - d_lo) / (z_hi - z_lo)
-    mu = d_lo - sigma * z_lo
-    return _clamp(100.0 * norm_cdf((d - mu) / sigma), 0.0, 100.0)
+    """Combined `damage` -> percent (0..100) by plain linear interpolation over `fit`'s anchors,
+    i.e. WG's own damageRating (see _fit_from_thresholds). 0 at no damage (the origin stop), and
+    FLAT at the top anchor's percentile above it -- WG's table ends at the 100th percentile, so
+    there is nothing left to extrapolate into."""
+    # _clamp, not a bare float: it maps NaN to the low bound (a NaN would otherwise fall through
+    # every segment test and report the TOP percentile) and pins anything past the last anchor.
+    d = _clamp(float(damage or 0.0), 0.0, fit[-1][0])
+    percent = fit[-1][1]
+    for (d_lo, p_lo), (d_hi, p_hi) in zip(fit, fit[1:]):
+        if d <= d_hi:
+            percent = p_lo + (p_hi - p_lo) * (d - d_lo) / (d_hi - d_lo)
+            break
+    return _clamp(percent, 0.0, 100.0)
 
 
 def ewma_project_raw(prev_avg, cd, k=EWMA_K):
@@ -174,18 +167,19 @@ def build_battle_model(snapshot):
                     or bool(getattr(snapshot, "baseline_known", False)))
 
     # The live percent is ALWAYS anchored to WG's REAL career standing (pre_percentile, from
-    # the dossier's getDamageRating) plus ONLY this battle's increment. Our damage->percent
-    # curve and WG's damageRating are different functions of damage, so their ABSOLUTE values
-    # disagree -- but that constant bias cancels in the increment f(proj) - f(pre_avg). At
+    # the dossier's getDamageRating) plus ONLY this battle's increment f(proj) - f(pre_avg). At
     # battle start proj == prev*(1-k), so the increment is slightly negative and we open just
     # BELOW WG's number: the honest projection of an uncommitted (0-damage) battle, climbing as
-    # damage accrues. Anchoring stays necessary even though the fit is exact AT the stops --
-    # pre_avg generally sits BETWEEN stops, where our curve and WG's damageRating still differ,
-    # so f(pre_avg) != pre_percentile; the anchor guarantees the overlay opens at WG's standing.
+    # damage accrues.
     #
-    # The increment rides WG's distribution SHAPE via the piecewise normal fit. A table the fit
-    # can't use (fewer than 2 strictly increasing stops) degrades to 'no percent'
-    # (has_data False), never a crash.
+    # KEEP THE ANCHORED FORM. f now reproduces WG's damageRating rather than approximating it, so
+    # the anchor's job is no longer accuracy -- it is UI CONTINUITY: WG's anchor table drifts
+    # DAILY, so f(pre_avg) computed off today's table differs slightly from the pre_percentile the
+    # dossier recorded under an older one. Anchoring guarantees the overlay opens on exactly the
+    # number the garage just showed, and the drift cancels in the increment. Do not "simplify" it
+    # into a bare f(proj).
+    #
+    # A table with no usable anchor at all degrades to 'no percent' (has_data False), never a crash.
     fit = _fit_from_thresholds(thresholds)
     has_data = fit is not None
     if has_data:
@@ -234,11 +228,12 @@ def marks_from_percentile(pre_percentile):
 def mark_axis(thresholds, marks):
     """The (lo, hi) combined-damage axis ends for the progress bar, as floats.
 
-    lo = the requirement for the mark HELD -- thresholds[marks] -- with 0 as the left end at
-    0 marks (nothing held yet, so the axis starts at no damage). hi = the requirement for the
-    mark being CHASED -- thresholds[marks + 1] -- with the 100th-percentile goalpost
-    (thresholds[100]) as the right end at 3 marks, where there is no higher mark. Mirrors the
-    tuner's own axis (`nx = marks >= 3 ? 100 : marks + 1`).
+    `thresholds` is keyed by PERCENTILE, so a mark count indexes MARK_PERCENTS: lo = the
+    requirement for the mark HELD -- thresholds[MARK_PERCENTS[marks - 1]] -- with 0 as the left
+    end at 0 marks (nothing held yet, so the axis starts at no damage). hi = the requirement for
+    the mark being CHASED -- thresholds[MARK_PERCENTS[marks]] -- with the 100th-percentile
+    goalpost (thresholds[100]) as the right end at 3 marks, where there is no higher mark.
+    Mirrors the tuner's own axis (`nx = marks >= 3 ? 100 : marks + 1`).
 
     Returns (0.0, 0.0) when the table is missing or the resolved ends are not a usable
     ascending pair -- the caller's "no data" path (the bar hides rather than dividing by a
@@ -246,8 +241,8 @@ def mark_axis(thresholds, marks):
     thresholds = thresholds or {}
     marks = min(max(0, int(marks or 0)), 3)
     try:
-        lo = float(thresholds.get(marks, 0) or 0) if marks > 0 else 0.0
-        hi = float(thresholds.get(100 if marks >= 3 else marks + 1, 0) or 0)
+        lo = float(thresholds.get(MARK_PERCENTS[marks - 1], 0) or 0) if marks > 0 else 0.0
+        hi = float(thresholds.get(100 if marks >= 3 else MARK_PERCENTS[marks], 0) or 0)
     except (TypeError, ValueError, AttributeError):
         return 0.0, 0.0
     if hi <= lo:
@@ -268,16 +263,18 @@ def mark_axis(thresholds, marks):
 def efficiency_stops(thresholds):
     """The five damage stops (0.0, r65, r85, r95, r100) as floats, or None when unusable.
 
-    `thresholds` is snap.thresholds, i.e. {1: D65, 2: D85, 3: D95, 100: D100}. Upstream it is
-    ALL-OR-NOTHING (adapter/moe_wgapi drops a whole tank row unless all four percentiles parse,
-    and returns {} on a miss), so there is no partial-axis path to write here: either all four
-    requirements are present and strictly ascending, or this returns None and the caller's
-    has_data gate hides the bar. Non-monotone / zero stops are rejected the same way -- a
-    zero-width segment would divide by zero in efficiency_bar_x."""
+    `thresholds` is snap.thresholds, keyed by PERCENTILE, so these are keys 65/85/95/100 (it may
+    also carry the 20/40/55/75 enrichment anchors -- this bar's axis deliberately ignores them,
+    its four visual quarters ARE the four requirements). Upstream those four are ALL-OR-NOTHING
+    (adapter/moe_wgapi drops a whole tank row unless all four parse, and returns {} on a miss), so
+    there is no partial-axis path to write here: either all four requirements are present and
+    strictly ascending, or this returns None and the caller's has_data gate hides the bar.
+    Non-monotone / zero stops are rejected the same way -- a zero-width segment would divide by
+    zero in efficiency_bar_x."""
     thresholds = thresholds or {}
     stops = [0.0]
     try:
-        for key in (1, 2, 3, 100):
+        for key in MARK_PERCENTS + (100,):
             d = float(int(thresholds.get(key, 0) or 0))
             if d <= stops[-1]:
                 return None

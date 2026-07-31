@@ -6,14 +6,19 @@ Wargaming's public API exposes the real Marks-of-Excellence damage distribution 
 build variants. Endpoint (EU cluster):
 
     GET https://api.worldoftanks.eu/wot/tanks/mastery/
-        ?application_id=<APP_ID>&distribution=damage&percentile=65,85,95,100
+        ?application_id=<APP_ID>&distribution=damage&percentile=20,40,55,65,75,85,95,100
         &tank_id=<up to 100 comma-separated intCDs>
 
     -> {"status":"ok","data":{"distribution":{
-          "<tank_id>":{"65":D1,"85":D2,"95":D3,"100":D4}}, "updated_at":...}}
+          "<tank_id>":{"20":D,"40":D,"55":D,"65":D,"75":D,"85":D,"95":D,"100":D}},
+          "updated_at":...}}
 
-Percentiles 65/85/95/100 map straight onto our contract keys {1,2,3,100} (1/2/3 marks +
-the right-edge goalpost). Missing/invalid tank_ids are simply absent from `distribution`.
+WG stores EXACTLY these 8 anchors (flat below the 20th percentile, linearly interpolated
+between them -- which is how damageRating itself is computed), so we request all 8 and key the
+threshold dict by PERCENTILE. 65/85/95 are the 1/2/3-mark requirements and 100 is the bar's
+right-edge goalpost -- the four every consumer needs, so a row is accepted only when all four
+parse; 20/40/55/75 are optional enrichment that sharpens the in-battle interpolator's low end.
+Missing/invalid tank_ids are simply absent from `distribution`.
 
 Fetch behavior -- a persistent, capped (100) working set of OWNED tank ids ("the list"):
   * The list lives in its own file (moe_fetch_list.json), a {intCD: recency} map. It is
@@ -67,11 +72,14 @@ API_URL = "https://api.worldoftanks.%s/wot/tanks/mastery/" % REGION
 # it is empty in an unbuilt/source checkout, which just disables fetching (fail-soft).
 APP_ID = build_config.WG_APPLICATION_ID
 DISTRIBUTION = "damage"
-PERCENTILES = "65,85,95,100"
-# WG percentile (JSON string key) -> our threshold dict key. 65/85/95 = the 1/2/3-mark
-# combined-damage thresholds; 100 = the bar's right-edge goalpost (the battle interpolator
-# needs all four). A tank missing any of these is skipped (unusable).
-_PCT_TO_KEY = {"65": 1, "85": 2, "95": 3, "100": 100}
+# The 8 anchors WG stores (its cap is 10 percentile values per call). ALSO the threshold dict's
+# keys: the dict is keyed by PERCENTILE, so nothing is remapped on the way in.
+_PCTS = (20, 40, 55, 65, 75, 85, 95, 100)
+PERCENTILES = ",".join(str(p) for p in _PCTS)
+# The four a consumer cannot do without (1/2/3 marks + the goalpost): a row is all-or-nothing on
+# THESE, exactly as the old 4-percentile fetch was, so requesting 8 does not double our exposure
+# to a partial WG row. The other four are enrichment -- absent ones are just missing from the row.
+_REQUIRED_PCTS = (65, 85, 95, 100)
 _TIMEOUT = 15.0
 _AGENT = ("Mozilla/5.0 (compatible; 14th_ua-MoE-Calculator; "
           "+https://github.com/drizzer14/moe-calculator)")
@@ -85,7 +93,11 @@ _MAX_IDS_PER_REQUEST = 100                           # WG API cap on tank_id per
 # failure -- only on a genuine authoritative "no data" or after the retries are exhausted.
 _MAX_FETCH_RETRIES = 3
 _RETRY_BACKOFF_SECONDS = (2.0, 5.0, 15.0)            # backoff before retry attempt 1, 2, 3
-_STORE_VERSION = 3                                   # on-disk cache envelope version (v3 adds fetched_at)
+# On-disk cache envelope version. v3 added fetched_at; v4 re-keyed the rows from mark counts
+# {1,2,3,100} to PERCENTILES {20..100} -- a MANDATORY bump, since a v3 row read as percentiles
+# would map D65/D85/D95 onto the 1st/2nd/3rd percentile and produce garbage. fresh_table()
+# returns {} on any version mismatch, so old entries are DISCARDED (never merged) and refetched.
+_STORE_VERSION = 4
 _LIST_VERSION = 1                                    # on-disk fetch-list envelope version
 # Cache-freshness time throttle: while now < our last-fetch time + this, the cache is served
 # without a time-driven refetch. The primary invalidation is the updated_at-change trigger in
@@ -94,7 +106,7 @@ _LIST_VERSION = 1                                    # on-disk fetch-list envelo
 _REVALIDATE_SECONDS = constants.REVALIDATE_SECONDS
 
 # --- module state (main-thread only) -----------------------------------------
-_table = {}            # int_cd -> {1: dmg, 2: dmg, 3: dmg, 100: dmg}
+_table = {}            # int_cd -> {percentile: dmg} (the 8 anchors; 65/85/95/100 guaranteed)
 _updated_at = 0        # WG data `updated_at` (epoch s) of the newest fetch/adopted cache
 _fetched_at = 0        # OUR wall-clock (epoch s) at the newest fetch/adopted cache -- freshness anchor
 _loaded = False        # something is showable (a fetch completed, or the cache adopted)
@@ -115,8 +127,9 @@ _poll_cb = None
 
 def parse_response(text):
     """Parse a WG /tanks/mastery JSON body into (table, updated_at):
-      table      = {int_cd: {1,2,3,100: dmg}} -- a tank included only if all four percentiles
-                   are present;
+      table      = {int_cd: {percentile: dmg}} -- keyed by PERCENTILE, carrying whichever of the
+                   8 anchors parsed as a positive int, and a tank is included only if all of
+                   _REQUIRED_PCTS (65/85/95/100) did;
       updated_at = the response's data.updated_at (epoch s), or None.
     Any error (non-ok status, bad JSON, missing fields) yields ({}, None). Pure -- safe on the
     worker thread."""
@@ -148,24 +161,20 @@ def parse_response(text):
         except (TypeError, ValueError):
             continue
         row = {}
-        ok = True
-        for pct_str, key in _PCT_TO_KEY.items():
-            val = pcts.get(pct_str)
-            if val is None:
-                ok = False
-                break
+        for pct in _PCTS:
             try:
-                row[key] = int(val)
+                val = int(pcts.get(str(pct)))
             except (TypeError, ValueError):
-                ok = False
-                break
-        if ok:
+                continue
+            if val > 0:
+                row[pct] = val
+        if all(pct in row for pct in _REQUIRED_PCTS):
             table[cd] = row
     return table, updated_at
 
 
 def fresh_table(blob, now_epoch, region):
-    """Return the cached {int_cd: {1,2,3,100: dmg}} table from a persisted envelope iff it is
+    """Return the cached {int_cd: {percentile: dmg}} table from a persisted envelope iff it is
     the current store version, same region, and still within the revalidation window
     (now_epoch < fetched_at + 24h -- i.e. WE fetched it less than a day ago); otherwise {}
     (stale -> refetch). The window is anchored to our own fetch time, not WG's `updated_at`,
@@ -212,7 +221,7 @@ def valid_list(blob, region):
 # --- public API --------------------------------------------------------------
 
 def get_thresholds(int_cd):
-    """Return {1,2,3,100: dmg} for a vehicle, or {} if unknown / not fetched yet. Kicks off the
+    """Return {percentile: dmg} for a vehicle, or {} if unknown / not fetched yet. Kicks off the
     one-time start() on first call; on a cache miss, enqueues a single-tank fetch (the ready
     listener re-pushes to reveal the labels when it lands)."""
     if not _started:

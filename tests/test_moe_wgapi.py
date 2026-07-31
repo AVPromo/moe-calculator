@@ -3,17 +3,23 @@
 
 The engine-facing fetch/poll/persist code is exercised in-client; here we cover the pieces
 that need no game engine:
-  - moe_wgapi.parse_response  : WG /tanks/mastery JSON -> {int_cd: {1,2,3,100: dmg}}
-  - moe_wgapi.fresh_table     : per-day cache envelope validity (fresh adopts / stale drops)
+  - moe_wgapi.parse_response  : WG /tanks/mastery JSON -> {int_cd: {percentile: dmg}}
+  - moe_wgapi.fresh_table     : per-day cache envelope validity (fresh adopts / stale drops),
+                                INCLUDING the v3->v4 re-key guard
   - garage_roster.rank_by_recency : top-N owned intCDs by last-battle time (most recent first)
 """
 import json
+
+import pytest
 
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import garage_roster
 
 
 # --- parse_response ----------------------------------------------------------
+# The table is keyed by PERCENTILE, not by mark count: WG stores 8 anchors and we request all
+# of them. 65/85/95/100 are REQUIRED (a row missing any of them is dropped whole); 20/40/55/75
+# are optional enrichment that sharpens the in-battle interpolator's low end.
 
 _OK = {
     "status": "ok",
@@ -26,17 +32,69 @@ _OK = {
     },
 }
 
+# A full 8-anchor row -- the live EU table for int_cd 54657 (see test_battle_builder's
+# back-test regression pins).
+_EIGHT = {20: 528, 40: 1163, 55: 1549, 65: 1799, 75: 2104, 85: 2494, 95: 3042, 100: 3482}
 
-def test_parse_response_maps_percentiles_to_mark_keys():
+
+def _dist(row, tid="54657", updated_at=1783468800):
+    return json.dumps({"status": "ok", "data": {
+        "distribution": {tid: dict((str(k), v) for k, v in row.items())},
+        "updated_at": updated_at}})
+
+
+def test_parse_response_keys_the_row_by_percentile():
+    # NOT by mark count: the row's keys ARE WG's percentile values, so nothing is remapped on
+    # the way in (the v4 store re-key).
     table, updated_at = moe_wgapi.parse_response(json.dumps(_OK))
-    assert table[69153] == {1: 2544, 2: 3634, 3: 4512, 100: 5229}
-    assert table[1] == {1: 709, 2: 1064, 3: 1367, 100: 1500}
+    assert table[69153] == {65: 2544, 85: 3634, 95: 4512, 100: 5229}
+    assert table[1] == {65: 709, 85: 1064, 95: 1367, 100: 1500}
     assert updated_at == 1783468800
+
+
+def test_parse_response_keeps_all_eight_anchors_when_present():
+    table, _ = moe_wgapi.parse_response(_dist(_EIGHT))
+    assert table[54657] == _EIGHT
+
+
+def test_parse_response_accepts_a_legacy_four_only_row():
+    # 20/40/55/75 are enrichment, not requirements: a row carrying only the four the consumers
+    # need is still admitted (exactly as the old 4-percentile fetch was).
+    legacy = {65: 1799, 85: 2494, 95: 3042, 100: 3482}
+    assert moe_wgapi.parse_response(_dist(legacy))[0] == {54657: legacy}
+
+
+@pytest.mark.parametrize("missing", [65, 85, 95, 100])
+def test_parse_response_drops_a_row_missing_any_required_anchor(missing):
+    # All-or-nothing on 65/85/95/100 -- a partial row would half-draw both bars.
+    row = dict(_EIGHT)
+    del row[missing]
+    assert moe_wgapi.parse_response(_dist(row))[0] == {}
+
+
+@pytest.mark.parametrize("bad", [0, -50, None, "x"])
+def test_parse_response_drops_a_row_whose_required_anchor_is_unusable(bad):
+    row = dict(_EIGHT)
+    row[95] = bad
+    assert moe_wgapi.parse_response(_dist(row))[0] == {}
+
+
+@pytest.mark.parametrize("bad", [0, -50, None, "x"])
+def test_parse_response_omits_an_unusable_enrichment_anchor(bad):
+    # An enrichment anchor that didn't parse (or came back 0) must be ABSENT from the row, never
+    # stored as 0 -- a 0-damage anchor at the 40th percentile would flatten the interpolator's
+    # whole low end onto the origin.
+    row = dict(_EIGHT)
+    row[40] = bad
+    parsed = moe_wgapi.parse_response(_dist(row))[0][54657]
+    assert 40 not in parsed
+    assert parsed == dict((k, v) for k, v in _EIGHT.items() if k != 40)
 
 
 def test_parse_response_keys_are_ints():
     table, _ = moe_wgapi.parse_response(json.dumps(_OK))
     assert all(isinstance(cd, int) for cd in table)
+    assert all(isinstance(pct, int) for row in table.values() for pct in row)
 
 
 def test_parse_response_skips_tank_missing_a_percentile():
@@ -147,7 +205,7 @@ def test_poll_authoritative_ok_marks_seen_even_when_tank_absent(monkeypatch):
 
 def test_poll_authoritative_ok_with_data_caches_and_seen(monkeypatch):
     _reset_fetch_state(monkeypatch, inflight=(69153,))
-    row = {1: 2544, 2: 3634, 3: 4512, 100: 5229}
+    row = {65: 2544, 85: 3634, 95: 4512, 100: 5229}
     monkeypatch.setattr(moe_wgapi, "_thread",
                         _FakeThread([69153], ok=True, result={69153: row}, updated_at=123, attempt=0))
     moe_wgapi._poll()
@@ -182,16 +240,22 @@ _UPD = 1783468800      # WG's own updated_at (epoch s) -- stored, but NOT the fr
 _FETCHED = 1783600000  # when WE fetched it (epoch s) -- the freshness anchor
 
 
-def _blob(fetched_at=_FETCHED, updated_at=_UPD, region="eu"):
-    return {"version": moe_wgapi._STORE_VERSION, "updated_at": updated_at,
-            "fetched_at": fetched_at, "region": region,
-            "table": {"69153": {"1": 2544, "2": 3634, "3": 4512, "100": 5229}}}
+_ROW = {65: 2544, 85: 3634, 95: 4512, 100: 5229}
+
+
+_CURRENT = object()      # sentinel: `version=None` must stay usable as a real (bad) value
+
+
+def _blob(fetched_at=_FETCHED, updated_at=_UPD, region="eu", version=_CURRENT, row=None):
+    return {"version": moe_wgapi._STORE_VERSION if version is _CURRENT else version,
+            "updated_at": updated_at, "fetched_at": fetched_at, "region": region,
+            "table": {"69153": dict((str(k), v) for k, v in (row or _ROW).items())}}
 
 
 def test_fresh_table_within_window_adopts():
     # 1h after WE fetched -> still inside the 24h revalidation window.
     table = moe_wgapi.fresh_table(_blob(), _FETCHED + 3600, "eu")
-    assert table == {69153: {1: 2544, 2: 3634, 3: 4512, 100: 5229}}
+    assert table == {69153: _ROW}
 
 
 def test_fresh_table_past_revalidation_is_empty():
@@ -202,7 +266,48 @@ def test_fresh_table_stale_updated_at_still_adopts():
     # WG publishes with a lag, so updated_at can be days old; freshness is anchored to fetched_at,
     # so a recently-fetched cache is adopted even when its updated_at is far in the past.
     table = moe_wgapi.fresh_table(_blob(updated_at=_UPD - 5 * 24 * 3600), _FETCHED + 3600, "eu")
-    assert table == {69153: {1: 2544, 2: 3634, 3: 4512, 100: 5229}}
+    assert table == {69153: _ROW}
+
+
+# --- THE v3 -> v4 re-key guard (the hazard of the percentile re-key) ----------
+# A v3 row was keyed by MARK COUNT ({1,2,3,100}). Read as percentiles it maps D65/D85/D95 onto
+# the 1st/2nd/3rd percentile -- a still-fresh envelope full of garbage, silently. The ONLY thing
+# standing between a user's on-disk v3 cache and that misread is the store-version bump, so pin
+# it hard: the version is 4, a v3 envelope is DISCARDED WHOLE (never merged, never partially
+# adopted), and a v4 envelope is adopted.
+
+def test_store_version_is_four():
+    assert moe_wgapi._STORE_VERSION == 4
+
+
+def test_fresh_table_rejects_a_v3_envelope_whole():
+    v3 = _blob(version=3, row={1: 2544, 2: 3634, 3: 4512, 100: 5229})
+    # ...even though it is otherwise perfectly fresh and same-region.
+    assert moe_wgapi.fresh_table(v3, _FETCHED + 3600, "eu") == {}
+
+
+def test_fresh_table_adopts_the_v4_envelope():
+    assert moe_wgapi.fresh_table(_blob(version=4), _FETCHED + 3600, "eu") == {69153: _ROW}
+
+
+@pytest.mark.parametrize("version", [None, 0, 1, 2, 3, "4", 5])
+def test_fresh_table_rejects_every_other_store_version(version):
+    # Forward AND backward: only the exact current int version is adopted, so a future re-key
+    # bump can't be read by this build either.
+    assert moe_wgapi.fresh_table(_blob(version=version), _FETCHED + 3600, "eu") == {}
+
+
+def test_load_cache_discards_a_v3_file_on_disk(monkeypatch, tmp_path):
+    # End-to-end through the real read path: a v3 file written by an older build must leave
+    # _table EMPTY (-> refetch), not populate it with mark-count keys.
+    _use_tmp(monkeypatch, tmp_path)
+    moe_wgapi.write_json(moe_wgapi._store_path(),
+                         _blob(version=3, row={1: 2544, 2: 3634, 3: 4512, 100: 5229}))
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: _FETCHED + 3600)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {}
+    assert moe_wgapi._updated_at == 0        # nothing adopted -> no stamps carried over either
+    assert moe_wgapi._fetched_at == 0
 
 
 def test_fresh_table_other_region_is_empty():
@@ -359,7 +464,7 @@ def test_write_json_fails_soft(tmp_path):
 
 def test_threshold_cache_save_load_round_trip(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
-    row = {1: 2544, 2: 3634, 3: 4512, 100: 5229}
+    row = dict(_EIGHT)                                    # a full 8-anchor row round-trips
     monkeypatch.setattr(moe_wgapi, "_table", {69153: dict(row)})
     monkeypatch.setattr(moe_wgapi, "_updated_at", _UPD)
     monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
@@ -377,7 +482,7 @@ def test_threshold_cache_save_load_round_trip(monkeypatch, tmp_path):
 
 def test_threshold_cache_stale_on_disk_is_not_adopted(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
-    monkeypatch.setattr(moe_wgapi, "_table", {69153: {1: 1, 2: 2, 3: 3, 100: 4}})
+    monkeypatch.setattr(moe_wgapi, "_table", {69153: {65: 1, 85: 2, 95: 3, 100: 4}})
     monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
     moe_wgapi._save_cache()
 

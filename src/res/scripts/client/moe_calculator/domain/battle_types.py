@@ -34,8 +34,9 @@ class BattleSnapshot(object):
                          (BUG B -- dash the metrics). See adapter/baseline_cache.seen().
 
     Reference data + gating:
-    - `thresholds`   : {1: dmg, 2: dmg, 3: dmg, 100: dmg} per-tank combined-damage
-                       distribution stops; {} when unknown / not loaded yet.
+    - `thresholds`   : {percentile: dmg} per-tank combined-damage distribution anchors, keyed by
+                       PERCENTILE -- 65/85/95/100 guaranteed, 20/40/55/75 when WG returned them
+                       ({} when unknown / not loaded yet).
     - `nation`       : nation id string (optional; for any art).
     - `has_vehicle`  : whether a player vehicle was readable (False -> overlay hidden).
     - `in_battle`    : whether combat is active (arena BATTLE period; gates the overlay).

@@ -19,8 +19,10 @@ def _patch_reads(monkeypatch, cd=1073, eff=(2000, 500, 0), thr=None,
     monkeypatch.setattr(ba, "_player_nation", lambda d: nation)
     monkeypatch.setattr(ba, "_in_battle", lambda: in_battle)
     monkeypatch.setattr(ba, "_is_spectating", lambda: spectating)
+    # `thresholds` is keyed by PERCENTILE (65/85/95 + the 100 goalpost), not by mark count.
     monkeypatch.setattr(ba.moe_wgapi, "get_thresholds",
-                        lambda c: dict(thr or {1: 1, 2: 2, 3: 3, 100: 4}))
+                        lambda c: dict(thr if thr is not None else {65: 1, 85: 2, 95: 3, 100: 4}))
+    monkeypatch.setattr(ba.moe_wgapi, "needs_estimate", lambda c: False)
     # In battle the lobby dossier is None -> engine_adapter._read_moe returns zeros; the
     # baseline must come from the garage cache instead.
     monkeypatch.setattr(ba.engine_adapter, "_read_moe", lambda c: (0, 0.0, 0))
@@ -108,5 +110,59 @@ def test_snapshot_assist_split_defaults_zero(monkeypatch):
     _patch_reads(monkeypatch)
     snap = ba.build_battle_snapshot()
     assert snap.track_assist == 0 and snap.spot_assist == 0
+
+
+# --- the offline-estimator fallback (parity with engine_adapter.build_snapshot) ---
+# THE bug this closes: engine_adapter fell back to the offline estimator when a tank's WG request
+# completed with no data, and battle_adapter did NOT. So on such a tank the GARAGE rendered real
+# numbers while every in-battle widget sat on an empty table and showed nothing at all.
+
+def test_snapshot_estimates_when_the_wg_request_errored(monkeypatch):
+    _patch_reads(monkeypatch, thr={})
+    monkeypatch.setattr(ba.moe_wgapi, "needs_estimate", lambda c: True)
+    calls = []
+    monkeypatch.setattr(ba.engine_adapter, "_estimate_thresholds",
+                        lambda pct, dmg: calls.append((pct, dmg)) or {65: 11, 85: 22,
+                                                                      95: 33, 100: 44})
+    baseline_cache.remember(1073, 60.0, 1500)
+    snap = ba.build_battle_snapshot()
+    assert snap.thresholds == {65: 11, 85: 22, 95: 33, 100: 44}
+    # ...fed the SAME career point the garage path feeds it (the cached baseline).
+    assert calls == [(60.0, 1500)]
+
+
+def test_snapshot_waits_when_the_fetch_is_still_pending(monkeypatch):
+    # needs_estimate False means the fetch has not answered yet -> do NOT estimate; the ready
+    # listener re-pushes when it lands. Estimating here would flash extrapolated numbers first.
+    _patch_reads(monkeypatch, thr={})
+    monkeypatch.setattr(ba.moe_wgapi, "needs_estimate", lambda c: False)
+    called = []
+    monkeypatch.setattr(ba.engine_adapter, "_estimate_thresholds",
+                        lambda pct, dmg: called.append(1) or {65: 11})
+    baseline_cache.remember(1073, 60.0, 1500)
+    assert ba.build_battle_snapshot().thresholds == {}
+    assert called == []
+
+
+def test_snapshot_never_estimates_over_a_real_wg_table(monkeypatch):
+    # A present WG table always wins -- the estimator is the fallback, not an override.
+    _patch_reads(monkeypatch)
+    monkeypatch.setattr(ba.moe_wgapi, "needs_estimate", lambda c: True)
+    monkeypatch.setattr(ba.engine_adapter, "_estimate_thresholds",
+                        lambda pct, dmg: {65: 11, 85: 22, 95: 33, 100: 44})
+    baseline_cache.remember(1073, 60.0, 1500)
+    assert ba.build_battle_snapshot().thresholds == {65: 1, 85: 2, 95: 3, 100: 4}
+
+
+def test_the_estimated_table_actually_drives_the_battle_readouts(monkeypatch):
+    # The point of the fallback: end-to-end, an estimated table must make the battle model report
+    # a percent (has_data True) where before it had an empty table and reported nothing.
+    from moe_calculator.domain.battle_builder import build_battle_model
+    _patch_reads(monkeypatch, thr={})
+    monkeypatch.setattr(ba.moe_wgapi, "needs_estimate", lambda c: True)
+    baseline_cache.remember(1073, 60.0, 1500)
+    snap = ba.build_battle_snapshot()          # the REAL estimator, not a stub
+    assert set(snap.thresholds) == {65, 85, 95, 100}
+    assert build_battle_model(snap).has_data is True
 
 

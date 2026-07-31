@@ -88,7 +88,7 @@ def _snap(**over):
         track_assist=_EngineNum(300), spot_assist=_EngineNum(100),
         team_damage=_EngineNum(0),
         pre_avg_damage=_EngineNum(1850), pre_percentile=_EngineNum(73.67),
-        thresholds={1: 2544, 2: 3634, 3: 4512, 100: 5229},
+        thresholds={65: 2544, 85: 3634, 95: 4512, 100: 5229},
         has_vehicle=True, in_battle=True, is_spectating=False, baseline_known=True,
     )
     kwargs.update(over)
@@ -281,7 +281,7 @@ def test_thresholds_are_copied_as_a_plain_dict(monkeypatch):
     snap = _snap()
     battle_bridge._note_prediction(snap, _model())
     battle_bridge._flush_prediction()
-    assert payloads[0]["thresholds"] == {1: 2544, 2: 3634, 3: 4512, 100: 5229}
+    assert payloads[0]["thresholds"] == {65: 2544, 85: 3634, 95: 4512, 100: 5229}
     assert payloads[0]["thresholds"] is not snap.thresholds     # a copy, not the live table
 
 

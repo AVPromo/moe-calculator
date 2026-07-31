@@ -11,8 +11,10 @@ from moe_calculator.bridge import wulf_args as w
 # --- build_model -------------------------------------------------------------
 
 def _snap(**kw):
+    # `thresholds` is keyed by PERCENTILE (the WG API's own anchors) -- 65/85/95 are the
+    # 1/2/3-mark requirements, NOT the mark counts.
     base = dict(vehicle_int_cd=1073, nation="germany", marks=1, cur_percentile=72.5,
-                cur_avg_damage=1500, thresholds={1: 1291, 2: 1858, 3: 2287})
+                cur_avg_damage=1500, thresholds={65: 1291, 85: 1858, 95: 2287})
     base.update(kw)
     return t.MoESnapshot(**base)
 
@@ -63,16 +65,24 @@ def test_missing_thresholds_degrade_gracefully():
 
 
 def test_partial_thresholds():
-    m = build_model(_snap(thresholds={1: 1291}))
+    m = build_model(_snap(thresholds={65: 1291}))
     assert [tk.damage_required for tk in m.ticks] == [1291, 0, 0]
     assert m.has_data is True
 
 
+def test_mark_ticks_read_percentile_keys_not_mark_counts():
+    # REGRESSION for the percentile re-key: a table keyed by MARK COUNT ({1,2,3}) must read as
+    # NO data at all here, or a stale v3 cache would light the ticks up with D65 under D95's label.
+    m = build_model(_snap(thresholds={1: 1291, 2: 1858, 3: 2287}))
+    assert [tk.damage_required for tk in m.ticks] == [0, 0, 0]
+    assert m.has_data is False
+
+
 def test_end_damage_required_from_100_key():
     # The 100th-percentile goalpost comes from thresholds[100]; absent -> 0.
-    m = build_model(_snap(thresholds={1: 1291, 2: 1858, 3: 2287, 100: 2641}))
+    m = build_model(_snap(thresholds={65: 1291, 85: 1858, 95: 2287, 100: 2641}))
     assert m.end_damage_required == 2641
-    assert build_model(_snap(thresholds={1: 1291})).end_damage_required == 0
+    assert build_model(_snap(thresholds={65: 1291})).end_damage_required == 0
     assert build_model(_snap(thresholds={})).end_damage_required == 0
 
 

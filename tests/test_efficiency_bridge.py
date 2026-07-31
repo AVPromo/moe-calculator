@@ -61,7 +61,7 @@ from moe_calculator.bridge import mod_settings             # noqa: E402
 from moe_calculator.bridge.view_models import EfficiencyVM  # noqa: E402
 from moe_calculator.domain import battle_types as bt       # noqa: E402
 
-THR = {1: 2450, 2: 3050, 3: 3620, 100: 4400}
+THR = {65: 2450, 85: 3050, 95: 3620, 100: 4400}   # keyed by PERCENTILE, not by mark count
 
 # The property names EfficiencyVM actually declares, derived from its OWN setters -- so this
 # fake can never accept a set*() the shipped model does not have (nor miss one it does).
@@ -188,8 +188,15 @@ def test_a_usable_axis_pushes_the_four_requirements_and_the_band():
 
 
 def test_a_partial_threshold_table_is_an_unusable_axis():
-    props = _push(2000, thresholds={1: 2450, 2: 3050, 3: 3620})
+    props = _push(2000, thresholds={65: 2450, 85: 3050, 95: 3620})
     assert props["hasData"] is False
+
+
+def test_a_mark_count_keyed_table_is_an_unusable_axis():
+    # A stale v3 cache row ({1,2,3,100}) must read as NO axis, never as D65 mis-labelled as the
+    # 1st-percentile requirement. moe_wgapi's _STORE_VERSION bump is the primary guard; this is
+    # the domain-side backstop.
+    assert _push(2000, thresholds={1: 2450, 2: 3050, 3: 3620, 100: 4400})["hasData"] is False
 
 
 # --- push_efficiency's own visibility gate ------------------------------------

@@ -10,8 +10,9 @@ from moe_calculator.domain.constants import (
     PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET)
 from moe_calculator.domain.positioning import anchor_centred
 
-# The shape battle_adapter fills from moe_wgapi.get_thresholds(): D65 / D85 / D95 / D100.
-THR = {1: 2450, 2: 3050, 3: 3620, 100: 4400}
+# The shape battle_adapter fills from moe_wgapi.get_thresholds(): D65 / D85 / D95 / D100, keyed
+# by PERCENTILE (mark_axis indexes MARK_PERCENTS into it, not MARK_COUNTS).
+THR = {65: 2450, 85: 3050, 95: 3620, 100: 4400}
 
 
 # --- marks_from_percentile ----------------------------------------------------
@@ -62,13 +63,27 @@ def test_axis_is_unusable_without_a_threshold_table():
 
 def test_axis_is_unusable_when_the_chased_end_is_missing():
     # A partial WG table: the mark held is known but the next requirement is not.
-    assert mark_axis({1: 2450}, 1) == (0.0, 0.0)
+    assert mark_axis({65: 2450}, 1) == (0.0, 0.0)
 
 
 def test_axis_is_unusable_when_the_ends_are_not_ascending():
     # WG can return non-monotone stops; a zero-or-negative-width axis must degrade, not divide.
-    assert mark_axis({1: 3050, 2: 3050, 100: 4400}, 1) == (0.0, 0.0)
-    assert mark_axis({1: 3100, 2: 3050, 100: 4400}, 1) == (0.0, 0.0)
+    assert mark_axis({65: 3050, 85: 3050, 100: 4400}, 1) == (0.0, 0.0)
+    assert mark_axis({65: 3100, 85: 3050, 100: 4400}, 1) == (0.0, 0.0)
+
+
+def test_axis_reads_percentile_keys_not_mark_counts():
+    # REGRESSION for the percentile re-key: a stale mark-count-keyed table ({1,2,3,100}) must
+    # degrade to no axis, never resolve D65/D85 as the 1st/2nd-percentile requirements.
+    assert mark_axis({1: 2450, 2: 3050, 3: 3620, 100: 4400}, 1) == (0.0, 0.0)
+
+
+def test_axis_ignores_the_enrichment_anchors():
+    # The 20/40/55/75 anchors ride in the same dict; the mark axis's ends are 65/85/95/100 only.
+    enriched = dict(THR)
+    enriched.update({20: 528, 40: 1163, 55: 1549, 75: 2104})
+    assert mark_axis(enriched, 1) == (2450.0, 3050.0)
+    assert mark_axis(enriched, 0) == (0.0, 2450.0)
 
 
 def test_axis_clamps_a_nonsense_mark_count():

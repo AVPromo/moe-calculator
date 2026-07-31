@@ -61,35 +61,45 @@ destroys it. `battle_view.open_window()`/`close_window()` keep a `_active` singl
 - **Projection** — `ewma_project`: `proj = round_half_away(pre_avg + EWMA_K·(C − pre_avg))`,
   `EWMA_K = 2/(N+1) = 2/101` (`constants.py`; community-derived, not WG-confirmed). A 0-damage
   battle IS folded, so the overlay opens slightly below career standing.
-- **damage → percent: an EXACT-at-stops piecewise normal fit.** Two functions:
-  - `_fit_from_thresholds(thresholds)` → the usable **stops** `[(damage, z), …]` ascending, or
-    `None`. Stops are `(D1, 0.65) (D2, 0.85) (D3, 0.95) (D100, GOALPOST_PERCENTILE/100 = 0.99)`
-    (0.99 not 1.0 — `Phi⁻¹(1)` is +∞); `z = inv_norm_cdf(p)`. A stop with `d <= 0` or
-    `d <= the last kept d` is dropped (WG can return missing / zero / non-monotone stops), which
-    guarantees every segment has `d_hi > d_lo` **and** `z_hi > z_lo`, i.e. `sigma > 0` by
-    construction. `< 2` usable stops → `None` → `has_data=False` → **the overlay hides the
-    percent** (`cur_percent`/`pct_delta` = 0). That degrade is the only fallback — there is no
-    chord/linear-interp path (see the caveat below).
-  - `_smooth_percent(damage, fit)` picks the **bracketing** stop pair (the end segments are
-    extended for both tails — no truncation, so above D100 the curve keeps asymptoting toward
-    100) and solves that segment exactly: `sigma = (d_hi−d_lo)/(z_hi−z_lo)`,
-    `mu = d_lo − sigma·z_lo`, `pct = clamp(100·norm_cdf((d−mu)/sigma), 0, 100)`.
-  - **Invariant to preserve: `f(D_i) == 100·p_i` at EVERY stop.** Inside a segment the curve still
-    rides WG's normal distribution *shape* rather than a straight chord.
-- **The readout is ANCHORED** — `cur_percent = clamp(pre_percentile + inc, 0, 100)` with
-  `inc = f(proj) − f(pre_avg)` (and `pct_delta = inc`). WG's own dossier `damageRating`
-  (`pre_percentile`) sets the **level**; the fit only supplies the **increment**. The anchor is
-  still required even though the fit is exact at the stops, because `pre_avg` generally sits
-  *between* stops, where our curve and WG's `damageRating` still disagree.
-- **No linear-interp fallback, and the exact fit is the PRIMARY path** — not a fallback. The
-  removed `damage_to_percent` / `_threshold_stops` / `_interp_percent` chord interpolation was
-  provably dead; don't re-add it. An earlier **global OLS** (mu, sigma) fit over the 4 stops is
-  also gone: it could not pass through them (live-EU residuals D1 −3.1, D2 +1.6, D3 +0.9,
-  D100 −0.25 pts), and the anchor cancels only a *level* bias, never a *slope* one.
-- `moe_estimate.fit_mu_sigma` (the real OLS, with its `MIN_Z_SPREAD` / `Sxx<=0` guards) **is still
-  live**, but ONLY for `thresholds_from_samples` — the WG-API-error fallback
-  (`adapter/engine_adapter.py::_estimate_thresholds`) that derives a whole threshold table from
-  the player's single dossier point. The battle mapping does not use it.
+- **damage → percent: piecewise-LINEAR over WG's anchors plus a `(0, 0)` origin.** This is not an
+  approximation of WG's `damageRating` — it **is** `damageRating`, reproduced to max **0.24 pp**
+  over 118 real logged battles (`tools/dev/analyze_battle_samples.py --backtest`). Nothing is
+  solved: no z-space, no probit, no normal CDF.
+  - **`thresholds` is keyed by PERCENTILE** (`20, 40, 55, 65, 75, 85, 95, 100` — the 8 anchors WG
+    actually stores; `adapter/moe_wgapi._PCTS`), *not* by mark count. `65/85/95/100` are the
+    required legacy four (a WG row is dropped unless all four parse); `20/40/55/75` are optional
+    enrichment that only adds resolution low on the axis.
+  - `_fit_from_thresholds(thresholds)` → `[(0.0, 0.0), (damage, percentile), …]` ascending — the
+    origin stop first, then the surviving anchors. **The fit IS the anchor list.** An anchor whose
+    damage is not strictly greater than the last kept one is dropped individually (WG can return
+    missing / zero / equal / non-monotone anchors), which guarantees `d_hi > d_lo` on every segment
+    so the interpolation never divides by zero. Returns `None` only when **no real anchor
+    survived** (falsy / unparseable table, or every anchor `<= 0`) → `has_data=False` → the overlay
+    hides the percent (`cur_percent`/`pct_delta` = 0). One surviving anchor is enough.
+  - `_smooth_percent(damage, fit)` — plain linear interpolation over `fit`: `0` at no damage (the
+    origin stop) and **FLAT** at the top anchor's percentile above it (WG's table ends at the 100th
+    percentile; there is nothing to extrapolate into). `_clamp` not `float()` on the input, so a
+    NaN maps to the low bound instead of reporting the top percentile.
+  - **The origin stop is load-bearing.** The superseded piecewise-normal fit was exact at its four
+    stops but had nothing anchoring it *below* `D65`, and read mean **+6.71 pp** high wherever
+    `pre_avg < 0.3·D65` (max error 11.9 pp) — nearly all its error, band-localised. Never drop it.
+  - Independently corroborated by `tv.lebwa.gunmarks` (`linierInterpretator` over the same 8
+    stops), which we already matched on `EWMA_K` and on the combined-damage formula.
+- **The readout is ANCHORED, and the anchor is now UI CONTINUITY — not accuracy.**
+  `cur_percent = clamp(pre_percentile + inc, 0, 100)` with `inc = f(proj) − f(pre_avg)` (and
+  `pct_delta = inc`). Since `f` now reproduces `damageRating`, the anchor's job is that WG's anchor
+  table **drifts daily**: `f(pre_avg)` off today's table differs slightly from the `pre_percentile`
+  the dossier recorded under an older one, so anchoring guarantees the overlay opens on exactly the
+  number the garage just showed and the drift cancels in the increment. **Keep it both ways** —
+  don't remove it chasing accuracy (unanchored is only marginally better *centred*: mean +0.002 vs
+  +0.045, and it would visibly jump at battle start), and don't remove it as redundant.
+- **Deleted with the old model:** the per-segment `(mu, sigma)` solve, `moe_estimate.norm_cdf`, and
+  before it a global OLS fit over the 4 stops. `moe_estimate.inv_norm_cdf` and `fit_mu_sigma` (with
+  their `MIN_Z_SPREAD` / `Sxx<=0` guards) **are still live**, but ONLY for
+  `thresholds_from_samples` — the WG-API-error fallback (`engine_adapter._estimate_thresholds`,
+  which `battle_adapter` now also takes) that derives a whole threshold table from the player's
+  single dossier point. `GOALPOST_PERCENTILE` belongs to that estimator alone; the battle mapping
+  does not use any of it.
 - The `~`/`approx` plumbing was fully removed per user.
 
 ## VM slots (`bridge/view_models.py::BattleMoEVM`)

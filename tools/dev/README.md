@@ -77,9 +77,48 @@ B.refresh()
 & "<py3>" tools\dev\analyze_battle_samples.py                  # default prefs path
 & "<py3>" tools\dev\analyze_battle_samples.py <file.jsonl> --min-delta 0.5
 & "<py3>" tools\dev\analyze_battle_samples.py --self-check     # assert-based self-test
+& "<py3>" tools\dev\analyze_battle_samples.py --backtest       # shipped-model back-test (fetches WG once)
 ```
 The percent is anchored (`cur = pre_percentile + inc`), so a constant offset cancels —
 read the OLS `residual ~ pct_delta` verdict + the buckets, not the mean alone.
+
+**Two row classes are NOT samples** and the loader drops both (they are counted in the
+`skipped:` line): `has_baseline false` (the overlay dashed the percent out, so nothing was
+ever shown — the two in this log carry residuals of +79/+70) and a repeat of
+`(int_cd, post_battles)` (the same battle re-logged from a replay watch, carrying a stale
+pre-baseline — the one in this log reads `pre_percentile 50.0` against a real `34.79`). With
+all three present the OLS slope reads t=-0.6 instead of its true t=+4.5, i.e. the poisoned
+rows can invert the verdict.
+
+**The default report is HISTORICAL, `--backtest` is current.** `residual` is a stored field —
+whatever the mod believed *at the time it logged the row* — so every pre-1.6.x row carries the
+superseded normal fit's error and the default mode still verdicts `t=+4.5` until enough battles
+are logged by the shipped linear model. `--backtest` re-derives the error from the shipped code
+and is the only mode that reflects HEAD.
+
+The log **spans the threshold re-key**, so it carries two `thresholds` shapes: pre-1.6.x rows
+keyed by MARK COUNT (`{1,2,3,100}` = D65/D85/D95/D100) and later rows keyed by PERCENTILE
+(`{20,40,55,65,75,85,95,100}`). The loader normalises legacy `1/2/3 → 65/85/95` on read (the
+key sets are disjoint apart from `100`) and the `thresholds:` header line counts each shape —
+left unmapped, a legacy row feeds the shipped fit D65 as the **1st** percentile and looks like
+garbage the fit accepts silently.
+
+`--backtest` answers one question: **does the SHIPPED damage→percent model still reproduce WG's
+own percentile?** The model is imported from `domain/battle_builder` (never re-implemented) and
+fed the EIGHT anchors WG stores, exactly as the shipped adapter now fetches them. The strongest
+test needs no prediction at all: `post_avg_damage` and `post_percentile` are BOTH read off the
+dossier, so `f(post_avg) - post_percentile` measures the mapping directly. The 8 anchors need
+one live WG call (batched, `.env` app_id, region eu, max 10 percentiles × 100 tank_ids);
+`--cache8` caches them to JSON so re-runs are offline.
+
+The finding this back-test banked, now shipped: WG's `damageRating` **IS** piecewise-linear
+interpolation over those 8 anchors plus a `(0 damage, 0 percent)` origin stop. Confirmed over
+118 logged rows — level error mean **+0.047**, stdev **0.088**, max **0.238**, and
+`residual ~ inc` slope **+0.004 (t=+0.27)** where the superseded piecewise-normal fit gave
+`+0.19 (t=+4.5)`. Those are the numbers a re-run must still print; a drift is a **shipped-code**
+regression, not a tool one. The normal-fit comparison arm is **gone** (it cannot be reproduced
+from shipped code any more, and its job is done); `lin_percent()` stays only as the independent
+oracle that `--self-check` sweeps against the shipped model.
 
 ## The shared harness shim (`lib/gf_check_shim.js`)
 Both in-battle bars are thin callers of ONE shared module,
