@@ -12,10 +12,11 @@ selected vehicle:
   you started the battle.
 - **In battle, centre screen** *(off by default)* — a transient progress bar that fades in,
   holds for about five seconds and fades out on its own; **hold Alt** to bring it up at any
-  time. Two mutually exclusive variants: **Moving Average** (your projected average between
-  the mark you hold and the next mark's requirement, plus this battle's contribution) or
-  **Damage Efficiency** (this battle's damage against the 65 / 85 / 95 / 100 %
-  requirements). Turn it on in Settings.
+  time. Two mutually exclusive variants: **Damage Efficiency** *(default)* (this battle's
+  damage against the 65 / 85 / 95 / 100 % requirements) or **Moving Average** (your projected
+  average between the mark you hold and the next mark's requirement, plus this battle's
+  contribution). Turn it on in Settings, where three switches also control when it comes up
+  (on events, on Alt, or always).
 
 It uses the game's own mark art.
 
@@ -34,7 +35,7 @@ It uses the game's own mark art.
 ## Install with the installer (recommended)
 
 1. Close World of Tanks completely (exit the Game Center launcher too).
-2. Run **`MoECalculator-Setup-1.6.0.exe`**.
+2. Run **`MoECalculator-Setup-1.7.0.exe`**.
 3. Confirm your World of Tanks folder when the installer shows it — the folder that
    contains `version.xml`. The installer detects it automatically in most cases.
 4. If a newer version is available on GitHub, the installer offers to download and run the
@@ -62,14 +63,14 @@ installer. OpenWG GameFace and ModsSettingsAPI stay in place for other mods that
    The folder name matches your installed client version. After a game update the version
    changes and you move the mod into the new version folder.
 
-3. Copy **`com.14th_ua.moe_calculator_1.6.0.wotmod`** into that folder.
+3. Copy **`com.14th_ua.moe_calculator_1.7.0.wotmod`** into that folder.
 4. Delete any older version of this mod from the same folder first.
 5. *(Optional)* Add **ModsSettingsAPI** (`aslain.modssettingsapi`) into the same folder to
    get the in-game settings panel. Without it the mod runs with both widgets enabled.
 6. Fully restart the game client: exit completely and relaunch.
 
 The `mods\2.3.1.0\` folder then holds the OpenWG GameFace `.wotmod`,
-`com.14th_ua.moe_calculator_1.6.0.wotmod`, and (optionally) the ModsSettingsAPI `.wotmod`.
+`com.14th_ua.moe_calculator_1.7.0.wotmod`, and (optionally) the ModsSettingsAPI `.wotmod`.
 
 ---
 
@@ -86,29 +87,37 @@ The `mods\2.3.1.0\` folder then holds the OpenWG GameFace `.wotmod`,
 ## Settings
 
 With **ModsSettingsAPI** installed, open the in-game **Modification list** window (added by
-the bundled Mods List API) and find **14th_ua's MoE Calculator**. The panel has two columns.
+the bundled Mods List API) and find **14th_ua's MoE Calculator**. The panel has two columns,
+each grouped into named categories; a feature's own on/off switch is simply labelled
+**Enabled**.
 
 **Column 1 — in battle:**
 
-- **In-Battle Widget** *(on)* — the overlay over the HUD. Its two options below are only
-  available while it's on:
-  - **Show on Alt Key** *(off)* — show the overlay only while **Alt** is held.
-  - **Counted Assistance** *(off)* — add a third overlay row with your counted assistance.
-- **Progress Bar** *(off)* — the transient centre-screen bar. A separate feature from the
-  In-Battle Widget, so it works whether that one is on or off. The two options beneath it
-  pick which bar you get: **Moving Average** (the default) or **Damage Efficiency**. The
-  bar's position is not configurable.
+- **Battle Calculator** — **Enabled** *(on)* controls the overlay over the HUD. Its children
+  are only available while it's on:
+  - **Alt Press** *(off)* — show the overlay only while **Alt** is held.
+  - **Counted Assistance Row** *(on)* — add a third overlay row with your counted assistance.
+- **Battle Progress** — **Enabled** *(off)* controls the transient centre-screen bar, a
+  separate feature from the Battle Calculator, so it works whether that one is on or off:
+  - **Events** / **Alt Press** / **Always** *(on / on / off)* — three switches deciding
+    *when* the bar comes up: on a tracked battle event, while Alt is held, or permanently
+    (which then greys out the other two).
+  - **Mode** — **Damage Efficiency** *(the default)* or **Moving Average**.
+  - **Scale** — **Default** or **Large**.
+  - **Transitions** *(on)*, with **Events** / **Alt Press** children — whether the bar
+    animates its entry/exit for each trigger, or appears and disappears instantly.
+  - The bar's position is not configurable.
 
 **Column 2 — in the Garage:**
 
-- **In-Garage Widget** *(on)* — the Garage percentile bar.
-- **Widget position (px)** — where the Garage widget is pinned. **Ctrl+drag** the widget to
-  move it (**Shift** locks to one axis); the steppers show the pinned top-left position:
-  - **Horizontal (left X)** / **Vertical (top Y)** — pixels from the left / top screen edge.
-    **0 / 0** is the default bottom-right position, which the panel's per-mod **Reset** also
-    restores.
+- **Garage Widget** — **Enabled** *(on)* controls the Garage percentile bar.
+- **Layout** — the Garage widget's position:
   - **Follow Carousel Mode** *(on)* — a dragged widget keeps shifting vertically with the
     vehicle carousel so it never overlaps it. When off, it stays put.
+  - **Horizontal (left X)** / **Vertical (top Y)** — where the widget is pinned, in pixels
+    from the left / top screen edge. **Ctrl+drag** the widget to move it (**Shift** locks to
+    one axis). **0 / 0** is the default bottom-right position, which the panel's per-mod
+    **Reset** also restores.
 
 Changes apply immediately.
 
@@ -137,7 +146,7 @@ Changes apply immediately.
 ## Uninstalling
 
 Remove the mod through its Windows **Apps & features** entry, or delete
-`com.14th_ua.moe_calculator_1.6.0.wotmod` from `mods\<version>\`, then restart the client.
+`com.14th_ua.moe_calculator_1.7.0.wotmod` from `mods\<version>\`, then restart the client.
 
 ---
 
