@@ -1391,9 +1391,9 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     assert mod_settings.counted_assistance_enabled() is False
     assert mod_settings.progress_bar_enabled() is True
     # The two non-bool values: each must come out the bump as the INT index the user chose, not
-    # booled into True by _coerce's default branch. NOTE the v13 option flip is deliberately NOT
-    # migrated -- the raw int survives, so what the user SEES swaps once. That is the accepted
-    # behaviour, and pinning the raw int here is what keeps a later "fix" from swapping again.
+    # booled into True by _coerce's default branch. This store already carries PROGRESS_SHOW_EVENTS_KEY
+    # (a v13-introduced key), so it is a >= v13 store -- _migrate_pre_v13_variant must leave the
+    # variant raw int untouched (only a PRE-v13 store gets flipped; see the dedicated test below).
     assert mod_settings._settings[PROGRESS_VARIANT_KEY] == 1
     assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
     assert mod_settings.progress_bar_size() == PROGRESS_SIZE_LARGE
@@ -1416,6 +1416,59 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     written = api.state["settings"][LINKAGE]
     for key, value in old.items():
         assert written[key] == value, "%s was wiped by the settingsVersion bump" % key
+    assert api.updated == 1
+    assert api.saved == 1
+
+
+def test_migrate_pre_v13_variant_flips_only_when_the_v13_marker_key_is_absent():
+    # Pure unit test of the fixup: a store with no PROGRESS_SHOW_EVENTS_KEY (the v13-introduced
+    # marker) is PRE-v13 and gets its raw variant int flipped 0<->1 in place; a store that already
+    # carries the marker is >= v13 and is left untouched.
+    pre_v13 = {PROGRESS_VARIANT_KEY: 0}   # OLD order: 0 = Moving Average
+    mod_settings._migrate_pre_v13_variant(pre_v13)
+    assert pre_v13[PROGRESS_VARIANT_KEY] == 1   # CURRENT order's Moving Average index
+
+    pre_v13_other = {PROGRESS_VARIANT_KEY: 1}   # OLD order: 1 = Damage Efficiency
+    mod_settings._migrate_pre_v13_variant(pre_v13_other)
+    assert pre_v13_other[PROGRESS_VARIANT_KEY] == 0   # CURRENT order's Damage Efficiency index
+
+    at_v13 = {PROGRESS_SHOW_EVENTS_KEY: True, PROGRESS_VARIANT_KEY: 0}
+    mod_settings._migrate_pre_v13_variant(at_v13)
+    assert at_v13[PROGRESS_VARIANT_KEY] == 0   # untouched -- marker key present means already v13+
+
+
+def test_migrate_pre_v13_variant_is_fail_soft():
+    # A missing key, a non-int, a bool (an int subclass -- must not be treated as a legal 0/1) and
+    # an out-of-range value must never raise, and are left exactly as-is (clamp_variant is what
+    # falls back to a safe default when one of these is later read).
+    no_key = {}
+    mod_settings._migrate_pre_v13_variant(no_key)
+    assert PROGRESS_VARIANT_KEY not in no_key
+
+    non_int = {PROGRESS_VARIANT_KEY: "nonsense"}
+    mod_settings._migrate_pre_v13_variant(non_int)
+    assert non_int[PROGRESS_VARIANT_KEY] == "nonsense"
+
+    booly = {PROGRESS_VARIANT_KEY: True}
+    mod_settings._migrate_pre_v13_variant(booly)
+    assert booly[PROGRESS_VARIANT_KEY] is True
+
+    out_of_range = {PROGRESS_VARIANT_KEY: 7}
+    mod_settings._migrate_pre_v13_variant(out_of_range)
+    assert out_of_range[PROGRESS_VARIANT_KEY] == 7
+
+
+def test_migration_flips_progress_bar_variant_for_a_pre_v13_store(_run_register):
+    # An upgrading pre-v13 (e.g. the published v1.6.0, settingsVersion 10) user who chose "Moving
+    # Average" under the OLD option order (raw stored int 0) must land back on "Moving Average"
+    # under the CURRENT order (index 1) -- the raw int must FLIP, not ride across unchanged.
+    old = {"enabled": True, PROGRESS_BAR_KEY: True, PROGRESS_VARIANT_KEY: 0}
+    api = _FakeMsaApi(stored=old, stored_version=10)
+    _run_register(api)
+    assert mod_settings._settings[PROGRESS_VARIANT_KEY] == 1
+    assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
+    written = api.state["settings"][LINKAGE]
+    assert written[PROGRESS_VARIANT_KEY] == 1
     assert api.updated == 1
     assert api.saved == 1
 

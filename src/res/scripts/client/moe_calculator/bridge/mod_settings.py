@@ -95,10 +95,12 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # Progress Bar group into standalone inline controls, and the variant radio's OPTION ORDER FLIPPED
 # (Damage Efficiency is now index 0 and the default). The option labels are structural to Aslain
 # (_settingsStructure folds them in) and _sync_template_text never rewrites options[].label, so only
-# a forward bump reaches an existing install. NOTE the flip carries the stored raw int across
-# UNCHANGED, so an existing user's chosen bar swaps once, silently -- accepted deliberately; there
-# is no migration for it (a value migration keyed on the old order would be indistinguishable from a
-# fresh 0). The three new keys take their fresh defaults (events on, Alt Press on, Always off), and
+# a forward bump reaches an existing install. NOTE (later corrected -- see _migrate_pre_v13_variant):
+# this originally carried the stored raw int across UNCHANGED, silently swapping an existing user's
+# chosen bar; register()'s migration branch now flips a pre-v13 store's raw int so the user's choice
+# survives, keyed on the ABSENCE of a key introduced in this same bump (there is no stored version
+# int to compare against directly). The three new keys take their fresh defaults (events on, Alt
+# Press on, Always off), and
 # counted_assistance_enabled's DEFAULT flipped False -> True, which reaches only fresh installs (the
 # migration branch preserves a saved value, as it must).
 # Bumped 13 -> 14 for the category-header bold + column-2 regroup: the four category/group headers
@@ -145,9 +147,10 @@ PROGRESS_BAR_KEY = "progress_bar_enabled"
 # templates.createRadioButtonGroup, ":type value: int"). _coerce has a dedicated branch for it,
 # because the default bool() branch would turn index 1 into True.
 #
-# THE ORDER FLIPPED IN v13 and the stored raw int rides across UNCHANGED, so an existing user's
-# chosen bar swaps exactly once (accepted -- see the SETTINGS_VERSION history). Damage Efficiency
-# is now index 0 and therefore the default.
+# THE ORDER FLIPPED IN v13. register()'s migration branch now flips a PRE-v13 store's raw int
+# in place (see _migrate_pre_v13_variant) so an upgrading user keeps the bar they actually
+# chose; a store already at v13+ passes through untouched. Damage Efficiency is index 0 and
+# therefore the default.
 PROGRESS_VARIANT_KEY = "progress_bar_variant"
 PROGRESS_VARIANT_EFFICIENCY = 0       # the damage-vs-requirements "Damage Efficiency" bar
 PROGRESS_VARIANT_MOVING_AVERAGE = 1   # the original next-mark moving-average bar
@@ -801,6 +804,30 @@ def _subscribe_reset(api):
         LOG_CURRENT_EXCEPTION()
 
 
+def _migrate_pre_v13_variant(old_raw):
+    """Flip a PRE-v13 progress_bar_variant raw int in place, so an upgrading user keeps the
+    bar they actually chose across the v13 option-order flip (see PROGRESS_VARIANT_KEY /
+    the SETTINGS_VERSION 12->13 comment). A store already at v13+ is left untouched.
+
+    There is no stored settingsVersion int to compare against directly (old_raw is just the
+    flat varName->value dict), so "pre-v13" is inferred from the ABSENCE of a key introduced
+    in that SAME bump (PROGRESS_SHOW_EVENTS_KEY) -- a v13+ store always carries it, since
+    setModTemplate/register() seed every varName current at the time it was written.
+
+    Fail-soft, and local to this one key: a missing / non-int / out-of-range value is left
+    alone (clamp_variant falls back to the safe default when it's read); this is a single
+    targeted fixup, not a general per-key migration framework."""
+    if PROGRESS_SHOW_EVENTS_KEY in old_raw:
+        return
+    v = old_raw.get(PROGRESS_VARIANT_KEY)
+    if isinstance(v, bool) or not isinstance(v, int):
+        return
+    if v == PROGRESS_VARIANT_EFFICIENCY:
+        old_raw[PROGRESS_VARIANT_KEY] = PROGRESS_VARIANT_MOVING_AVERAGE
+    elif v == PROGRESS_VARIANT_MOVING_AVERAGE:
+        old_raw[PROGRESS_VARIANT_KEY] = PROGRESS_VARIANT_EFFICIENCY
+
+
 def register():
     """Register (or re-load) the settings panel with MSA and seed the flag state.
 
@@ -849,6 +876,7 @@ def register():
             # defaults and registration still completes below.
             if old_raw:
                 try:
+                    _migrate_pre_v13_variant(old_raw)
                     _apply(old_raw)
                     g_modsSettingsApi.updateModSettings(
                         LINKAGE, _full_settings_for_write(g_modsSettingsApi))
