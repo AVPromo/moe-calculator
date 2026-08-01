@@ -284,16 +284,58 @@ body { margin: 0; }
    ...AND THE PIN IS NOW LOAD-BEARING FOR A SECOND FIX, which is why it must not be reverted or
    turned back into an em: it makes each caption's box a CONSTANT number of rem, so the vertical
    anchor of the pieces hanging off it -- (line box - own box) / 2 + the tuned nudge -- is a
-   constant too, and CAN be quantised. It is not, however, a whole number of DEVICE pixels: at the
-   shipped values it lands on a quarter of a rem (.mp-capC's glyph: (20.5-16)/2 + 1 == 3.25rem),
-   which is whole only where the rem->px factor is a multiple of 4. At factor 2 it is a whole HALF
-   pixel -- the approved render. At factor 1 (interface scale 1, reported at 3440x1440) it is 0.75
-   of a device pixel, so the engine resolves the glyph's box origin DOWN-SCREEN. NO CORRECTION IS
-   SHIPPED FOR IT YET, and the reason is worth keeping: a correction has to apply at factor 1 and NOT
-   at factor 2, and nothing inside these registered views is known to report the interface scale --
-   the surface push that proves the geometry (viewEnv.resizeViewRem) is a write-only C++ sink, and a
-   root-font read keyed a whole build that never took effect at any scale. See
-   tests/test_caption_anchor_quantisation.py for the measurements and the four attempts. */
+   constant too, and CAN be quantised. It is not, however, a whole number of DEVICE pixels at every
+   rem->px factor. Worked out for ALL FIVE pieces this bar hangs off a caption box, in rem:
+       .mp-capC .mp-ico   (20.5 - 16  )/2 + 1    == 3.25  <- 0.25 off the device grid at factor 1,
+                                                             0.50 off at factor 2: it CAN drift
+       .mp-capP .mp-ico   (18   - 14  )/2 + 0    == 2.00  <- whole rem: whole device pixels at EVERY
+       .mp-capL .mp-ico   (18   - 17  )/2 + 0.5  == 1.00     factor, so it resolves identically at
+       .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00     both scales and takes no rule, ever
+       .mp-cap  .mp-d      0           + 2.5     == 2.50  <- 0.5 off the grid at factor 1, whole at
+                                                             factor 2: it CAN drift, and the
+                                                             maintainer reports it DOES.
+   The four ICON rows are flex items under align-items:center, so the centring term is the flex line's
+   cross size -- the numeral's line box, i.e. the pin -- minus the glyph's own square box, and the last
+   term is the per-role translateY.
+   THE DELTA ROW HAS NO CENTRING TERM, AND AN EARLIER REVISION OF THIS NOTE GOT THAT WRONG. The wrong
+   prediction is kept here and corrected in place rather than quietly deleted, because it is the
+   plausible reading and the next person will reach for it again.
+     THE FAILED PREDICTION: "the delta is out of flow with NO `top`, so it takes the CENTRED static
+     position it would have as the sole flex item" -- which is CSS Flexbox's own rule (an abspos
+     child's static position is aligned by align-items / justify-content). That yields
+     (20.5 - 15.5)/2 + 2.5 == 5.00rem: a whole rem, therefore whole device pixels at every factor,
+     therefore "structurally incapable of drifting" -- and on that basis the sibling's delta rule was
+     deliberately NOT mirrored. The maintainer then looked at interface scale 1 and reported the delta
+     out by the same one device pixel as the icon.
+     WHY IT IS WRONG: this engine does not implement that flexbox rule. It puts the abspos child at the
+     CSS2.1 static position -- the containing block's content-box origin -- so the used `top` is 0, the
+     centring term is absent, and the tuned translateY IS the whole anchor: 2.50rem.
+     THE EVIDENCE IS THIS BAR'S OWN APPROVED RENDER, not a spec reading. 2.5rem here is the sibling's
+     delta Y carried over verbatim (see the .mp-cap .mp-d note below), and THERE it is measured from an
+     explicit `top: 0` and is exactly the value that centres a 15.5rem delta box on a 20.5rem numeral
+     box -- (20.5 - 15.5)/2 == 2.5. If this engine also centred by static position, that same 2.5rem
+     would put this bar's delta a further 2.5rem (5 device px at factor 2) BELOW its numeral's centre,
+     hanging off the bottom of the caption, and the composition approved at factor 2 would show it. It
+     does not. So THE TWO DELTAS ARE THE SAME SHAPE, land on the same 2.50rem anchor, and need the same
+     correction -- the sibling's rule IS mirrored here after all.
+   THE .up / .dn PADDING-vs-MARGIN ASYMMETRY DOES NOT REACH ANY OF THIS, and was checked explicitly.
+   `.mp-cap.up` puts its gap in `padding-bottom` (Coherent renders a margin-bottom as 0 against a
+   bottom:100% anchor) while `.mp-cap.dn` uses `margin-top`, and a PADDING box is indeed what an
+   out-of-flow child's percentage `top` resolves against -- that trap is real, and it is why .mp-capP's
+   icon stays IN FLOW as a margin (see the per-role nudge note below). But the delta lives on `.dn`,
+   which carries no padding at all, and it declares no `top` to resolve: padding box == content box
+   here, at both factors. Not what moved the delta.
+   .mp-cap.side .mp-v is deliberately NOT in the table: its own box IS the line box, so the centring
+   term is identically 0 at every factor and its -0.5rem is a font-metrics constant, not a scale
+   residual.
+   A CORRECTION IS NOW SHIPPED for both drifting rows -- the appended interface-scale block at the
+   END of this file. It is gated on the `.mp-s1` body class, which MoEBarTransient.setQuantClass()
+   adds when captureBaseFont() reads below 1.5: THAT ROOT-FONT CAPTURE IS THE INTERFACE-SCALE SIGNAL
+   (below 1.5 at scale 1, at/above it at scale 2), established by a four-bit screenshot probe over two
+   fresh launches -- while `devicePixelRatio` and both view ratios read flat across scales and carry
+   nothing. Interface scale 2 adds no class at all, so no selector in that block can match there and
+   the approved render is structurally unreachable. See
+   tests/test_caption_anchor_quantisation.py for the measurements, the gate and the failed attempts. */
 .mp-cap.up { bottom: 100%; padding-bottom: 6rem; font-size: 14rem;
              line-height: 18rem; }
 .mp-cap.dn { top: 100%; margin-top: 6rem; font-size: 16rem;
@@ -376,12 +418,14 @@ body { margin: 0; }
    text width. `left: 100%` + margin-left is the SAFE anchored pair (Coherent honours the
    left/top twins; it is `right:100%`+margin-right and `bottom:100%`+margin-bottom that render
    a 0 gap), and it keeps the 0.35em gap byte-for-byte as tuned. Same idiom as the sibling
-   MoEEfficiency.css, one declaration short of it: NO `top` HERE, ON PURPOSE. An abspos child
-   of a flex container takes its static position as if it were the sole flex item, so
-   align-items: center keeps the vertical placement the in-flow box already had and the
-   translateY below stays the whole Y story. That bar's `top: 0` anchors to the content-box TOP
-   instead, which here would lift the delta by half the row's leftover height -- do not
-   "unify" them.
+   MoEEfficiency.css, one declaration short of it: no `top` here. THAT OMISSION BUYS NOTHING, and
+   the note that used to defend it was wrong -- see the failed prediction worked through in the
+   caption-pin block above. This engine resolves an omitted `top` to the CSS2.1 static position,
+   the content-box origin, which is precisely what the sibling spells out as `top: 0`; it does NOT
+   apply flexbox's align-items centring to an out-of-flow child. So the two bars' deltas are the
+   SAME shape, the translateY below is the whole Y story on both, and 2.5rem lands the delta box
+   centred on the numeral's on both. Adding `top: 0` here would be a no-op, not a fix -- and the
+   Y carried over from that bar is only correct BECAUSE the two agree.
    THE DELTA FADES IN at the numeral swap (valueSwapMs): JS sets opacity 1 there and back to
    0 when it re-runs the transient -- the curve is here, not in JS. OPACITY, not visibility
    (which cannot interpolate). display:none would no longer disturb the centring now that the
@@ -677,6 +721,68 @@ body { margin: 0; }
 .mp-lg .mp-capP .mp-ico { margin-left: -15.333rem; }
 .mp-lg .mp-capC .mp-ico { margin-left: -17.333rem; }
 /* ===== END APPENDED HAND-ADDED BLOCK ===== */
+
+/* ===== APPENDED HAND-ADDED BLOCK -- THE INTERFACE-SCALE CAPTION CORRECTION (interface scale 1).
+   NOT tuned, and no tuned value above is touched. The tuner has no notion of the interface scale, so
+   this can no more come out of `gen_bar_tuner.ps1 -EmitCss` than the size mode above can. A re-emit
+   writes TASKS/refs/MoEProgress.css and not this file, so the two guards standing in for a splice are
+   the tuner's own $APPENDED advisory (it names `.mp-s1`) and
+   tests/test_progress_surface_mirror.py, which requires both blocks to keep their markers.
+
+   WHAT IT CORRECTS: TWO pieces of the bottom-centre caption -- its damage GLYPH (anchor 3.25rem) and
+   its DELTA (anchor 2.50rem) -- and nothing else on this bar. The table in the caption-pin note above
+   works all five candidates; the other three land on a whole rem, whole device pixels at every factor,
+   so they take no rule and must NOT be given one.
+   THE DELTA PAIR WAS ADDED LATE, AFTER THE MODEL SAID IT COULD NOT DRIFT AND THE MAINTAINER'S EYES
+   SAID IT DOES. The first revision of this block asserted that this bar's delta takes the flex
+   container's CENTRED static position and lands on a whole 5.00rem, and refused to mirror the
+   sibling's rule on that basis. That was a bad input, worked through and corrected in the caption-pin
+   note: this engine gives an out-of-flow child the CSS2.1 static position (the content-box origin),
+   which is the same anchor the sibling gets from an explicit `top: 0`. Both deltas land on 2.50rem --
+   0.5 off the device grid at factor 1, whole at factor 2 -- so the mirror was owed all along.
+
+   THE MAGNITUDE IS ONE DEVICE PIXEL, UP-SCREEN, ON BOTH PIECES, AND IT IS EMPIRICAL. No screenshot
+   pair has been taken of THIS bar: what ships is the sibling bar's MEASURED corrections (the icon's
+   ink top 1841 -> 1840 at interface scale 1; the delta's bottom -1.00rem from the digit baseline
+   against -2.00rem at scale 2) plus the maintainer's live report, made separately for the glyph and
+   for the delta, that this bar drifts the same way and by the same amount. The anchor arithmetic says
+   only that a residual EXISTS at factor 1 and not at factor 2; it predicts no magnitude -- and on the
+   delta it did not even predict the residual until its static-position input was fixed. If a
+   measurement is ever made it replaces the pixel count, not the structure.
+
+   ONE DEVICE PIXEL IS NOT ONE REM AT BOTH SIZES, which is the whole reason each piece takes two rules.
+   Large IS the root font (baseFont * SIZE_F == 1 * 1.5), so at interface scale 1 the rem->px factor is
+   1 at the Default size and 1.5 under Large: one device pixel is 1rem there and 1/1.5 == 0.667rem
+   here. Each Y is therefore its base rule's Y MINUS that pixel.
+   tests/test_caption_anchor_quantisation.py re-derives all four from their base rules and from SIZE_F
+   scraped out of the JS, so a retune of a base Y -- or of SIZE_F -- cannot silently leave a correction
+   behind.
+
+   THE LARGE RULE OF EACH PAIR IS A COMPOUND, `.mp-s1.mp-lg` (0,4,0), NEVER `.mp-s1 .mp-lg`. Both
+   classes land on document.body, so a lone `.mp-s1` rule would match under Large too and, being later
+   in the file, would win -- shipping the Default size's 1rem pixel at 1.5x. (On this bar neither size
+   twin is a transform: `.mp-lg .mp-capC .mp-ico` declares margin-left and `.mp-lg .mp-cap .mp-d`
+   margin-left, so unlike the sibling there is no x-length in the same property for a lone rule to
+   swallow -- but the compound is still what makes the two different Y values reachable at all.)
+
+   ALWAYS THE FULL DECLARATION, NEVER A BARE translateY() BOLTED ON: a transform declaration REPLACES
+   its base outright, so whatever the base spells has to be restated here verbatim. On the icon that is
+   the x term -- and with it the transform that makes .mp-ico a stacking context and scopes the
+   ::before glow's z-index:-1 (see the per-role nudge note above); the x is 0rem at both sizes and is
+   restated for exactly that reason. On the delta the base declaration IS a bare `translateY()` (its
+   gap rides margin-left, not the transform), so restating that shape is already verbatim-complete --
+   do NOT "improve" it into a translate() pair here, which would silently re-anchor its x at 0.
+   NO CUSTOM PROPERTY ANYWHERE NEAR ANY OF THIS EITHER: Gameface drops the whole declaration on an
+   unresolved var(), which on a transform costs the glyph its stacking context as well as its Y.
+
+   INTERFACE SCALE 2 CANNOT MATCH ANY OF IT. setQuantClass adds no class there, and neither does an
+   untrusted read (the positive lower bound in MoEBarTransient.js), so both fall back to the base
+   cascade -- the render the maintainer approved, bit for bit. */
+.mp-s1 .mp-capC .mp-ico       { transform: translate(0rem, 0rem); }
+.mp-s1.mp-lg .mp-capC .mp-ico { transform: translate(0rem, 0.333rem); }
+.mp-s1 .mp-cap .mp-d          { transform: translateY(1.5rem); }
+.mp-s1.mp-lg .mp-cap .mp-d    { transform: translateY(1.833rem); }
+/* ===== END APPENDED INTERFACE-SCALE BLOCK ===== */
 
 
 /* Animation timings for phase 2's JS (the numbers, not just the CSS):

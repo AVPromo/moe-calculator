@@ -642,12 +642,22 @@ def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():
     #   * the tuner still does NOT emit `.mp-lg` -- pinning the KNOWN GAP, so the day someone
     #     teaches -EmitCss the size mode this fails and says to move the guard there.
     css = _read("MoEProgress.css")
-    head = '/* ===== APPENDED HAND-ADDED BLOCK -- THE "LARGE" SIZE MODE'
-    tail = "/* ===== END APPENDED HAND-ADDED BLOCK ===== */"
-    assert css.count(head) == 1 and css.count(tail) == 1, "the .mp-lg block lost its markers"
-    inside = css[css.index(head):css.index(tail)]
-    assert css.count(_LG) == inside.count(_LG) > 0, \
-        "a .mp-lg rule sits OUTSIDE the marked block -- a re-emit would drop it silently"
+    # TWO marked regions carry `.mp-lg` now: the size mode itself, and the appended interface-scale
+    # correction whose Large twin is a COMPOUND `.mp-s1.mp-lg` (a lone `.mp-s1` rule would match under
+    # Large too and, later in the file, win). Both are equally invisible to a re-emit, so the guard
+    # counts the union rather than one block -- otherwise adding the second region would have made
+    # the `outside == 0` claim fail for a rule that IS protected.
+    marked = (('/* ===== APPENDED HAND-ADDED BLOCK -- THE "LARGE" SIZE MODE',
+               "/* ===== END APPENDED HAND-ADDED BLOCK ===== */"),
+              ("/* ===== APPENDED HAND-ADDED BLOCK -- THE INTERFACE-SCALE CAPTION CORRECTION",
+               "/* ===== END APPENDED INTERFACE-SCALE BLOCK ===== */"))
+    inside_count = 0
+    for head, tail in marked:
+        assert css.count(head) == 1 and css.count(tail) == 1, \
+            "a hand-added block lost its markers: %s" % head
+        inside_count += css[css.index(head):css.index(tail)].count(_LG)
+    assert css.count(_LG) == inside_count > 0, \
+        "a .mp-lg rule sits OUTSIDE the marked blocks -- a re-emit would drop it silently"
     # A RULE, not a mention: the emitted caption-pin comment names `.mp-lg` when it points readers at
     # the sibling hand-added blocks, and a bare substring search is satisfied by that prose (the repo
     # lesson `unscoped-substring-assertion-is-not-an-assertion`, in the direction that FAILS a green

@@ -68,6 +68,60 @@ and `.mp-lg` could coexist by exactly one route -- launch at Default, then enabl
 -- and the correction applied or not depending on HOW the user reached Large. It now runs
 unconditionally there AND on every applySize flip, in both directions (toggle(cls, force) removes).
 
+THE MOVING AVERAGE BAR (MoEProgress.css) TAKES TWO PIECES, FOUR RULES -- the same two the efficiency
+bar corrects, and for the same reason. Its captions are flex rows under `align-items: center`, so an
+IN-FLOW piece's anchor is (line box - own box) / 2 + the tuned nudge, in rem; the out-of-flow delta
+takes the static position (see below) and its anchor is the nudge alone:
+
+    .mp-capC .mp-ico   (20.5 - 16  )/2 + 1    == 3.25   <- 0.25 off the device grid at factor 1,
+                                                           0.50 off at factor 2: it CAN drift
+    .mp-capP .mp-ico   (18   - 14  )/2 + 0    == 2.00   <- whole rem: whole device pixels at EVERY
+    .mp-capL .mp-ico   (18   - 17  )/2 + 0.5  == 1.00      factor, so it cannot resolve differently
+    .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00      at the two scales and takes no rule
+    .mp-cap  .mp-d      0           + 2.5     == 2.50   <- 0.5 off the grid at factor 1, whole at
+                                                           factor 2: it CAN drift, and does
+`.mp-cap.side .mp-v` is not in the table on purpose: its own box IS the line box, so the centring
+term is identically 0 at every factor and its -0.5rem is a font-metrics constant, not a residual.
+`test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction` re-derives all six rows (both axis-end
+glyph families) from the stylesheet, so a future retune that pushes another piece off the grid fails
+here instead of shipping uncorrected.
+
+THE DELTA ROW IS A CORRECTED WRONG PREDICTION, KEPT BECAUSE THE WRONG INPUT IS THE PLAUSIBLE ONE.
+An earlier revision of this file worked that row as (20.5 - 15.5)/2 + 2.5 == 5.00rem -- a whole rem,
+hence whole device pixels at every factor, hence "structurally incapable of drifting" -- and on that
+basis DELIBERATELY did not mirror the efficiency bar's delta rule, recording the difference as a real
+divergence between the two bars. The maintainer then checked the icon and the delta separately on
+screen at interface scale 1 and reported the delta out by the same one device pixel as the icon.
+    THE BAD INPUT: "the delta is out of flow with no `top`, so it takes the CENTRED static position it
+    would have as the sole flex item." That is CSS Flexbox's rule (an abspos child's static position
+    is aligned by align-items / justify-content) and THIS ENGINE DOES NOT IMPLEMENT IT. It places the
+    child at the CSS2.1 static position -- the containing block's content-box origin -- so the used
+    `top` is 0, there is no centring term, and the tuned translateY is the whole anchor.
+    THE PROOF IS THE APPROVED RENDER, NOT A SPEC READING. MoEProgress.css's 2.5rem is the efficiency
+    bar's delta Y carried over verbatim, and THERE it is measured from an explicit `top: 0` and is
+    exactly the value that centres a 15.5rem delta box on a 20.5rem numeral box. Had this engine
+    centred by static position, that same 2.5rem would sit this bar's delta a FURTHER 2.5rem (5 device
+    px at factor 2) below its numeral's centre, hanging off the bottom of the caption -- and factor 2
+    is the render the composition was approved on. So the two deltas are the SAME shape, land on the
+    same 2.50rem anchor, and the mirror was owed all along.
+    WHAT WAS CHECKED AND IS *NOT* THE CAUSE: the `.up` / `.dn` padding-vs-margin asymmetry. `.mp-cap.up`
+    puts its 6rem gap in padding-bottom and `.mp-cap.dn` in margin-top, and an out-of-flow child's
+    PERCENTAGE `top` does resolve against the padding box -- but the delta is on `.dn`, which has no
+    padding, and declares no `top`. Nor does Gameface's drop of `margin` on a bottom/right-anchored
+    side reach it: the delta's own anchors are `left: 100%` + margin-left, the pairing Coherent honours.
+
+THE MA MAGNITUDE IS EMPIRICAL ON BOTH PIECES -- a weaker footing than the efficiency pair above, and
+flagged rather than hidden. No screenshot pair has been taken of this bar; what is known is (a) the
+arithmetic above, which says a residual exists and predicts no size (and on the delta predicted no
+residual at all until its static-position input was fixed), and (b) the maintainer's live report --
+made separately for the glyph and for the delta -- that this bar drifts the same way and by the same
+amount as the efficiency bar, whose two corrections were a measured ONE DEVICE PIXEL up-screen. So one
+device pixel up-screen is what ships, on each. ONE DEVICE PIXEL IS NOT ONE REM AT BOTH SIZES: Large IS
+the root font (baseFont * SIZE_F == 1 * 1.5), so at interface scale 1 the factor is 1 at the Default
+size and 1.5 under Large, i.e. 1rem and 1/SIZE_F == 0.667rem. Hence two rules per piece with DIFFERENT
+Y, and hence the compound `.mp-s1.mp-lg` -- a lone `.mp-s1` rule would match under Large too and,
+later in the file, win with the Default size's pixel.
+
 WHAT DID NOT WORK, so a later build does not repeat it:
   1. A custom property (`--mp-qy-*`). WRONG BY CONSTRUCTION: Gameface DROPS THE WHOLE DECLARATION on
      an unresolved var(), which here costs the icon its gap to the numeral AND the stacking context
@@ -107,15 +161,75 @@ _CORRECTED = ((".mp-s1 .mp-cap.up .mp-ico", ".mp-cap.up .mp-ico", 0),
               (".mp-s1 .mp-cap .mp-d", ".mp-cap .mp-d", 0),
               (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-lg .mp-cap .mp-d", -2))
 
+# --- THE MOVING AVERAGE BAR (MoEProgress.css): TWO pieces, FOUR rules -----------------------------
+# Everything below is re-derived FROM MoEProgress.css; nothing is transcribed, so a retune of any
+# caption's font-size, its line-box pin, a glyph's box or a per-role nudge lands in this file rather
+# than silently stranding (or inventing) a correction.
+# (corrected selector, the BASE rule it overrides, is it the Large twin). Each pair overrides ONE base
+# rule, which is where this bar differs from the sibling: NEITHER size-mode twin
+# (`.mp-lg .mp-capC .mp-ico`, `.mp-lg .mp-cap .mp-d`) declares a transform -- both are margin-left --
+# so the Large render's Y comes from the base rule too.
+_MA_CORRECTED = ((".mp-s1 .mp-capC .mp-ico", ".mp-capC .mp-ico", False),
+                 (".mp-s1.mp-lg .mp-capC .mp-ico", ".mp-capC .mp-ico", True),
+                 (".mp-s1 .mp-cap .mp-d", ".mp-cap .mp-d", False),
+                 (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-cap .mp-d", True))
+# EVERY piece this bar hangs off a caption's line box, as
+# (nudge rule, caption rule, own-box rule, own-box property, IS IT IN FLOW?). SIX rows for five
+# pieces: the right-hand axis caption swaps glyph FAMILIES at 3 marks (.mk -> .moe), and both boxes
+# have to land whole for that caption to be correctly ruleless.
+# THE LAST FLAG IS THE INPUT THAT WAS WRONG ONCE (see the docstring). The four icons are flex items,
+# so align-items:center contributes (line box - own box)/2; the delta is OUT OF FLOW and this engine
+# gives it the CSS2.1 static position -- the content-box origin -- so it contributes NOTHING and the
+# tuned nudge is the whole anchor. Its line box and the caption's are still read on that row, so a
+# retune of either still has to keep them declared and parseable, and so the two numbers the failed
+# model used stay visible next to the model that replaced it.
+_MA_PIECES = ((".mp-capC .mp-ico", ".mp-cap.dn", ".mp-ico.dmgc", "height", True),
+              (".mp-capP .mp-ico", ".mp-cap.up", ".mp-ico.dmgp", "height", True),
+              (".mp-capL .mp-ico", ".mp-cap.side", ".mp-ico.mk", "height", True),
+              (".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico.mk", "height", True),
+              (".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico.moe", "height", True),
+              (".mp-cap .mp-d", ".mp-cap.dn", ".mp-cap .mp-d", "line-height", False))
 
-def _transform(css, selector):
-    """One rule's whole `transform` value. The rule may be single- or multi-line (the delta's base
-    is a full declaration block), so the brace body is read and the property picked out of it."""
-    match = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^{}]*)\}", css)
-    assert match, "MoEEfficiency.css: no rule for `%s`" % selector
-    decl = re.search(r"\btransform:\s*([^;]+);", match.group(1))
-    assert decl, "MoEEfficiency.css: `%s` declares no transform" % selector
+
+def _bare(css):
+    """A stylesheet with every comment stripped. Both files DISCUSS their own selectors and their
+    own rejected forms in prose (`NEVER .mp-s1 .mp-lg`), so any structural search that skips this
+    is answered by the warning that documents the rule."""
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def _decl(css, selector, prop, name="MoEEfficiency.css"):
+    """One rule's value for one property, whitespace-normalized.
+
+    COMMENTS ARE STRIPPED FIRST and the selector is anchored at the start of a LINE: both
+    stylesheets discuss their own selectors in prose (this correction's block quotes
+    `.mp-lg .mp-capC .mp-ico` verbatim), and an unscoped search would happily read a sentence as a
+    rule -- the repo lesson `unscoped-substring-assertion-is-not-an-assertion`. The rule may be
+    single- or multi-line (the delta's base is a full declaration block), so the brace body is read
+    whole and the property picked out of it."""
+    # `(?<!,\n)` refuses a GROUPED rule's continuation line: MoEProgress.css declares
+    # `.mp-cap .mp-v,\n.mp-cap .mp-d { color... }` before the delta's own block, and without this the
+    # search reads that shared rule and reports the delta as declaring no line-height.
+    match = re.search(r"(?m)^(?<!,\n)" + re.escape(selector) + r"\s*\{([^{}]*)\}", _bare(css))
+    assert match, "%s: no rule for `%s`" % (name, selector)
+    # (?<![-\w]) not \b: `\bheight:` also matches inside `line-height:`, which would silently read
+    # the pinned line box as a glyph's box height in the anchor arithmetic below.
+    decl = re.search(r"(?<![-\w])" + re.escape(prop) + r":\s*([^;}]+)[;}]?", match.group(1) + "}")
+    assert decl, "%s: `%s` declares no %s" % (name, selector, prop)
     return " ".join(decl.group(1).split())
+
+
+def _transform(css, selector, name="MoEEfficiency.css"):
+    return _decl(css, selector, "transform", name)
+
+
+def _y_term(transform):
+    """The rem Y of a transform, as (match, Decimal). Two shapes: a `translateY(<n>rem)` chained
+    onto a centring translate, or the second argument of a single `translate(<x>, <y>)`."""
+    match = (re.search(r"translateY\((-?[\d.]+)rem\)", transform) or
+             re.search(r"translate\([^,]+,\s*(-?[\d.]+)rem\)", transform))
+    assert match, "the rule carries no rem Y term: %s" % transform
+    return match, Decimal(match.group(1))
 
 
 def _size_factor():
@@ -145,12 +259,9 @@ def _corrected(transform, nudge_px, large):
     already produced a false "these differ" on byte-identical declarations in this repo
     (`css-em-arithmetic-needs-decimal-not-float-equality`) -- and here 1/1.5 is precisely the kind of
     value that would."""
-    match = (re.search(r"translateY\((-?[\d.]+)rem\)", transform) or
-             re.search(r"translate\([^,]+,\s*(-?[\d.]+)rem\)", transform))
-    assert match, "the base rule carries no rem Y term to correct: %s" % transform
+    match, base_y = _y_term(transform)
     rem_per_px = 1 / _size_factor() if large else Decimal(1)
-    y = (Decimal(match.group(1)) - 1 + nudge_px * rem_per_px).quantize(Decimal("0.001"),
-                                                                      rounding=ROUND_HALF_UP)
+    y = (base_y - 1 + nudge_px * rem_per_px).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
     return transform[:match.start(1)] + format(y.normalize(), "f") + transform[match.end(1):]
 
 
@@ -176,12 +287,12 @@ def test_no_stylesheet_leaks_a_custom_property():
 def test_nothing_from_the_abandoned_attempts_is_still_shipped():
     # THE CLEAN-UP GATE. Every attempt in the docstring left rules or JS in the tree at some point:
     # quantisation buckets (mp-q*), per-element probe classes (mp-p*, mp-c*) and the four-bit carrier
-    # probe (mp-f*). ONE thing survives, in ONE stylesheet -- `.mp-s1` in MoEEfficiency.css. The
-    # Moving Average bar is out of scope and must carry NO scale rule at all: its own caption geometry
-    # was never measured at factor 1, and a rule there would move a render nobody has checked.
-    # Matched as RULES / statements, never as prose -- this module's docstring names every one.
-    assert not re.search(r"(?m)^\.mp-(?:q\d|p[ab]|c\d|f\d|s\d)", _read(_WIDGET, "MoEProgress.css")), \
-        "MoEProgress.css carries a quantisation, probe or correction rule -- that bar is out of scope"
+    # probe (mp-f*). ONE FAMILY survives, `.mp-s1`, and it is now in BOTH stylesheets -- the Moving
+    # Average bar's single corrected piece is pinned by the two tests below. Everything else must be
+    # gone from both. Matched as RULES / statements, never as prose -- this module's docstring names
+    # every one.
+    assert not re.search(r"(?m)^\.mp-(?:q\d|p[ab]|c\d|f\d)", _read(_WIDGET, "MoEProgress.css")), \
+        "MoEProgress.css still carries a quantisation or probe rule"
     assert not re.search(r"(?m)^\.mp-(?:q\d|p[ab]|c\d|f\d)", _read(_WIDGET, "MoEEfficiency.css")), \
         "MoEEfficiency.css still carries a quantisation or probe rule"
     code = re.sub(r"(?m)^\s*//.*$", "",
@@ -253,3 +364,107 @@ def test_the_class_is_gated_on_a_threshold_and_re_evaluated():
         "the post-deadline re-assert no longer evaluates the gate on BOTH size paths"
     assert "else setQuantClass" not in js, \
         "the gate is latched to one branch again -- that is the defect this file records"
+
+
+def _ma_anchor(css, nudge_sel, cap_sel, box_sel, box_prop, in_flow):
+    """One MA piece's vertical anchor in rem.
+
+    IN FLOW: (line box - own box) / 2 + the tuned nudge. The caption is a flex row under
+    `align-items: center`, so the flex line's cross size is the numeral's line box -- i.e. the PIN
+    (tests/test_caption_line_box_pins.py), which is exactly what makes this a constant and therefore
+    quantisable at all.
+    OUT OF FLOW (the delta): the nudge ALONE. This engine resolves an omitted `top` to the CSS2.1
+    static position -- the containing block's content-box origin -- and does NOT apply flexbox's
+    align-items centring to an out-of-flow child, so there is no centring term. Asserting the
+    centred form here is the bad input this file records; see the docstring. The two boxes are still
+    read on that row so a retune cannot quietly remove them.
+    Decimal end to end: these are exact-equality comparisons of CSS lengths and IEEE754 has already
+    produced a false verdict on byte-identical declarations in this repo
+    (`css-em-arithmetic-needs-decimal-not-float-equality`)."""
+    line = Decimal(_decl(css, cap_sel, "line-height", "MoEProgress.css")[:-len("rem")])
+    own = Decimal(_decl(css, box_sel, box_prop, "MoEProgress.css")[:-len("rem")])
+    _match, nudge = _y_term(_transform(css, nudge_sel, "MoEProgress.css"))
+    return ((line - own) / 2 if in_flow else Decimal(0)) + nudge
+
+
+def test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction():
+    """WHICH pieces are corrected, derived rather than decided.
+
+    A WHOLE-REM anchor is a whole number of device pixels at EVERY factor, so it resolves the same
+    at interface scale 1 and 2 and cannot be what drifted; a fractional one can. On this bar TWO of
+    the six rows are fractional -- `.mp-capC .mp-ico` at 3.25rem and `.mp-cap .mp-d` at 2.50rem --
+    and both are corrected. The delta row is the one this file got wrong once, by crediting it with a
+    flex centring term it does not get and landing it on a whole 5.00rem (docstring); the assertion
+    below is now what refuses the REVERSE mistake as well, since dropping the mirror again would
+    leave a fractional anchor uncorrected. It equally catches a future retune that pushes another
+    caption off a whole rem."""
+    css = _read(_WIDGET, "MoEProgress.css")
+    anchors = {row[0]: _ma_anchor(css, *row) for row in _MA_PIECES}
+    for row in _MA_PIECES:                      # the two .mp-capR glyph families must AGREE
+        assert _ma_anchor(css, *row) == anchors[row[0]], \
+            "%s anchors differently per glyph family -- one of them needs its own rule" % row[0]
+    drifting = {sel for sel, a in anchors.items() if a != a.to_integral_value()}
+    assert drifting == {base for _sel, base, _large in _MA_CORRECTED}, \
+        "the set of MA pieces off a whole rem changed: %s (anchors: %s)" % (
+            sorted(drifting), {k: str(v) for k, v in sorted(anchors.items())})
+    # ...and the shipped rules cover exactly that set. Anchored at the start of a LINE so the block's
+    # own prose -- which names every selector it does NOT correct -- cannot satisfy it.
+    ruled = set(re.findall(r"(?m)^\.mp-s1(?:\.mp-lg)? (\.\S+ \.\S+)\s*\{", _bare(css)))
+    assert ruled == drifting, \
+        "MoEProgress.css corrects %s but the arithmetic says %s" % (sorted(ruled), sorted(drifting))
+
+
+def test_the_ma_correction_is_the_base_rule_exactly_one_device_pixel_higher():
+    """All four MA rules re-derived from the base rule each overrides.
+
+    ONE DEVICE PIXEL IS NOT ONE REM AT BOTH SIZES: Large IS the root font (baseFont * SIZE_F), so at
+    interface scale 1 the rem->px factor is 1 at the Default size and SIZE_F under Large -- 1rem and
+    1/SIZE_F == 0.667rem, with SIZE_F scraped out of the shipped JS so the conversion cannot drift
+    from the factor the bar applies. That is the entire reason each piece has a Large twin.
+    Only the NUMBER is spliced, so the x term (where the base has one) and the unit have to survive
+    verbatim for the equality to hold -- which makes this also the "still the base's whole
+    declaration" check. A transform declaration REPLACES its base outright: swapping the icon's
+    `translate(x, y)` for a bare translateY() would drop the x AND the stacking context scoping its
+    ::before glow's z-index:-1, and turning the delta's bare translateY() into a translate() pair
+    would silently re-anchor its x."""
+    css = _read(_WIDGET, "MoEProgress.css")
+    for corrected, base_sel, large in _MA_CORRECTED:
+        base = _transform(css, base_sel, "MoEProgress.css")
+        match, base_y = _y_term(base)
+        rem_per_px = 1 / _size_factor() if large else Decimal(1)
+        y = (base_y - rem_per_px).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        want = base[:match.start(1)] + format(y.normalize(), "f") + base[match.end(1):]
+        got = _transform(css, corrected, "MoEProgress.css")
+        assert got == want, "%s is not `%s` one device pixel higher: %s != %s" % (
+            corrected, base_sel, got, want)
+        assert got.split("(")[0] == base.split("(")[0], \
+            "%s is not `%s`'s own transform function: %s vs %s" % (corrected, base_sel, got, base)
+
+
+def test_the_ma_large_twin_is_a_compound_and_keeps_the_base_x_verbatim():
+    # SPECIFICITY: both classes land on document.body, so a lone `.mp-s1` rule would match under
+    # Large as well and -- later in the file, equal specificity -- would win, shipping the Default
+    # size's 1rem pixel at 1.5x. `.mp-s1.mp-lg` (0,4,0), no descendant combinator, out-specifies it.
+    # NOTHING OUTSIDE THE Y NUMBER MAY DIFFER FROM THE BASE, on either rule of either pair: the icon's
+    # x is 0rem (invariant under any factor, which is why its size twin carries no transform at all)
+    # and the delta's base declaration is a bare translateY() whose gap rides margin-left. Comparing
+    # the prefix and suffix around the spliced number covers both shapes without asserting an x term
+    # that one of them legitimately does not have.
+    css = _bare(_read(_WIDGET, "MoEProgress.css"))
+    assert not re.search(r"(?m)^\.mp-s1 \.mp-lg", css), \
+        "the MA Large correction is a DESCENDANT selector -- it cannot out-specify the size mode"
+    for plain_row, large_row in ((_MA_CORRECTED[0], _MA_CORRECTED[1]),
+                                 (_MA_CORRECTED[2], _MA_CORRECTED[3])):
+        base = _transform(css, plain_row[1], "MoEProgress.css")
+        base_match, _base_y = _y_term(base)
+        skeleton = (base[:base_match.start(1)], base[base_match.end(1):])
+        plain = _transform(css, plain_row[0], "MoEProgress.css")
+        large = _transform(css, large_row[0], "MoEProgress.css")
+        assert plain != large, \
+            "%s and %s are identical -- one of them is not its own size's device pixel" % (
+                plain_row[0], large_row[0])
+        for sel, got in ((plain_row[0], plain), (large_row[0], large)):
+            got_match, _got_y = _y_term(got)
+            assert (got[:got_match.start(1)], got[got_match.end(1):]) == skeleton, \
+                "%s did not restate `%s` verbatim outside its Y (%s vs %s)" % (
+                    sel, plain_row[1], got, base)

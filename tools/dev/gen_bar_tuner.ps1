@@ -1680,11 +1680,12 @@ if ($EmitCss) {
   # ---- advisory: the hand-edited blocks this emit does NOT carry --------------------------
   # The shipped stylesheet is the emit PLUS blocks added/rewritten by hand, so copying a fresh
   # emit over it silently drops them. One marker per block; another one is ONE line here. The
-  # value says what dropping it breaks -- all four have already cost a relaunch.
+  # value says what dropping it breaks -- the first four have already cost a relaunch each.
   $APPENDED = [ordered]@{
     '@font-face'   = 'the bundled MoEBattle @font-face -- without it every numeral silently falls back to Arial Narrow'
     '#moe-bar-box' = 'the body/#moe-bar-box sizing shim -- without it the size calculation times out and the engine clobbers the surface to 256x256'
     'mp-life-b'    = 'the mp-life-b alternating-identity twin -- without it the JS restart is a no-op and the bar never reappears after its first run'
+    '.mp-s1'       = 'the interface-scale caption correction (.mp-s1 / .mp-s1.mp-lg on .mp-capC .mp-ico AND on .mp-cap .mp-d) -- without it the bottom-centre damage glyph and its delta each sit one device pixel low at interface scale 1, at both sizes'
     # NOT an appended block but a REWRITTEN one: .mp-track::after ships WG's own tiling idiom
     # (background-image + one 3rem period + background-size + background-repeat) with an OPAQUE
     # gap, while this emit still writes a single track-wide `background:` gradient at gapA 0.5.
