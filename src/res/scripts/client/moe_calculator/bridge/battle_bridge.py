@@ -56,6 +56,14 @@ _last_prediction = None
 # Diagnostics only; it never becomes the prediction of record.
 _last_final_push = None
 
+# Whether the player DIED this battle -- logged as the sample row's `died` column so the analysis
+# can split the "WG credited us after our last push" tail by the death path (see
+# tools/dev/analyze_battle_samples.py --backtest). Set by _on_post_mortem_switched ONLY; NOT
+# derived from snap.is_spectating, because after death WoT can leave the camera on the player's own
+# wreck, so is_spectating stays False and the death would be missed. Reset once per battle in
+# _flush_prediction. Diagnostics only -- nothing reads it back into the model.
+_died = False
+
 # The full-stats scoreboard views currently open, keyed by their g_eventBus eventType. While
 # any is open the overlay hides (it would otherwise clutter the full-screen scoreboard). All
 # four are dispatched on g_eventBus at EVENT_BUS_SCOPE.BATTLE with ctx['isDown'] (True open /
@@ -198,6 +206,15 @@ def _on_observed_vehicle_changed(*args, **kwargs):
         LOG_CURRENT_EXCEPTION()
 
 
+def _on_post_mortem_switched(*args, **kwargs):
+    # vehicleState.onPostMortemSwitched: WE died (this fires on the player's own death, unlike
+    # onVehicleControlling which also fires on a normal battle-start mount -- so ONLY this entry is
+    # repointed here). Note the death for the sample log, then behave exactly as before.
+    global _died
+    _died = True
+    _on_observed_vehicle_changed(*args, **kwargs)
+
+
 def _on_teardown(*args, **kwargs):
     # Avatar became non-player (battle exit) -> tear down ALL THREE windows; the next battle mount
     # re-opens whichever is enabled. The event lists are rebuilt by the arena teardown regardless.
@@ -337,8 +354,9 @@ _LISTENERS = (
     # Observed-vehicle changes drive the spectate hide/reveal (postmortem free-look).
     ("observed vehicle", _vehicle_state_holder, "onVehicleControlling",
      _on_observed_vehicle_changed),
+    # Same hide/reveal, plus it records that we DIED (the sample log's `died` column).
     ("postmortem", _vehicle_state_holder, "onPostMortemSwitched",
-     _on_observed_vehicle_changed),
+     _on_post_mortem_switched),
     # Interface-scale changes re-place the overlay so it keeps tracking WG's efficiency panel.
     ("interface scale", _interface_scale_holder, "onScaleChanged", _on_scale_changed),
     # "Summarized damage" DAMAGE_LOG group toggles re-place the overlay (raised vs default).
@@ -494,11 +512,15 @@ def _flush_prediction():
     clear it so the next battle starts fresh. Once per battle, on teardown. Every field is
     coerced to a plain JSON scalar/dict here (no game objects reach the log) and the whole body
     is guarded -- a recorder failure must never break the teardown."""
-    global _last_prediction, _last_final_push
+    global _last_prediction, _last_final_push, _died
     pair = _last_prediction
     final = _last_final_push
+    died = _died
     _last_prediction = None
     _last_final_push = None
+    # Cleared HERE, above the early return: a battle with no prediction to flush must still not
+    # leak its death into the next battle's row.
+    _died = False
     if pair is None:
         return
     snap, model = pair
@@ -533,6 +555,10 @@ def _flush_prediction():
         if final is not None and int(final[0].vehicle_int_cd or 0) == pred["int_cd"]:
             pred["final_combined_damage"] = int(final[1].combined_damage or 0)
             pred["final_percent"] = float(final[1].cur_percent or 0.0)
+        # Which of the two the shortfall belongs to: the death path specifically, or end-of-battle
+        # server accounting in general. Always written (never omitted), so a null in the log means
+        # "logged by a build without the column", i.e. UNKNOWN -- never False.
+        pred["died"] = bool(died)
         sample_log.stash(pred)
     except Exception:
         LOG_CURRENT_EXCEPTION()

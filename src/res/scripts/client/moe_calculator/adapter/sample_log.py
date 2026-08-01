@@ -19,6 +19,12 @@ Flow:
 The pairing needs no battle id: a prediction waits in the pending file until a dossier read for
 that same intCD reports values DIFFERENT from the pre-battle ones it was predicted against.
 
+Schema (one row): v [, mod_version], ts, the prediction fields (_PRED_KEYS, pinned order), the
+resolved truth (post_percentile, post_avg_damage, residual [, post_battles]), then the optional
+trailing diagnostic columns (_FINAL_KEYS: final_combined_damage, final_percent, died). Trailing
+columns are APPEND-ONLY at a fixed ROW_VERSION, so a reader must treat a missing one as UNKNOWN
+-- for `died` that is a third state, never False.
+
 ALWAYS ON, deliberately not DEBUG-gated -- the data has to come from normal play. Fail-soft
 everywhere: every disk touch and every field read is guarded, and a missing/corrupt pending file
 reads as empty rather than raising, so a recorder failure can never break a battle or the widget.
@@ -60,7 +66,14 @@ _PRED_KEYS = ("int_cd", "ewma_k", "thresholds", "pre_percentile", "pre_avg_damag
 # battle's very LAST push, spectating included -- equal to the prediction means post-mortem
 # credit is a non-issue, divergent means the death path under-predicts by exactly that much.
 # Each is omitted when the bridge couldn't supply it (no trailing push, or a different tank).
-_FINAL_KEYS = ("final_combined_damage", "final_percent")
+#
+# `died` rides last on the same append-only mechanism (see the docstring's schema note): the
+# open question the final_* columns did NOT settle is whether the ~20% of battles where WG's
+# combined damage exceeds ours is the DEATH path specifically or end-of-battle server accounting
+# in general. The bridge always supplies it, so a MISSING/null `died` means the row predates the
+# column -- unknown, a THIRD state, never False. Append-only and backwards compatible, so
+# ROW_VERSION deliberately does NOT move.
+_FINAL_KEYS = ("final_combined_damage", "final_percent", "died")
 
 _version = None  # cached mod version string ("" = unresolvable -> the key is omitted)
 

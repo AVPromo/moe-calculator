@@ -50,6 +50,7 @@ from moe_calculator.domain.constants import EWMA_K       # noqa: E402
 def setup_function(_):
     battle_bridge._last_prediction = None
     battle_bridge._last_final_push = None
+    battle_bridge._died = False
 
 
 teardown_function = setup_function
@@ -204,7 +205,8 @@ def test_final_columns_omitted_when_the_trailing_push_is_another_tank(monkeypatc
     battle_bridge._flush_prediction()
     assert "final_combined_damage" not in payloads[0]
     assert "final_percent" not in payloads[0]
-    assert set(payloads[0]) == set(sample_log._PRED_KEYS)
+    # `died` is the one trailing column the bridge writes unconditionally, so it stays.
+    assert set(payloads[0]) == set(sample_log._PRED_KEYS) | {"died"}
 
 
 def test_the_trailing_push_never_becomes_the_prediction_of_record(monkeypatch):
@@ -231,6 +233,56 @@ def test_a_spectate_only_battle_stashes_nothing(monkeypatch):
     battle_bridge._flush_prediction()
     assert payloads == []
     assert battle_bridge._last_final_push is None
+
+
+# --- the `died` column: which event marks a death, and its per-battle reset ---
+# `died` splits the final_* shortfall into "the death path specifically" vs "end-of-battle server
+# accounting in general", so it must mean exactly "WE died in THIS battle".
+
+def _fire(event_attr):
+    """Invoke whatever handler _LISTENERS wires to <event_attr>. Driving the registry (not the
+    handler function) is what pins the WIRING -- which event marks a death. Engine-free: the
+    handlers only re-push, and refresh() early-returns with no window open."""
+    handler, = [h for _label, _holder, attr, h in battle_bridge._LISTENERS if attr == event_attr]
+    handler()
+
+
+def test_died_is_true_when_the_postmortem_event_fired(monkeypatch):
+    payloads = _spy_stash(monkeypatch)
+    battle_bridge._note_prediction(_snap(), _model())
+    _fire("onPostMortemSwitched")
+    battle_bridge._flush_prediction()
+    assert payloads[0]["died"] is True
+
+
+def test_died_is_false_when_the_postmortem_event_never_fired(monkeypatch):
+    payloads = _spy_stash(monkeypatch)
+    battle_bridge._note_prediction(_snap(), _model())
+    battle_bridge._flush_prediction()
+    assert payloads[0]["died"] is False
+
+
+def test_taking_control_at_battle_start_is_not_a_death(monkeypatch):
+    # onVehicleControlling also fires on a normal battle-start mount, so it must NOT mark the
+    # flag -- wiring it there would log died=True for EVERY battle, survived ones included.
+    payloads = _spy_stash(monkeypatch)
+    _fire("onVehicleControlling")
+    battle_bridge._note_prediction(_snap(), _model())
+    battle_bridge._flush_prediction()
+    assert payloads[0]["died"] is False
+
+
+def test_a_death_cannot_mark_the_next_battle(monkeypatch):
+    # THE leak guard. Battle N dies but leaves no prediction of record (spectate-only join, an
+    # unreadable vehicle), so its flush hits the `pair is None` early return. Battle N+1 must
+    # still log died=False -- i.e. the reset lives ABOVE that return, not below it.
+    payloads = _spy_stash(monkeypatch)
+    _fire("onPostMortemSwitched")
+    battle_bridge._flush_prediction()                          # battle N: nothing to stash
+    assert payloads == []
+    battle_bridge._note_prediction(_snap(), _model())          # battle N+1, survived
+    battle_bridge._flush_prediction()
+    assert payloads[0]["died"] is False
 
 
 # --- _flush_prediction: coercion + once-per-battle reset ---------------------

@@ -409,6 +409,51 @@ def _by_band(recs, key, fmt="%+8.3f"):
     return "  ".join(cells)
 
 
+MISS_THRESHOLD = 200.0    # a miss this big is beyond the rounding noise below -- worth counting
+
+
+def _miss(row):
+    """The late credit WG applied that we never saw, in COMBINED DAMAGE. None without a k.
+
+    post_avg is the dossier average AFTER the battle, and the average moves by EWMA, so
+    `pre_avg + (post_avg - pre_avg)/k` is the combined damage WG itself booked for that battle;
+    subtracting our own last-seen total (the trailing push when we have one) leaves the shortfall.
+    post_avg_damage is an INTEGER, so this carries +-0.5/k (~+-25 damage at k=0.0198) of rounding
+    noise -- which is why the split below reports the MEDIAN and a count over a threshold, never
+    a mean alone."""
+    k = _f(row, "ewma_k")
+    if not k:
+        return None
+    implied = _f(row, "pre_avg_damage") + (_f(row, "post_avg_damage")
+                                          - _f(row, "pre_avg_damage")) / k
+    return implied - (_f(row, "final_combined_damage") or _f(row, "combined_damage"))
+
+
+def _died_label(row):
+    """"died" / "survived" / "unknown" -- a null `died` is a row written before the column existed,
+    which is a THIRD state, never False (see adapter/sample_log._FINAL_KEYS)."""
+    d = row.get("died")
+    return "unknown" if d is None else ("died" if d else "survived")
+
+
+def death_split(recs, threshold=MISS_THRESHOLD):
+    """[(label, n, median miss, count(miss > threshold), mean residual, median residual)] in
+    died / survived / unknown order. The question: is the ~20% late-credit tail the DEATH path,
+    or end-of-battle server accounting in general?"""
+    groups = {}
+    for r in recs:
+        groups.setdefault(_died_label(r["row"]), []).append(r)
+    out = []
+    for label in ("died", "survived", "unknown"):
+        g = groups.get(label) or []
+        misses = [m for m in (_miss(r["row"]) for r in g) if m is not None]
+        res = [r["res"] for r in g]
+        out.append((label, len(g), st.median(misses) if misses else None,
+                    sum(1 for m in misses if m > threshold),
+                    st.fmean(res) if res else None, st.median(res) if res else None))
+    return out
+
+
 def _slope(recs, xkey, ykey):
     f = fit([r[xkey] for r in recs], [r[ykey] for r in recs])
     if f is None:
@@ -442,6 +487,17 @@ def backtest(rows, stops8):
     print("\n== PREDICTION test: pred = pre_percentile + (f(proj) - f(pre_avg)) ==")
     print("  %s" % line([r["res"] for r in recs]))
     print("  residual ~ inc: %s" % _slope(recs, "inc", "res"))
+
+    print("\n== late WG credit we never saw, split by `died` ==")
+    print("   miss = pre_avg + (post_avg - pre_avg)/k  -  our last seen combined damage")
+    print("   (post_avg is an INTEGER -> +-0.5/k ~ +-25 dmg of noise; read the median + the count)")
+    print("  %-9s %4s %10s %8s %9s %9s"
+          % ("group", "n", "med miss", ">%d" % MISS_THRESHOLD, "mean res", "med res"))
+    for label, n, med, over, mres, medres in death_split(recs):
+        cell = lambda v, f: (f % v) if v is not None else "%8s" % "-"   # noqa: E731 - local alias
+        print("  %-9s %4d %10s %8d %9s %9s"
+              % (label, n, cell(med, "%10.0f"), over, cell(mres, "%+9.3f"),
+                 cell(medres, "%+9.3f")))
 
     print("\n== UNANCHORED: f(proj) - post_percentile (drops the pre_percentile anchor) ==")
     print("  %s" % line([r["unanch"] for r in recs]))
@@ -496,6 +552,28 @@ def self_check():
         {20: 528, 65: 1799, 100: 3482}, "percentile")
     assert _norm_thresholds({}) == ({}, "missing")
     assert _norm_thresholds({"thresholds": {"x": 1}}) == ({}, "unreadable")
+
+    # The `died` split, over all THREE states (True / False / absent = unknown). At k=0.02 a +4
+    # move in the dossier average is 200 damage of WG credit, so pre 1800 -> post 1804 implies
+    # 2000 combined and logging 1700 of it is a 300 miss; the trailing final_* total wins when set.
+    d = [({"ewma_k": 0.02, "pre_avg_damage": 1800, "post_avg_damage": 1804,
+           "combined_damage": 1700, "died": True}, -1.0),                            # miss 300
+         ({"ewma_k": 0.02, "pre_avg_damage": 1800, "post_avg_damage": 1804,
+           "combined_damage": 1700, "final_combined_damage": 1950, "died": True}, -3.0),  # miss 50
+         ({"ewma_k": 0.02, "pre_avg_damage": 1800, "post_avg_damage": 1810,
+           "combined_damage": 2300, "died": False}, 0.5),                            # miss 0
+         ({"ewma_k": 0.02, "pre_avg_damage": 1800, "post_avg_damage": 1804,
+           "combined_damage": 2000}, 0.5)]                                  # no column -> unknown
+    assert abs(_miss(d[0][0]) - 300.0) < 1e-9, _miss(d[0][0])
+    assert abs(_miss(d[1][0]) - 50.0) < 1e-9, _miss(d[1][0])   # final_* preferred over combined
+    assert _miss({}) is None                                   # no k logged -> not measurable
+    split = death_split([{"row": row, "res": res} for row, res in d])
+    assert [(g[0], g[1], g[3]) for g in split] == [("died", 2, 1), ("survived", 1, 0),
+                                                   ("unknown", 1, 0)], split
+    assert abs(split[0][2] - 175.0) < 1e-9, split[0]           # median of the 300 / 50 misses
+    assert split[1][2] == 0.0 and split[2][2] == 0.0, split    # both non-death groups: no miss
+    assert abs(split[1][4] - 0.5) < 1e-9, split[1]             # residual carried per group
+    assert abs(split[0][4] - -2.0) < 1e-9, split[0]
 
     rows = [{"has_data": True, "has_baseline": True, "int_cd": 100 + i % 3, "ts": 1750000000 + i * 3600,
              "ewma_k": 0.12, "pct_delta": 0.25 * i, "combined_damage": 300 + 90 * i,
