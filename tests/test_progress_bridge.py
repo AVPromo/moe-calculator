@@ -117,10 +117,10 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. ELEVEN: the nine through barSize, then transEvents /
-    # transManual, both APPENDED after barSize so nothing above them is renumbered.
+    # side only is invisible in the client. TWELVE: the nine through barSize, then transEvents /
+    # transManual and showEvents, all APPENDED after barSize so nothing above them is renumbered.
     assert set(_push()) == _VM_PROPS
-    assert len(_VM_PROPS) == 11
+    assert len(_VM_PROPS) == 12
 
 
 def test_push_writes_the_two_transition_flags_master_folded():
@@ -147,3 +147,33 @@ def test_push_writes_the_two_transition_flags_master_folded():
     # while the master is off.
     assert mod_settings.PROGRESS_TRANSITIONS_KEY not in props
     assert "transitions" not in props and "transEnabled" not in props
+
+
+def test_push_writes_the_visibility_switches_with_always_folded_in(monkeypatch):
+    # The VISIBILITY trio -- WHEN the bar comes up, a different axis from the transitions pair
+    # above (HOW it moves), which is why the two near-identical sets both exist. Only TWO fields
+    # carry all three switches: `showEvents`, and `altHeld`, which absorbs both "Alt Press" and
+    # "Always" because a permanently-held Alt is exactly how the shared JS transient pins the bar.
+    def _show(events, alt_key, always, alt_down):
+        monkeypatch.setattr(battle_bridge, "_alt_held", alt_down)
+        props = _push(**{mod_settings.PROGRESS_SHOW_EVENTS_KEY: events,
+                         mod_settings.PROGRESS_SHOW_ALT_KEY: alt_key,
+                         mod_settings.PROGRESS_SHOW_ALWAYS_KEY: always})
+        return props["showEvents"], props["altHeld"]
+
+    # The shipped triggers: an event raises it, a held Alt peeks it.
+    assert _show(True, True, False, False) == (True, False)
+    assert _show(True, True, False, True) == (True, True)
+    # Each switch mutes its OWN trigger and nothing else.
+    assert _show(False, True, False, True) == (False, True)
+    assert _show(True, False, False, True) == (True, False)
+    assert _show(False, False, False, True) == (False, False)
+    # "Always" pins the bar and re-enables the event field (so the pinned bar's numbers keep
+    # updating) whatever the two greyed switches still store -- MSA pushes a greyed value anyway.
+    assert _show(False, False, True, False) == (True, True)
+    assert _show(False, False, True, True) == (True, True)
+    # ...and neither raw key is pushed under its own name: the JS gets no third switch to misread.
+    props = _push()
+    for key in ("showAlways", "showAltKey", mod_settings.PROGRESS_SHOW_ALWAYS_KEY,
+                mod_settings.PROGRESS_SHOW_ALT_KEY):
+        assert key not in props

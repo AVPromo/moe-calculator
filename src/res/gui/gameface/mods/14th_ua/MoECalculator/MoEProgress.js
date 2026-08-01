@@ -389,12 +389,18 @@ function render(model) {
     // ~142px too high (see the shared module's SURFACE_REASSERT_MS). The baseline shows nothing, so
     // it costs nothing to let it run -- and it MUST run, or `last` never gets recorded and the first
     // real change plays a bogus pre->proj climb. T.show() picks warm-vs-cold off its own `showing`.
+    //
+    // THE SHOW TRIGGER IS ALSO GATED ON `showEvents` (mod_settings.progress_show_events, with
+    // "Always" already folded in Python -- there is no master field to read here). `!== false`, NOT
+    // `!!`: a model that does not carry the field at all (a pre-push frame, a harness fixture) must
+    // degrade to the SHIPPED behaviour, which is "an event raises the bar". The other two visibility
+    // switches need no branch -- "Alt Press" and "Always" both arrive folded into `altHeld` below.
     if (first) {
         // Silent baseline: settle the bar at its resting values without showing anything.
         setPos(cur.projAvg, false);
         swapped = true;
         showVal(true);
-    } else if (changed && T.settled()) {
+    } else if (changed && model.showEvents !== false && T.settled()) {
         T.show();
     }
 

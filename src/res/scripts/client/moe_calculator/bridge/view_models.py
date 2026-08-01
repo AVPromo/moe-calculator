@@ -217,7 +217,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=11, commands=0):
+    def __init__(self, properties=12, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -251,6 +251,17 @@ class ProgressVM(ViewModel):
                                                      #    shipped (an animated bar)
         self._addBoolProperty("transManual", True)    # 10 the same for the ALT PEEK's enter/exit
                                                      #    (progress_transitions_manual())
+        self._addBoolProperty("showEvents", True)     # 11 may a BATTLE EVENT raise the bar at all
+                                                     #    (mod_settings.progress_show_events, with
+                                                     #    "Always" already folded in). APPENDED.
+                                                     #    A DIFFERENT axis from transEvents above:
+                                                     #    this is WHETHER it comes up, that one is
+                                                     #    only HOW it moves. The other two
+                                                     #    visibility switches need no field --
+                                                     #    "Alt Press" and "Always" are both folded
+                                                     #    into `altHeld` by
+                                                     #    mod_settings.progress_alt_held(), because
+                                                     #    a permanently-held Alt IS "Always"
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -285,6 +296,9 @@ class ProgressVM(ViewModel):
     def setTransManual(self, v):
         self._setBool(10, v)
 
+    def setShowEvents(self, v):
+        self._setBool(11, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -311,7 +325,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=14, commands=0):
+    def __init__(self, properties=15, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -354,6 +368,14 @@ class EfficiencyVM(ViewModel):
                                                     #    so false here means "instant", full stop
         self._addBoolProperty("transManual", True)   # 13 the same for the ALT PEEK's enter/exit
                                                     #    (progress_transitions_manual())
+        self._addBoolProperty("showEvents", True)    # 14 may a BATTLE EVENT raise the bar at all
+                                                    #    (mod_settings.progress_show_events, with
+                                                    #    "Always" already folded in). APPENDED.
+                                                    #    Same wire meaning as ProgressVM's, and the
+                                                    #    same DIFFERENT axis from transEvents: this
+                                                    #    is WHETHER it comes up, that is only HOW.
+                                                    #    "Alt Press" / "Always" ride on `altHeld`
+                                                    #    (mod_settings.progress_alt_held)
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -396,3 +418,6 @@ class EfficiencyVM(ViewModel):
 
     def setTransManual(self, v):
         self._setBool(13, v)
+
+    def setShowEvents(self, v):
+        self._setBool(14, v)
