@@ -168,18 +168,31 @@ def _sole_rule_decls(css, selector, what):
 def test_the_delta_carries_the_efficiency_bars_size_and_nudge():
     # A live pass settled the recent-delta's look on the Damage Efficiency bar; the maintainer asked
     # for the SAME size and nudge here. The values are MoEEfficiency.css's `.mp-cap .mp-d` --
-    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: the X gap is
-    # already margin-left: 0.35em == the same 4.2rem at 12rem (see the centring test below, which
+    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: the X gap
+    # is already margin-left: 0.35em == the same 4.2rem at 12rem (see the centring test below, which
     # pins that gap and the anchor it hangs off). Adding an X term here would DOUBLE the gap.
     # The tuner is asserted alongside because MoEProgress.css is a -EmitCss output: pinning only the
     # stylesheet lets the next re-emit revert this silently, which is how it was lost once already.
     decls = _sole_rule_decls(_read("MoEProgress.css"), ".mp-cap .mp-d", "MoEProgress.css")
     assert re.search(r"\bfont-size:\s*12rem\s*;", decls), "delta font-size is not 12rem"
-    assert re.search(r"\btransform:\s*translateY\(2\.5rem\)\s*;", decls), "delta Y nudge is not 2.5rem"
+    assert re.search(r"\btransform:\s*translateY\(2\.5rem\)\s*;", decls), \
+        "delta Y nudge is not 2.5rem"
     tuner = _read_tuner()
     assert tuner.count("font-size: 12rem;\\n") == 1 and \
         tuner.count("transform: translateY(2.5rem);\\n") == 1, \
         "gen_bar_tuner.ps1 -EmitCss no longer emits the delta size/nudge -- a re-emit would revert it"
+    # ...AND THE TUNER'S OTHER HALF. Its live-preview <style> carries its OWN hardcoded copy of both
+    # (no knob: see the -EmitCss comment), and that preview is the surface the look is APPROVED on
+    # -- so a drift there sends the next live pass back to re-tuning a value that already shipped.
+    # Anchored on the rule's OWN opening, not on a bare `translateY(2.5rem)`: the stylesheet and both
+    # tuner halves each carry a translateY of their own for the SIDE captions' numerals (the numY
+    # knob), so an unanchored search is satisfied the moment those two happen to agree -- which is a
+    # single retune away. The assertion above is scoped by _sole_rule_decls for the same reason; this
+    # file's whole anti-vacuity rule is that a value only counts when read out of the rule that owns
+    # it.
+    assert tuner.count(".mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;"
+                       "font-size:12rem;transform:translateY(2.5rem);") == 1, \
+        "the tuner's LIVE PREVIEW no longer previews the delta's tuned size/nudge"
 
 
 def _rem(decls, prop, what):
@@ -187,6 +200,44 @@ def _rem(decls, prop, what):
     match = re.search(r"\b%s:\s*(-?[\d.]+)rem\s*;" % re.escape(prop), decls)
     assert match, "%s: no %s in `%s`" % (what, prop, decls.strip())
     return Decimal(match.group(1))
+
+
+def test_the_two_centre_captions_icons_sit_at_their_tuned_y():
+    """The Y of each centre caption's icon, PINNED AS A VALUE in both halves.
+
+    The centring test below walks these same two rules but only asserts the transform's SHAPE
+    (`translate(0rem, <signed rem>)`) -- what it owns is the negative margin, and it keeps that
+    shape check only to prove the per-role Y still rides a transform rather than a margin. That
+    left the Y ITSELF with no signal at all: a live pass moved the bottom row's glyph 3rem and
+    reverting it -- in the stylesheet OR in the tuner's SCHEMA default -- kept the whole suite green.
+    So pin the literal, the way the delta's nudge above is pinned.
+
+    ONE tuner assertion per caption covers BOTH tuner halves, because both DERIVE from the knob
+    rather than restating it: -EmitCss interpolates `st.icoYC` (asserted in the centring test) and
+    the live preview writes it into the --icoyc custom property (asserted here). Those two
+    derivation pins are what make the SCHEMA default the single source -- and hence what makes
+    pinning that default enough. THE TOP caption is in here too even though that pass only moved
+    the bottom one: its Y sits behind exactly the same shape-only check, so it carried the same
+    hole, and 0 is the value where a DROPPED translateY would look identical.
+    """
+    css, tuner = _read("MoEProgress.css"), _read_tuner()
+    for cap, knob, prop, want in ((".mp-capP", "icoYP", "--icoyp", "0"),
+                                  (".mp-capC", "icoYC", "--icoyc", "1")):
+        decls = _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css")
+        got = re.search(r"\btransform:\s*translate\(0rem,\s*(-?[\d.]+)rem\)\s*;", decls)
+        assert got and Decimal(got.group(1)) == Decimal(want), \
+            "%s's icon Y is %s, not %srem" % (cap, got and got.group(1) + "rem", want)
+        # THE TUNER'S SCHEMA DEFAULT, scoped to the ONE knob entry that owns it -- a 128KB file of
+        # prose, sliders and two CSS templates, where a bare search for `1` is satisfied by
+        # anything from a slider `min` to a comment.
+        default = re.search(r'\{id:"%s",[^}]*\bval:(-?[\d.]+)\}' % knob, tuner)
+        assert default and Decimal(default.group(1)) == Decimal(want), \
+            "gen_bar_tuner.ps1's %s default is %s, not %s -- the next -EmitCss would revert the " \
+            "stylesheet" % (knob, default and default.group(1), want)
+        assert tuner.count("%s .mp-ico{transform:translate(0,var(%s))" % (cap, prop)) == 1, \
+            "the tuner's live preview no longer takes %s's icon Y from %s" % (cap, prop)
+        assert tuner.count('S.setProperty("%s",rem(st.%s))' % (prop, knob)) == 1, \
+            "the tuner's live preview no longer writes %s from the st.%s knob" % (prop, knob)
 
 
 def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
@@ -220,8 +271,10 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
         decls = _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css")
         assert _rem(decls, "margin-left", "MoEProgress.css") == -(box + gap), \
             "%s's icon does not cancel its own %srem box + the %srem gap" % (cap, box, gap)
-        # ...and the per-role Y is still on the SAME rule's transform, not traded for a margin.
-        assert re.search(r"\btransform:\s*translate\(0rem,\s*-?[\d.]+rem\)\s*;", decls), \
+        # ...and the per-role Y is still on the SAME rule's transform, not traded for a margin. Shape
+        # only, as the docstring says -- the quantisation term chained after it is matched loosely
+        # here on purpose (the test above pins it per caption).
+        assert re.search(r"\btransform:\s*translate\(0rem,\s*-?[\d.]+rem\)[^;]*;", decls), \
             "%s's icon lost the transform that scopes its glow's z-index" % cap
     for cap in (".mp-capL", ".mp-capR"):
         assert "margin-left" not in _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css"), \
@@ -350,15 +403,22 @@ _LG = ".mp-lg "
 
 
 def _x4_3(text):
-    """`text` with every rem length multiplied by SIZE_XF, at the stylesheet's own 3dp."""
+    """`text` with every rem AND em length multiplied by SIZE_XF, at the stylesheet's own 3dp.
+
+    The UNIT IS PRESERVED, and `em` is in here because leaving it out is how the delta's gap shipped
+    25% short under the size mode: `.mp-cap .mp-d`'s `margin-left: 0.35em` is a horizontal length
+    like any other, and 0.35em of a font-size the root font already grew by SIZE_F carries SIZE_F
+    but not SIZE_XF. Everything else a value can hold -- a %, `contain`, a colour, `90deg`, a
+    background-size y-ratio -- still passes through untouched, which is what the CLEAN claim rests
+    on."""
     xf = _size_factor("SIZE_XF")
 
     def _one(match):
         scaled = (Decimal(match.group(1)) * xf).quantize(Decimal("0.001"),
                                                          rounding=ROUND_HALF_UP)
-        return format(scaled.normalize(), "f") + "rem"
+        return format(scaled.normalize(), "f") + match.group(2)
 
-    return re.sub(r"(-?[\d.]+)rem", _one, text)
+    return re.sub(r"(-?[\d.]+)(r?em)", _one, text)
 
 
 def _xnum(value):
@@ -425,7 +485,10 @@ def _x_props(body):
 
     The classification is mechanical, not a hand-kept list -- a hand-kept list is how the next
     x-length gets added with no twin and nothing notices:
-      * a left/right margin or padding, and `left`/`right` itself, are always x;
+      * a left/right margin or padding, and `left`/`right` itself, are always x -- in rem OR em
+        (`r?em`): an em x-length still owes SIZE_XF on top of the root font, and reading this as
+        rem-only is exactly how the delta's `margin-left: 0.35em` went twinless and rendered its
+        gap 25% short under the size mode;
       * a `width` in rem is x UNLESS the same rule gives `height` the same value -- that is a
         SQUARE icon box, a uniform length the root font already scales (scaling it would stretch
         the glyph);
@@ -437,7 +500,7 @@ def _x_props(body):
     for prop, value in _decls(body):
         if prop in ("margin-left", "margin-right", "padding-left", "padding-right",
                     "left", "right"):
-            hit = re.search(r"-?[\d.]+rem", value)
+            hit = re.search(r"-?[\d.]+r?em", value)
         elif prop == "width":
             hit = (re.match(r"^-?[\d.]+rem$", value) and values.get("height") != value)
         elif prop == "transform":
@@ -452,16 +515,22 @@ def _x_props(body):
 
 
 def _lg_completeness(name):
-    """(base selectors that declare an x-length, `.mp-lg` selectors) for one stylesheet."""
+    """({(base selector, x-property)}, {(twin selector, property)}) for one stylesheet.
+
+    PER DECLARATION, not per selector -- and that distinction is itself a hole this section once
+    had, of exactly the species it exists to catch. `.mp-cap .mp-d` already carried a `.mp-lg` twin
+    for its transform, so the day its `margin-left` gap was added the SELECTOR was already in both
+    sets and the new x-length's missing twin was invisible. Confirmed by mutation probe: adding an
+    untwinned em x-length to a rule that already has a twin left the whole suite green."""
     base, large = _cascade(name)
-    return ({s for s, body in base.items() if _x_props(body)},
-            {s[len(_LG):] for s in large})
+    return ({(s, p) for s, body in base.items() for p in _x_props(body)},
+            {(s[len(_LG):], p) for s, body in large.items() for p, _v in _decls(body)})
 
 
 def test_the_large_block_twins_exactly_the_base_cascades_x_lengths():
-    # COMPLETE, both directions. A base x-length with no twin renders half-scaled horizontally
-    # under the large mode; a twin with no base x-length is a rule scaling something the root font
-    # already handled (or a selector typo that silently styles nothing).
+    # COMPLETE, both directions and per DECLARATION. A base x-length with no twin renders
+    # half-scaled horizontally under the large mode; a twin with no base x-length is a rule scaling
+    # something the root font already handled (or a selector typo that silently styles nothing).
     want, got = _lg_completeness("MoEProgress.css")
     assert got == want, "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
         sorted(want - got), sorted(got - want))
@@ -497,7 +566,7 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
                 "%s { %s: %s } is not the base `%s` times 4/3" % (selector, prop, value,
                                                                   base_decls[prop])
             checked += 1
-    assert checked == 9, "expected 9 straight x4/3 declarations, checked %d" % checked
+    assert checked == 10, "expected 10 straight x4/3 declarations, checked %d" % checked
 
 
 def test_the_large_block_carries_no_keyframe_and_no_vertical_length():
@@ -579,6 +648,10 @@ def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():
     inside = css[css.index(head):css.index(tail)]
     assert css.count(_LG) == inside.count(_LG) > 0, \
         "a .mp-lg rule sits OUTSIDE the marked block -- a re-emit would drop it silently"
-    assert ".mp-lg" not in _read_tuner(), \
+    # A RULE, not a mention: the emitted caption-pin comment names `.mp-lg` when it points readers at
+    # the sibling hand-added blocks, and a bare substring search is satisfied by that prose (the repo
+    # lesson `unscoped-substring-assertion-is-not-an-assertion`, in the direction that FAILS a green
+    # file). A selector followed by a declaration brace is the thing that would actually be emitted.
+    assert not re.search(r"\.mp-lg [^\n\"]*\{", _read_tuner()), \
         "gen_bar_tuner.ps1 now emits the size mode -- move this guard onto its emit, the way the " \
         "delta size/nudge pins are asserted in BOTH the tuner and the stylesheet"

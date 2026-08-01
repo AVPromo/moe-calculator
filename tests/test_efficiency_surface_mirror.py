@@ -352,6 +352,76 @@ def _translate_y(css, selector):
     return float(match.group(1))
 
 
+def _eff_tuner():
+    """tools/dev/eff_bar_tuner.html -- the SINGLE source of truth for every number in this bar's
+    base cascade: MoEEfficiency.css's non-`.mp-lg` half IS this tuner's emit, byte-for-byte
+    (tools/dev/emit_eff_css.js re-assembles it and check_eff_css.js gates the drift). Read RAW:
+    SCHEMA is JS, not CSS, so the CSS comment strippers above do not apply -- and every assertion
+    on it below is scoped to the ONE `{id:"..."}` entry that owns the value."""
+    with open(os.path.join(os.path.dirname(__file__), "..", "tools", "dev",
+                           "eff_bar_tuner.html")) as handle:
+        return handle.read()
+
+
+def _knob(name):
+    """One SCHEMA knob's default `val`, scoped to its own entry, as a Decimal.
+
+    Scoped and not a bare search on purpose: the tuner's prose and its selfCheck() PROBE VALUES
+    quote these very numbers (selfCheck deliberately re-emits at -1.75 / -2.25 / -1.25), so a
+    file-wide grep for a value here would be satisfied by a probe that has nothing to do with the
+    shipped default."""
+    match = re.search(r'\{id:"%s",[^}]*\bval:(-?[\d.]+)\}' % re.escape(name), _eff_tuner())
+    assert match, "eff_bar_tuner.html: no SCHEMA entry for knob '%s'" % name
+    return Decimal(match.group(1))
+
+
+def _css_num(value):
+    """A Decimal as the tuner's emit spells it (no trailing zeros, never exponent form)."""
+    return format(value.normalize(), "f")
+
+
+def test_the_current_rows_delta_and_icon_sit_at_their_tuned_y():
+    """The current-damage row's delta and icon Ys, PINNED AS VALUES and against their knobs.
+
+    Neither had independent signal before this test: the only thing asserting them was the
+    base<->`.mp-lg` twin lockstep below, so a coherent 3rem shift -- the tuner default, the shipped
+    base rule, the shipped twin and emit_eff_css.js's copy of the twin, all four together -- left the
+    suite fully green (that shift was attempted, and reverted, precisely because nothing caught it).
+    Two claims per value, because they fail differently:
+
+      LOCKSTEP  the shipped rule is what the knob emits. This stylesheet's base half is the
+                tuner's emit byte-for-byte, so a stylesheet-only pin lets the next
+                `node tools/dev/emit_eff_css.js` revert it silently (the repo lesson
+                `emitcss-is-not-the-whole-shipped-stylesheet`, and how this bar's sibling lost its
+                delta size once already).
+      THE VALUE the literal the live pass settled on. A pure knob has no derivation to check it
+                against, so the literal IS the pin -- and it is what refuses a coherent shift.
+
+    THE DELTA'S X IS TREATED THE OTHER WAY ROUND: 4.2rem is not a knob, it is dGap * dFS at the
+    tuner's own 2dp (`dTf`, eff_bar_tuner.html:706), so it is RE-DERIVED from those two knobs
+    rather than restated -- a genuine retune of the gap or the delta's size moves both and still
+    passes, while drift in one alone fails. The Y half must NOT pick up that derivation, which is
+    the whole reason they share one translate(): only the FIRST argument is horizontal.
+    """
+    css = _css()
+    # X: derived. Y: pinned. Asserted as ONE whole declaration so a dropped argument fails too --
+    # a `translate(4.2rem)` renders no Y at all and would satisfy two separate half-assertions.
+    gap_x = (_knob("dGap") * _knob("dFS")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    assert _decl(css, ".mp-cap .mp-d", "transform") == \
+        "translate(%srem, %srem)" % (_css_num(gap_x), _css_num(_knob("dY"))), \
+        "the delta's translate is not `dGap*dFS` in x and the dY knob in y"
+    assert _knob("dY") == Decimal("2.5"), \
+        "eff_bar_tuner.html's dY default is %s -- the live pass settled the delta at 2.5rem" % (
+            _knob("dY"),)
+    # The icon keeps its gap in the SAME transform (Coherent drops margin on the `right:100%`
+    # side), so only the chained translateY() is this row's Y nudge.
+    assert Decimal(str(_translate_y(css, ".mp-cap.up .mp-ico"))) == _knob("icoyCur"), \
+        "the current row's icon Y is not the icoyCur knob -- a re-emit would move the glyph"
+    assert _knob("icoyCur") == Decimal("0.5"), \
+        "eff_bar_tuner.html's icoyCur default is %s -- the live pass settled the glyph at " \
+        "0.5rem" % (_knob("icoyCur"),)
+
+
 def test_the_sizing_boxs_height_is_the_emits_own_five_term_derivation():
     # THE HEIGHT IS DERIVED, AND meta CARRIES NO COPY OF IT (only boxWRem), so before this test it
     # was the one emitted number with ZERO test signal -- it went 51 -> 55 on a re-tune of tickH /
@@ -607,15 +677,23 @@ _LG = ".mp-lg "
 
 
 def _x4_3(text):
-    """`text` with every rem length multiplied by SIZE_XF, at the stylesheet's own 3dp."""
+    """`text` with every rem AND em length multiplied by SIZE_XF, at the stylesheet's own 3dp.
+
+    The UNIT IS PRESERVED, and `em` is in here for the reason the sibling
+    tests/test_progress_surface_mirror.py spells out: an `em` x-length is a horizontal length like
+    any other and still owes SIZE_XF on top of the root font, and a rem-only matcher is blind to it
+    -- which is how THAT stylesheet shipped its delta gap 25% short under the size mode. This bar
+    happens to spell that same gap in rem (the x half of `.mp-cap .mp-d`'s translate), so today the
+    `em` branch is latent here; it is kept in lockstep anyway, because the next `em` x-length added
+    to this file must not be invisible too."""
     xf = _size_factor("SIZE_XF")
 
     def _one(match):
         scaled = (Decimal(match.group(1)) * xf).quantize(Decimal("0.001"),
                                                          rounding=ROUND_HALF_UP)
-        return format(scaled.normalize(), "f") + "rem"
+        return format(scaled.normalize(), "f") + match.group(2)
 
-    return re.sub(r"(-?[\d.]+)rem", _one, text)
+    return re.sub(r"(-?[\d.]+)(r?em)", _one, text)
 
 
 # WHICH PROPERTIES CARRY THE X FACTOR, and how much of their value is horizontal. Doubling as the
@@ -667,6 +745,15 @@ def _cascade():
     """({base selector: decls}, {.mp-lg selector: decls}) for MoEEfficiency.css."""
     base, large = {}, {}
     for selector, body in _rules(_css()):
+        # `.mp-s1` / `.mp-s1.mp-lg` are HAND-ADDED BLOCK 4's INTERFACE-SCALE correction and are
+        # dropped here: they are conditional overrides of the base cascade, not x-length twins of it,
+        # and the pair already IS its own size-mode twin (the compound selector, at (0,5,0), is what
+        # keeps the Large x). tests/test_caption_anchor_quantisation.py pins their exact values.
+        # ANCHORED WITH A DIGIT on purpose: an earlier `.mp-c` form of this exclusion also swallowed
+        # every `.mp-cap` BASE rule and silently emptied the walk of the declarations it exists to
+        # check.
+        if re.match(r"\.mp-s\d\b", selector):
+            continue
         (large if selector.startswith(_LG) else base)[selector] = body
     return base, large
 
@@ -684,7 +771,9 @@ def _x_props(body):
 
     Mechanical, not a hand-kept list -- a hand-kept list is how the next x-length gets added with
     no twin and nothing notices:
-      * a left/right margin or padding, and `left`/`right` itself, are always x;
+      * a left/right margin or padding, and `left`/`right` itself, are always x -- in rem OR em
+        (`r?em`), for the reason _x4_3 above gives: reading this as rem-only is exactly how the
+        sibling stylesheet's `margin-left: 0.35em` went twinless;
       * a `width` in rem is x UNLESS the same rule gives `height` the same value -- that is a
         SQUARE icon box, a uniform length the root font already scales (this bar has four of them:
         .mp-ico, .mp-ico.mk, .mp-ico.bm, .mp-ico.dmg);
@@ -697,7 +786,7 @@ def _x_props(body):
     for prop, value in _decls(body):
         if prop in ("margin-left", "margin-right", "padding-left", "padding-right",
                     "left", "right"):
-            hit = re.search(r"-?[\d.]+rem", value)
+            hit = re.search(r"-?[\d.]+r?em", value)
         elif prop == "width":
             hit = (re.match(r"^-?[\d.]+rem$", value) and values.get("height") != value)
         elif prop == "transform":
@@ -712,12 +801,15 @@ def _x_props(body):
 
 
 def test_the_large_block_twins_exactly_the_base_cascades_x_lengths():
-    # COMPLETE, both directions. A base x-length with no twin renders half-scaled horizontally under
-    # the large mode; a twin with no base x-length is a rule scaling something the root font already
-    # handled (or a selector typo that silently styles nothing).
+    # COMPLETE, both directions, and per DECLARATION rather than per selector -- the sibling file's
+    # _lg_completeness spells out why: a rule that ALREADY has a twin hides the next x-length added
+    # to it, which is the same species of miss as the untwinned gap that shipped. A base x-length
+    # with no twin renders half-scaled horizontally under the large mode; a twin with no base
+    # x-length is a rule scaling something the root font already handled (or a selector typo that
+    # silently styles nothing).
     base, large = _cascade()
-    want = {s for s, body in base.items() if _x_props(body)}
-    got = {s[len(_LG):] for s in large}
+    want = {(s, p) for s, body in base.items() for p in _x_props(body)}
+    got = {(s[len(_LG):], p) for s, body in large.items() for p, _v in _decls(body)}
     assert got == want, "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
         sorted(want - got), sorted(got - want))
 
@@ -752,7 +844,10 @@ def test_the_large_block_carries_no_keyframe_and_no_vertical_length():
     # a `@keyframes` (mp-life's slide is a y length, and its identity is what the twin blocks exist
     # for) would not be a rule at all and would slip past the walk entirely. Read from the RAW file
     # so the block's own markers are visible.
-    block = _read("MoEEfficiency.css").split('HAND-ADDED BLOCK 3 OF 3')[-1]
+    # Scoped to BLOCK 3's own markers: BLOCK 4 (the temporary diagnostic) follows it in the file.
+    # Scoped to BLOCK 3's own markers: BLOCK 4 (the temporary probe) follows it in the file.
+    block = _read("MoEEfficiency.css").split('HAND-ADDED BLOCK 3 OF 4')[-1] \
+                                      .split('END HAND-ADDED BLOCK 3')[0]
     assert "@keyframes" not in block and "%{" not in block, \
         "the .mp-lg block grew a keyframe -- the root font already scales mp-life's slide"
 

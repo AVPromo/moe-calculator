@@ -260,8 +260,8 @@ $tpl = @'
      WG's own _dist corpus. padding-bottom / padding-right have several and DO apply, so
      those two directions use padding. The top:100%+margin-top / left:100%+margin-left
      twins work as written -- do not "unify" them onto padding. */
-  .mp-cap.up{bottom:100%;padding-bottom:var(--gapreq);font-size:var(--reqfs)}
-  .mp-cap.dn{top:100%;margin-top:var(--gapcur);font-size:var(--curfs)}
+  .mp-cap.up{bottom:100%;padding-bottom:var(--gapreq);font-size:var(--reqfs);line-height:var(--reqlh)}
+  .mp-cap.dn{top:100%;margin-top:var(--gapcur);font-size:var(--curfs);line-height:var(--curlh)}
   /* SIDE (axis-end) captions: the .mp-tick centring trick -- top:50% + translateY(-50%) -- so the
      row's box centres on the track midline. `left:auto` is REQUIRED on the left one because
      .mp-cap sets left:0 and right:100% alone would not release it. Two classes so the transform
@@ -271,7 +271,7 @@ $tpl = @'
      nudge is on a CHILD, so the two transforms never clobber each other (and the ::before glow's
      z-index:-1 stays scoped by .mp-ico's own transform). Own font size (--endfs): these are no
      longer "the top captions", so they must not inherit .up's. */
-  .mp-cap.side{top:50%;transform:translateY(-50%);font-size:var(--endfs)}
+  .mp-cap.side{top:50%;transform:translateY(-50%);font-size:var(--endfs);line-height:var(--endlh)}
   .mp-cap.side.mp-capL{left:auto;right:100%;padding-right:var(--gapendl)}
   .mp-cap.side.mp-capR{left:100%;margin-left:var(--gapendr)}
   /* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
@@ -311,7 +311,7 @@ $tpl = @'
      a pointer-events:none overlay, so there is nothing to hit-test or focus behind a 0-alpha box.
      ONE transition declaration on .mp-d, naming ONLY opacity -- explicit ms + easing in the
      emitted CSS (Gameface drops a transition whose property starts from an unresolvable var()). */
-  .mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;font-size:12rem;transform:translateY(2.5rem);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;font-size:12rem;transform:translateY(2.5rem);line-height:15.5rem;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mp-v.mp-up,.mp-d-num.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mp-v.mp-down,.mp-d-num.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   /* Only the bottom-centre caption animates (it rides proj_avg); pre_avg's stays put. */
@@ -540,6 +540,24 @@ $tpl = @'
            top:IMGDIR+QT+"icon_battle_condition_top.png",
            mk:[IMGDIR+"library/marksOnGun/mark_1.png",IMGDIR+"library/marksOnGun/mark_2.png",IMGDIR+"library/marksOnGun/mark_3.png"]};
   function rem(v){return (v*st.pxrem).toFixed(2)+"px";}
+  // THE PINNED LINE BOX -- used by BOTH halves (the live preview's custom properties and the
+  // -EmitCss builder), because a caption's box height must not depend on the rem->px factor.
+  // `line-height: normal` makes the line box the font's ascent+descent+gap SNAPPED UP TO WHOLE
+  // DEVICE PIXELS, so measured in rem it SHRINKS as that factor grows: a 16rem caption is 21.000rem
+  // at factor 1, 20.500 at 2, 20.125 at 24 (all three measured live). The captions place their
+  // glyph off that box -- .mp-ico is a flex item under align-items:center here, and top:50% of the
+  // same box on the sibling efficiency bar -- so HALF that variation lands straight in the icon's Y
+  // and the numerals drift apart at low interface scales (reported at 3440x1440, factor 1).
+  // R == 1.2565 is MoEBattle.ttf's fitted line ratio: ceil(font_px*R) reproduces all six measured
+  // boxes (16/32/384px -> 21/41/483, 12/24/288px -> 16/31/362), and the fit corridor is
+  // (1.25521, 1.25694]. PINNED AT THE FACTOR-2 VALUE, not at the font's true unsnapped ratio: the
+  // maintainer's own render IS factor 2 and must not move by even one device pixel, whereas a
+  // `1.2565em` line-height would compute to 40.2px there and shift everything 0.75px.
+  // Halves are exact in rem (x.0 / x.5), so the emitted length stays a plain decimal.
+  // NO LARGE-MODE TWIN: line-height is a uniform (vertical) length, so the root font alone scales
+  // it (SIZE_F) -- a size-mode twin would DOUBLE-apply it, and
+  // tests/test_progress_surface_mirror.py's large-mode walk refuses one.
+  function lh(fs){return Math.ceil(fs*2*1.2565)/2;}
   function fmt(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
   function hexA(hex,a){var n=parseInt(hex.slice(1),16);return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";}
 
@@ -942,6 +960,11 @@ $tpl = @'
     S.setProperty("--gapendl",rem(st.gapEndL));S.setProperty("--gapendr",rem(st.gapEndR));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--endfs",rem(st.endFS));
+    // ...and each caption's PINNED line box, DERIVED from the same font-size knob (see lh()): a
+    // literal here would leave the box behind the next size retune, which is the whole failure
+    // mode being fixed.
+    S.setProperty("--reqlh",rem(lh(st.reqFS)));S.setProperty("--curlh",rem(lh(st.curFS)));
+    S.setProperty("--endlh",rem(lh(st.endFS)));
     S.setProperty("--wt",st.wt);S.setProperty("--ls",st.ls+"em");S.setProperty("--textsh",textSh());
     S.setProperty("--trackbg",trackBg());S.setProperty("--fillbg",fillBg());
     // The fill's signed colours: the SAME upCol/dnCol the numerals glow with, at the fill's own
@@ -1228,8 +1251,41 @@ $tpl = @'
       "   corpus, while padding-bottom / padding-right have several and DO apply. Hence padding on\n"+
       "   those two directions only; the top:100%+margin-top / left:100%+margin-left twins work as\n"+
       "   written and must NOT be \"unified\" onto padding. */\n"+
-      ".mp-cap.up { bottom: 100%; padding-bottom: "+st.gapReq+"rem; font-size: "+st.reqFS+"rem; }\n"+
-      ".mp-cap.dn { top: 100%; margin-top: "+st.gapCur+"rem; font-size: "+st.curFS+"rem; }\n"+
+      "/* EVERY CAPTION PINS ITS LINE BOX, and that is a BUG FIX, not a style choice. With\n"+
+      "   `line-height: normal` the line box is the font's ascent+descent+gap SNAPPED UP TO WHOLE\n"+
+      "   DEVICE PIXELS, so in rem it is NOT constant -- it shrinks as the rem->px factor grows. For a\n"+
+      "   16rem caption, measured live: 21.000rem at factor 1, 20.500 at 2, 20.125 at 24 (and for the\n"+
+      "   12rem delta: 16.000 / 15.500 / 15.083). .mp-ico is a flex item under align-items: center, so\n"+
+      "   HALF that variation goes straight into the glyph's Y -- the icon and delta read ~0.75rem low\n"+
+      "   relative to the numeral at factor 1 versus factor 2 (reported at 3440x1440).\n"+
+      "   THE VALUE: ceil(font_rem * 2 * 1.2565) / 2, i.e. the FACTOR-2 box expressed in rem. 1.2565 is\n"+
+      "   MoEBattle.ttf's fitted line ratio and ceil(font_px * 1.2565) reproduces all six measurements\n"+
+      "   above. Pinned at the factor-2 value ON PURPOSE rather than at the font's true unsnapped\n"+
+      "   ratio: factor 2 is the render this composition was approved on and must not move by even one\n"+
+      "   device pixel, while a `1.2565em` line-height computes to 40.2px there and would shift it\n"+
+      "   0.75px. Every pin below is therefore byte-identical to what `normal` already yielded at\n"+
+      "   factor 2, and only factors != 2 change.\n"+
+      "   NO LARGE-MODE TWIN, EVER: line-height is a uniform (vertical) length, so the root font\n"+
+      "   (SIZE_F) scales it alone -- a twin would double-apply it. The residual this does NOT fix is\n"+
+      "   the glyph's own ascent snap INSIDE the pinned box (sub-0.5rem, and it moves the numeral and\n"+
+      "   the delta together rather than pulling them apart).\n"+
+      "   ...AND THE PIN IS NOW LOAD-BEARING FOR A SECOND FIX, which is why it must not be reverted or\n"+
+      "   turned back into an em: it makes each caption's box a CONSTANT number of rem, so the vertical\n"+
+      "   anchor of the pieces hanging off it -- (line box - own box) / 2 + the tuned nudge -- is a\n"+
+      "   constant too, and CAN be quantised. It is not, however, a whole number of DEVICE pixels: at the\n"+
+      "   shipped values it lands on a quarter of a rem (.mp-capC's glyph: (20.5-16)/2 + 1 == 3.25rem),\n"+
+      "   which is whole only where the rem->px factor is a multiple of 4. At factor 2 it is a whole HALF\n"+
+      "   pixel -- the approved render. At factor 1 (interface scale 1, reported at 3440x1440) it is 0.75\n"+
+      "   of a device pixel, so the engine resolves the glyph's box origin DOWN-SCREEN. NO CORRECTION IS\n"+
+      "   SHIPPED FOR IT YET, and the reason is worth keeping: a correction has to apply at factor 1 and NOT\n"+
+      "   at factor 2, and nothing inside these registered views is known to report the interface scale --\n"+
+      "   the surface push that proves the geometry (viewEnv.resizeViewRem) is a write-only C++ sink, and a\n"+
+      "   root-font read keyed a whole build that never took effect at any scale. See\n"+
+      "   tests/test_caption_anchor_quantisation.py for the measurements and the four attempts. */\n"+
+      ".mp-cap.up { bottom: 100%; padding-bottom: "+st.gapReq+"rem; font-size: "+st.reqFS+"rem;\n"+
+      "             line-height: "+lh(st.reqFS)+"rem; }\n"+
+      ".mp-cap.dn { top: 100%; margin-top: "+st.gapCur+"rem; font-size: "+st.curFS+"rem;\n"+
+      "             line-height: "+lh(st.curFS)+"rem; }\n"+
       "/* SIDE (axis-end) captions -- the .mp-tick vertical trick: top:50% + translateY(-50%) centres\n"+
       "   the flex row's box on the track midline. `left: auto` is REQUIRED on the left one because\n"+
       "   .mp-cap sets left:0 and right:100% alone would not release it. TWO classes so the transform\n"+
@@ -1242,7 +1298,8 @@ $tpl = @'
       "   CAPTION box while the per-role icon nudge is on the .mp-ico CHILD, so the two transforms\n"+
       "   cannot clobber each other and .mp-ico keeps its own stacking context (see below). Their\n"+
       "   font-size is their OWN (not .up's): these are side labels, not top labels. */\n"+
-      ".mp-cap.side { top: 50%; transform: translateY(-50%); font-size: "+st.endFS+"rem; }\n"+
+      ".mp-cap.side { top: 50%; transform: translateY(-50%); font-size: "+st.endFS+"rem;\n"+
+      "               line-height: "+lh(st.endFS)+"rem; }\n"+
       "/* SIDE-CAPTION NUMERAL NUDGE -- a FONT METRICS correction, not a box-height problem.\n"+
       "   MoEBattle.ttf is ascender 2088 / descender 486 at upem 2048 = a 1.2568em line box\n"+
       "   (17.60rem at the "+st.endFS+"rem side font-size), but the digit ink spans only\n"+
@@ -1251,7 +1308,11 @@ $tpl = @'
       "   track midline. Result: the numerals read ~0.53rem low; this transform pulls them back.\n"+
       "   Do NOT \"fix\" this with min-height/line-height on the caption -- the box is ALREADY\n"+
       "   17.60rem tall, so any min-height at or below that (the 17rem mark box, say) is a literal\n"+
-      "   no-op. Scoped to .side only: .up/.dn hang off the track edges instead of being centred on\n"+
+      "   no-op. (The line-height PIN above is not that fix and does not disturb this one: it states\n"+
+      "   the snapped-up box, "+lh(st.endFS)+"rem, which is what `normal` already yielded at BOTH\n"+
+      "   factor 1 and factor 2 for this font size -- it only stops the box shrinking at higher\n"+
+      "   factors, and the ink offset it corrects is a font-metrics constant either way.)\n"+
+      "   Scoped to .side only: .up/.dn hang off the track edges instead of being centred on\n"+
       "   the midline, so they must never pick this up. .mp-v is a flex item of the .mp-cap row, so\n"+
       "   a transform applies to it (it would not on a bare inline span). */\n"+
       ".mp-cap.side .mp-v { transform: translateY("+st.numY+"rem); }\n"+
@@ -1312,7 +1373,10 @@ $tpl = @'
       "   restore the transition -- the same idiom the fill/tick rewind uses. */\n"+
       ".mp-cap .mp-d {\n  position: absolute;\n  left: 100%;\n  margin-left: 0.35em;\n"+
       "  font-size: 12rem;\n"+
-      "  transform: translateY(2.5rem);\n  opacity: 0;\n"+
+      "  transform: translateY(2.5rem);\n"+
+      // The delta's own line box, pinned by the same rule as the captions above (lh(12) == 15.5) --
+      // spelled as a literal because its font-size is one too (no knob owns it).
+      "  line-height: 15.5rem;\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       ".mp-v.mp-up,\n.mp-d-num.mp-up {\n  color: #ffffff;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+

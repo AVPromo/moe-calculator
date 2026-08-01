@@ -199,10 +199,19 @@ function jsFactor(src, name, where) {
 // fail-soft try/catch meant a missing documentElement looked exactly like a working shipped size).
 // `base` is deliberately NOT 1: at 1 the expected value would equal SIZE_F itself, so a module that
 // wrote the bare factor instead of base*factor would pass.
-function makeRootFont(base) {
+//
+// BOTH HALVES ARE MUTABLE, AND THAT IS THE POINT: the engine writes the view's size and its root font
+// LATE (in the first frames of a mount innerWidth/innerHeight are 0 and the computed root font is
+// still the UA default 16), which is the whole reason setRootFont gates its capture on the view
+// having a size. So `font.px` is the value getComputedStyle reports and `win` is the view size, both
+// writable by a section that wants to replay that arrival. `unsized` starts the view at 0x0 -- the
+// state a fresh mount is really in; every other section wants the settled one, which is the default.
+function makeRootFont(base, unsized) {
     const documentElement = new El("html");
-    const getComputedStyle = (el) => ({ fontSize: (el === documentElement ? base : 0) + "px" });
-    return { documentElement, getComputedStyle };
+    const font = { px: base };
+    const win = { innerWidth: unsized ? 0 : 1920, innerHeight: unsized ? 0 : 1080 };
+    const getComputedStyle = (el) => ({ fontSize: (el === documentElement ? font.px : 0) + "px" });
+    return { documentElement, getComputedStyle, font, win };
 }
 
 // Comments OUT before any source-text assertion. This repo has had a check satisfied by a COMMENT

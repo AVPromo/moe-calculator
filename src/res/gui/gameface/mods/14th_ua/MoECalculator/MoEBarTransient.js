@@ -105,6 +105,8 @@ const HIT_MAGIC = 15;
 const SIZE_F = 1.5;
 const SIZE_XF = 4 / 3;
 
+
+
 // Two interchangeable arming classes, each bound to its OWN identically-tuned @keyframes (the
 // second is each stylesheet's marked HAND-ADDED mp-life-b block), so consecutive runs never share
 // an animation-name and the engine has nothing to coalesce a restart with.
@@ -449,13 +451,69 @@ export function createTransient(cfg) {
     // Captures the base ONCE and never reads back our own inline value, so applying it twice cannot
     // compound. Fail-soft like every other engine touch: no getComputedStyle / no documentElement
     // (a shim, a stripped document) simply leaves the size alone.
+    //
+    // THE CAPTURE IS GATED ON THE VIEW HAVING A SIZE, and that gate is load-bearing. For the first
+    // frames of a mount the view has NO size (innerWidth/innerHeight are both 0 -- live-measured, in
+    // the very first dump of every mount) and THE ENGINE HAS NOT WRITTEN ITS ROOT FONT YET, so
+    // getComputedStyle hands back the UA default 16 instead of the engine's 1 (2 at interface scale
+    // x2). Baking 16 in as the base multiplied every rem by 16: with Large enabled BEFORE launch --
+    // the ONLY path where the very first applySize takes the large branch -- rootFontPx came out 24
+    // and the 400rem track 9600px wide inside a 950px surface, i.e. drawn entirely outside the view
+    // and INVISIBLE. Flipping to Large mid-session was always fine (the engine's root font is in
+    // place by then), which is exactly what hid this until it shipped.
+    // Untrusted means WRITE NOTHING -- not a guessed base, and not our own value read back: leaving
+    // the inline style alone is what keeps the LATER read (mount's post-deadline re-assert calls this
+    // again) the engine's own value.
+    // The capture, kept as its own function: it is the ONE place a root-font read happens, and it is
+    // ALSO the interface-scale signal setQuantClass gates on. That second use is MEASURED, not
+    // assumed: a four-bit screenshot probe read this value BELOW 1.5 at interface scale 1 and at/above
+    // 1.5 at scale 2, on the DEFAULT path, on fresh launches -- while devicePixelRatio and
+    // innerWidth/viewW both read a constant 1 at either scale and innerHeight/viewH a constant ratio,
+    // so none of those three is a signal. See tests/test_caption_anchor_quantisation.py.
+    // Returns the base in px; 0 == not trustworthy yet, which means DO NOTHING.
+    function captureBaseFont() {
+        if (!baseFont && (window.innerWidth || window.innerHeight)) {
+            baseFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 1;
+        }
+        return baseFont;
+    }
+
     function setRootFont() {
         try {
-            if (!baseFont) {
-                baseFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 1;
-            }
+            if (!captureBaseFont()) return;
             document.documentElement.style.fontSize = large ? (baseFont * SIZE_F) + "px" : "";
         } catch (e) { /* fail-soft: the shipped size beats a dead view */ }
+    }
+
+
+    // THE INTERFACE-SCALE GATE. The ONE class the caption-icon correction hangs off
+    // (MoEEfficiency.css's HAND-ADDED BLOCK 4, which documents the correction itself; MoEProgress.css
+    // deliberately carries no rule for it, so on the Moving Average bar this class is inert).
+    //
+    // A THRESHOLD, NEVER AN EXACT KEY: an exact match on an engine-reported number fails silently and
+    // one whole build died on exactly that. It also never consults `large` -- the size mode is a
+    // separate axis, and folding it in here is what made the correction depend on how Large was
+    // reached.
+    // THE POSITIVE LOWER BOUND IS THE TRUST GATE: captureBaseFont returns 0 while the view has no size
+    // (see it), and an untrusted read must leave the class OFF, because the base cascade IS the render
+    // the maintainer approved at interface scale 2. Every failure mode here -- no size yet, no
+    // documentElement, a throwing getComputedStyle -- therefore lands on "no class, no correction,
+    // nothing moves".
+    // toggle(cls, force) both ADDS and REMOVES, which is what makes re-evaluating safe from anywhere.
+    //
+    // KNOWN, ACCEPTED DEFECT -- A LIVE INTERFACE-SCALE CHANGE LEAVES THE CLASS STALE UNTIL RELAUNCH.
+    // Python DOES see one (settingsCore.interfaceScale.onScaleChanged -> battle_bridge's
+    // _on_scale_changed -> *_view.apply_position()), but nothing carries it into this document: there
+    // is no VM field for it, and `baseFont` is captured ONCE, so re-running the gate off a hook would
+    // re-read the old value anyway (and re-capturing is not free -- under Large we have written our
+    // own inline root font, which a naive re-read would compound). Minor, and deliberately NOT papered
+    // over with a polling timer. A measurement taken ACROSS a live scale change is therefore not a
+    // measurement of this gate.
+    function setQuantClass() {
+        try {
+            const px = captureBaseFont();
+            document.body.classList.toggle("mp-s1", px > 0 && px < 1.5);
+        } catch (e) { /* fail-soft: the base cascade IS the approved render */ }
     }
 
     // Apply the pushed size flag. Idempotent (a no-op unless it actually FLIPPED), so the bars can
@@ -480,6 +538,15 @@ export function createTransient(cfg) {
         shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;
         hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
         setRootFont();
+        // THE SCALE GATE IS RE-EVALUATED ON EVERY FLIP, in BOTH directions, and is deliberately not
+        // latched at mount. The shipped build computed it in ONE branch of the re-assert, so `.mp-s1`
+        // and `.mp-lg` could only coexist by launching at Default and enabling Large mid-session --
+        // i.e. the correction applied or not depending on HOW the user reached Large. It is also the
+        // one place an engine-pushed scale can reach the gate: self.onScaleUpdated moves `baseFont`,
+        // but only while large, so a flip BACK re-reads it. At the shipped size this re-reads the same
+        // capture and is a no-op, which is the point -- it can only ever agree with the mount-time
+        // evaluation.
+        setQuantClass();
         try {
             // WG's own ancestor-class idiom (.mediaLargeWidth ...). It MUST go on the BODY: the
             // sizing shim #moe-bar-box is a body-level SIBLING of the JS-created root, so a class on
@@ -489,6 +556,7 @@ export function createTransient(cfg) {
         root.style.left = shiftX + "rem";
         pushSurfaceSize();
     }
+
 
     // The pushed transition switches (VM `transEvents` / `transManual`). Plumbed exactly like
     // applySize -- idempotent and safe on every render -- but it needs no flip guard and touches
@@ -538,6 +606,19 @@ export function createTransient(cfg) {
                 });
             } catch (e) { /* fail-soft: the event is optional */ }
             setTimeout(function () {
+                // THE DEFERRED ROOT FONT. A large flag pushed on the first render arrives while the
+                // view still has no size, so setRootFont could not trust the computed base and wrote
+                // nothing; the re-assert is the first moment the view is definitely sized, so this is
+                // where that write actually lands. Gated on `large` for the same reason the scale
+                // hook is: the shipped size never touches the root font at all.
+                // THE SCALE GATE RUNS UNCONDITIONALLY, on BOTH paths, and the two lines are kept
+                // adjacent so that stays visible: this is the first moment the view is definitely
+                // sized, hence the first moment the capture can be trusted, and a launch straight
+                // into Large must get the gate too. The shipped build ran it in the `else` alone,
+                // which is how the correction became a function of how Large was reached (see
+                // applySize, which re-evaluates it on every flip).
+                if (large) setRootFont();
+                setQuantClass();
                 pushSurfaceSize();
                 setTimeout(function () {
                     settled = true;

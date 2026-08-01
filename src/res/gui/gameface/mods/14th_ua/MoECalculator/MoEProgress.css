@@ -263,8 +263,41 @@ body { margin: 0; }
    (translateX(-50%) on .up is unaffected by height, translateY(-50%) on .capL by width).
    The `top:100%` / `left:100%` twins below keep their margins -- those pairings DO work.
    NOT `calc(100% + 6rem)`: a % + rem mix inside one calc() is 0/515 in WG's corpus. */
-.mp-cap.up { bottom: 100%; padding-bottom: 6rem; font-size: 14rem; }
-.mp-cap.dn { top: 100%; margin-top: 6rem; font-size: 16rem; }
+/* EVERY CAPTION PINS ITS LINE BOX, and that is a BUG FIX, not a style choice. With
+   `line-height: normal` the line box is the font's ascent+descent+gap SNAPPED UP TO WHOLE
+   DEVICE PIXELS, so in rem it is NOT constant -- it shrinks as the rem->px factor grows. For a
+   16rem caption, measured live: 21.000rem at factor 1, 20.500 at 2, 20.125 at 24 (and for the
+   12rem delta: 16.000 / 15.500 / 15.083). .mp-ico is a flex item under align-items: center, so
+   HALF that variation goes straight into the glyph's Y -- the icon and delta read ~0.75rem low
+   relative to the numeral at factor 1 versus factor 2 (reported at 3440x1440).
+   THE VALUE: ceil(font_rem * 2 * 1.2565) / 2, i.e. the FACTOR-2 box expressed in rem. 1.2565 is
+   MoEBattle.ttf's fitted line ratio and ceil(font_px * 1.2565) reproduces all six measurements
+   above. Pinned at the factor-2 value ON PURPOSE rather than at the font's true unsnapped
+   ratio: factor 2 is the render this composition was approved on and must not move by even one
+   device pixel, while a `1.2565em` line-height computes to 40.2px there and would shift it
+   0.75px. Every pin below is therefore byte-identical to what `normal` already yielded at
+   factor 2, and only factors != 2 change.
+   NO LARGE-MODE TWIN, EVER: line-height is a uniform (vertical) length, so the root font
+   (SIZE_F) scales it alone -- a twin would double-apply it. The residual this does NOT fix is
+   the glyph's own ascent snap INSIDE the pinned box (sub-0.5rem, and it moves the numeral and
+   the delta together rather than pulling them apart).
+   ...AND THE PIN IS NOW LOAD-BEARING FOR A SECOND FIX, which is why it must not be reverted or
+   turned back into an em: it makes each caption's box a CONSTANT number of rem, so the vertical
+   anchor of the pieces hanging off it -- (line box - own box) / 2 + the tuned nudge -- is a
+   constant too, and CAN be quantised. It is not, however, a whole number of DEVICE pixels: at the
+   shipped values it lands on a quarter of a rem (.mp-capC's glyph: (20.5-16)/2 + 1 == 3.25rem),
+   which is whole only where the rem->px factor is a multiple of 4. At factor 2 it is a whole HALF
+   pixel -- the approved render. At factor 1 (interface scale 1, reported at 3440x1440) it is 0.75
+   of a device pixel, so the engine resolves the glyph's box origin DOWN-SCREEN. NO CORRECTION IS
+   SHIPPED FOR IT YET, and the reason is worth keeping: a correction has to apply at factor 1 and NOT
+   at factor 2, and nothing inside these registered views is known to report the interface scale --
+   the surface push that proves the geometry (viewEnv.resizeViewRem) is a write-only C++ sink, and a
+   root-font read keyed a whole build that never took effect at any scale. See
+   tests/test_caption_anchor_quantisation.py for the measurements and the four attempts. */
+.mp-cap.up { bottom: 100%; padding-bottom: 6rem; font-size: 14rem;
+             line-height: 18rem; }
+.mp-cap.dn { top: 100%; margin-top: 6rem; font-size: 16rem;
+             line-height: 20.5rem; }
 /* SIDE (axis-end) captions -- the .mp-tick vertical trick: top:50% + translateY(-50%) centres
    the flex row's box on the track midline. `left: auto` is REQUIRED on the left one because
    .mp-cap sets left:0 and right:100% alone would not release it. TWO classes so the transform
@@ -274,7 +307,8 @@ body { margin: 0; }
    CAPTION box while the per-role icon nudge is on the .mp-ico CHILD, so the two transforms
    cannot clobber each other and .mp-ico keeps its own stacking context (see below). Their
    font-size is their OWN (not .up's): these are side labels, not top labels. */
-.mp-cap.side { top: 50%; transform: translateY(-50%); font-size: 14rem; }
+.mp-cap.side { top: 50%; transform: translateY(-50%); font-size: 14rem;
+               line-height: 18rem; }
 /* SIDE-CAPTION NUMERAL NUDGE -- a FONT METRICS correction, not a box-height problem.
    MoEBattle.ttf is ascender 2088 / descender 486 at upem 2048 = a 1.2568em line box
    (17.60rem at the 14rem side font-size), but the digit ink spans only
@@ -283,7 +317,11 @@ body { margin: 0; }
    track midline. Result: the numerals read ~0.53rem low; this transform pulls them back.
    Do NOT "fix" this with min-height/line-height on the caption -- the box is ALREADY
    17.60rem tall, so any min-height at or below that (the 17rem mark box, say) is a literal
-   no-op. Scoped to .side only: .up/.dn hang off the track edges instead of being centred on
+   no-op. (The line-height PIN above is not that fix and does not disturb this one: it states
+   the snapped-up box, 18rem, which is what `normal` already yielded at BOTH
+   factor 1 and factor 2 for this font size -- it only stops the box shrinking at higher
+   factors, and the ink offset it corrects is a font-metrics constant either way.)
+   Scoped to .side only: .up/.dn hang off the track edges instead of being centred on
    the midline, so they must never pick this up. .mp-v is a flex item of the .mp-cap row, so
    a transform applies to it (it would not on a bare inline span). */
 .mp-cap.side .mp-v { transform: translateY(-0.5rem); }
@@ -361,6 +399,7 @@ body { margin: 0; }
   margin-left: 0.35em;
   font-size: 12rem;
   transform: translateY(2.5rem);
+  line-height: 15.5rem;
   opacity: 0;
   transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
 }
@@ -621,6 +660,14 @@ body { margin: 0; }
 .mp-lg .mp-cap .mp-ico { margin-right: 1.333rem; }
 .mp-lg .mp-cap.side.mp-capL { padding-right: 10.667rem; }
 .mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }
+/* THE DELTA'S GAP, and the ONE x-length here dialled in `em` rather than rem -- which is exactly why
+   it was missing until now: 0.35em of the delta's OWN font-size already rides SIZE_F (the root font
+   grows that font-size 1.5x), but an x-length owes SIZE_F * SIZE_XF, so under Large the gap came out
+   25% SHORT while the sibling MoEEfficiency.css -- which spells the same gap as the rem x half of
+   `.mp-cap .mp-d`'s translate -- carried its twin correctly. Still em, so it keeps tracking the
+   delta's font-size: 0.35 * 4/3 at the block's 3dp. The base rule's translateY is NOT restated --
+   a plain rem Y needs no twin, the root font scales it. */
+.mp-lg .mp-cap .mp-d { margin-left: 0.467em; }
 /* THE TWO CENTRE CAPTIONS' ICON-WIDTH CANCELS ARE RE-DERIVED, NOT MULTIPLIED: the margin is
    -(this caption's own icon box + the gap), and the icon BOX is a uniform y-ish length that the root
    font scales on its own -- only the gap takes the x factor. So -(14 + 1.333) and -(16 + 1.333),
@@ -630,6 +677,7 @@ body { margin: 0; }
 .mp-lg .mp-capP .mp-ico { margin-left: -15.333rem; }
 .mp-lg .mp-capC .mp-ico { margin-left: -17.333rem; }
 /* ===== END APPENDED HAND-ADDED BLOCK ===== */
+
 
 /* Animation timings for phase 2's JS (the numbers, not just the CSS):
 {

@@ -202,9 +202,9 @@
   /* The two signed X nudges are RESIDUAL now (default 0): the numeral is already centred on its
      tick by construction, so these only exist for a deliberate offset. Composed onto the same
      transform as the -50% centring, two classes so they out-specify .mp-cap. */
-  .mp-cap.dn{top:100%;margin-top:var(--gapbot);font-size:var(--reqfs);
+  .mp-cap.dn{top:100%;margin-top:var(--gapbot);font-size:var(--reqfs);line-height:var(--reqlh);
     transform:translateX(-50%) translateX(var(--capxreq))}
-  .mp-cap.up{bottom:100%;font-size:var(--curfs);
+  .mp-cap.up{bottom:100%;font-size:var(--curfs);line-height:var(--curlh);
     transform:translateX(-50%) translateX(var(--capxcur)) translateY(var(--gaptopn));
     transition:left var(--filldur) var(--fillease)}
   /* position:relative so the numeral is the box the out-of-flow icon/delta measure against. */
@@ -219,7 +219,7 @@
      way. It FADES on opacity, which interpolates -- never visibility. No parens on this bar: .mp-d
      carries the gap, size and fade, and .mp-d-num alone carries the signed digits. */
   .mp-cap .mp-d{position:absolute;left:100%;top:0;transform:var(--dtf);
-    font-size:var(--dfs);color:#ffffff;font-weight:var(--wt);
+    font-size:var(--dfs);line-height:var(--dlh);color:#ffffff;font-weight:var(--wt);
     text-shadow:var(--textsh);opacity:0;transition:opacity var(--dfadems) var(--dfadease)}
   .mp-cap .mp-d.on{opacity:1}
 
@@ -447,6 +447,21 @@
   // CSS provably cannot diverge (this is exactly why the shipped tuner has it).
   function rem(v){return (v*st.pxrem).toFixed(2)+"px";}
   function REM(v){return v+"rem";}
+  // THE PINNED LINE BOX -- fed to BOTH units above, because a caption's box height must not depend
+  // on the rem->px factor. `line-height: normal` makes the line box the font's ascent+descent+gap
+  // SNAPPED UP TO WHOLE DEVICE PIXELS, so measured in rem it SHRINKS as that factor grows: a 16rem
+  // caption is 21.000rem at factor 1, 20.500 at 2, 20.125 at 24 (all three measured live; the 12rem
+  // captions go 16.000 / 15.500 / 15.083). This bar's .mp-ico is `top: 50%` of that very box, so
+  // HALF the variation lands straight in the glyph's Y and the icon/delta drift down from the
+  // numeral at low interface scales (reported at 3440x1440, which renders at factor 1).
+  // R == 1.2565 is MoEBattle.ttf's fitted line ratio: ceil(font_px*R) reproduces all six
+  // measurements, over the fit corridor (1.25521, 1.25694]. PINNED AT THE FACTOR-2 VALUE, not at
+  // the font's true unsnapped ratio -- factor 2 is the render this composition was approved on and
+  // must not move by even one device pixel, whereas `1.2565em` would compute to 40.2px there and
+  // shift it 0.75px. Halves are exact in rem, so the emitted length stays a plain decimal.
+  // NO LARGE-MODE TWIN: line-height is a uniform (vertical) length, so the root font (SIZE_F)
+  // scales it alone; tests/test_efficiency_surface_mirror.py's large-mode walk refuses one.
+  function lh(fs){return Math.ceil(fs*2*1.2565)/2;}
   // Separator is a knob: MoEBattle carries "," AND space, so both are shippable.
   var SEP={comma:",",space:" ",none:""};
   function fmt(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,SEP[st.sep]);}
@@ -757,6 +772,10 @@
     S.setProperty("--gapbot",rem(gapBot()));S.setProperty("--gaptopn",rem(-gapTop()));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--dfs",rem(st.dFS));S.setProperty("--dtf",dTf(rem));
+    // ...and each of those three boxes PINNED, DERIVED from the same size knob (see lh()): a
+    // literal would leave the box behind the next size retune, which is the failure being fixed.
+    S.setProperty("--reqlh",rem(lh(st.reqFS)));S.setProperty("--curlh",rem(lh(st.curFS)));
+    S.setProperty("--dlh",rem(lh(st.dFS)));
     S.setProperty("--wt",st.wt);S.setProperty("--ls",st.ls+"em");
     S.setProperty("--textsh",textSh(rem));
     S.setProperty("--numyreq",rem(st.numyReq));S.setProperty("--numycur",rem(st.numyCur));
@@ -1025,9 +1044,42 @@
 "   TICK-INCLUSIVE (tick height + the tuned gap) so no calc() mixes units. */\n"+
 "/* The signed X below is a RESIDUAL nudge (0 by default): the numeral is already on its tick by\n"+
 "   construction. Composed onto the same transform as the -50% centring. */\n"+
+"/* EVERY CAPTION PINS ITS LINE BOX, and that is a BUG FIX, not a style choice. With\n"+
+"   `line-height: normal` the line box is the font's ascent+descent+gap SNAPPED UP TO WHOLE DEVICE\n"+
+"   PIXELS, so in rem it is NOT constant -- it shrinks as the rem->px factor grows. Measured live:\n"+
+"   a 16rem caption is 21.000rem at factor 1, 20.500 at 2, 20.125 at 24; a 12rem one 16.000 /\n"+
+"   15.500 / 15.083. The out-of-flow .mp-ico is `top: 50%` of exactly that box, so HALF the\n"+
+"   variation lands in the glyph's Y and the icon (and the delta, whose own box shrinks the same\n"+
+"   way) drift below the numeral at low interface scales -- reported at 3440x1440, factor 1.\n"+
+"   THE VALUE: ceil(font_rem * 2 * 1.2565) / 2, i.e. the FACTOR-2 box expressed in rem. 1.2565 is\n"+
+"   MoEBattle.ttf's fitted line ratio and ceil(font_px * 1.2565) reproduces all six measurements.\n"+
+"   Pinned at the FACTOR-2 value on purpose, not at the font's true unsnapped ratio: factor 2 is the\n"+
+"   render this composition was approved on and must not move by even one device pixel, while a\n"+
+"   `1.2565em` line-height would compute to 40.2px there and shift it 0.75px. So every pin here is\n"+
+"   byte-identical to what `normal` already yielded at factor 2; only factors != 2 change.\n"+
+"   NO LARGE-MODE TWIN, EVER: line-height is a uniform (vertical) length, so the root font (SIZE_F)\n"+
+"   scales it alone and a twin would double-apply it. NOT FIXED by this, and left as a\n"+
+"   known residual: the glyph's own ascent snap INSIDE the pinned box (sub-0.5rem, and it moves the\n"+
+"   numeral and its delta together rather than pulling them apart).\n"+
+"   ...AND THE PIN IS NOW LOAD-BEARING FOR A SECOND FIX, which is why it must not be reverted or\n"+
+"   turned back into an em: it makes each caption's box a CONSTANT number of rem, so the vertical\n"+
+"   anchor of the out-of-flow pieces hanging off it -- line/2 - own box/2 + the tuned nudge -- is a\n"+
+"   constant too, and CAN be quantised. It is not, however, a whole number of DEVICE pixels: at the\n"+
+"   shipped values it lands on a quarter of a rem (the current row's glyph: 20.5/2 - 16/2 + 0.5 ==\n"+
+"   2.75rem), which is whole only where the rem->px factor is a multiple of 4. At factor 2 it is a\n"+
+"   whole HALF pixel -- the approved render. At factor 1 (interface scale 1, reported at 3440x1440)\n"+
+"   it is 0.75 of a device pixel, so the engine resolves the glyph's box origin DOWN-SCREEN -- one\n"+
+"   device pixel low on the current-damage caption's icon, and on nothing else.\n"+
+"   THE RESIDUAL IS CORRECTED IN HAND-ADDED BLOCK 4 (the `.mp-s1` pair at the end of this file),\n"+
+"   gated on the interface scale by MoEBarTransient.setQuantClass so factor 2 -- the approved render\n"+
+"   -- cannot match any of it. The correction is a MEASURED -1rem, not this arithmetic: the anchor\n"+
+"   above says why a residual exists, it does not predict the number. See that block and\n"+
+"   tests/test_caption_anchor_quantisation.py. */\n"+
 ".mp-cap.dn { top: 100%; margin-top: "+gapBot()+"rem; font-size: "+st.reqFS+"rem;\n"+
+"             line-height: "+lh(st.reqFS)+"rem;\n"+
 "             transform: translateX(-50%) translateX("+st.capxReq+"rem); }\n"+
 ".mp-cap.up { bottom: 100%; font-size: "+st.curFS+"rem;\n"+
+"             line-height: "+lh(st.curFS)+"rem;\n"+
 "             transform: translateX(-50%) translateX("+st.capxCur+"rem) translateY("+
                REM(-gapTop())+");\n"+
 "             transition: left "+st.fillDur+"ms "+st.fillEase+"; }\n"+
@@ -1047,7 +1099,8 @@
 "   over a bright HUD, not a glow -- keep it. No parens on this bar: .mp-d carries the gap, size\n"+
 "   and fade, .mp-d-num alone carries the digits. */\n"+
 ".mp-cap .mp-d {\n  position: absolute;\n  left: 100%;\n  top: 0;\n"+
-"  transform: "+dTf(REM)+";\n  font-size: "+st.dFS+"rem;\n  color: #ffffff;\n"+
+"  transform: "+dTf(REM)+";\n  font-size: "+st.dFS+"rem;\n"+
+"  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n"+
 "  font-weight: "+st.wt+";\n  text-shadow: "+textSh(REM)+";\n  opacity: 0;\n"+
 "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
 ".mp-cap .mp-d.on { opacity: 1; }\n\n"+

@@ -273,6 +273,16 @@ const MUTATIONS = {
     // Idempotent, because both bars call T.size() on EVERY render: without the guard every push
     // re-pushes the surface to the engine.
     "size-not-idempotent": ["T", "        if (flag === large) return;", "        if (false) return;"],
+    // THE FRESH-LAUNCH REGRESSION (shipped in 1.6.0). The base may only be captured once the view has
+    // a SIZE: before that the engine has not written its root font and getComputedStyle reports the UA
+    // default 16, which multiplies every rem by 16. Two halves, separately invisible -- the trust gate,
+    // and the deferred write that must then land on the post-deadline re-assert.
+    "size-root-font-trusts-an-unsized-view": ["T",
+        "        if (!baseFont && (window.innerWidth || window.innerHeight)) {",
+        "        if (!baseFont) {"],
+    "size-root-font-never-deferred": ["T",
+        "                if (large) setRootFont();\n",
+        ""],
     // WG re-writes the root font off this event; if it ever reaches a registered view we must take
     // the pushed scale as the new base rather than keep compounding the mount-time capture.
     "size-ignores-a-scale-update": ["T",
@@ -282,6 +292,7 @@ const MUTATIONS = {
         "                    if (!large) return;", "                    if (false) return;"],
     // THIS BAR's one line: the pushed flag has to reach the transient at all.
     "size-flag-never-pushed": ["B", "    T.size(Number(model.barSize) === 1);", "    void 0;"],
+
 };
 
 // --- the modules' own constants, SCRAPED (never written down here) ---------------------------
@@ -313,6 +324,12 @@ const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
 const SIZE_F = jsFactor(T_SRC, "SIZE_F", "MoEBarTransient.js");
 const SIZE_XF = jsFactor(T_SRC, "SIZE_XF", "MoEBarTransient.js");
 const ROOT_FONT_PX = 2;
+// The UA default root font size -- what getComputedStyle reports BEFORE the engine has written its
+// own, i.e. for the first frames of every mount. Not scraped: it is a browser constant, and it is the
+// number the shipped 1.6.0 bar multiplied every rem by (16 * SIZE_F == a 24px root, a 9600px track in
+// a 950px surface, nothing visible). Deliberately different from ROOT_FONT_PX so the two are
+// distinguishable in an assertion.
+const UA_FONT_PX = 16;
 const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
                     Math.round((BOX_H + 2 * PAD) * SIZE_F)];
 const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
@@ -339,7 +356,10 @@ const RUN_NAMES = jsArray(T_SRC, "RUN_NAMES", "MoEBarTransient.js");
 // `unsettled` leaves the clock at mount time, i.e. BEFORE the re-assert flips the transient's
 // `settled` -- the state the surface section and the show gate below examine. Every other section
 // wants a bar that is allowed to show, so by default the clock is run straight past the flip.
-function mount(srcs, unsettled) {
+// `unsized` additionally starts the VIEW at 0x0 with the UA-default root font, i.e. the state a mount
+// is really in before the engine has sized the view and written its root font -- the large size
+// mode's fresh-launch path (see the "large size mode: a fresh launch" section).
+function mount(srcs, unsettled, unsized) {
     // The transient FIRST: this bar's `const VALUE_SWAP_MS = FADE_IN_MS` and its
     // `const T = createTransient(...)` both run at load and would hit the transient's const TDZ the
     // other way round.
@@ -353,8 +373,11 @@ function mount(srcs, unsettled) {
     const clock = makeClock(1e12);
     const bodyEl = new El("body");
     parseHTML(VIEW_HTML.replace(/<!--[\s\S]*?-->/g, ""), bodyEl);  // the view's own static markup
-    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write.
-    const { documentElement, getComputedStyle } = makeRootFont(ROOT_FONT_PX);
+    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write, and
+    // `win` (the view size) with them, because setRootFont only trusts the computed base once the view
+    // has a size. An `unsized` mount reports the UA default until the section says otherwise.
+    const { documentElement, getComputedStyle, font, win } =
+        makeRootFont(unsized ? UA_FONT_PX : ROOT_FONT_PX, unsized);
     const document = {
         body: bodyEl,
         documentElement,
@@ -382,15 +405,15 @@ function mount(srcs, unsettled) {
     };
 
     new Function("document", "viewEnv", "engine", "ModelObserver", "setTimeout", "clearTimeout",
-                 "Date", "requestAnimationFrame", "getComputedStyle", body)(
+                 "Date", "requestAnimationFrame", "getComputedStyle", "window", body)(
         document, viewEnv, engine, () => observer, clock.setTimeout, clock.clearTimeout,
-        { now: clock.now }, clock.raf, getComputedStyle);
+        { now: clock.now }, clock.raf, getComputedStyle, win);
 
     const root = document.getElementById("moe-bar-root");
     const q = (sel) => root.querySelector(sel);
     if (!unsettled) clock.advance(SETTLE);
     return {
-        clock, calls, root, document, body: bodyEl, observer, documentElement,
+        clock, calls, root, document, body: bodyEl, observer, documentElement, font, win,
         scaleUpdate: (v) => engineHandlers["self.onScaleUpdated"](v),
         // A real ModelObserver updates .model and THEN notifies, and the surface-settle re-render
         // reads .model back -- so pushing has to do both, or that path sees a stale/empty model.
@@ -926,6 +949,38 @@ function run(mutation) {
     s.push(M({ barSize: 1 }));
     eq("a scale update seen at the shipped size is not remembered as the base",
        s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+    // --- THE LARGE MODE ON A FRESH LAUNCH (the 1.6.0 regression) ------------------------------
+    // The section above is the MID-SESSION flip -- a view that has long had a size and the engine's
+    // root font -- and it is the only path that ever worked. Enabling Large BEFORE launch makes the
+    // FIRST applySize take the large branch, in the frames where innerWidth/innerHeight are still 0 0
+    // and getComputedStyle reports the UA default 16: the shipped build captured that as the base, so
+    // rootFontPx became 24 and the 400rem track 9600px inside a 950px surface -- the whole
+    // composition outside the view, nothing visible. So the base may only be captured once the view
+    // HAS a size, and the write that was skipped has to land on the post-deadline re-assert.
+    // Every value below is the EMITTED inline fontSize, and the base is deliberately not 1 (a bare
+    // SIZE_F write would pass at 1).
+    section("large size mode: a fresh launch");
+    s = mount(srcs, true, true);              // pre-re-assert AND unsized == the first frames of a mount
+    s.push(M({ barSize: 1 }));                // Large already on, so this FIRST render flips the mode
+    eq("the surface still takes both factors immediately (it does not read the root font)",
+       s.calls.resize.slice(-1), [LG_SURFACE]);
+    ok("...and the body class lands with it", s.body.classList.contains("mp-lg"));
+    eq("but an UNSIZED view's computed root font is not trusted: nothing is written, not even the "
+       + "UA default * SIZE_F", s.documentElement.style.fontSize, undefined);
+    s.font.px = ROOT_FONT_PX;                 // the engine arrives: its root font...
+    s.win.innerWidth = 1920;                  // ...and the view's real size
+    s.win.innerHeight = 1080;
+    s.clock.advance(SETTLE);
+    eq("the deferred write lands on the post-deadline re-assert, off the ENGINE's base",
+       s.documentElement.style.fontSize, (ROOT_FONT_PX * SIZE_F) + "px");
+
+    s = mount(srcs, true, true);
+    s.push(M({ barSize: 1 }));
+    s.clock.advance(SETTLE);
+    eq("a view that never gets a size fails soft to the SHIPPED root font -- never to a 16x one",
+       s.documentElement.style.fontSize, undefined);
+
 
     // --- THE TRANSITION SWITCHES (mod_settings.progress_transitions_events / _manual, pushed as
     // --- the VM's transEvents / transManual) --------------------------------------------------

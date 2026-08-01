@@ -333,6 +333,19 @@ const MUTATIONS = {
         "    let x = p / 100 * BAR_W_REM * xf;", "    let x = p / 100 * BAR_W_REM;"],
     "clamp-return-axis-not-scaled": ["B",
         "    return x / (BAR_W_REM * xf) * 100;", "    return x / BAR_W_REM * 100;"],
+    // THE INTERFACE-SCALE GATE (.mp-s1). Three ways to lose it, each of which SHIPS SILENTLY: a
+    // missing class renders as the bug and an extra one moves the render the maintainer approved.
+    // (1) latched to the Default branch, which is how the shipped build made the correction a
+    // function of how Large was reached; (2) the trust gate dropped, so an unsized view's 0 reads as
+    // "scale 1" and the correction lands at scale 2 as well; (3) not re-evaluated on a size flip,
+    // where an engine-pushed scale (self.onScaleUpdated, large-only) reaches it for the first time.
+    "quant-gate-latched-to-the-default-path": ["T",
+        "                if (large) setRootFont();\n                setQuantClass();",
+        "                if (large) setRootFont(); else setQuantClass();"],
+    "quant-gate-trusts-an-untrusted-read": ["T",
+        'document.body.classList.toggle("mp-s1", px > 0 && px < 1.5);',
+        'document.body.classList.toggle("mp-s1", px < 1.5);'],
+    "quant-gate-not-re-evaluated-on-a-size-flip": ["T", "\n        setQuantClass();", ""],
 };
 
 // --- the modules' own constants, SCRAPED (never written down here) ---------------------------
@@ -364,6 +377,10 @@ const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
 const SIZE_F = jsFactor(T_SRC, "SIZE_F", "MoEBarTransient.js");
 const SIZE_XF = jsFactor(T_SRC, "SIZE_XF", "MoEBarTransient.js");
 const ROOT_FONT_PX = 2;
+// The UA default root font -- what getComputedStyle reports BEFORE the engine has written its own,
+// i.e. for the first frames of every mount. Not scraped: it is a browser constant, and deliberately
+// different from ROOT_FONT_PX so the two are distinguishable in an assertion.
+const UA_FONT_PX = 16;
 const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
                     Math.round((BOX_H + 2 * PAD) * SIZE_F)];
 const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
@@ -393,7 +410,10 @@ const BANDS = jsArray(B_SRC, "BAND_CLASSES", "MoEEfficiency.js");
 // `unsettled` leaves the clock at mount time, i.e. BEFORE the re-assert flips the transient's
 // `settled` -- the state the surface section and the show gate below examine. Every other section
 // wants a bar that is allowed to show, so by default the clock is run straight past the flip.
-function mount(srcs, unsettled) {
+// `unsized` additionally starts the VIEW at 0x0 reporting the UA-default root font, i.e. the state a
+// mount is really in before the engine has sized the view and written its own -- the state the
+// caption-anchor section below replays, since that write shares the same trust gate.
+function mount(srcs, unsettled, unsized) {
     // The transient FIRST: this bar's top-level `const T = createTransient(...)` runs at load and
     // would hit the transient's const TDZ the other way round.
     const src = S.concatModules([srcs.T, srcs.B]);
@@ -405,8 +425,11 @@ function mount(srcs, unsettled) {
     const clock = makeClock(1e12);
     const body = new El("body");
     parseHTML(VIEW_HTML.replace(/<!--[\s\S]*?-->/g, ""), body);   // the view's own static markup
-    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write.
-    const { documentElement, getComputedStyle } = makeRootFont(ROOT_FONT_PX);
+    // documentElement + getComputedStyle exist ONLY for the large size mode's root-font write, and
+    // `win` with them: setRootFont only trusts the computed base once the view has a size. The
+    // regression that gate exists for is asserted in check_progress_js.js's own large-size section.
+    const { documentElement, getComputedStyle, font, win } =
+        makeRootFont(unsized ? UA_FONT_PX : ROOT_FONT_PX, unsized);
     const document = {
         body,
         documentElement,
@@ -437,16 +460,16 @@ function mount(srcs, unsettled) {
     // this bar nor the transient ever calls it (the cold-only rAF is MoEProgress.js's alone -- see
     // its commitClimb). An unused global costs nothing and keeps the two mounts comparable.
     new Function("document", "viewEnv", "engine", "ModelObserver", "setTimeout", "clearTimeout",
-                 "Date", "requestAnimationFrame", "getComputedStyle", src)(
+                 "Date", "requestAnimationFrame", "getComputedStyle", "window", src)(
         document, viewEnv, engine, () => observer, clock.setTimeout, clock.clearTimeout,
-        { now: clock.now }, clock.raf, getComputedStyle);
+        { now: clock.now }, clock.raf, getComputedStyle, win);
 
     const root = document.getElementById("moe-bar-root");
     const q = (sel) => root.querySelector(sel);
     const capC = q(".mp-cap.up");
     if (!unsettled) clock.advance(SETTLE);
     return {
-        clock, calls, root, document, body, observer, documentElement,
+        clock, calls, root, document, body, observer, documentElement, font, win,
         scaleUpdate: (v) => engineHandlers["self.onScaleUpdated"](v),
         // A real ModelObserver updates .model and THEN notifies, and the surface-settle re-render
         // reads .model back -- so pushing has to do both, or that path sees a stale/empty model.
@@ -985,6 +1008,60 @@ function run(mutation) {
     s.push(M({ barSize: 1 }));
     eq("a scale update seen at the shipped size is not remembered as the base",
        s.documentElement.style.fontSize, (ROOT_FONT_PX * 4 * SIZE_F) + "px");
+
+
+    // --- THE INTERFACE-SCALE GATE (.mp-s1) ----------------------------------------------------
+    // The body class MoEEfficiency.css's HAND-ADDED BLOCK 4 hangs its caption-icon correction off.
+    // It lives in the shared transient, but only THIS bar's stylesheet carries a rule for it, so it
+    // is asserted here alone. Threshold, on the root-font capture, on BOTH size paths.
+    // ROOT_FONT_PX is 2 -- the maintainer's approved render -- so the default settled mount is the
+    // "must not move" case and 1 is the scale-1 case.
+    section("the interface-scale gate");
+    s = mount(srcs, true, true);              // unsized == the first frames of a mount
+    s.push(M());
+    s.clock.advance(SETTLE);                  // the re-assert runs the gate on a STILL-unsized view
+    eq("an UNSIZED view's root font is not trusted, so NO class is added -- the base cascade IS the "
+       + "approved render, and every failure mode must land on it", s.body.classList.contains("mp-s1"),
+       false);
+
+    s = mount(srcs, true, true);
+    s.push(M());
+    s.font.px = 1;                            // the engine arrives at interface scale 1...
+    s.win.innerWidth = 1920;
+    s.win.innerHeight = 1080;
+    s.clock.advance(SETTLE);
+    ok("a base font BELOW the threshold (interface scale 1) turns the correction on",
+       s.body.classList.contains("mp-s1"));
+
+    s = mount(srcs, true, true);
+    s.push(M());
+    s.font.px = ROOT_FONT_PX;                 // ...and at interface scale 2 (the approved render)
+    s.win.innerWidth = 1920;
+    s.win.innerHeight = 1080;
+    s.clock.advance(SETTLE);
+    eq("at/above the threshold there is no class at all, so no .mp-s1 selector can match and the "
+       + "approved render is structurally unreachable", s.body.classList.contains("mp-s1"), false);
+
+    s = mount(srcs, true, true);
+    s.push(M({ barSize: 1 }));                // Large enabled BEFORE launch: the re-assert takes the
+    s.font.px = 1;                            // large branch, and the gate must STILL run
+    s.win.innerWidth = 1920;
+    s.win.innerHeight = 1080;
+    s.clock.advance(SETTLE);
+    ok("a launch STRAIGHT INTO Large gets the gate too (the shipped build ran it in the `else` "
+       + "alone, so the correction depended on HOW the user reached Large)",
+       s.body.classList.contains("mp-s1"));
+    ok("...alongside mp-lg, which is what the compound .mp-s1.mp-lg rule is for",
+       s.body.classList.contains("mp-lg"));
+
+    // ...and the flip RE-EVALUATES it, which is the one path an engine-pushed scale can reach it by:
+    // self.onScaleUpdated only updates the base while large, so flipping back is where that base is
+    // first re-read. A scale of 2 pushed under Large must switch the correction OFF on the way out.
+    s.scaleUpdate(ROOT_FONT_PX);
+    s.push(M({ barSize: 0 }));
+    eq("a size flip re-evaluates the gate off the base self.onScaleUpdated pushed, and toggle() "
+       + "REMOVES the class rather than latching it", s.body.classList.contains("mp-s1"), false);
+
 
     // --- THE CLAMP CORRIDOR UNDER THE LARGE MODE ---------------------------------------------
     // capClampPct is the ONE function on either bar that mixes a MEASURED px width with rem

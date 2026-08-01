@@ -28,9 +28,9 @@ const emit = fs.readFileSync(EMIT, "utf8");
 const shipped = fs.readFileSync(SHIPPED, "utf8");
 
 // --- strip the marked hand-added regions ----------------------------------------------------
-const RE = /\n\/\* ===== HAND-ADDED BLOCK (\d) OF 3[\s\S]*?\/\* ===== END HAND-ADDED BLOCK \1 ===== \*\/\n/g;
+const RE = /\n\/\* ===== HAND-ADDED BLOCK (\d) OF 4[\s\S]*?\/\* ===== END HAND-ADDED BLOCK \1 ===== \*\/\n/g;
 const found = shipped.match(RE) || [];
-assert.strictEqual(found.length, 3, "expected exactly 3 marked HAND-ADDED regions, got " + found.length);
+assert.strictEqual(found.length, 4, "expected exactly 4 marked HAND-ADDED regions, got " + found.length);
 const stripped = shipped.replace(RE, "");
 assert.strictEqual(stripped, emit,
     "the shipped CSS is NOT the emit plus only the two marked blocks -- silent drift");
@@ -70,5 +70,5 @@ const bd = rule(".mp-backdrop");
               ".mp-backdrop " + p[0] + " is not " + p[1] + " -- MoEEfficiency.js's BOX_* are stale"));
 assert.ok(/width:\s*300rem;/.test(rule("#moe-bar-root")), "#moe-bar-root width is not 300rem (BAR_W_REM)");
 
-console.log("MoEEfficiency.css OK: emit (" + Buffer.byteLength(emit) + " B) + 3 marked blocks = " +
+console.log("MoEEfficiency.css OK: emit (" + Buffer.byteLength(emit) + " B) + 4 marked blocks = " +
             Buffer.byteLength(shipped) + " B; twin matches; backdrop 460x96 @ (-80,-40); bar 300rem");
