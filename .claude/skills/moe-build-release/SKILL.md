@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.6.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.7.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +95,8 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.6.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.6.0 (2026-07-29) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
+**v0.1.0 through v1.7.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.7.0 (2026-08-01) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
 client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
@@ -149,6 +149,28 @@ caption centring was fixed to sit on the numeral, not the row. Player docs were 
 release (`README.md` / `INSTALL.md` / `installer/readme.moe.txt`, both language halves), and
 `installer/readme.wgmods.txt` was **DELETED** as a superseded stub — `readme.moe.txt` is now the
 single portal-readme template, and `build/build_moe_zip.py` was already its only consumer.
+**1.7.0 (2026-08-01)** is a minor bump carrying in-battle MoE-projection accuracy work plus a
+full MSA panel restructure. The damage→percent mapping moved **off** 1.5.0's exact-at-stops
+piecewise normal fit onto **WG's own LINEAR interpolation over the 8 published anchors plus a
+(0,0) origin** — no z-space, no probit; the old normal fit's 11.9pp error was localised below the
+lowest stop. Both centre bars gained a **Large** size mode (the `progressSize` radio, labelled
+"Scale", options Default/Large). The progress bar's enter/exit fade+slide can now be switched off
+per trigger area (`progress_transitions_enabled`/`_events`/`_manual`). The interface-scale-1
+caption-drift fix landed on the efficiency bar then was mirrored onto the moving-average bar. A
+died/survived flag was added to the battle-sample log to split the credit shortfall
+(dev/sample-corpus only, not user-facing). The MSA panel itself was restructured into three
+column-1 categories (Battle Calculator / Battle Progress / Transitions) with bold `<b>` headers and
+`Empty` spacers; column 2 split into Garage Widget + Layout; every master now reads "Enabled"; new
+progress-visibility flags `progress_show_events` / `_alt_key` / `_always` were added, with "Always"
+greying the other two via an MSA multi-condition AND gate; both radios went standalone and inline;
+the Mode radio was reordered so Damage Efficiency is index 0 and the new default; and
+`counted_assistance_enabled` now defaults **True**. `SETTINGS_VERSION` went **12 → 14** (v1.6.0
+shipped 10). A follow-up fix (`_migrate_pre_v13_variant` in `bridge/mod_settings.py`) flips a
+pre-v13 store's `progress_bar_variant` raw int 0↔1 during `register()`'s migration branch, keyed
+on the absence of the v13-introduced `progress_show_events` key (no stored version int to compare
+against directly), so an upgrading v1.6.0 user keeps the bar they actually chose across the
+reorder — no `SETTINGS_VERSION` bump of its own. Player docs (`README.md`, `INSTALL.md`,
+`installer/readme.moe.txt`) were reconciled against the v14 panel in both EN and UA halves.
 Both channels now ship the **same single build** (WG-API threshold source): the GitHub release
 carries `MoECalculator-Setup-<ver>.exe` + the bare `.wotmod`, and `MoECalculator_<ver>.zip`
 (same `.wotmod` + vendor deps) is uploaded manually to
