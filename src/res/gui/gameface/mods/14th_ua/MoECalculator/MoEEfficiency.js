@@ -377,7 +377,13 @@ function render(model) {
     // badly mis-placed (see the shared module's SURFACE_REASSERT_MS). The baseline shows nothing, so
     // it costs nothing to let it run -- and it MUST run, or `last` never gets recorded and the first
     // real hit is missed. T.show() picks warm-vs-cold off its own `showing`.
-    if (gained && T.settled()) {
+    //
+    // ALSO GATED ON `showEvents` (mod_settings.progress_show_events, with "Always" already folded in
+    // Python). `!== false`, NOT `!!`: a model without the field (a pre-push frame, a harness
+    // fixture) must degrade to the SHIPPED behaviour, which is "a hit raises the bar". The delta
+    // caption rides the same gate -- with the bar staying down there is nothing to flash. "Alt
+    // Press" and "Always" need no branch here: both arrive folded into `altHeld` below.
+    if (gained && model.showEvents !== false && T.settled()) {
         showDelta();
         T.show();
     }

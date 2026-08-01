@@ -93,6 +93,28 @@ def _large_shift_y(js):
     return iround_half_away(Decimal(_shift_y(js)) * _size_factor("SIZE_F"))
 
 
+def test_both_bars_read_the_new_show_events_flag_as_not_false():
+    # `showEvents` is a NEW VM bool, and a model that does not carry it (a pre-push frame, an old
+    # harness fixture, a marshal that dropped it) must degrade to the SHIPPED behaviour -- "an
+    # event raises the bar". `!!undefined` is false, so a `!!` read would silently ship the
+    # UNSHIPPED behaviour instead: a bar that never comes up. Both bars, one test, because they are
+    # separate render() functions that trivially drift apart.
+    #
+    # SCOPED TO THE OWNING CONDITIONAL, and over COMMENT-STRIPPED source. A bare
+    # `"model.showEvents !== false" in src` is not an assertion: both files carry that exact spelling
+    # in the comment ABOVE the gate explaining why it is `!==` and not `!!`, so deleting the gate
+    # outright left the substring behind and the check went vacuously green (mutation-probed).
+    # The show trigger's OTHER two terms are what pin it to the real branch -- the event term
+    # (`changed` / `gained`) and the settle gate -- so assert the whole expression.
+    for name, event_term in (("MoEProgress.js", "changed"), ("MoEEfficiency.js", "gained")):
+        src = re.sub(r"^[ \t]*//.*$", "", _read(name), flags=re.M)
+        assert re.search(r"\(%s && model\.showEvents !== false && T\.settled\(\)\)" % event_term,
+                         src), \
+            "%s: the show trigger is no longer gated on showEvents (or the gate moved)" % name
+        assert "!!model.showEvents" not in src, \
+            "%s: showEvents must be read as `!== false`, never `!!` (absent means ON)" % name
+
+
 def test_css_sizing_box_matches_the_js_surface():
     assert _css_box(_read("MoEProgress.css")) == _surface_wh(_read("MoEProgress.js"))
 

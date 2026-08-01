@@ -70,3 +70,27 @@ def test_no_accessor_addresses_a_slot_outside_the_declared_range():
         assert max(used) < declared, (
             "%s addresses slot %d but only declares properties=%r" % (name, max(used), declared))
         assert min(used) == 0, "%s never addresses slot 0" % name
+
+
+def test_every_setter_addresses_the_slot_its_own_property_was_registered_at():
+    # THE renumbering trap itself, which the two checks above only bound: they pin the COUNT and the
+    # CEILING, so a setter pointed at a legal-but-wrong slot is green in both -- and green through
+    # the recording fake VM too, which records by METHOD NAME and never sees an index. Appending
+    # setShowEvents to ProgressVM at slot 10 instead of 11 (i.e. onto transManual's slot) passed the
+    # entire suite; mutation-probed.
+    #
+    # Every model here names its setter after its property (`setShowEvents` <-> "showEvents"), all
+    # 60 of them, so that convention IS the pin: read the registration ORDER out of _initialize and
+    # require each setter's index to land on its own name. A slot with no setter is fine (MoEVM's
+    # Array is read back through _getArray), which is why this walks setters, not slots.
+    for name, cls in sorted(_models().items()):
+        props = re.findall(r"self\._add\w+Property\(\s*[\"'](\w+)[\"']",
+                           inspect.getsource(cls._initialize))
+        setters = re.findall(r"def set(\w+)\(self[^)]*\):\s*\n\s*self\._set\w+\((\d+)",
+                             inspect.getsource(cls))
+        assert setters, "%s has no index-addressing setters at all" % name
+        for setter, index in setters:
+            expected = setter[0].lower() + setter[1:]
+            assert props[int(index)] == expected, (
+                "%s.set%s writes slot %s, which is registered as %r, not %r -- the setter is "
+                "pointed at another field" % (name, setter, index, props[int(index)], expected))

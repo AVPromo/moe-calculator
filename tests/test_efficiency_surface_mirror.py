@@ -314,7 +314,9 @@ def test_the_surface_reassert_outlasts_the_engines_size_deadline():
         < mount.index("}, SURFACE_REASSERT_MS);"), \
         "MoEBarTransient.js: the settle flip is no longer nested in the re-assert callback"
     # This bar's show trigger is gated on it (the silent baseline deliberately is not).
-    assert re.search(r"if \(gained && T\.settled\(\)\)", _js()), \
+    # (`showEvents` -- the "Events" visibility switch -- sits between the two; the settle gate is
+    # still the last term, and it is the one this test owns.)
+    assert re.search(r"if \(gained && model\.showEvents !== false && T\.settled\(\)\)", _js()), \
         "MoEEfficiency.js: the show trigger is no longer gated on the settle flag"
 
 

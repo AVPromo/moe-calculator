@@ -105,7 +105,10 @@ _battle_epoch = 0
 #  - the corner overlay's "Show on Alt Key" mode -- while the In-Battle Widget master is on AND
 #    that mode is on, the overlay's visible flag follows this (decided in battle_bar_visible);
 #  - the centre-screen progress bar, which gets it pushed as `altHeld` and treats it as an
-#    ADDITIVE show trigger (pull the bar up and hold it), never a gate.
+#    ADDITIVE show trigger (pull the bar up and hold it), never a gate. That push goes through
+#    mod_settings.progress_alt_held(), which gates it on the bar's own "Alt Press" switch and
+#    forces it TRUE while "Always" is on (a permanently-held Alt is exactly how the shared JS
+#    transient pins the bar on screen).
 # Read this module global -- do NOT call battle_input.install_alt_key_listener again for a second
 # consumer: its `_on_change` is a SINGLE callback slot, so a second install would silently
 # replace the overlay's handler and kill its Alt peek.
@@ -120,8 +123,8 @@ def _window_gates():
     One place deciding who may be up, shared by the battle mount and the live settings apply, so
     the "exactly one centre-screen bar at a time" rule cannot drift between them. The corner
     overlay has its own master; the two centre-screen bars are radio ALTERNATIVES that split the
-    single progress_bar_enabled master by variant (MOVING_AVERAGE = progress_view, EFFICIENCY =
-    efficiency_view), so at most one of them is ever gated on."""
+    single progress_bar_enabled master by variant (EFFICIENCY = efficiency_view, MOVING_AVERAGE =
+    progress_view), so at most one of them is ever gated on."""
     bar_on = mod_settings.progress_bar_enabled()
     variant = mod_settings.progress_bar_variant()
     return ((mod_settings.battle_enabled(), battle_view),
@@ -656,8 +659,14 @@ def push_progress(rvm, snap, model):
         proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
         has_data = axis_hi > axis_lo
         bar_size = mod_settings.progress_bar_size()
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s size=%d" % (
-            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, _alt_held, bar_size))
+        # The two VISIBILITY switches, both resolved in mod_settings so the pair can never disagree
+        # between the bars: `alt_held` carries "Alt Press" AND "Always" (a permanently-held Alt IS
+        # the Always mode -- the JS pins the bar at its hold plateau), `showEvents` carries "Events".
+        alt_held = mod_settings.progress_alt_held(_alt_held)
+        show_events = mod_settings.progress_show_events()
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s size=%d ev=%s" % (
+            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, alt_held, bar_size,
+            show_events))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -666,12 +675,13 @@ def push_progress(rvm, snap, model):
             tx.setPreAvg(pre_avg)
             tx.setProjAvg(proj_avg)
             tx.setHasData(has_data)
-            tx.setAltHeld(_alt_held)
+            tx.setAltHeld(alt_held)
             tx.setBarSize(bar_size)
             # The two effective transition flags -- the Transitions MASTER is already ANDed in by
             # the getters, so the widget never sees it (mod_settings).
             tx.setTransEvents(mod_settings.progress_transitions_events())
             tx.setTransManual(mod_settings.progress_transitions_manual())
+            tx.setShowEvents(show_events)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -711,10 +721,14 @@ def push_efficiency(rvm, snap, model):
         bar_x = efficiency_bar_x(damage, stops)
         band = efficiency_band(damage, stops)
         bar_size = mod_settings.progress_bar_size()
+        # The two VISIBILITY switches -- see push_progress; resolved in mod_settings so both bars
+        # agree by construction.
+        alt_held = mod_settings.progress_alt_held(_alt_held)
+        show_events = mod_settings.progress_show_events()
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
-                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d size=%d" % (
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d size=%d ev=%s" % (
                       visible, has_data, damage, bar_x, band,
-                      r[1], r[2], r[3], r[4], _alt_held, _battle_epoch, bar_size))
+                      r[1], r[2], r[3], r[4], alt_held, _battle_epoch, bar_size, show_events))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -725,13 +739,14 @@ def push_efficiency(rvm, snap, model):
             tx.setR95(r[3])
             tx.setR100(r[4])
             tx.setHasData(has_data)
-            tx.setAltHeld(_alt_held)
+            tx.setAltHeld(alt_held)
             tx.setBattleEpoch(_battle_epoch)
             tx.setBarSize(bar_size)
             # The two effective transition flags -- the Transitions MASTER is already ANDed in by
             # the getters, so the widget never sees it (mod_settings).
             tx.setTransEvents(mod_settings.progress_transitions_events())
             tx.setTransManual(mod_settings.progress_transitions_manual())
+            tx.setShowEvents(show_events)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
