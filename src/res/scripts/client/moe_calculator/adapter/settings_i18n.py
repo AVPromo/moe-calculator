@@ -34,7 +34,9 @@ see ``HEADER_KEYS``) in ``<b>...</b>``; ``mod_settings._label`` then only adds t
 for why that matters). The ``positionSub`` ("Position") row that heads the two steppers is
 deliberately excluded from ``HEADER_KEYS``, so the weight difference reads as hierarchy. An
 ``Empty`` row has no text at all, so ``COL1_KEYS`` / ``COL2_KEYS`` give it a ``None`` sentinel
-slot rather than a key -- see those tuples.
+slot rather than a key -- see those tuples. A spacer also heads the standalone Mode / Scale
+radios, the "Transitions" group (both column 1) and the "Position" sub-label (column 2), matching
+the existing category-separator spacers.
 
 NOTE on terminology: the non-English blocks use each locale's natural wording for
 "widget", "Garage", "battle" and "Marks of Excellence". The official Marks-of-Excellence
@@ -99,11 +101,12 @@ VARIANT_KEY = u"progressVariant"
 # Ordered key list per column -- the wire order of the controls in the MSA template. Used by
 # mod_settings to walk a stored template in lockstep. Column 1 is TWO CATEGORIES separated by an
 # Empty spacer row: "Battle Calculator" (the In-Battle Widget master + its two children), then
-# "Battle Progress" (the Progress Bar master + its three VISIBILITY children, the standalone Mode
-# and Scale radios, then the Transitions master + its two children -- a SECOND group under the same
-# category header, so it adds no cat* row). Column 2 is the "Garage Widget" category header, the
-# garage master, a spacer, then the "Layout" group. Only two columns -- a third does not render in
-# the panel at all.
+# "Battle Progress" (the Progress Bar master + its three VISIBILITY children, a SECOND Empty
+# spacer, the standalone Mode and Scale radios, a THIRD Empty spacer, then the Transitions master
+# + its two children -- a THIRD group under the same category header, so it adds no cat* row).
+# Column 2 is the "Garage Widget" category header, the garage master, a spacer, then the "Layout"
+# group (Follow Carousel, a spacer, the "Position" sub-label, the X/Y steppers). Only two columns
+# -- a third does not render in the panel at all.
 #
 # EVERY control gets a slot, including the ones that carry no varName (the cat* headers) -- the zip
 # in _sync_template_text is POSITIONAL, so a missing key here pairs every LATER control with the
@@ -114,14 +117,17 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None,
              u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
+             None,
              VARIANT_KEY, u"progressSize",
+             None,
              u"progressTransitions", u"progressTransEvents", u"progressTransManual")
 # Column 2: the category header, the standalone In-Garage Widget master, a spacer, then the
-# "Layout" group -- its bold header, Follow Carousel, a non-bold "Position" sub-label, then the
-# X/Y numeric steppers (in that exact control order, so _sync_template_text walks it in lockstep).
-# EIGHT slots (grew from seven): "positionSub" is the new sub-label heading the two steppers.
+# "Layout" group -- its bold header, Follow Carousel, a spacer, a non-bold "Position" sub-label,
+# then the X/Y numeric steppers (in that exact control order, so _sync_template_text walks it in
+# lockstep). NINE slots (grew from eight): a second Empty spacer now heads "Position" the same way
+# the first one heads "Battle Progress" / separates "Garage Widget" from "Layout".
 COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarousel",
-             u"positionSub", u"posX", u"posY")
+             None, u"positionSub", u"posX", u"posY")
 
 # The four CATEGORY/GROUP header keys that render BOLD (see build()). "positionSub"
 # ("Position") is deliberately EXCLUDED -- it is the non-bold sub-label under "Layout", and
@@ -223,10 +229,21 @@ _PANEL = {
             u"Always", u"Always show",
             u"Keeps the bar on screen permanently; it never fades. Overrides both switches "
             u"above, which grey out while this is on."),
-        # Both radios carry a label and no tooltip -- their option labels say it all. The options
-        # themselves come from _VARIANT_OPTIONS / _SIZE_OPTIONS via build().
-        u"progressVariant": _row(u"Mode"),
-        u"progressSize": _row(u"Scale"),
+        # Both radios now carry a tooltip too (maintainer override -- the "options say it all"
+        # invariant a prior pass protected with a dedicated test is waived). Each adds INFO beyond
+        # what's already said elsewhere rather than repeating it: progressBar's own tooltip above
+        # already spells out what "Damage Efficiency" / "Moving Average" mean, so Mode's tooltip
+        # covers WHEN a mode-switch takes effect instead; Scale has no explanation anywhere else in
+        # the panel, so it explains the option words directly. Options themselves still come from
+        # _VARIANT_OPTIONS / _SIZE_OPTIONS via build().
+        u"progressVariant": _row(
+            u"Mode", u"Bar mode",
+            u"Switches between the two progress bars described above. Takes effect the next "
+            u"time the bar comes up."),
+        u"progressSize": _row(
+            u"Scale", u"Bar scale",
+            u"Default: the bar's normal size. Large: draws it bigger, for easier reading from "
+            u"a distance."),
         # The Transitions master + its two children. Only the MASTER carries a tooltip: the two
         # children are one-word switches whose meaning the master's prose spells out, so they are
         # label-only rows (no tt* -> _render emits no tooltip key).
@@ -244,7 +261,11 @@ _PANEL = {
             u"Ctrl+drag the Garage widget to move it (hold Shift to lock to one axis). The "
             u"steppers below show its pinned top-left position in pixels; 0 / 0 means the "
             u"default bottom-right position. Use the per-mod Reset to return to default."),
-        u"positionSub": _row(u"Position"),
+        # NEW info, not a repeat of "positioning"'s drag instructions or posX/posY's per-axis
+        # tooltips: that both steppers apply the moment you change them.
+        u"positionSub": _row(
+            u"Position", u"Position steppers",
+            u"Both steppers below apply immediately, without needing to drag the widget."),
         u"posX": _row(
             u"Horizontal (left X)", u"Horizontal position",
             u"The pinned widget's distance from the left screen edge, in pixels. 0 restores "
@@ -277,8 +298,14 @@ _PANEL = {
             u"Immer", u"Immer anzeigen",
             u"Lässt die Leiste dauerhaft auf dem Bildschirm stehen; sie verschwindet nie. "
             u"Hat Vorrang vor beiden Schaltern oben, die dabei ausgegraut werden."),
-        u"progressVariant": _row(u"Modus"),
-        u"progressSize": _row(u"Skalierung"),
+        u"progressVariant": _row(
+            u"Modus", u"Leistenmodus",
+            u"Wechselt zwischen den beiden oben beschriebenen Leisten. Wird wirksam, sobald "
+            u"die Leiste das nächste Mal erscheint."),
+        u"progressSize": _row(
+            u"Skalierung", u"Leistengröße",
+            u"Standard: die normale Größe der Leiste. Groß: zeigt sie größer an, für bessere "
+            u"Lesbarkeit aus der Entfernung."),
         u"garageWidget": _row(
             u"Aktiviert", u"Garage-Widget",
             u"Zeigt die Marken-Prozentanzeige in der Garage beim ausgewählten Fahrzeug. "
@@ -321,7 +348,9 @@ _PANEL = {
             u"zeigen seine fixierte Position oben links in Pixeln; 0 / 0 bedeutet die "
             u"Standardposition unten rechts. Nutze das Zurücksetzen des Mods, um zum "
             u"Standard zurückzukehren."),
-        u"positionSub": _row(u"Position"),
+        u"positionSub": _row(
+            u"Position", u"Positions-Felder",
+            u"Beide Felder unten wirken sofort, ganz ohne das Widget zu ziehen."),
         u"posX": _row(
             u"Horizontal (links X)", u"Horizontale Position",
             u"Abstand des fixierten Widgets vom linken Bildschirmrand in Pixeln. 0 stellt "
@@ -355,8 +384,14 @@ _PANEL = {
             u"Laisse la barre affichée en permanence à l'écran ; elle ne disparaît jamais. "
             u"Prime sur les deux interrupteurs ci-dessus, qui se grisent tant que celui-ci "
             u"est actif."),
-        u"progressVariant": _row(u"Mode"),
-        u"progressSize": _row(u"Échelle"),
+        u"progressVariant": _row(
+            u"Mode", u"Mode de la barre",
+            u"Bascule entre les deux barres décrites ci-dessus. Prend effet la prochaine fois "
+            u"que la barre apparaît."),
+        u"progressSize": _row(
+            u"Échelle", u"Taille de la barre",
+            u"Par défaut : taille normale de la barre. Grande : l'affiche plus grande, pour une "
+            u"meilleure lisibilité à distance."),
         u"garageWidget": _row(
             u"Activé", u"Widget du garage",
             u"Affiche la barre de centile des marques d'excellence dans le garage, sur le "
@@ -400,7 +435,10 @@ _PANEL = {
             u"épinglée en haut à gauche, en pixels ; 0 / 0 correspond à la position par "
             u"défaut en bas à droite. Utilisez la réinitialisation du mod pour revenir au "
             u"réglage par défaut."),
-        u"positionSub": _row(u"Position"),
+        u"positionSub": _row(
+            u"Position", u"Compteurs de position",
+            u"Les deux compteurs ci-dessous s'appliquent immédiatement, sans avoir à faire "
+            u"glisser le widget."),
         u"posX": _row(
             u"Horizontal (X gauche)", u"Position horizontale",
             u"Distance du widget épinglé par rapport au bord gauche de l'écran, en "
@@ -433,8 +471,14 @@ _PANEL = {
             u"Siempre", u"Mostrar siempre",
             u"Mantiene la barra en pantalla de forma permanente; nunca se oculta. Anula los "
             u"dos interruptores anteriores, que se atenúan mientras este está activado."),
-        u"progressVariant": _row(u"Modo"),
-        u"progressSize": _row(u"Escala"),
+        u"progressVariant": _row(
+            u"Modo", u"Modo de la barra",
+            u"Alterna entre las dos barras descritas arriba. Se aplica la próxima vez que "
+            u"aparezca la barra."),
+        u"progressSize": _row(
+            u"Escala", u"Tamaño de la barra",
+            u"Predeterminada: el tamaño normal de la barra. Grande: la muestra más grande, para "
+            u"facilitar la lectura a distancia."),
         u"garageWidget": _row(
             u"Activado", u"Widget del garaje",
             u"Muestra la barra de percentil de las marcas de excelencia en el garaje, en "
@@ -476,7 +520,10 @@ _PANEL = {
             u"de la esquina superior izquierda, en píxeles; 0 / 0 es la posición "
             u"predeterminada en la esquina inferior derecha. Usa el restablecimiento del "
             u"mod para volver al valor predeterminado."),
-        u"positionSub": _row(u"Posición"),
+        u"positionSub": _row(
+            u"Posición", u"Contadores de posición",
+            u"Ambos contadores de abajo se aplican de inmediato, sin necesidad de arrastrar el "
+            u"widget."),
         u"posX": _row(
             u"Horizontal (X izquierda)", u"Posición horizontal",
             u"Distancia del widget fijado al borde izquierdo de la pantalla, en píxeles. "
@@ -510,8 +557,14 @@ _PANEL = {
             u"Lascia la barra fissa sullo schermo in modo permanente; non scompare mai. "
             u"Prevale sui due interruttori sopra, che restano in grigio finché questo è "
             u"attivo."),
-        u"progressVariant": _row(u"Modalità"),
-        u"progressSize": _row(u"Scala"),
+        u"progressVariant": _row(
+            u"Modalità", u"Modalità della barra",
+            u"Passa da una barra all'altra tra le due descritte sopra. Ha effetto la prossima "
+            u"volta che la barra appare."),
+        u"progressSize": _row(
+            u"Scala", u"Dimensione della barra",
+            u"Predefinita: la dimensione normale della barra. Grande: la mostra più grande, per "
+            u"una lettura più facile a distanza."),
         u"garageWidget": _row(
             u"Abilitato", u"Widget del garage",
             u"Mostra la barra di percentile dei marchi di merito nel garage, sul veicolo "
@@ -554,7 +607,10 @@ _PANEL = {
             u"in alto a sinistra, in pixel; 0 / 0 indica la posizione predefinita in "
             u"basso a destra. Usa il ripristino del mod per tornare al valore "
             u"predefinito."),
-        u"positionSub": _row(u"Posizione"),
+        u"positionSub": _row(
+            u"Posizione", u"Contatori di posizione",
+            u"Entrambi i contatori sotto si applicano immediatamente, senza dover trascinare "
+            u"il widget."),
         u"posX": _row(
             u"Orizzontale (X sinistra)", u"Posizione orizzontale",
             u"Distanza del widget fissato dal bordo sinistro dello schermo, in pixel. 0 "
@@ -588,8 +644,14 @@ _PANEL = {
             u"Utrzymuje pasek na ekranie na stałe; nigdy nie znika. Ma pierwszeństwo przed "
             u"obydwoma przełącznikami powyżej, które są wyszarzone, gdy ta opcja jest "
             u"włączona."),
-        u"progressVariant": _row(u"Tryb"),
-        u"progressSize": _row(u"Skala"),
+        u"progressVariant": _row(
+            u"Tryb", u"Tryb paska",
+            u"Przełącza między dwoma paskami opisanymi powyżej. Zaczyna działać przy "
+            u"następnym pojawieniu się paska."),
+        u"progressSize": _row(
+            u"Skala", u"Rozmiar paska",
+            u"Domyślny: normalny rozmiar paska. Duży: pokazuje go większym, dla łatwiejszego "
+            u"odczytu z odległości."),
         u"garageWidget": _row(
             u"Włączone", u"Widżet w garażu",
             u"Pokazuje pasek percentyla znaków doskonałości w garażu, na wybranym "
@@ -630,7 +692,10 @@ _PANEL = {
             u"zablokować do jednej osi). Liczniki poniżej pokazują przypiętą pozycję "
             u"lewego górnego rogu w pikselach; 0 / 0 oznacza domyślną pozycję w prawym "
             u"dolnym rogu. Użyj resetu moda, aby wrócić do wartości domyślnej."),
-        u"positionSub": _row(u"Pozycja"),
+        u"positionSub": _row(
+            u"Pozycja", u"Liczniki pozycji",
+            u"Oba liczniki poniżej działają natychmiast, bez konieczności przeciągania "
+            u"widżetu."),
         u"posX": _row(
             u"Poziomo (lewy X)", u"Pozycja pozioma",
             u"Odległość przypiętego widżetu od lewej krawędzi ekranu, w pikselach. 0 "
@@ -662,8 +727,14 @@ _PANEL = {
             u"Vždy", u"Vždy zobrazit",
             u"Nechá lištu trvale na obrazovce; nikdy nezmizí. Má přednost před oběma "
             u"přepínači výše, které jsou po dobu jeho zapnutí zašedlé."),
-        u"progressVariant": _row(u"Režim"),
-        u"progressSize": _row(u"Měřítko"),
+        u"progressVariant": _row(
+            u"Režim", u"Režim lišty",
+            u"Přepíná mezi oběma lištami popsanými výše. Projeví se při příštím zobrazení "
+            u"lišty."),
+        u"progressSize": _row(
+            u"Měřítko", u"Velikost lišty",
+            u"Výchozí: běžná velikost lišty. Velká: zobrazí ji větší, pro snazší čtení z "
+            u"dálky."),
         u"garageWidget": _row(
             u"Povoleno", u"Widget v garáži",
             u"Zobrazuje percentilovou lištu znaků cti v garáži u vybraného vozidla. "
@@ -702,7 +773,9 @@ _PANEL = {
             u"osu). Čítače níže ukazují jeho ukotvenou pozici levého horního rohu v "
             u"pixelech; 0 / 0 znamená výchozí pozici vpravo dole. Pro návrat na výchozí "
             u"hodnotu použij reset modu."),
-        u"positionSub": _row(u"Pozice"),
+        u"positionSub": _row(
+            u"Pozice", u"Čítače pozice",
+            u"Oba čítače níže se projeví okamžitě, bez nutnosti tažení widgetu."),
         u"posX": _row(
             u"Vodorovně (levé X)", u"Vodorovná pozice",
             u"Vzdálenost ukotveného widgetu od levého okraje obrazovky v pixelech. 0 "
@@ -736,8 +809,14 @@ _PANEL = {
             u"Оставляет полосу на экране постоянно; она никогда не исчезает. Имеет "
             u"приоритет над обоими переключателями выше, которые становятся серыми, пока эта "
             u"опция включена."),
-        u"progressVariant": _row(u"Режим"),
-        u"progressSize": _row(u"Масштаб"),
+        u"progressVariant": _row(
+            u"Режим", u"Режим полосы",
+            u"Переключает между двумя полосами, описанными выше. Вступает в силу при "
+            u"следующем появлении полосы."),
+        u"progressSize": _row(
+            u"Масштаб", u"Масштаб полосы",
+            u"Стандартная: обычный размер полосы. Большая: показывает её крупнее, для удобного "
+            u"чтения на расстоянии."),
         u"garageWidget": _row(
             u"Включено", u"Виджет в ангаре",
             u"Показывает полосу процентиля отметок классности в ангаре на выбранной "
@@ -777,7 +856,10 @@ _PANEL = {
             u"верхнего левого угла в пикселях; 0 / 0 означает стандартную позицию в "
             u"правом нижнем углу. Используйте сброс мода, чтобы вернуть значение по "
             u"умолчанию."),
-        u"positionSub": _row(u"Позиция"),
+        u"positionSub": _row(
+            u"Позиция", u"Счётчики позиции",
+            u"Оба счётчика ниже применяются немедленно, без необходимости перетаскивать "
+            u"виджет."),
         u"posX": _row(
             u"Горизонталь (левый X)", u"Позиция по горизонтали",
             u"Расстояние закреплённого виджета от левого края экрана в пикселях. 0 "
@@ -810,8 +892,14 @@ _PANEL = {
             u"Завжди", u"Показувати завжди",
             u"Залишає смугу на екрані постійно; вона ніколи не зникає. Має пріоритет над "
             u"обома перемикачами вище, які стають сірими, поки цей увімкнено."),
-        u"progressVariant": _row(u"Режим"),
-        u"progressSize": _row(u"Масштаб"),
+        u"progressVariant": _row(
+            u"Режим", u"Режим смуги",
+            u"Перемикає між двома смугами, описаними вище. Набуває чинності під час "
+            u"наступної появи смуги."),
+        u"progressSize": _row(
+            u"Масштаб", u"Масштаб смуги",
+            u"Стандартна: звичайний розмір смуги. Велика: показує її більшою, для зручного "
+            u"читання на відстані."),
         u"garageWidget": _row(
             u"Увімкнено", u"Віджет в ангарі",
             u"Показує смугу процентиля позначок класності в ангарі на вибраній машині. "
@@ -851,7 +939,10 @@ _PANEL = {
             u"верхнього лівого кута в пікселях; 0 / 0 означає стандартну позицію в правому "
             u"нижньому куті. Використайте скидання мода, щоб повернути значення за "
             u"замовчуванням."),
-        u"positionSub": _row(u"Позиція"),
+        u"positionSub": _row(
+            u"Позиція", u"Лічильники позиції",
+            u"Обидва лічильники нижче застосовуються негайно, без потреби перетягувати "
+            u"віджет."),
         u"posX": _row(
             u"Горизонталь (лівий X)", u"Позиція по горизонталі",
             u"Відстань закріпленого віджета від лівого краю екрана в пікселях. 0 "
@@ -884,8 +975,14 @@ _PANEL = {
             u"Mindig", u"Mindig megjelenítés",
             u"Végig a képernyőn tartja a sávot; sosem tűnik el. Felülbírálja a fenti két "
             u"kapcsolót, amelyek eközben szürkén jelennek meg."),
-        u"progressVariant": _row(u"Mód"),
-        u"progressSize": _row(u"Méretezés"),
+        u"progressVariant": _row(
+            u"Mód", u"Sáv módja",
+            u"Váltás a fent leírt két sáv között. A sáv következő megjelenésekor lép "
+            u"életbe."),
+        u"progressSize": _row(
+            u"Méretezés", u"Sáv mérete",
+            u"Alapértelmezett: a sáv normál mérete. Nagy: nagyobb méretben jeleníti meg, hogy "
+            u"távolról is könnyebb legyen olvasni."),
         u"garageWidget": _row(
             u"Engedélyezve", u"Garázs-widget",
             u"Megjeleníti a kiválósági jelek percentilis sávját a garázsban, a "
@@ -924,7 +1021,9 @@ _PANEL = {
             u"tengelyre rögzítéshez). Az alábbi számlálók a rögzített bal felső pozíciót "
             u"mutatják pixelben; a 0 / 0 az alapértelmezett jobb alsó pozíciót jelenti. Az "
             u"alapértelmezéshez való visszatéréshez használd a mod visszaállítását."),
-        u"positionSub": _row(u"Pozíció"),
+        u"positionSub": _row(
+            u"Pozíció", u"Pozíció-számlálók",
+            u"Az alábbi két számláló azonnal érvénybe lép, a widget húzása nélkül."),
         u"posX": _row(
             u"Vízszintes (bal X)", u"Vízszintes pozíció",
             u"A rögzített widget távolsága a képernyő bal szélétől, pixelben. A 0 "
@@ -956,8 +1055,14 @@ _PANEL = {
             u"Her zaman", u"Her zaman göster",
             u"Çubuğu ekranda kalıcı olarak tutar; asla kaybolmaz. Bu açıkken soluklaşan "
             u"yukarıdaki iki anahtarın önüne geçer."),
-        u"progressVariant": _row(u"Mod"),
-        u"progressSize": _row(u"Ölçek"),
+        u"progressVariant": _row(
+            u"Mod", u"Çubuk modu",
+            u"Yukarıda açıklanan iki çubuk arasında geçiş yapar. Çubuğun bir sonraki "
+            u"görünüşünde etkili olur."),
+        u"progressSize": _row(
+            u"Ölçek", u"Çubuk boyutu",
+            u"Varsayılan: çubuğun normal boyutu. Büyük: uzaktan daha kolay okumak için daha "
+            u"büyük gösterir."),
         u"garageWidget": _row(
             u"Etkin", u"Garaj widget'ı",
             u"Seçili araçta, garajda üstünlük işaretleri yüzdelik çubuğunu gösterir. "
@@ -997,7 +1102,10 @@ _PANEL = {
             u"Shift'i basılı tut). Aşağıdaki sayaçlar, sabitlenmiş sol üst konumu piksel "
             u"cinsinden gösterir; 0 / 0 varsayılan sağ alt konumu ifade eder. Varsayılana "
             u"dönmek için modun sıfırlamasını kullan."),
-        u"positionSub": _row(u"Konum"),
+        u"positionSub": _row(
+            u"Konum", u"Konum sayaçları",
+            u"Aşağıdaki her iki sayaç da widget'ı sürüklemeye gerek kalmadan hemen "
+            u"uygulanır."),
         u"posX": _row(
             u"Yatay (sol X)", u"Yatay konum",
             u"Sabitlenmiş widget'ın ekranın sol kenarına uzaklığı, piksel cinsinden. 0, "

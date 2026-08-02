@@ -115,7 +115,22 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # The three masters' own label also went "Show" -> "Enabled" and the position steppers' labels
 # regained their axis hints ("Horizontal (left X)" / "Vertical (top Y)") -- both text-only and would
 # have travelled via _sync_template_text on their own, but ride along with this bump regardless.
-SETTINGS_VERSION = 14
+# Bumped 14 -> 15 to add two more "Empty" spacer rows: one heading the "Transitions" group (column
+# 1, right after the Scale radio) and one heading the "Position" sub-label (column 2, right after
+# Follow Carousel) -- purely visual breathing room, matching the existing category-separator
+# spacers. Two new None-sentinel slots in COL1_KEYS/COL2_KEYS shift every following control's
+# positional pairing in _sync_template_text, so this is structural even though no varName changed;
+# register()'s saved-truthy path never calls setModTemplate on an existing install, so only a
+# forward bump reaches it. No varName was added, removed or renamed, so the migration branch
+# carries every saved value across unchanged.
+# Bumped 15 -> 16 for a THIRD "Empty" spacer row in column 1: one now heads the standalone Mode /
+# Scale radios too (right after the Progress Bar group's three visibility children), the same
+# purely visual role as the other two. One more None-sentinel slot in COL1_KEYS (16 -> 17) shifts
+# every later control's positional pairing in _sync_template_text, so -- same reasoning as the
+# 14 -> 15 bump -- this is structural even though no varName changed; only a forward bump reaches
+# an existing install. No varName was added, removed or renamed, so the migration branch carries
+# every saved value across unchanged.
+SETTINGS_VERSION = 16
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -633,10 +648,12 @@ def _template():
     by that feature's controls, and categories are separated by an "Empty" spacer row.
     Column 1: "Battle Calculator" (the In-Battle Widget master + its "Alt Press" and "Counted
     Assistance Row" children), then "Battle Progress" (the Progress Bar master + its three
-    VISIBILITY children, the standalone Mode and Scale radios, then the Transitions master + its
-    Events and Alt Press children). Column 2: "Garage Widget" (the garage master), then the
-    "Layout" group -- a header, Follow Carousel, a "Position" sub-label, then the X/Y numeric
-    steppers. Because the header names the feature, each master's own label is just "Enabled".
+    VISIBILITY children, an Empty spacer, the standalone Mode and Scale radios, a SECOND Empty
+    spacer, then the Transitions master + its Events and Alt Press children). Column 2: "Garage
+    Widget" (the garage master), then the "Layout" group -- a header, Follow Carousel, an Empty
+    spacer, a "Position" sub-label, then the X/Y numeric steppers. Because the header names the
+    feature, each master's
+    own label is just "Enabled".
     Every visible label/tooltip comes from settings_i18n at the client's language (English
     fallback). The four category/group headers render BOLD (see _label); "Position" does not."""
     t = settings_i18n.panel_text()
@@ -679,14 +696,17 @@ def _template():
         # The two RADIOS are deliberately STANDALONE (no master, no condition): Mode and Scale
         # describe the bar itself rather than when it shows, they are `inline` so they cost one row
         # each, and leaving them ungated keeps them readable while the feature is off -- the same
-        # call already made for the column-2 steppers.
+        # call already made for the column-2 steppers. An Empty spacer heads them, same purely
+        # visual role as every other spacer in this column.
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL1_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
         #
         # The Transitions master is a THIRD _grouped_column1 call spliced on, for the same reason
         # the Progress Bar one is its own group: its two children must grey out with IT and with
-        # nothing else. Same "Battle Progress" category, so it gets NO header row of its own.
+        # nothing else. Same "Battle Progress" category, so it gets NO header row of its own --
+        # only an Empty spacer ahead of it, breathing room after the two radios (same purely
+        # visual role as the spacer ahead of "Battle Progress" itself).
         #
         # Both category headers render BOLD -- settings_i18n.build() already wrapped their text
         # (see _label); this only adds the matching useHTML key.
@@ -694,14 +714,15 @@ def _template():
                     + _grouped_column1(battle_master, [battle_alt, counted])
                     + [_empty(), _label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
-                    + [progress_variant, progress_size]
+                    + [_empty(), progress_variant, progress_size, _empty()]
                     + _grouped_column1(trans_master, [trans_events, trans_manual])),
         # column2: the BOLD category header, the garage master, an Empty spacer, then the "Layout"
-        # group -- its own BOLD header, Follow Carousel, a non-bold "Position" sub-label, then the
-        # X/Y steppers. Follow Carousel sits ABOVE the steppers (moved up so the whole group reads
-        # top-to-bottom as "Layout" -> toggle -> position), and "Position" heads just the two
-        # steppers -- deliberately NOT bold, so the weight difference marks it as a sub-level under
-        # "Layout" rather than a THIRD header. Column 2 stays FLAT: the steppers and Follow Carousel
+        # group -- its own BOLD header, Follow Carousel, a SECOND Empty spacer, a non-bold
+        # "Position" sub-label, then the X/Y steppers. Follow Carousel sits ABOVE the steppers
+        # (moved up so the whole group reads top-to-bottom as "Layout" -> toggle -> spacer ->
+        # position), and "Position" heads just the two steppers -- deliberately NOT bold, so the
+        # weight difference marks it as a sub-level under "Layout" rather than a THIRD header.
+        # Column 2 stays FLAT: the steppers and Follow Carousel
         # are all STANDALONE (no masterVarName), so they keep working -- and stay ungreyed -- while
         # the garage widget is off. Steppers show 0 (auto) until a drag / edit pins a px; Follow
         # Carousel ships ON. The wire order here MUST stay in lockstep with settings_i18n.COL2_KEYS
@@ -713,6 +734,7 @@ def _template():
             _empty(),
             _label("positioning", t["positioning"]),
             _checkbox(FOLLOW_CAROUSEL_KEY, t["followCarousel"]),
+            _empty(),
             _label("positionSub", t["positionSub"]),
             _stepper(POS_X_KEY, t["posX"]),
             _stepper(POS_Y_KEY, t["posY"]),

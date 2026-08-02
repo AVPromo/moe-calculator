@@ -36,8 +36,10 @@ def test_the_text_less_spacer_rows_take_a_none_sentinel_slot():
     # slot would shift every later control's text by one. `None` specifically, because
     # `panel_text().get(None)` is falsy and the sync walk's existing `if not rendered: continue`
     # then skips it with no new branch (the template-side pairing is pinned in test_mod_settings).
-    assert S.COL1_KEYS.count(None) == 1
-    assert S.COL2_KEYS.count(None) == 1
+    # THREE in column 1, TWO in column 2: column 1 gained a spacer heading "Transitions" and (this
+    # bump) a second one heading "Mode"; column 2 gained one heading "Position".
+    assert S.COL1_KEYS.count(None) == 3
+    assert S.COL2_KEYS.count(None) == 2
     # A sentinel must never collide with a real row, in any language.
     for code in S._PANEL:
         assert None not in S.build(code)
@@ -155,19 +157,26 @@ def test_counted_assist_ukrainian_translated():
 def test_progress_bar_group_is_the_tail_of_col1():
     # The progress-bar control briefly had a column 3 of its own; that column never rendered
     # in-client, so it is back in column 1 -- as the "Battle Progress" CATEGORY: a bare header row,
-    # the Progress Bar master with its three VISIBILITY children, the standalone Mode and Scale
-    # radios, then the Transitions master with its two children (a SECOND group under the SAME
-    # header, so it adds no cat* row). TEN keys, and they are the contiguous TAIL of column 1. The
-    # TABLE KEY `progressBar` never changed through any of those moves, so no translation was ever
-    # orphaned.
+    # the Progress Bar master with its three VISIBILITY children, an Empty spacer (this bump,
+    # ahead of "Mode"), the standalone Mode and Scale radios, a SECOND Empty spacer, then the
+    # Transitions master with its two children (a THIRD group under the SAME header, so it adds no
+    # cat* row). The TABLE KEY `progressBar` never changed through any of those moves, so no
+    # translation was ever orphaned.
+    #
+    # "Battle Progress" is NO LONGER the contiguous tail of COL1_KEYS as a plain key list: TWO
+    # `None` sentinels now sit INSIDE it -- one ahead of the Mode radio, one ahead of the
+    # Transitions master. So pin the tail as the literal last TWELVE slots (ten real keys + the two
+    # Nones), rather than filtering the sentinels out and asserting contiguity on what remains --
+    # that would silently accept either spacer landing anywhere in the group instead of exactly
+    # where it belongs.
     assert u"progressBar" in S._PANEL[u"en"]
-    _cat = (u"catBattleProgress", u"progressBar",
-            u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
-            S.VARIANT_KEY, u"progressSize",
-            u"progressTransitions", u"progressTransEvents", u"progressTransManual")
-    assert _col1_slice(*_cat) == tuple(range(len(S.COL1_KEYS) - len(_cat), len(S.COL1_KEYS))), \
-        u"the Battle Progress category is no longer the contiguous tail of COL1_KEYS: %r" % (
-            S.COL1_KEYS,)
+    tail = S.COL1_KEYS[-12:]
+    assert tail == (u"catBattleProgress", u"progressBar",
+                    u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
+                    None, S.VARIANT_KEY, u"progressSize", None,
+                    u"progressTransitions", u"progressTransEvents", u"progressTransManual"), (
+        u"the Battle Progress category (incl. both spacers) is no longer the tail of "
+        u"COL1_KEYS: %r" % (S.COL1_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
     # phantom column to mod_settings._sync_template_text's walk.
@@ -182,11 +191,12 @@ def test_progress_bar_group_is_the_tail_of_col1():
     assert en[u"progressBar"][u"label"] == u"Enabled"
     assert u"ttHeader" in en[u"progressBar"] and u"ttBody" in en[u"progressBar"]
     # The variant radio is a NORMAL _PANEL row again (it carries a "Mode" label), so build() only
-    # bolts its options on -- it no longer synthesises a blank entry.
+    # bolts its options on -- it no longer synthesises a blank entry. It also now carries its own
+    # tooltip (maintainer override, v15 -- see test_both_radios_now_carry_a_tooltip_in_every_language).
     assert S.VARIANT_KEY in S._PANEL[u"en"]
     variant = S.build(u"en")[S.VARIANT_KEY]
     assert variant[u"text"] == u"Mode"
-    assert u"tooltip" not in variant
+    assert variant[u"tooltip"]
     # The per-variant prose lives on the master's tooltip body.
     assert u"Moving Average" in en[u"progressBar"][u"ttBody"]
     assert u"Damage Efficiency" in en[u"progressBar"][u"ttBody"]
@@ -280,20 +290,29 @@ def test_every_alt_labelled_row_keeps_the_alt_literal_in_every_language():
                 u"%s/%s label lost the 'Alt' key name" % (code, key)
 
 
-def test_both_radios_are_label_only_rows_in_every_language():
-    # Each radio carries a LABEL ("Mode" / "Scale") and NO tooltip, in every language: the two
-    # option labels beside it say it all, and _render must emit no "tooltip" key or
-    # mod_settings._radio would hand the panel an empty one -- which a stored template can then
-    # never have removed again (_sync_template_text only overwrites).
+def test_both_radios_now_carry_a_tooltip_in_every_language():
+    # MAINTAINER OVERRIDE (v15): the "options say it all" invariant this test used to protect is
+    # deliberately WAIVED. Each radio still carries its LABEL ("Mode" / "Scale") but now ALSO a
+    # real header+body tooltip that adds INFO the option labels alone don't -- Mode covers WHEN a
+    # mode switch takes effect, Scale explains what the option words mean (it has no explanation
+    # anywhere else in the panel). Assembled in the same {HEADER}/{BODY} shape _render() builds for
+    # every other tooltipped row, and translated (not just present) in every shipped language.
+    en = S._PANEL[u"en"]
     for key in (S.VARIANT_KEY, u"progressSize"):
         for code in S._PANEL:
             entry = S._PANEL[code][key]
             assert entry[u"label"], u"%s has an empty %s label" % (code, key)
-            assert u"ttHeader" not in entry and u"ttBody" not in entry, (
-                u"%s/%s grew a tooltip -- its option labels are the whole story" % (code, key))
+            assert entry.get(u"ttHeader") and entry.get(u"ttBody"), (
+                u"%s/%s lost its tooltip -- the maintainer override that waived the "
+                u"label-only rule expects one" % (code, key))
             rendered = S.build(code)[key]
             assert rendered[u"text"] == entry[u"label"]
-            assert u"tooltip" not in rendered
+            assert rendered[u"tooltip"] == u"{HEADER}%s{/HEADER}{BODY}%s{/BODY}" % (
+                entry[u"ttHeader"], entry[u"ttBody"])
+            if code != u"en":
+                for part in (u"ttHeader", u"ttBody"):
+                    assert entry[part] != en[key][part], (
+                        u"%s/%s/%s is still the English string" % (code, key, part))
 
 
 def test_a_translated_radio_row_is_never_marked_untranslated(monkeypatch):
@@ -442,17 +461,28 @@ def test_the_three_category_headers_are_label_only_in_every_language():
                     u"%s/%s is still the English string" % (code, key))
 
 
-def test_position_sub_label_is_a_new_tipless_row_in_every_language():
-    # The new column-2 sub-label heading the two steppers (mod_settings SETTINGS_VERSION 14):
-    # deliberately NOT bold (unlike "Layout" above it), so it is also tipless -- the weight
-    # difference alone marks it as a sub-level, and a bare one-word label has nothing to hover.
+def test_position_sub_label_now_carries_a_tooltip_in_every_language():
+    # The column-2 sub-label heading the two steppers (mod_settings SETTINGS_VERSION 14) shipped
+    # tipless -- deliberately NOT bold (unlike "Layout" above it), the weight difference alone
+    # marking it as a sub-level. MAINTAINER OVERRIDE (v15) waives that: it now carries a real
+    # header+body tooltip explaining NEW info (that both steppers apply immediately, without
+    # dragging the widget) -- not a repeat of "positioning"'s drag instructions or posX/posY's
+    # per-axis tooltips. Still not bold; only the tipless status changed.
     assert u"positionSub" in S.COL2_KEYS
+    en = S._PANEL[u"en"]
     for code in S._PANEL:
         entry = S._PANEL[code][u"positionSub"]
         assert entry[u"label"], u"%s has an empty positionSub label" % code
-        assert u"ttHeader" not in entry and u"ttBody" not in entry, (
-            u"%s/positionSub grew a tooltip -- it is a bare sub-label" % code)
-        assert u"tooltip" not in S.build(code)[u"positionSub"]
+        assert entry.get(u"ttHeader") and entry.get(u"ttBody"), (
+            u"%s/positionSub lost its tooltip -- the maintainer override that waived the "
+            u"tipless rule expects one" % code)
+        rendered = S.build(code)[u"positionSub"]
+        assert rendered[u"tooltip"] == u"{HEADER}%s{/HEADER}{BODY}%s{/BODY}" % (
+            entry[u"ttHeader"], entry[u"ttBody"])
+        if code != u"en":
+            for part in (u"ttHeader", u"ttBody"):
+                assert entry[part] != en[u"positionSub"][part], (
+                    u"%s/positionSub/%s is still the English string" % (code, part))
 
 
 def test_posx_posy_labels_restore_the_axis_and_corner_hint_in_every_language():
@@ -511,9 +541,9 @@ def test_every_masters_label_is_the_bare_enabled_in_every_language():
 def test_progress_bar_ukrainian_translated():
     uk = S.resolve(u"uk")
     assert uk[u"progressBar"][u"label"] != S.resolve(u"en")[u"progressBar"][u"label"]
-    # No progressVariant label comparison: it is blank in every language by design (see
-    # test_progress_variant_row_is_deliberately_blank_in_every_language) -- only the OPTION labels
-    # under it carry Ukrainian text now.
+    # No progressVariant label/tooltip comparison here -- it is a normal, fully-translated row
+    # (see test_both_radios_now_carry_a_tooltip_in_every_language); this test only needs the OPTION
+    # labels under it to carry Ukrainian text too.
     assert _options(u"uk") != _options(u"en")
 
 

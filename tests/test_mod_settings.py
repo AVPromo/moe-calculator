@@ -560,25 +560,36 @@ def test_template_settings_version_pins_the_current_layout():
     # rendering them plain forever without this bump. Column 2 also reorders (Follow Carousel moves
     # up under "Layout") and gains a new varName-less "Position" sub-label (COL2_KEYS 7 -> 8). No
     # varName was added/removed/renamed, so the migration branch carries every saved value across.
-    assert SETTINGS_VERSION == 14
+    # Bumped 14 -> 15 to add two more "Empty" spacer rows -- one heading "Transitions" in column 1,
+    # one heading "Position" in column 2 -- purely visual, but the two new None-sentinel slots shift
+    # every later control's positional pairing in _sync_template_text, so it is structural even
+    # though no varName changed. The migration branch carries every saved value across unchanged.
+    # Bumped 15 -> 16 for a THIRD "Empty" spacer, immediately ahead of the "Mode" radio in column 1
+    # -- again purely visual (no tooltip moved, no varName touched), but the new None-sentinel slot
+    # (COL1_KEYS 16 -> 17) shifts every later control's positional pairing, so it is structural
+    # regardless. The migration branch carries every saved value across unchanged.
+    assert SETTINGS_VERSION == 16
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
 def test_template_column1_is_two_categories_each_a_label_then_its_group():
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # FIFTEEN controls = TWO CATEGORIES separated by an Empty spacer, each a bare Label header
+    # SEVENTEEN controls = TWO CATEGORIES separated by an Empty spacer, each a bare Label header
     # followed by that feature's controls: "Battle Calculator" + [In-Battle master, Alt child,
     # counted-assist child], spacer, then "Battle Progress" + [Progress Bar master + its three
-    # VISIBILITY children] + [the two standalone radios] + [Transitions master, Events child, Alt
-    # Press child]. The Transitions group is a SECOND group under the SAME category header, so it
-    # adds three rows but NO Label -- there are still exactly two headers. The header names the
+    # VISIBILITY children] + a SECOND Empty spacer (new in this bump, ahead of "Mode") + [the two
+    # standalone radios] + a THIRD Empty spacer + [Transitions master, Events child, Alt Press
+    # child]. The Transitions group is a SECOND group under the SAME category header, so it adds
+    # three rows but NO Label -- there are still exactly two headers. The header names the
     # feature, which is why both masters read just "Enabled" (was "Show").
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
         "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
+        "Empty",
         "RadioButtonGroup", "RadioButtonGroup",
+        "Empty",
         "CheckBox", "CheckBox", "CheckBox"]
     # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
     assert [c["varName"] for c in col1 if "varName" in c] == [
@@ -595,9 +606,14 @@ def test_template_column1_is_two_categories_each_a_label_then_its_group():
     # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
     assert col1[0]["text"] == u"<b>Battle Calculator</b>" and col1[0]["useHTML"] is True
     assert col1[5]["text"] == u"<b>Battle Progress</b>" and col1[5]["useHTML"] is True
-    # The Empty spacer is a bare type and NOTHING else: no varName, and above all no text/tooltip,
-    # which is what lets settings_i18n give it a `None` sentinel slot instead of a key.
+    # All THREE Empty spacers are a bare type and NOTHING else: no varName, and above all no
+    # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
+    # key. The first heads "Battle Progress"; the second (this bump) heads "Mode"; the third heads
+    # "Transitions".
     assert col1[4] == {"type": "Empty"}
+    assert col1[10] == {"type": "Empty"}
+    assert col1[13] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13]
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -624,10 +640,13 @@ def test_template_variant_radio_shape(monkeypatch):
     # list of {"label": ...} dicts in index order, localized via settings_i18n.
     col1 = mod_settings._template()["column1"]
     radio, index = _at(col1, PROGRESS_VARIANT_KEY)
-    # POSITION, named rather than an index literal buried in a longer assertion: the Mode radio
-    # follows the LAST visibility child and the Scale radio follows it, so the pair's order is what
-    # _sync_template_text's positional zip walks.
-    assert index == _at(col1, PROGRESS_SHOW_ALWAYS_KEY)[1] + 1
+    # POSITION, named rather than an index literal buried in a longer assertion: an Empty spacer
+    # (new in this bump) now sits between the last visibility child and the Mode radio, and the
+    # Scale radio still directly follows Mode, so the pair's order is what _sync_template_text's
+    # positional zip walks.
+    assert col1[_at(col1, PROGRESS_SHOW_ALWAYS_KEY)[1] + 1] == {"type": "Empty"}, \
+        "a control was inserted between the last visibility child and the Mode radio's spacer"
+    assert index == _at(col1, PROGRESS_SHOW_ALWAYS_KEY)[1] + 2
     assert index + 1 == _at(col1, PROGRESS_SIZE_KEY)[1]
     assert radio["type"] == "RadioButtonGroup"
     assert radio["varName"] == PROGRESS_VARIANT_KEY
@@ -642,12 +661,15 @@ def test_template_variant_radio_shape(monkeypatch):
     # createRadioButtonGroup's kwarg of the same name -- that kwarg raises TypeError on
     # MSA < 1.6.1, an unknown key just rides through (MSA validates no descriptor).
     assert radio["inline"] is True
-    # It DOES carry a label now ("Mode"), unlike the label-less row it used to be.
+    # It DOES carry a label now ("Mode").
     assert radio["text"] == u"Mode"
-    # ...and no tooltip: the two option labels say it all, and _radio omits the key rather than
-    # emitting u"" (an empty tooltip is still a tooltip to the panel, and one written into a
-    # stored template can never be removed again).
-    assert "tooltip" not in radio
+    # ...and it now ALSO carries a tooltip -- a maintainer OVERRIDE (v15) of the "options say it
+    # all" invariant this test used to protect: Mode's tooltip covers WHEN a mode switch takes
+    # effect, which the option labels alone don't say. Assembled in the same {HEADER}/{BODY} shape
+    # settings_i18n._render() builds for every other tooltipped row.
+    assert radio["tooltip"] == u"{HEADER}%s{/HEADER}{BODY}%s{/BODY}" % (
+        settings_i18n._PANEL[u"en"][settings_i18n.VARIANT_KEY][u"ttHeader"],
+        settings_i18n._PANEL[u"en"][settings_i18n.VARIANT_KEY][u"ttBody"])
     master = _at(col1, PROGRESS_BAR_KEY)[0]
     assert u"Moving Average" in master["tooltip"]
     assert u"Damage Efficiency" in master["tooltip"]
@@ -671,12 +693,15 @@ def test_template_size_radio_shape(monkeypatch):
     # hardcoded in _radio.
     col1 = mod_settings._template()["column1"]
     radio, index = _at(col1, PROGRESS_SIZE_KEY)
-    # POSITION, anchored to NAMED neighbours rather than to a length: the Scale radio is the last
-    # control before the Transitions master, and the Transitions group is the contiguous THREE-row
-    # tail of the column. So an insertion anywhere in between (which shifts every later control's
-    # text -- COL1_KEYS' zip is positional) still fails here, while a legitimate append does not.
-    assert index + 1 == _at(col1, PROGRESS_TRANSITIONS_KEY)[1], \
-        "a control was inserted between the Scale radio and the Transitions master"
+    # POSITION, anchored to NAMED neighbours rather than to a length: an Empty spacer (new in this
+    # bump) now sits between the Scale radio and the Transitions master, and the Transitions group
+    # is still the contiguous THREE-row tail of the column. So an insertion anywhere else (which
+    # shifts every later control's text -- COL1_KEYS' zip is positional) still fails here, while a
+    # legitimate append does not.
+    assert col1[index + 1] == {"type": "Empty"}, \
+        "a control was inserted between the Scale radio and its spacer"
+    assert index + 2 == _at(col1, PROGRESS_TRANSITIONS_KEY)[1], \
+        "the spacer ahead of the Transitions master moved or disappeared"
     assert [c.get("varName") for c in col1[-3:]] == [
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY], \
         "the Transitions group is no longer the column-1 tail (COL1_KEYS' zip is positional)"
@@ -685,10 +710,13 @@ def test_template_size_radio_shape(monkeypatch):
     assert not isinstance(radio["value"], bool)
     assert [o["label"] for o in radio["options"]] == ["Default", "Large"]
     assert radio["inline"] is True
-    # A label ("Scale") but still no tooltip: the two option labels say it all, and _radio omits
-    # the key rather than emitting u"" (an empty tooltip is still a tooltip to the panel).
+    # A label ("Scale") AND now a tooltip too -- the same maintainer override as the Mode radio
+    # (v15): Scale has no explanation anywhere else in the panel, so its tooltip spells out what
+    # the option words mean, in the same {HEADER}/{BODY} shape.
     assert radio["text"] == u"Scale"
-    assert "tooltip" not in radio
+    assert radio["tooltip"] == u"{HEADER}%s{/HEADER}{BODY}%s{/BODY}" % (
+        settings_i18n._PANEL[u"en"]["progressSize"][u"ttHeader"],
+        settings_i18n._PANEL[u"en"]["progressSize"][u"ttBody"])
     monkeypatch.setitem(settings_i18n._SIZE_OPTIONS, u"en", (u"AAA", u"BBB"))
     fresh = _at(mod_settings._template()["column1"], PROGRESS_SIZE_KEY)[0]
     assert [o["label"] for o in fresh["options"]] == [u"AAA", u"BBB"], \
@@ -758,20 +786,22 @@ def test_label_emits_usehtml_by_key_and_never_touches_the_text():
 def test_template_column2_is_the_garage_category_then_the_layout_group():
     # Column 2 = the "Garage Widget" category header, the garage master ("Enabled"), an Empty
     # spacer, then the "Layout" group: its BOLD Label header (no varName), Follow Carousel, a
-    # non-bold "Position" sub-label, then the X/Y numeric steppers.
+    # SECOND Empty spacer (new in this bump), then the non-bold "Position" sub-label, then the X/Y
+    # numeric steppers.
     col2 = mod_settings._template()["column2"]
     assert [c["type"] for c in col2] == [
-        "Label", "CheckBox", "Empty", "Label", "CheckBox", "Label",
+        "Label", "CheckBox", "Empty", "Label", "CheckBox", "Empty", "Label",
         "NumericStepper", "NumericStepper"]
     # The varName-bearing controls, in order (a Label header / Empty spacer has no stored value).
     assert [c["varName"] for c in col2 if "varName" in c] == [
         GARAGE_KEY, FOLLOW_CAROUSEL_KEY, POS_X_KEY, POS_Y_KEY]
     # THREE Label rows carry no varName. The CATEGORY header and the "Layout" header are both BOLD
     # (<b> wrap + explicit useHTML) and the category header stays TIPLESS (a bare feature name has
-    # nothing to explain) while "Layout" keeps its tooltip; "Position" is neither bold nor
-    # tooltipped -- the weight difference alone marks it as a sub-level under "Layout". _label()
-    # emits the tooltip key only when there IS one and the useHTML key only when bold -- see the
-    # tipless counter in test_sync_template_text_walks_built_template_in_lockstep.
+    # nothing to explain) while "Layout" keeps its tooltip; "Position" is not bold (the weight
+    # difference alone marks it as a sub-level under "Layout") but DOES now carry its own tooltip
+    # (a maintainer override of the tipless rule, v15). _label() emits the tooltip key only when
+    # there IS one and the useHTML key only when bold -- see the tipless counter in
+    # test_sync_template_text_walks_built_template_in_lockstep.
     assert "varName" not in col2[0] and "tooltip" not in col2[0]
     assert col2[0]["text"] == u"<b>Garage Widget</b>"
     assert col2[0]["useHTML"] is True
@@ -779,9 +809,10 @@ def test_template_column2_is_the_garage_category_then_the_layout_group():
     assert "varName" not in col2[3] and col2[3]["tooltip"]
     assert col2[3]["text"] == u"<b>Layout</b>"
     assert col2[3]["useHTML"] is True
-    assert "varName" not in col2[5] and "tooltip" not in col2[5]
-    assert col2[5]["text"] == u"Position"
-    assert "useHTML" not in col2[5]
+    assert col2[5] == {"type": "Empty"}
+    assert "varName" not in col2[6] and col2[6]["tooltip"]
+    assert col2[6]["text"] == u"Position"
+    assert "useHTML" not in col2[6]
 
 
 def test_template_steppers_are_bounded_manual_entry():
@@ -942,9 +973,11 @@ def test_col_keys_lockstep_with_template_order():
             assert control["text"] == text[key]["text"]
             assert control.get("tooltip") == text[key].get("tooltip")
     # ...and every Empty in the template is covered by one: a spacer added without a sentinel would
-    # shift the whole tail of the zip and silently retitle every control after it.
+    # shift the whole tail of the zip and silently retitle every control after it. FIVE now (grew
+    # from four in this bump): column 1 has a spacer ahead of "Transitions" AND (new) one ahead of
+    # "Mode"; column 2 has one ahead of "Position".
     assert sentinels == sum(1 for col, _k in _column_pairs(tmpl)
-                            for c in tmpl[col] if c["type"] == "Empty") == 2
+                            for c in tmpl[col] if c["type"] == "Empty") == 5
 
 
 def test_sync_template_text_walks_built_template_in_lockstep():
@@ -1003,23 +1036,27 @@ def test_sync_template_text_walks_built_template_in_lockstep():
                 # never be removed again.
                 assert control["tooltip"] == u"STALE"
                 tipless += 1
-    # EIGHT tipless controls: the three bare CATEGORY headers (Battle Calculator / Battle Progress /
-    # Garage Widget -- a feature name has nothing to explain and nothing to hover), BOTH radios
-    # (Mode / Scale -- their option labels say it all), the Transitions group's two children
-    # (Events / Alt Press) -- one-word switches whose meaning the Transitions master's tooltip
-    # spells out -- and the new "Position" sub-label (heads the two steppers; the weight
-    # difference from "Layout" above it is its only distinguishing mark, so it carries no tooltip
-    # either). The Progress Bar group's three VISIBILITY children (Events / Alt Press / Always)
-    # used to be label-only too (bringing the count to TEN), but each now carries its own tooltip,
-    # so they dropped OUT of this count -- see settings_i18n's progressShowEvents/Alt/Always. The
-    # counter is the tripwire that surfaced the _label tooltip hole in the first place, and it is
-    # what caught the SAME hole in _checkbox: the Transitions children were the first tipless
-    # CHECKBOXES, and _checkbox hard-indexed rendered["tooltip"], so building the template raised
-    # KeyError before this walk was even reached. Keep it exact rather than a `>= 1`, because a NEW
-    # tipless row is exactly the change that owes a bump.
-    assert tipless == 8, "expected 8 tooltip-less controls, got %d" % tipless
-    # ...and both Empty spacers were walked and left untouched (see the sentinel branch above).
-    assert spacers == 2, "expected 2 text-less spacer rows, got %d" % spacers
+    # FIVE tipless controls: the three bare CATEGORY headers (Battle Calculator / Battle Progress /
+    # Garage Widget -- a feature name has nothing to explain and nothing to hover), and the
+    # Transitions group's two children (Events / Alt Press) -- one-word switches whose meaning the
+    # Transitions master's tooltip spells out. BOTH radios (Mode / Scale) and the "Position"
+    # sub-label used to be tipless too (bringing the count to EIGHT), but a maintainer OVERRIDE
+    # (v15) gave all three their own tooltip -- Mode/Scale describe the bar and its size beyond
+    # what the option labels alone say, and "Position" explains that both steppers apply
+    # immediately -- so they dropped OUT of this count. See settings_i18n's progressVariant /
+    # progressSize / positionSub. The Progress Bar group's three VISIBILITY children (Events / Alt
+    # Press / Always) dropped out earlier, in v14, the same way. The counter is the tripwire that
+    # surfaced the _label tooltip hole in the first place, and it is what caught the SAME hole in
+    # _checkbox: the Transitions children were the first tipless CHECKBOXES, and _checkbox
+    # hard-indexed rendered["tooltip"], so building the template raised KeyError before this walk
+    # was even reached. Keep it exact rather than a `>= 1`, because a NEW tipless row is exactly
+    # the change that owes a bump (and a control LOSING its tipless status is the change this
+    # bump made). v16 added a THIRD Empty spacer (ahead of "Mode") but moved no tooltip, so this
+    # count is UNCHANGED at 5 -- a pure-layout bump can grow the spacer count without touching this
+    # one, and pinning both separately is what proves that.
+    assert tipless == 5, "expected 5 tooltip-less controls, got %d" % tipless
+    # ...and all FIVE Empty spacers were walked and left untouched (see the sentinel branch above).
+    assert spacers == 5, "expected 5 text-less spacer rows, got %d" % spacers
     assert saved["called"] is True   # something changed -> state persisted
 
 
