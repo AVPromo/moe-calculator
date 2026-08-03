@@ -16,9 +16,12 @@ counted_assistance) -- WG credits the greatest stream, not the sum; the server b
 summary supplies the track/spot split (adapter/battle_adapter._read_assist_split).
 """
 import bisect
+import math
 
 from moe_calculator.domain import battle_types as bt
-from moe_calculator.domain.constants import EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS
+from moe_calculator.domain.constants import (
+    EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS,
+    PROGRESS_AXIS_MIN_WINDOW, PROGRESS_ETA_CAP, PROGRESS_ETA_MARGIN)
 from moe_calculator.domain.rounding import iround_half_away
 
 
@@ -248,6 +251,59 @@ def mark_axis(thresholds, marks):
     if hi <= lo:
         return 0.0, 0.0
     return lo, hi
+
+
+def progress_axis_lo(axis_hi, pre_avg, k=EWMA_K, min_window=PROGRESS_AXIS_MIN_WINDOW):
+    """The bar's display floor: where the projection lands after a zero-damage battle.
+
+    Replaces the held-mark requirement as the axis's left end, so one battle's
+    movement is a visible fraction of the track instead of a rounding error.
+
+    THE FLOOR IS A CALL TO ewma_project_raw, NEVER AN INLINED pre * (1 - k): it is the SAME fold
+    the fill's own proj_avg uses, evaluated at the smallest cd can ever be (combined_damage clamps
+    cd >= 0 upstream), so the floor is provably the fill's minimum and the two can never drift
+    apart. min_window only binds once pre_avg sits within a few tens of damage of axis_hi (the
+    window is already >= k * pre_avg without it) and keeps the axis from collapsing to zero width.
+
+    mark_axis stays the no-data verdict: this is a DISPLAY floor, computed only once the caller has
+    already decided the mark axis is usable."""
+    floor = ewma_project_raw(pre_avg, 0, k)
+    return max(0.0, min(floor, float(axis_hi or 0.0) - min_window))
+
+
+def battles_to_axis_hi(proj_avg, axis_hi, k=EWMA_K,
+                       margin=PROGRESS_ETA_MARGIN, cap=PROGRESS_ETA_CAP):
+    """Repeats of this battle needed for the average to reach axis_hi.
+
+    Modelled as an EWMA converging on a REFERENCE level L a `margin` above the requirement -- the
+    count depends on this battle only through proj_avg, never through a bare cd term:
+        L = axis_hi * (1 + margin)
+        n = ceil( ln((axis_hi - L) / (proj_avg - L)) / ln(1 - k) )
+    which is what makes it MONOTONE NON-INCREASING in proj_avg -- a worse battle yields a LARGER
+    count, the whole point of the readout. (A signed linear extrapolation (hi - proj)/(proj - pre)
+    was tried and rejected: its magnitude SHRINKS as the battle worsens.)
+
+    Sign check, so the log is asserted rather than trusted: proj_avg < axis_hi < L, so both
+    (axis_hi - L) and (proj_avg - L) are negative and |axis_hi - L| < |proj_avg - L|, i.e. the
+    ratio sits in (0, 1), its ln is negative, and dividing by the also-negative ln(1 - k) gives a
+    positive n.
+
+    Returns -1 when axis_hi <= 0 (no-data sentinel; the caller's hasData already gates rendering,
+    so it should be unreachable), 0 when proj_avg >= axis_hi (the mark is already made), otherwise
+    a positive int capped at `cap`. Runs per damage event in battle, so the degenerate
+    proj_avg == L and any non-finite input degrade to `cap` rather than raising."""
+    if float(axis_hi or 0.0) <= 0.0:
+        return -1
+    hi = float(axis_hi)
+    proj = float(proj_avg or 0.0)
+    if proj >= hi:
+        return 0
+    level = hi * (1.0 + margin)
+    try:
+        n = math.log((hi - level) / (proj - level)) / math.log(1.0 - k)
+        return min(cap, max(1, int(math.ceil(n))))
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return cap
 
 
 # --- damage-efficiency bar: the five-stop damage axis -------------------------

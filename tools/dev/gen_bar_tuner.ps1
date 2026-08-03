@@ -12,12 +12,12 @@
   hot-reloaded, so every CSS tweak in-game costs a full client relaunch (same reason
   gen_overlay_tuner.ps1 exists).
 
-  Assets (backdrop jpg / MoEBattle.ttf / checker.png / the 6 tick icons) are base64-inlined so
+  Assets (backdrop jpg / MoEBattle.ttf / checker.png / the 7 tick icons) are base64-inlined so
   the HTML works from any path with no sibling files. The tuner runs in a BROWSER, where the
   in-game img:// scheme does not resolve -- hence the inlining; the EMITTED css still carries
   img:// urls.
 
-  -ExtractIcons pulls the 6 needed PNGs out of the client's gui-part{1..4}.pkg into
+  -ExtractIcons pulls the 7 needed PNGs out of the client's gui-part{1..4}.pkg into
   TASKS/refs/icons/ using gen_icon_picker.ps1's flat "__" naming (they are SCATTERED across all
   four packages, so all four are scanned). Idempotent: already-present files are skipped. Run it
   once; afterwards plain generation just inlines them, and a MISSING icon aborts BY PATH.
@@ -65,6 +65,7 @@ $ICONS = @(
   'gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_damage.png',
   'gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png',
   'gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_top.png',
+  'gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_battles.png',
   'gui/maps/icons/library/marksOnGun/mark_1.png',
   'gui/maps/icons/library/marksOnGun/mark_2.png',
   'gui/maps/icons/library/marksOnGun/mark_3.png'
@@ -72,9 +73,9 @@ $ICONS = @(
 function IconRel($inner) { "TASKS/refs/icons/" + (($inner -replace '^gui/maps/icons/', '') -replace '/', '__') }
 
 # Idempotent: only the missing ones are hunted, and the scan stops early once none are left.
-# The 6 files live in DIFFERENT gui-part packages (damage=2, barrel_mark+mark_1=3, mark_2=4,
-# mark_3+top=1), so all four are opened rather than guessing. Each ZipArchive is disposed -- a
-# leaked handle keeps a 1.3 GB package open.
+# The original 6 files live in DIFFERENT gui-part packages (damage=2, barrel_mark+mark_1=3,
+# mark_2=4, mark_3+top=1) -- battles' own package is not yet catalogued, so all four are opened
+# rather than guessing. Each ZipArchive is disposed -- a leaked handle keeps a 1.3 GB package open.
 function ExtractIconsNow {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $dir = Join-Path $repo "TASKS/refs/icons"
@@ -272,12 +273,11 @@ $tpl = @'
      z-index:-1 stays scoped by .mp-ico's own transform). Own font size (--endfs): these are no
      longer "the top captions", so they must not inherit .up's. */
   .mp-cap.side{top:50%;transform:translateY(-50%);font-size:var(--endfs);line-height:var(--endlh)}
-  .mp-cap.side.mp-capL{left:auto;right:100%;padding-right:var(--gapendl)}
   .mp-cap.side.mp-capR{left:100%;margin-left:var(--gapendr)}
   /* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
      width with a negative margin-left -- see the .mp-capP / .mp-capC rules below. */
   .mp-cap .mp-ico{margin-right:var(--icogap)}
-  .mp-cap .mp-v,.mp-cap .mp-d{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
+  .mp-cap .mp-v,.mp-cap .mp-eta,.mp-cap .mp-d{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
   /* SHIPPED CONVENTION (MoEBattle.css .mb-up/.mb-down): FOR TEXT the sign is a coloured GLOW,
      never a fill -- the numerals stay WHITE, because a coloured glyph loses legibility over a
      bright or dark map. Do NOT "fix" this into color:green/red later. (The .mp-fill rule above
@@ -312,8 +312,8 @@ $tpl = @'
      ONE transition declaration on .mp-d, naming ONLY opacity -- explicit ms + easing in the
      emitted CSS (Gameface drops a transition whose property starts from an unresolvable var()). */
   .mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;font-size:12rem;transform:translateY(1.5rem);line-height:15.5rem;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
-  .mp-v.mp-up,.mp-d-num.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
-  .mp-v.mp-down,.mp-d-num.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
+  .mp-v.mp-up,.mp-d-num.mp-up,.mp-eta.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
+  .mp-v.mp-down,.mp-d-num.mp-down,.mp-eta.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   /* Only the bottom-centre caption animates (it rides proj_avg); pre_avg's stays put. */
   .mp-cap.mp-capC{transition:left var(--tickdur) var(--tickease) var(--tickdelay)}
   .mp-ico.none{display:none}
@@ -350,7 +350,6 @@ $tpl = @'
      (dmgP / dmgC are independent sliders). NOT on the two .side captions: they are not centred on
      anything, they are pushed off the axis ends by their own gap, so cancelling their icon would
      just slide the label inwards over the track. */
-  .mp-capL .mp-ico{transform:translate(0,var(--icoyl))}
   .mp-capP .mp-ico{transform:translate(0,var(--icoyp));margin-left:var(--dmgpml)}
   .mp-capC .mp-ico{transform:translate(0,var(--icoyc));margin-left:var(--dmgcml)}
   .mp-capR .mp-ico{transform:translate(0,var(--icoyr))}
@@ -361,19 +360,22 @@ $tpl = @'
      So the numerals render ~0.53rem low and this pulls them back. min-height would be a NO-OP
      (the box is already 17.60rem; markBox's 17 < 17.60). .side only -- .up/.dn are not centred
      on the midline, so they must NOT inherit it. .mp-v is a flex item, so transform applies. */
-  .mp-cap.side .mp-v{transform:translateY(var(--numy))}
+  .mp-cap.side .mp-v,.mp-cap.side .mp-eta{transform:translateY(var(--numy))}
   /* 106% == the overlay's 18rem glow behind a 17rem icon, expressed as a ratio so it follows
      whichever box (icon or mark) the element uses. Alpha 0 turns the glow off. */
   .mp-ico::before{content:"";position:absolute;left:50%;top:50%;z-index:-1;
     width:106%;height:106%;transform:translate(-50%,-50%);
     background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
-  /* The two axis-end (.side) MoE REQUIREMENT icons take their own glow colour+alpha -- independent
+  /* The axis-end (.side) MoE REQUIREMENT icons take their own glow colour+alpha -- independent
      of the two centre damage icons above. BACKGROUND ONLY: the base rule keeps supplying z-index:-1,
      the 106% box and its own translate(-50%,-50%), and this targets ::before (never .mp-ico), so
-     .mp-ico's transform -- which both carries the per-role Y (icoYL/icoYR) AND is what scopes that
-     z-index:-1 to the icon -- is untouched. Includes the general-MoE glyph at 3 marks (it is still
-     .mp-capR .mp-ico). Specificity (0,2,1) > the base (0,1,1), so only the gradient is overridden. */
-  .mp-capL .mp-ico::before,.mp-capR .mp-ico::before{background:radial-gradient(circle at 50% 50%,var(--reqglow) 0%,transparent 73%)}
+     .mp-ico's transform -- which carries the per-role Y (icoYR) AND is what scopes that
+     z-index:-1 to the icon -- is untouched. Includes the general-MoE glyph at 3 marks (still
+     .mp-capR .mp-ico). The battles glyph is ALSO .mp-capR .mp-ico so it inherits this dark drop
+     too -- but opts back OUT to gold below (.mp-ico.battles::before), same specificity, later in
+     source order, so it wins the cascade back to the icoglow gold while the mark glyph beside it
+     stays dark. Specificity (0,2,1) > the base (0,1,1), so only the gradient is overridden. */
+  .mp-capR .mp-ico::before{background:radial-gradient(circle at 50% 50%,var(--reqglow) 0%,transparent 73%)}
   .mp-ico::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;
     background-repeat:no-repeat;background-position:center}
   /* TWO independent damage glyphs: dmgp = top-centre (pre_avg), dmgc = bottom-centre (proj_avg).
@@ -395,6 +397,18 @@ $tpl = @'
   .mp-ico.mk1::after{background-image:url(data:image/png;base64,__ICO_MK1__)}
   .mp-ico.mk2::after{background-image:url(data:image/png;base64,__ICO_MK2__)}
   .mp-ico.mk3::after{background-image:url(data:image/png;base64,__ICO_MK3__)}
+  /* THE REMAINING-BATTLES GLYPH -- .mp-capR's second icon, marking the count of repeats of this
+     battle still needed to reach the requirement. NO width/height rule: it takes .mp-ico's BASE
+     icoBox (13rem shipped), the only glyph that does. bb is its measured alpha>32 bbox fraction
+     (see BATTLESBB below), same icoSz() convention as damage/barrel_mark/top.
+     GLOW OPTS BACK OUT TO GOLD: `.mp-capR .mp-ico::before` above darkens EVERY icon on this
+     caption (mark AND battles alike), but the battles glyph reads better with the same gold halo
+     as the centre damage pair, off the SAME icoGlowCol/icoGlowA knob -- one gold in this file.
+     Equal specificity (0,2,1) to that override, so it wins purely on SOURCE ORDER: it must stay
+     textually after `.mp-capR .mp-ico::before` or the dark override wins back silently. */
+  .mp-ico.battles{margin-left:var(--etagap)}
+  .mp-ico.battles::before{background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
+  .mp-ico.battles::after{background-image:var(--battlesimg);background-size:var(--battlessz);filter:brightness(3)}
 
   /* Requirement met -> the WHOLE bar takes the gold glow. */
   #moe-bar-root.mp-full .mp-track,#moe-bar-root.mp-full .mp-fill,#moe-bar-root.mp-full .mp-tick{box-shadow:0 0 var(--glowb) var(--glowc)}
@@ -468,16 +482,18 @@ $tpl = @'
       <div class="mp-tick mp-proj"></div>
       <div class="mp-tick mp-end mp-right"></div>
       <!-- 2 captions on the CENTRE ticks (pre_avg above, proj_avg below - the animated one) and
-           2 BESIDE the axis ends (.side, vertically centred on the track, hanging off each edge).
-           Icon stays LEFT in all four (DOM: icon, value, delta) -- on the left-hand .side label
-           that puts the NUMBER nearest the axis it labels, which is the right way round. -->
-      <div class="mp-cap side mp-capL"><i class="mp-ico mk mk1"></i><span class="mp-v">2,450</span></div>
+           ONE on the RIGHT axis end (.side, vertically centred on the track, hanging off the
+           edge) -- the axis-floor .mp-capL twin is gone; axisLo is the battle's starting
+           projection, not a requirement, and the label said nothing the moving caption does not.
+           Icon stays LEFT of its numeral throughout (DOM: icon, value, delta) -- and .mp-capR now
+           carries a SECOND icon+value pair (the remaining-battles count) after the mark pair,
+           because setIco()/capV() in the shipped JS both take the FIRST match. -->
       <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v">2,905</span></div>
       <!-- Shipped .mb-delta > .mb-delta-num split verbatim: the PARENS are static text nodes on
            the .mp-d wrapper (plain white, dark drop only) and only the signed NUMBER child
            .mp-d-num takes the sign glow. The main .mp-v glows too (bottom caption only). -->
       <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v">2,913</span><span class="mp-d">(<span class="mp-d-num">+8</span>)</span></div>
-      <div class="mp-cap side mp-capR"><i class="mp-ico mk mk2"></i><span class="mp-v">3,050</span></div>
+      <div class="mp-cap side mp-capR"><i class="mp-ico mk mk2"></i><span class="mp-v">3,050</span><i class="mp-ico battles"></i><span class="mp-eta">18</span></div>
     </div>
   </div></div>
   <div id="ribbons"><div class="rb">DAMAGE 452</div><div class="rb">ASSIST 189</div><div class="rb">DESTROYED</div></div>
@@ -533,11 +549,18 @@ $tpl = @'
   // its measured ink (35x24 of 128 -> 0.273 on the max dimension, the same alpha>32 convention
   // that gives damage 0.219 and barrel_mark 0.328).
   var MOEURI="data:image/png;base64,__ICO_TOP__", MOEBB=0.273;
+  // THE REMAINING-BATTLES GLYPH -- .mp-capR's second icon (the countdown to the requirement it
+  // sits beside). Same 128px quest_type canvas/line-art family as the three above, so the same
+  // alpha>32 bbox + icoSz() convention applies: measured bbox (50,48)-(77,77) -> max dim 29 ->
+  // bb = 29/128 = 0.226563 (icoSz(0.226563) = 331.0%, matching the shipped stylesheet). It takes
+  // NO box of its own (see .mp-ico.battles) -- .mp-ico's base icoBox is the only glyph that does.
+  var BATTLESURI="data:image/png;base64,__ICO_BATTLES__", BATTLESBB=0.226563;
   // In-game equivalents of the inlined URIs above (emitted CSS only -- img:// is dead in a browser).
   var IMGDIR="img://gui/maps/icons/", QT="personal_missions_30/quest_type/128x128/";
   var IMG={damage:IMGDIR+QT+"icon_battle_condition_damage.png",
            barrel_mark:IMGDIR+QT+"icon_battle_condition_barrel_mark.png",
            top:IMGDIR+QT+"icon_battle_condition_top.png",
+           battles:IMGDIR+QT+"icon_battle_condition_battles.png",
            mk:[IMGDIR+"library/marksOnGun/mark_1.png",IMGDIR+"library/marksOnGun/mark_2.png",IMGDIR+"library/marksOnGun/mark_3.png"]};
   function rem(v){return (v*st.pxrem).toFixed(2)+"px";}
   // THE PINNED LINE BOX -- used by BOTH halves (the live preview's custom properties and the
@@ -602,16 +625,10 @@ $tpl = @'
       {id:"tickH",label:"Tick height (rem)",min:2,max:60,step:0.5,val:9},
       {id:"gapReq",label:"Top caption (pre_avg) -> track gap (rem)",min:0,max:40,step:0.5,val:6},
       {id:"gapCur",label:"Track -> bottom caption gap (rem)",min:0,max:40,step:0.5,val:6},
-      // The two axis-end captions hang OUTSIDE the track ends (right:100% / left:100%), so these
-      // are their horizontal clearance from the end. TWO sliders, deliberately independent: the two
-      // side rows are not the same width (the left one carries the held mark glyph, the right the
-      // chased one) and the maintainer tuned them apart, so a single symmetric knob cannot express
-      // the settled look. They also emit DIFFERENT properties -- padding-right on the left, because
-      // Gameface renders margin on the `right:100%` anchored side as 0 (see the CSS note above), and
-      // margin-left on the right, where that direction works. (They replace the old capGap clamp
-      // margin, which existed only because the end captions used to share the upper band with
-      // pre_avg's -- they no longer do, so there is nothing to de-collide.)
-      {id:"gapEndL",label:"Track LEFT end -> left side caption gap (rem, padding)",min:0,max:60,step:0.5,val:8},
+      // The axis-end caption hangs OUTSIDE the track's right end (left:100%), so this is its
+      // horizontal clearance from the end -- margin-left, because Gameface renders margin on a
+      // `right:100%`-anchored side as 0 (see the CSS note above) but honours it here. The left-hand
+      // twin (gapEndL, padding-right) went with .mp-capL when the axis-floor caption was removed.
       {id:"gapEndR",label:"Track RIGHT end -> right side caption gap (rem, margin)",min:0,max:60,step:0.5,val:3},
       {id:"offX",label:"Centre X offset (rem)",min:-300,max:300,step:1,val:0},
       // Measured off tuner-backdrop-ribbon.jpg: the REAL "400 x Damage Caused x Taschenratte"
@@ -734,18 +751,22 @@ $tpl = @'
       {id:"markBox",label:"Mark icon box (rem) - 24px art, blurs above ~24",min:6,max:40,step:1,val:17},
       // ONE gap knob now: the icon sits LEFT of the numerals on one row -> margin-right.
       {id:"icoGap",label:"Icon -> numerals gap (rem, icon is LEFT)",min:0,max:20,step:0.5,val:1},
+      // Gap between the next-mark numeral and the estimated-battles glyph, right caption only.
+      {id:"etaGap",label:"Mark numeral -> battles icon gap (rem)",min:0,max:20,step:0.5,val:4},
       // TWO INDEPENDENT ICON GLOWS. This pair governs the two CENTRE DAMAGE icons only (top
       // pre_avg + bottom proj_avg) -- it used to borrow glowCol, so it has its own colour now.
       {id:"icoGlowCol",label:"CENTRE damage icon glow colour",color:true,val:"#ffcd5a"},
       {id:"icoGlowA",label:"CENTRE damage icon glow alpha (0 = off)",min:0,max:1,step:0.01,val:0.5},
-      // ...and this pair the MoE REQUIREMENT icons: the mark glyphs on the two axis-end .side
-      // captions, INCLUDING the general-MoE glyph that replaces the right one at 3 marks. Scoped as
-      // `.mp-capL .mp-ico::before, .mp-capR .mp-ico::before` -- BACKGROUND ONLY, so the base
+      // ...and this pair the MoE REQUIREMENT icons: the mark glyphs on the axis-end .side caption,
+      // INCLUDING the general-MoE glyph that replaces the mark at 3 marks.
+      // Scoped as `.mp-capR .mp-ico::before` -- BACKGROUND ONLY, so the base
       // .mp-ico::before rule keeps supplying z-index:-1 + the 106% box + its own translate, and
-      // .mp-ico's per-role Y transform (icoYL/icoYR) is not touched at all. THE SPLIT IS TUNED NOW
+      // .mp-ico's per-role Y transform (icoYR) is not touched at all. THE SPLIT IS TUNED NOW
       // and the two groups no longer agree: the side marks got a DARK DROP (near-black #1a1a1a @
       // 0.5) while the centre damage pair kept the gold halo (icoGlowCol #ffcd5a @ 0.5). That is
-      // why the split exists -- do not "restore" these to the gold.
+      // why the split exists -- do not "restore" these to the gold. The battles glyph is ALSO
+      // `.mp-capR .mp-ico` so this dark drop lands on it too, but `.mp-ico.battles::before` opts it
+      // back OUT to icoGlowCol/icoGlowA (same specificity, later in source order) -- see that rule.
       {id:"reqGlowCol",label:"REQUIREMENT (side mark) icon glow colour",color:true,val:"#1a1a1a"},
       {id:"reqGlowA",label:"REQUIREMENT (side mark) icon glow alpha (0 = off)",min:0,max:1,step:0.01,val:0.5},
       // barrel_mark on TOP: the mark glyph reads as "the average that earns marks", and the
@@ -754,7 +775,7 @@ $tpl = @'
       {id:"dmgCIco",label:"BOTTOM centre glyph (proj_avg)",opts:["damage","barrel_mark"],val:"damage"},
       // Signed per-ROLE baseline nudge (the glyph families sit differently on their baselines).
       // Stays on .mp-ico's own transform -- see the CSS note; a margin would kill the glow scope.
-      {id:"icoYL",label:"LEFT mark icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0.5},
+      // (icoYL, the axis-floor mark's twin, went with .mp-capL.)
       {id:"icoYP",label:"TOP damage icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0},
       {id:"icoYC",label:"BOTTOM damage icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:1},
       {id:"icoYR",label:"RIGHT mark icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0.5},
@@ -853,7 +874,7 @@ $tpl = @'
       root=document.getElementById("moe-bar-root"),
       fill=root.querySelector(".mp-fill"),
       tPre=root.querySelector(".mp-pre"), tProj=root.querySelector(".mp-proj"),
-      capL=root.querySelector(".mp-capL"), capP=root.querySelector(".mp-capP"),
+      capP=root.querySelector(".mp-capP"),
       capC=root.querySelector(".mp-capC"), capR=root.querySelector(".mp-capR"),
       bd=root.querySelector(".mp-backdrop"), ribs=document.getElementById("ribbons"),
       dyn=document.createElement("style");
@@ -957,7 +978,7 @@ $tpl = @'
     S.setProperty("--barw",rem(st.barW));S.setProperty("--trackh",rem(st.trackH));
     S.setProperty("--tickw",rem(st.tickW));S.setProperty("--tickh",rem(st.tickH));
     S.setProperty("--gapreq",rem(st.gapReq));S.setProperty("--gapcur",rem(st.gapCur));
-    S.setProperty("--gapendl",rem(st.gapEndL));S.setProperty("--gapendr",rem(st.gapEndR));
+    S.setProperty("--gapendr",rem(st.gapEndR));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--endfs",rem(st.endFS));
     // ...and each caption's PINNED line box, DERIVED from the same font-size knob (see lh()): a
@@ -983,9 +1004,9 @@ $tpl = @'
     S.setProperty("--icobox",rem(st.icoBox));S.setProperty("--markbox",rem(st.markBox));
     // Two independent icon glows: --icoglow = the centre damage pair, --reqglow = the two .side
     // requirement marks (the ::before override; neither touches .mp-ico's transform).
-    S.setProperty("--icogap",rem(st.icoGap));S.setProperty("--icoglow",hexA(st.icoGlowCol,st.icoGlowA));
+    S.setProperty("--icogap",rem(st.icoGap));S.setProperty("--etagap",rem(st.etaGap));S.setProperty("--icoglow",hexA(st.icoGlowCol,st.icoGlowA));
     S.setProperty("--reqglow",hexA(st.reqGlowCol,st.reqGlowA));
-    S.setProperty("--icoyl",rem(st.icoYL));S.setProperty("--icoyp",rem(st.icoYP));
+    S.setProperty("--icoyp",rem(st.icoYP));
     S.setProperty("--icoyc",rem(st.icoYC));S.setProperty("--icoyr",rem(st.icoYR));
     S.setProperty("--numy",rem(st.numY));
     S.setProperty("--dmgpbox",rem(st.dmgPBox));S.setProperty("--dmgcbox",rem(st.dmgCBox));
@@ -996,6 +1017,7 @@ $tpl = @'
     S.setProperty("--dmgpimg","url("+DMG[st.dmgPIco].u+")");S.setProperty("--dmgpsz",icoSz(DMG[st.dmgPIco].bb));
     S.setProperty("--dmgcimg","url("+DMG[st.dmgCIco].u+")");S.setProperty("--dmgcsz",icoSz(DMG[st.dmgCIco].bb));
     S.setProperty("--moeimg","url("+MOEURI+")");S.setProperty("--moesz",icoSz(MOEBB));
+    S.setProperty("--battlesimg","url("+BATTLESURI+")");S.setProperty("--battlessz",icoSz(BATTLESBB));
     S.setProperty("--glowc",hexA(st.glowCol,st.glowA));S.setProperty("--glowb",rem(st.glowB));S.setProperty("--glowb2",rem(st.glowB2));
     // MET-state fill: the glow's own gold (glowCol), the fill's own alpha.
     S.setProperty("--fullfill",hexA(st.glowCol,st.fullFillA));
@@ -1019,9 +1041,7 @@ $tpl = @'
     // / the 100% stop). In windowed mode the ends are the window, so the mark glyphs there read
     // as direction rather than as a stop -- expected.
     var b=bounds();
-    capV(capL).textContent=fmt(b[0]);                   // prev requirement (0 when marks=0)
     capV(capR).textContent=fmt(b[1]);                     // next requirement (100% stop at m=3)
-    setIco(capL,st.marks);                                // marks=0 -> no icon at all
     setIco(capR,st.marks>=3?4:st.marks+1);                // marks=3 -> the general MoE glyph
     capV(capP).textContent=fmt(st.preAvg);
     // The sign lands on THREE elements, all off the same proj_avg - pre_avg: the bottom caption's
@@ -1314,14 +1334,15 @@ $tpl = @'
       "   factors, and the ink offset it corrects is a font-metrics constant either way.)\n"+
       "   Scoped to .side only: .up/.dn hang off the track edges instead of being centred on\n"+
       "   the midline, so they must never pick this up. .mp-v is a flex item of the .mp-cap row, so\n"+
-      "   a transform applies to it (it would not on a bare inline span). */\n"+
-      ".mp-cap.side .mp-v { transform: translateY("+st.numY+"rem); }\n"+
-      ".mp-cap.side.mp-capL { left: auto; right: 100%; padding-right: "+st.gapEndL+"rem; }\n"+
+      "   a transform applies to it (it would not on a bare inline span). .mp-eta IS THE SAME\n"+
+      "   CORRECTION ON THE SAME ROW, not an extra: the remaining-battles count is a second numeral\n"+
+      "   on this caption at the same font-size and pinned line box, so the ink offset is identical. */\n"+
+      ".mp-cap.side .mp-v,\n.mp-cap.side .mp-eta { transform: translateY("+st.numY+"rem); }\n"+
       ".mp-cap.side.mp-capR { left: 100%; margin-left: "+st.gapEndR+"rem; }\n"+
       "/* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer\n"+
       "   width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */\n"+
       ".mp-cap .mp-ico { margin-right: "+st.icoGap+"rem; }\n"+
-      ".mp-cap .mp-v,\n.mp-cap .mp-d {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
+      ".mp-cap .mp-v,\n.mp-cap .mp-eta,\n.mp-cap .mp-d {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
       "  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n}\n"+
       "/* FOR TEXT THE SIGN IS A COLOURED GLOW, NEVER A FILL (shipped .mb-up/.mb-down): the numerals\n"+
@@ -1378,11 +1399,11 @@ $tpl = @'
       // spelled as a literal because its font-size is one too (no knob owns it).
       "  line-height: 15.5rem;\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
-      ".mp-v.mp-up,\n.mp-d-num.mp-up {\n  color: #ffffff;\n"+
+      ".mp-v.mp-up,\n.mp-d-num.mp-up,\n.mp-eta.mp-up {\n  color: #ffffff;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
       "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.upCol,DGA)+",\n"+
       "               0rem 0rem "+st.dGlowT+"rem "+hexA(st.upCol,DGA)+";\n}\n"+
-      ".mp-v.mp-down,\n.mp-d-num.mp-down {\n  color: #ffffff;\n"+
+      ".mp-v.mp-down,\n.mp-d-num.mp-down,\n.mp-eta.mp-down {\n  color: #ffffff;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
       "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.dnCol,DGA)+",\n"+
       "               0rem 0rem "+st.dGlowT+"rem "+hexA(st.dnCol,DGA)+";\n}\n"+
@@ -1428,7 +1449,6 @@ $tpl = @'
       "   retune. NOT on the two .side captions: they are not centred on anything, they are pushed\n"+
       "   off the axis ends by their own gap, so cancelling their icon would just slide the label\n"+
       "   inwards over the track. */\n"+
-      ".mp-capL .mp-ico { transform: translate(0rem, "+st.icoYL+"rem); }\n"+
       ".mp-capP .mp-ico { transform: translate(0rem, "+st.icoYP+"rem); margin-left: "+
       (-(st.dmgPBox+st.icoGap))+"rem; }\n"+
       ".mp-capC .mp-ico { transform: translate(0rem, "+st.icoYC+"rem); margin-left: "+
@@ -1445,11 +1465,14 @@ $tpl = @'
       "     - the base rule above still supplies z-index:-1, the 106% box and its own\n"+
       "       translate(-50%,-50%), i.e. the glow's radius geometry is identical for both groups;\n"+
       "     - .mp-ico's OWN transform is not touched, and that matters twice over -- it carries the\n"+
-      "       per-role Y nudge (icoYL / icoYR) AND it is the stacking context that scopes the\n"+
+      "       per-role Y nudge (icoYR) AND it is the stacking context that scopes the\n"+
       "       z-index:-1 to the icon. Never move this override onto .mp-ico.\n"+
-      "   Covers the general-MoE glyph that replaces the right mark at 3 marks (still .mp-capR\n"+
-      "   .mp-ico). Specificity (0,2,1) > the base (0,1,1), so only the gradient is replaced. */\n"+
-      ".mp-capL .mp-ico::before,\n.mp-capR .mp-ico::before {\n"+
+      "   Covers this caption's mark icon (or the general-MoE glyph that replaces it at 3 marks) --\n"+
+      "   the battles glyph is ALSO `.mp-capR .mp-ico` so it inherits this dark drop too, but opts\n"+
+      "   back OUT to gold further down (.mp-ico.battles::before): same specificity, later in source\n"+
+      "   order, so it wins the cascade back to gold while the mark glyph beside it stays dark.\n"+
+      "   Specificity (0,2,1) > the base (0,1,1), so only the gradient is replaced. */\n"+
+      ".mp-capR .mp-ico::before {\n"+
       "  background: radial-gradient(circle at 50% 50%, "+hexA(st.reqGlowCol,st.reqGlowA)+" 0%, transparent 73%);\n}\n"+
       ".mp-ico::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  background-repeat: no-repeat;\n  background-position: center;\n}\n"+
@@ -1472,7 +1495,22 @@ $tpl = @'
       ".mp-ico.mk1::after { background-image: url("+IMG.mk[0]+"); }\n"+
       ".mp-ico.mk2::after { background-image: url("+IMG.mk[1]+"); }\n"+
       ".mp-ico.mk3::after { background-image: url("+IMG.mk[2]+"); }\n"+
-      "/* marks=0 -> the left caption carries NO icon at all. */\n"+
+      "/* THE REMAINING-BATTLES GLYPH -- the second icon on .mp-capR, marking the count of repeats of\n"+
+      "   this battle still needed to reach that requirement. NO width/height OF ITS OWN: it takes\n"+
+      "   .mp-ico's BASE "+st.icoBox+"rem box, the only glyph in the file that does. background-size IS THE\n"+
+      "   SAME DERIVED RECIPE (icoSz, bb "+BATTLESBB+") as the three quest_type glyphs above.\n"+
+      "   GLOW OPTS BACK OUT TO GOLD: `.mp-capR .mp-ico::before` above darkens EVERY icon on this\n"+
+      "   caption, mark AND battles alike -- but the battles glyph reads better with the same gold\n"+
+      "   halo as the centre damage pair, off the SAME icoGlowCol/icoGlowA knob (one gold in this\n"+
+      "   file). Equal specificity (0,2,1) to that override, so it wins purely on SOURCE ORDER: it\n"+
+      "   must stay textually after `.mp-capR .mp-ico::before` or the dark override silently wins. */\n"+
+      ".mp-ico.battles { margin-left: "+st.etaGap+"rem; }\n"+
+      ".mp-ico.battles::before {\n  background: radial-gradient(circle at 50% 50%, "+hexA(st.icoGlowCol,st.icoGlowA)+" 0%, transparent 73%);\n}\n"+
+      ".mp-ico.battles::after {\n  background-image: url("+IMG.battles+");\n"+
+      "  background-size: "+icoSz(BATTLESBB)+";\n  filter: brightness(3);\n}\n"+
+      "/* THE SUPPRESSION VARIANT: `display: none` collapses the flex item's whole box (its square\n"+
+      "   AND the shared "+st.icoGap+"rem margin-right), so a suppressed glyph leaves no hole in the row.\n"+
+      "   marks=0 -> the general-MoE/mark slot carries NO icon at all either. */\n"+
       ".mp-ico.none { display: none; }\n"+
       "/* proj_avg >= thresholds[m+1] -> the WHOLE bar takes the gold glow. */\n"+
       "#moe-bar-root.mp-full .mp-track,\n#moe-bar-root.mp-full .mp-fill,\n#moe-bar-root.mp-full .mp-tick {\n"+
@@ -1598,6 +1636,7 @@ $tpl = $tpl.Replace('__BG__', $bg).Replace('__TTF__', $ttf).Replace('__CK__', $c
   Replace('__ICO_DMG__', $ico['icon_battle_condition_damage']).
   Replace('__ICO_BM__', $ico['icon_battle_condition_barrel_mark']).
   Replace('__ICO_TOP__', $ico['icon_battle_condition_top']).
+  Replace('__ICO_BATTLES__', $ico['icon_battle_condition_battles']).
   Replace('__ICO_MK1__', $ico['mark_1']).Replace('__ICO_MK2__', $ico['mark_2']).Replace('__ICO_MK3__', $ico['mark_3'])
 
 $dest = if ([IO.Path]::IsPathRooted($Out)) { $Out } else { Join-Path $repo $Out }

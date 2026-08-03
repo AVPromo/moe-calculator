@@ -231,6 +231,81 @@ def _rem(decls, prop, what):
     return Decimal(match.group(1))
 
 
+def test_the_eta_gap_separates_the_requirement_numeral_from_the_battles_glyph():
+    """The 4rem gap between the next-mark numeral and the remaining-battles glyph (etaGap),
+    pinned in BOTH stylesheet rules it feeds and BOTH tuner halves that derive them.
+
+    SCOPED, not a bare `4rem` / `margin-left` substring -- both strings recur elsewhere in this
+    file (e.g. `.mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }`, `.mp-capR .mp-ico` transforms),
+    so `_sole_rule_decls` is what refuses a match against the wrong rule.
+
+    PLACEMENT is no longer the adjacency of the gap rule to `::after` -- a `.mp-ico.battles::before`
+    glow rule now sits between them (the gold-glow addition), so that adjacency check is retired.
+    What placement now actually decides is a CASCADE RACE: `.mp-capR .mp-ico::before` (the side
+    caption's dark drop) and `.mp-ico.battles::before` (this glyph's own gold override) are EQUAL
+    SPECIFICITY -- both two classes plus a pseudo-element, (0,2,1) -- so the cascade has no
+    specificity tiebreaker and falls through to SOURCE ORDER alone. Pin that the gold rule comes
+    AFTER the dark-drop rule: reorder them and the battles glyph silently reverts to the dark drop
+    with no error anywhere, while every value-equality grep in this file still passes.
+    """
+    css = _read("MoEProgress.css")
+    decls = _sole_rule_decls(css, ".mp-ico.battles", "MoEProgress.css")
+    assert _rem(decls, "margin-left", "MoEProgress.css") == 4, \
+        "the requirement<->battles-glyph gap is not 4rem"
+    bare = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    dark_drop = ".mp-capR .mp-ico::before"
+    gold = ".mp-ico.battles::before"
+    assert bare.count(dark_drop) == 1 and bare.count(gold) == 1, \
+        "expected exactly one %s rule and one %s rule" % (dark_drop, gold)
+    assert bare.index(dark_drop) < bare.index(gold), \
+        "%s must come AFTER %s in source order -- both are (0,2,1) specificity, so the cascade " \
+        "decides by source order alone, and reordering them silently reverts the battles glyph " \
+        "to the dark drop" % (gold, dark_drop)
+    # THE .mp-lg TWIN -- the hand-authored x-length pair this rule feeds. Pinned here too (not
+    # only via the derived-count assertion in test_every_large_declaration_is_its_base_counterpart_
+    # times_four_thirds): that test is satisfied by ANY correct 4/3 relationship between the base
+    # and the twin, so a mutation that moves BOTH together in lockstep would still pass it. This
+    # anchors the BASE side of that relationship to the literal spec value.
+    large_decls = _sole_rule_decls(css, ".mp-lg .mp-ico.battles", "MoEProgress.css")
+    assert _rem(large_decls, "margin-left", "MoEProgress.css") == Decimal("5.333"), \
+        "the .mp-lg twin of the eta gap is not 4 * 4/3 == 5.333rem"
+    # THE TUNER, all four places that would silently revert this on the next -EmitCss / a re-tune:
+    # the SCHEMA default (what -EmitCss derives from), the emit builder (must read st.etaGap, never
+    # a literal "4"), and the live preview's custom-property wiring + consuming rule.
+    tuner = _read_tuner()
+    default = re.search(r'\{id:"etaGap",[^}]*\bval:([\d.]+)\}', tuner)
+    assert default and Decimal(default.group(1)) == 4, \
+        "gen_bar_tuner.ps1's etaGap default is %s, not 4 -- the next -EmitCss would revert the gap" \
+        % (default and default.group(1))
+    assert tuner.count('".mp-ico.battles { margin-left: "+st.etaGap+"rem; }\\n"+') == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer emits the eta gap from st.etaGap"
+    assert tuner.count(".mp-ico.battles{margin-left:var(--etagap)}") == 1, \
+        "the tuner's live preview no longer takes the eta gap from --etagap"
+    assert tuner.count('S.setProperty("--etagap",rem(st.etaGap))') == 1, \
+        "the tuner's live preview no longer writes --etagap from the st.etaGap knob"
+
+
+def test_the_eta_numeral_glows_on_the_deltas_own_sign_knobs():
+    """.mp-eta.mp-up / .mp-eta.mp-down carry no dedicated knobs of their own -- they are added to the
+    EXISTING .mp-v/.mp-d-num sign-glow rules, riding upCol/dnCol and the same triple text-shadow. Two
+    independent gates, both required: the CSS rule here is inert without the JS's `capEta` in the
+    d>0/d<0 toggle array (pinned separately, in check_progress_js.js).
+
+    SCOPED to each rule via `_sole_rule_decls`, not a bare colour grep: rgba(123,236,55,0.9) /
+    rgba(211,68,63,0.9) both already appear in the SAME two rules for `.mp-v`/`.mp-d-num`, so an
+    unscoped substring search would pass even if `.mp-eta` were never added to the selector list.
+    """
+    css = re.sub(r"/\*.*?\*/", "", _read("MoEProgress.css"), flags=re.S)
+    up = _sole_rule_decls(css, ".mp-v.mp-up,\n.mp-d-num.mp-up,\n.mp-eta.mp-up", "MoEProgress.css")
+    down = _sole_rule_decls(css, ".mp-v.mp-down,\n.mp-d-num.mp-down,\n.mp-eta.mp-down",
+                            "MoEProgress.css")
+    for decls, colour, what in ((up, "123,236,55", "up"), (down, "211,68,63", "down")):
+        shadows = re.findall(r"0rem 0rem (\d+)rem rgba\((\d+,\d+,\d+),(0\.\d+)\)", decls)
+        assert shadows == [("1", "0,0,0", "0.5"), ("6", colour, "0.9"), ("1", colour, "0.9")], \
+            "the .mp-eta.mp-%s rule's triple shadow does not match the delta's dark drop + wide " \
+            "pass + tight core -- .mp-eta must share upCol/dnCol, never carry its own literal" % what
+
+
 def test_the_two_centre_captions_icons_sit_at_their_tuned_y():
     """The Y of each centre caption's icon, PINNED AS A VALUE in both halves.
 
@@ -305,7 +380,7 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
         # here on purpose (the test above pins it per caption).
         assert re.search(r"\btransform:\s*translate\(0rem,\s*-?[\d.]+rem\)[^;]*;", decls), \
             "%s's icon lost the transform that scopes its glow's z-index" % cap
-    for cap in (".mp-capL", ".mp-capR"):
+    for cap in (".mp-capR",):
         assert "margin-left" not in _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css"), \
             "%s is a .side caption -- cancelling its icon slides the label over the track" % cap
     delta = _sole_rule_decls(css, ".mp-cap .mp-d", "MoEProgress.css")
@@ -595,7 +670,16 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
                 "%s { %s: %s } is not the base `%s` times 4/3" % (selector, prop, value,
                                                                   base_decls[prop])
             checked += 1
-    assert checked == 10, "expected 10 straight x4/3 declarations, checked %d" % checked
+    # RE-DERIVED, not transcribed: the twinned x-lengths (`want`, proven COMPLETE by
+    # test_the_large_block_twins_exactly_the_base_cascades_x_lengths above) minus the three
+    # RE_DERIVED exceptions this loop `continue`s past without incrementing `checked`. A blind
+    # literal bump here is exactly how a mutated twin count would go unnoticed -- this fails if
+    # either set drifts, not just if a twin is missing.
+    want, _got = _lg_completeness("MoEProgress.css")
+    expected = len(want) - len(_RE_DERIVED & want)
+    assert checked == expected, (
+        "expected %d straight x4/3 declarations (%d twinned x-lengths minus %d re-derived "
+        "exceptions), checked %d" % (expected, len(want), len(_RE_DERIVED & want), checked))
 
 
 def test_the_large_block_carries_no_keyframe_and_no_vertical_length():

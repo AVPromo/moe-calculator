@@ -250,6 +250,17 @@ const MUTATIONS = {
         'root.classList.toggle("mp-full", false);'],
     "wrong-next-mark-glyph": ["B",
         "setIco(capR, cur.marks >= 3 ? 4 : cur.marks + 1);", "setIco(capR, cur.marks);"],
+    // THE MARK PAIR MUST STAY FIRST in .mp-capR's markup: setIco()/capV() are both first-match
+    // querySelectors, so swapping the two icon+value pairs repoints setIco at the battles glyph
+    // (stripping its static "battles" class) instead of the mark. Caught by "the battles glyph
+    // keeps its static family class" in the "first push" section below.
+    "battles-pair-comes-first": ["B",
+        "'  <div class=\"mp-cap side mp-capR\"><i class=\"mp-ico none\"></i>' +\n" +
+        "        '<span class=\"mp-v\"></span><i class=\"mp-ico battles\"></i>' +\n" +
+        "        '<span class=\"mp-eta\"></span></div>' +",
+        "'  <div class=\"mp-cap side mp-capR\"><i class=\"mp-ico battles\"></i>' +\n" +
+        "        '<span class=\"mp-eta\"></span><i class=\"mp-ico none\"></i>' +\n" +
+        "        '<span class=\"mp-v\"></span></div>' +"],
     "pre-tick-not-painted": ["B", "    tPre.style.left = pre;", "    void 0;"],
     "pre-caption-not-painted": ["B", "    capP.style.left = pre;", "    void 0;"],
     // ...and setPos's third write, which had no assertion at all until the captions were re-centred
@@ -265,6 +276,49 @@ const MUTATIONS = {
     // The glow must key off the delta AS ROUNDED, or a +0.4 shows a green "(+0)".
     "raw-sign-gate": ["B",
         "const glows = Math.round(Math.abs(d)) !== 0;", "const glows = d !== 0;"],
+    // capEta MUST ride the SAME toggle as the numeral/delta/fill/tick -- the CSS rule alone
+    // (.mp-eta.mp-up/.mp-down) is inert without it, and dropping capEta from this array is
+    // invisible to every OTHER assertion in this file (none of them read capEta's classList except
+    // the ones added for exactly this mutation).
+    "eta-not-in-glow-array": ["B",
+        "[capV(capC), capDN, fill, tProj, capEta].forEach", "[capV(capC), capDN, fill, tProj].forEach"],
+    // THE INVERSION TRAP: d > 0 is a better-than-average battle, which LOWERS battles_to_axis_hi, so
+    // green-on-improving is already correct on the countdown -- the intuitive-but-wrong "more
+    // battles remaining is worse, so invert" read would swap capEta's up/down against every other
+    // member of the array. Flip ONLY capEta's two toggle calls, leaving the other four untouched.
+    "eta-polarity-inverted": ["B",
+        "[capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {\n" +
+        '        e.classList.toggle("mp-up", glows && d > 0);\n' +
+        '        e.classList.toggle("mp-down", glows && d < 0);\n' +
+        "    });",
+        "[capV(capC), capDN, fill, tProj].forEach(function (e) {\n" +
+        '        e.classList.toggle("mp-up", glows && d > 0);\n' +
+        '        e.classList.toggle("mp-down", glows && d < 0);\n' +
+        "    });\n" +
+        '    capEta.classList.toggle("mp-up", glows && d < 0);\n' +
+        '    capEta.classList.toggle("mp-down", glows && d > 0);'],
+
+    // ===== THE REMAINING-BATTLES COUNT (VM `etaBattles`) =====================================
+    // The gate: >= 1 only (0 means already met, -1 is the no-data sentinel, and NaN -- an absent
+    // field -- is false against ANY `>=` threshold, so both mutations below leave the NaN case
+    // alone and move only a real boundary).
+    "eta-gate-includes-zero": ["B", "cur.eta >= 1", "cur.eta >= 0"],
+    "eta-gate-includes-sentinel": ["B", "cur.eta >= 1", "cur.eta >= -1"],
+    // SUPPRESSION MUST COLLAPSE THE GLYPH'S BOX (`display: none` via .none), not just blank it --
+    // drop the toggle and a suppressed frame leaves a dead 13rem + gap hole in the row.
+    "eta-glyph-never-suppressed": ["B",
+        'capEtaIco.classList.toggle("none", !showEta);', 'capEtaIco.classList.toggle("none", false);'],
+    // ...and the TEXT must clear alongside the collapsed glyph, or a live count sits beside an
+    // invisible icon -- exactly the state the suppression exists to avoid.
+    "eta-text-not-cleared": ["B",
+        'capEta.textContent = showEta ? fmt(cur.eta) : "";', "capEta.textContent = fmt(cur.eta);"],
+    // The count is bare -- never a signed/ornamented one.
+    "eta-count-gets-an-ornament": ["B", "fmt(cur.eta) : \"\";", "\"+\" + fmt(cur.eta) : \"\";"],
+    // THE COUNT MOVED OFF THE DELTA -- a regression that reintroduces it must fail the "sign+
+    // magnitude only" assertion on capDN (the delta caption), not just the new .mp-eta one.
+    "delta-regains-the-eta-suffix": ["B",
+        '(d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d));',
+        '(d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d)) + (cur.eta >= 1 ? "/" + cur.eta : "");'],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // Each half is separately invisible in-client (the CSS half is guarded by
@@ -462,7 +516,9 @@ function mount(srcs, unsettled, unsized) {
         // reads .model back -- so pushing has to do both, or that path sees a stale/empty model.
         push: (m) => { observer.model = m; render(m); },
         animEnd: (name) => root.dispatch("animationend", { animationName: name }),
-        fill: q(".mp-fill"), capC: q(".mp-capC"), capL: q(".mp-capL"), capR: q(".mp-capR"),
+        fill: q(".mp-fill"), capC: q(".mp-capC"), capR: q(".mp-capR"),
+        capEtaIco: q(".mp-capR").querySelector(".mp-ico.battles"),
+        capEta: q(".mp-capR").querySelector(".mp-eta"),
         capP: q(".mp-capP"), proj: q(".mp-proj"), pre: q(".mp-pre"),
         capCV: q(".mp-capC").querySelector(".mp-v"),
         capD: q(".mp-capC").querySelector(".mp-d"),
@@ -554,12 +610,40 @@ function run(mutation) {
     eq("the moving caption rides proj_avg, like the fill and the tick", s.capC.style.left,
        "50.000%");
     eq("the bottom numeral already shows projAvg", s.capCV.textContent, "2,750");
-    eq("axis-end captions carry the requirement values",
-       [s.capL.querySelector(".mp-v").textContent, s.capR.querySelector(".mp-v").textContent],
-       ["2,450", "3,050"]);
-    eq("the mark glyphs are held / next", [s.capL.querySelector(".mp-ico").className,
-                                          s.capR.querySelector(".mp-ico").className],
-       ["mp-ico mk mk1", "mp-ico mk mk2"]);
+    eq("the next-mark caption carries the requirement value",
+       s.capR.querySelector(".mp-v").textContent, "3,050");
+    eq("capR marks the next mark, and setIco still targets the FIRST .mp-ico",
+       s.capR.querySelector(".mp-ico").className, "mp-ico mk mk2");
+    ok("the battles glyph keeps its static family class",
+       s.capEtaIco.classList.contains("battles"));
+
+    // --- THE REMAINING-BATTLES COUNT (etaBattles), on the NEXT-MARK caption ------------------
+    section("eta battles pair");
+    const etaOf = (s) => [s.capEta.textContent, s.capEtaIco.classList.contains("none")];
+    s = mount(srcs);
+    s.push(M());
+    eq("etaBattles absent -> no count and the glyph box COLLAPSED (fail-soft)", etaOf(s), ["", true]);
+    eq("...and the delta is sign+magnitude only", s.capDN.textContent, "+50");
+    s = mount(srcs);
+    s.push(M({ etaBattles: 0 }));
+    eq("etaBattles 0 (requirement met) suppresses both", etaOf(s), ["", true]);
+    s = mount(srcs);
+    s.push(M({ etaBattles: -1 }));
+    eq("etaBattles -1 (no-data sentinel) suppresses both", etaOf(s), ["", true]);
+    s = mount(srcs);
+    s.push(M({ etaBattles: 1 }));
+    eq("etaBattles 1 renders the count and reveals the glyph", etaOf(s), ["1", false]);
+    s = mount(srcs);
+    s.push(M({ etaBattles: 18 }));
+    eq("a mid-range count renders bare, no ornament", etaOf(s), ["18", false]);
+    s = mount(srcs);
+    s.push(M({ etaBattles: 99 }));
+    eq("the cap renders, and the delta STILL carries no suffix",
+       [etaOf(s), s.capDN.textContent], [["99", false], "+50"]);
+    s.push(M({ etaBattles: 0 }));
+    eq("a later frame re-collapses it in place", etaOf(s), ["", true]);
+    s.push(M({ etaBattles: 7 }));
+    eq("...and re-reveals it", etaOf(s), ["7", false]);
 
     // --- COLD SHOW --------------------------------------------------------------------------
     section("cold show");
@@ -583,6 +667,12 @@ function run(mutation) {
     ok("...and the sign glow lands on the fill + numerals",
        s.fill.classList.contains("mp-up") && s.capCV.classList.contains("mp-up"));
     ok("no down-glow", !s.fill.classList.contains("mp-down"));
+    // .mp-eta RIDES THE SAME d>0/d<0 TEST as the delta -- no separate battles-count delta exists, so
+    // "d > 0 -> green" is correct on the countdown too (a better-than-average battle LOWERS the
+    // battles still needed). The gate is inert without the CSS's own .mp-eta.mp-up/.mp-down rules --
+    // see tests/test_progress_surface_mirror.py for that half.
+    ok("...and the same up-glow lands on the remaining-battles count", s.capEta.classList.contains("mp-up"));
+    ok("no down-glow on the count either", !s.capEta.classList.contains("mp-down"));
 
     // --- WARM RE-TRIGGER --------------------------------------------------------------------
     section("warm re-trigger");
@@ -902,17 +992,17 @@ function run(mutation) {
     s.push(M({ projAvg: 2700.4 }));               // cold show, delta +0.4
     s.clock.advance(FADE_IN);
     eq("a +0.4 delta displays as the rounded '+0'", s.capDN.textContent, "+0");
-    eq("...and glows on NOTHING -- not the numeral, the delta, the fill or the tick",
-       [s.capCV, s.capDN, s.fill, s.proj].map(
+    eq("...and glows on NOTHING -- not the numeral, the delta, the fill, the tick or the count",
+       [s.capCV, s.capDN, s.fill, s.proj, s.capEta].map(
            (e) => e.classList.contains("mp-up") || e.classList.contains("mp-down")),
-       [false, false, false, false]);
+       [false, false, false, false, false]);
     s.push(M({ projAvg: 2699.6 }));               // warm re-trigger, delta -0.4
     s.clock.advance(FADE_IN);
     eq("the -0.4 twin displays as '-0'", s.capDN.textContent, "-0");
     eq("...and is equally neutral (the warm path classifies the same as the cold one)",
-       [s.capCV, s.capDN, s.fill, s.proj].map(
+       [s.capCV, s.capDN, s.fill, s.proj, s.capEta].map(
            (e) => e.classList.contains("mp-up") || e.classList.contains("mp-down")),
-       [false, false, false, false]);
+       [false, false, false, false, false]);
 
     // --- PREVIOUS-SIGN CARRY ------------------------------------------------------------------
     // The cold-entry window (0..VALUE_SWAP_MS) has no new sign yet, so it must keep painting the
@@ -931,12 +1021,12 @@ function run(mutation) {
     s.push(M({ preAvg: 3000, projAvg: 3000.4 }));  // a FRESH cold show whose delta rounds to zero
     eq("precondition: a cold entry from the top", s.root.style.animationDelay, "0ms");
     eq("the PREVIOUS committed sign is still painted through the entry window",
-       [s.capCV, s.capDN, s.fill, s.proj].map((e) => e.classList.contains("mp-up")),
-       [true, true, true, true]);
+       [s.capCV, s.capDN, s.fill, s.proj, s.capEta].map((e) => e.classList.contains("mp-up")),
+       [true, true, true, true, true]);
     s.clock.advance(FADE_IN);
     eq("...and only the swap clears it, because this delta rounds to zero",
-       [s.capCV, s.capDN, s.fill, s.proj].map((e) => e.classList.contains("mp-up")),
-       [false, false, false, false]);
+       [s.capCV, s.capDN, s.fill, s.proj, s.capEta].map((e) => e.classList.contains("mp-up")),
+       [false, false, false, false, false]);
 
     // --- THE CONFIGURABLE HOLD DURATION (mod_settings.progress_hold_seconds, pushed as `holdMs`) --
     // applyHold is the shared transient's own fail-soft cast (`Number(ms) > 0 ? v : HOLD_MS`), and

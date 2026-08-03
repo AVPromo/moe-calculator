@@ -64,21 +64,68 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 //
 // THE SIDE CLEARANCE IS 80rem AND IT IS NOT WIDTH-DERIVED: the box is the 200rem track (see
 // #moe-bar-root's width note in the CSS) plus BOX_LEFT_REM on each side, so a track resize moves
-// BOX_W_REM by exactly the same amount and every per-side margin is preserved. The widest thing
-// outside the track is a .side caption, and it is bounded: 6rem gap + a 17rem .mk glyph + its 1rem
-// margin + the numerals, whose digits advance 0.4932em == 6.90rem at the .side 14rem font-size
-// (MoEBattle.ttf hmtx, comma 3.46rem), i.e. ~55rem for a 4-digit requirement and ~62rem even at 5
-// digits. The glows are smaller still (8rem .mp-full, 16rem .mp-pulse, 1rem ring). So the BACKDROP
-// is the extreme on both sides with ~18rem to spare -- keep the 80rem, do not trim it to the
-// caption.
-// SINCE THE CENTRE CAPTIONS WERE RE-CENTRED ON THEIR NUMERAL (MoEProgress.css: the icon's width
-// cancelled by a negative margin, the delta hung out of flow) the .side caption is no longer
-// automatically the widest thing out there. At proj_avg == axisHi, .mp-capC's box sits at 100% and
-// only its numeral is centred, so its DELTA now reaches ~58rem past the track's right edge (4-digit
-// numeral, 4.2rem gap, a "(+200)"-sized delta at 12rem) against .mp-capR's ~52rem -- while on the
-// LEFT the same change SHRINKS capC's reach (~35rem, down from ~46). Still ~22rem inside the 80rem
-// on the worst side, so the clearance stands unchanged; it is the "which one is the extreme"
-// conclusion that moved, so re-derive both before ever trimming it.
+// BOX_W_REM by exactly the same amount and every per-side margin is preserved.
+// WHICH CAPTION IS THE EXTREME HAS NOW MOVED THREE TIMES, so all three extremes are RE-DERIVED here
+// from the shipped CSS and MoEBattle.ttf's own advances (digit 0.4932em, comma 0.2471, paren 0.3008,
+// plus 0.4932; 1rem == 1 logical px; every figure re-checked against the ttf's hmtx). The two moves
+// in THIS revision: the .mp-capL axis-floor caption is GONE outright, and the REMAINING-BATTLES
+// COUNT moved OFF the delta and ONTO .mp-capR with a glyph of its own.
+//   RIGHT -- .mp-capR, and it is now the extreme by a wide margin. ONE flex row, FOUR items --
+//   plus a FIFTH term now, the ETA GAP (.mp-ico.battles's own margin-left, DOM order after the
+//   requirement numeral and before the battles glyph -- it widens the row, not a box of its own):
+//     3.00 (.mp-cap.side.mp-capR's margin-left off the track end)
+//     + 17.00 (.mp-ico.mk / .mp-ico.moe) + 1.00 (.mp-cap .mp-ico's shared gap)
+//     + 31.08 ("3,050", a 4-digit requirement, at the .side 14rem: 4*6.9048 + 3.4594)
+//     + 4.00 (.mp-ico.battles's margin-left -- the ETA GAP, added to breathe the requirement
+//       numeral apart from the remaining-battles count that follows it)
+//     + 13.00 (.mp-ico.battles -- it takes .mp-ico's BASE box, the only glyph in the file that does)
+//     + 1.00 (that same shared gap) + 13.81 ("99", the PROGRESS_ETA_CAP ceiling, 2*6.9048 at 14rem)
+//     == 83.89rem of BOXES, + 1.00 for the numerals' dark-drop text-shadow radius == 84.89rem.
+//     SO IT OVERHANGS THE 80rem BACKDROP CLEARANCE BY 4.89rem (UP FROM 0.89rem BEFORE THE GAP) --
+//     and unlike before, that overhang is NO LONGER pure shadow halo. The final "99" numeral's own
+//     box now spans 70.08 -> 83.89rem, i.e. 3.89rem of ITS BOX (not just its shadow) sits PAST the
+//     80rem backdrop edge, on bare HUD. At the .side 14rem size one digit is 6.9048rem wide, so
+//     3.89rem is a bit over half a digit -- WORST CASE IS ROUGHLY THE OUTER HALF OF THE LAST DIGIT
+//     LOSING ITS DARK BACKING, and it only reaches that worst case when a 4-digit requirement
+//     ("3,050"-shaped) and a 2-digit ETA ("99") land together. THIS IS A KNOWN, ACCEPTED TRADEOFF
+//     OF THE 4rem GAP, not a bug to chase: do NOT fix it by moving the backdrop, changing
+//     PROGRESS_ANCHOR_X_OFFSET, shrinking this gap, or re-deriving it away -- that is the
+//     maintainer's call, not this file's.
+//     DISTINGUISH OVERHANG FROM CLIPPING before reaching for the geometry -- the surface is a
+//     further PAD_REM out at 90rem, so CLIPPING STARTS AT 90 and there is still 5.11rem of
+//     clearance before that (90 - 84.89): nothing here is clipped, only unbacked.
+//     REBALANCING THE BACKDROP IS NOT FREE AND WAS DELIBERATELY NOT DONE. Taking clearance off the
+//     now-empty left side (80/80 -> e.g. 52/108, keeping BOX_W_REM and so the surface AND the mouse
+//     hit rect) breaks the symmetry that lets positioning.anchor_centred's `max_x // 2` centre the
+//     bar with NO X term in Python: constants.PROGRESS_ANCHOR_X_OFFSET is 0, and
+//     tests/test_progress_surface_mirror.py::test_the_large_backdrop_stays_symmetric_about_the_track
+//     pins exactly that. Any asymmetry slides the bar half the error sideways at every resolution
+//     until that constant -- plus a Large twin for it, since it is logical px and the block's
+//     x-lengths carry SIZE_XF -- follows. That is a positioning change, not a CSS one.
+//   CENTRE (.mp-capC) RIGHT -- back down, now that the "/NN" suffix is off the delta:
+//     17.76 (half of "3,050" at the .dn 16rem == 35.52) + 4.20 (.mp-d's 0.35em gap of its OWN 12rem
+//     font) + 30.89 ("(+297)" at 12rem) + 6.00 (.mp-d-num's sign-glow text-shadow radius)
+//     == 58.85rem, i.e. 21.15rem SPARE. That reproduces the pre-count figure exactly, as it must.
+//     A 4-digit delta ("(+2,970)" == 39.78) still only reaches 67.74rem, and needs cd ~ 150,000.
+//   LEFT -- .mp-capC at 0% is the ONLY candidate left, and its ICON path beats its numeral's glow:
+//     17.76 (the same half-numeral) + 17.00 (.mp-capC .mp-ico's negative-margin overhang)
+//     + 0.48 (that icon's ::before glow, 3% of its 16rem box) == 35.24rem, against the numeral's
+//     own 17.76 + 6.00 == 23.76. So 35.24rem and 44.76rem SPARE: ~45rem of dead space out there.
+//     (An earlier revision of this note SUMMED those two paths into 41.24rem. They are
+//     ALTERNATIVES, not terms -- the 6rem is the numeral's own text-shadow and stops at -23.76.)
+//   The .mp-full case is UNCHANGED and now provably so: battles_to_axis_hi returns 0 exactly when
+//   proj_avg >= axis_hi, which is the same test .mp-full toggles on, so the count is suppressed on
+//   every gold frame and needs no `#moe-bar-root.mp-full .mp-eta` rule of its own.
+//   Large is NOT size-mode-agnostic (it needs its own sum, the x-length terms scale by SIZE_XF while
+//   the boxes/numerals scale via the root font alone) but is still strictly slacker: the clearance
+//   grows 80 -> 106.667rem, and the ETA GAP's own Large twin (.mp-ico.battles's margin-left, an
+//   x-length like the shared gaps: 4 * 4/3 == 5.333) is the only new term --
+//   capR' == 4 + 17 + 1.333 + 31.08 + 5.333 + 13 + 1.333 + 13.81 + 1 == 87.89rem, 18.78rem spare
+//   (down from 24.1rem before the gap, since the gap only widens the reach and the backdrop grows
+//   for a different reason). Still comfortably unclipped, so the Default size keeps binding on
+//   every side.
+// Keep the 80rem, and re-derive ALL THREE extremes again before ever moving it -- "which one is the
+// extreme" has now moved three times, and each move invalidated the previous revision's spare.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
 //   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 380     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
@@ -94,11 +141,13 @@ const BOX_W_REM = 360;                               // .mp-backdrop's width
 const BOX_H_REM = 72;                                // .mp-backdrop's height
 const PAD_REM = 10;
 
-// Build the root once and cache it. Markup shape is the tuner's stage verbatim: backdrop, the
-// track with its four ticks, then the four captions. Each caption is ONE flex row -- icon, value,
-// and on capC only the delta, whose PARENS are static text on the wrapper so they never glow
-// (see the .mp-d / .mp-d-num split in the CSS). NO word labels anywhere: MoEBattle.ttf is a
-// 19-glyph numeric subset (digits % ( ) + - , . / space) and a letter renders BLANK.
+// Build the root once and cache it. Markup shape is the tuner's stage: backdrop, the track with its
+// four ticks, then THREE captions -- the tuner's fourth, .mp-capL, carried the axis FLOOR numeral
+// and is gone (axisLo is the battle's starting projection, not a requirement, and the label said
+// nothing the moving caption does not). Each caption is ONE flex row -- icon, value, and on capC the
+// delta, whose PARENS are static text on the wrapper so they never glow (see the .mp-d / .mp-d-num
+// split in the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
+// (digits % ( ) + - , . / space) and a letter renders BLANK.
 function ensureRoot() {
     let root = document.getElementById("moe-bar-root");
     if (root) return root;
@@ -112,14 +161,19 @@ function ensureRoot() {
         '  <div class="mp-tick mp-pre"></div>' +
         '  <div class="mp-tick mp-proj"></div>' +
         '  <div class="mp-tick mp-end mp-right"></div>' +
-        '  <div class="mp-cap side mp-capL"><i class="mp-ico none"></i>' +
-        '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i>' +
         '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>' +
         '<span class="mp-d">(<span class="mp-d-num"></span>)</span></div>' +
+        // THE MARK PAIR MUST COME FIRST IN THIS ROW, and two helpers silently depend on it: setIco()
+        // and capV() both do a querySelector for the FIRST .mp-ico / .mp-v, so reordering these four
+        // nodes repoints the mark-glyph writer at the battles glyph and the requirement writer at the
+        // count -- with no error and no test in this file to catch it. The requirement's glyph is the
+        // only one setIco ever rewrites; the battles glyph's class is STATIC (paintStatic only
+        // toggles `none` on it), which is why it can safely share the .mp-ico family here.
         '  <div class="mp-cap side mp-capR"><i class="mp-ico none"></i>' +
-        '<span class="mp-v"></span></div>' +
+        '<span class="mp-v"></span><i class="mp-ico battles"></i>' +
+        '<span class="mp-eta"></span></div>' +
         '</div>';
     document.body.appendChild(root);
     return root;
@@ -129,17 +183,24 @@ const root = ensureRoot();
 const fill = root.querySelector(".mp-fill");
 const tPre = root.querySelector(".mp-pre");
 const tProj = root.querySelector(".mp-proj");
-const capL = root.querySelector(".mp-capL");
 const capP = root.querySelector(".mp-capP");
 const capC = root.querySelector(".mp-capC");
 const capR = root.querySelector(".mp-capR");
 const capD = capC.querySelector(".mp-d");
 const capDN = capC.querySelector(".mp-d-num");
+// The remaining-battles pair on capR. Its own classes, NOT a second .mp-v / an .mp-ico index: see the
+// mark-pair-comes-first note on the template above.
+const capEtaIco = capR.querySelector(".mp-ico.battles");
+const capEta = capR.querySelector(".mp-eta");
 
 function capV(c) { return c.querySelector(".mp-v"); }
 
-// The mark glyph for an axis-end caption: k in 1..3 -> mk<k>; k=4 (3 marks held, no higher mark
-// to chase) -> the general MoE glyph; k=0 (nothing held) -> no icon at all (.none is display:none).
+// The mark glyph for the NEXT-MARK caption: k in 1..3 -> mk<k>; k=4 (3 marks held, no higher mark
+// to chase) -> the general MoE glyph; k=0 -> no icon at all (.none is display:none).
+// FIRST .mp-ico ONLY, and .mp-capR now holds two: the mark pair is first in the template precisely so
+// this keeps addressing it (see the note there). The k=0 arm is unreached from paintStatic today --
+// its only caller passes marks+1 or 4 -- but it stays, because without it a stray 0 would write the
+// nonexistent class "mk mk0" and blank the glyph silently instead of hiding it.
 function setIco(c, k) {
     c.querySelector(".mp-ico").className =
         "mp-ico" + (k === 0 ? " none" : k === 4 ? " moe" : " mk mk" + k);
@@ -151,7 +212,7 @@ function setIco(c, k) {
 // private, always-compositing view and has never needed the garage's cold-mount signal).
 // `last === null` means "no baseline yet": the FIRST push after mount (and after any re-show) is
 // recorded silently so the bar does not appear at battle start.
-let cur = { marks: 0, axisLo: 0, axisHi: 0, preAvg: 0, projAvg: 0 };
+let cur = { marks: 0, axisLo: 0, axisHi: 0, preAvg: 0, projAvg: 0, eta: -1 };
 let last = null;
 
 // This bar's OWN animation state, all of it about VALUES rather than the run: `swapped` = the bottom
@@ -208,6 +269,9 @@ function showVal(sw) {
     const d = cur.projAvg - cur.preAvg;
     capV(capC).textContent = fmt(sw ? cur.projAvg : cur.preAvg);
     capD.style.opacity = sw ? "1" : "0";
+    // SIGN + MAGNITUDE ONLY. The remaining-battles count used to be appended here as "/NN"; it now
+    // lives on .mp-capR beside the requirement it is a countdown to, with a glyph of its own (see
+    // paintStatic). Do not re-append it: it was the single term that pushed capC's reach to 74rem.
     capDN.textContent = (d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d));
     if (!sw) return;         // the entry window keeps the PREVIOUS committed sign -- see above
     // THE CLASSES KEY OFF THE ROUNDED VALUE, PRECISELY SO GLYPH AND GLOW CAN NEVER DISAGREE. `d`
@@ -217,7 +281,12 @@ function showVal(sw) {
     // win". Tested on the MAGNITUDE, exactly as fmt() rounds it (half away from zero) -- NOT
     // Math.round(d), which is -0 for d == -0.5 while the text already reads "(-1)".
     const glows = Math.round(Math.abs(d)) !== 0;
-    [capV(capC), capDN, fill, tProj].forEach(function (e) {
+    // capEta rides the SAME test as the delta -- no inversion. d > 0 is a better-than-average
+    // battle, which LOWERS battles_to_axis_hi (fewer repeats still needed), so "d > 0 -> green"
+    // already reads correctly on the countdown too. The intuitive-but-wrong instinct is "more
+    // battles remaining is worse, so invert" -- resist it; there is no separate battles-count
+    // delta to test against, only this one d.
+    [capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {
         e.classList.toggle("mp-up", glows && d > 0);
         e.classList.toggle("mp-down", glows && d < 0);
     });
@@ -226,10 +295,25 @@ function showVal(sw) {
 // Everything that does NOT animate: the axis-end captions + their mark glyphs, the static pre_avg
 // tick and caption, and the met-requirement gold. Safe to re-run on every push.
 function paintStatic() {
-    capV(capL).textContent = fmt(cur.axisLo);
     capV(capR).textContent = fmt(cur.axisHi);
-    setIco(capL, cur.marks);                            // 0 marks -> no icon at all
     setIco(capR, cur.marks >= 3 ? 4 : cur.marks + 1);   // 3 marks -> the general MoE glyph
+    // THE REMAINING-BATTLES COUNT, second pair of the same row -- moved here off the delta because it
+    // is a countdown to THIS requirement, and because on the delta it cost 15.18rem of the clipping
+    // budget (see the header's re-derivation).
+    // SUPPRESSION COLLAPSES THE BOX, IT DOES NOT JUST BLANK THE ART: `.mp-ico.none` is
+    // `display: none` (MoEProgress.css), so a suppressed glyph takes NO width and NOT the shared
+    // 1rem gap either -- verified in the stylesheet before reusing the variant, because a
+    // background-only blank would have left a 14rem hole mid-row. The class is toggled, never
+    // rewritten: setIco() reassigns className wholesale and would drop `battles`, which is why the
+    // family class is static in the template. The TEXT has to be cleared too -- a live count beside a
+    // collapsed glyph is exactly the state this suppression exists to avoid.
+    // WHEN: >= 1 only. 0 means the requirement is already met (.mp-full's gold says so, and
+    // battles_to_axis_hi returns 0 on precisely the same proj_avg >= axis_hi test), -1 is the no-data
+    // sentinel, and `>= 1` on a Number() of a possibly-ABSENT field is NaN-false -- so a pre-push
+    // frame or an older harness fixture renders no count rather than a bogus one.
+    const showEta = cur.eta >= 1;
+    capEtaIco.classList.toggle("none", !showEta);
+    capEta.textContent = showEta ? fmt(cur.eta) : "";
     capV(capP).textContent = fmt(cur.preAvg);
     const pre = axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style.left = pre;
@@ -382,6 +466,10 @@ function render(model) {
         axisHi: Number(model.axisHi) || 0,
         preAvg: Number(model.preAvg) || 0,
         projAvg: Number(model.projAvg) || 0,
+        // NO `|| 0` here, deliberately: 0 is a MEANINGFUL value (requirement met) and an absent
+        // field must not collapse into it. Number(undefined) is NaN, which paintStatic's `>= 1` reads
+        // as "render no count" -- the fail-soft direction for a brand-new VM field.
+        eta: Number(model.etaBattles),
     };
     paintStatic();
 

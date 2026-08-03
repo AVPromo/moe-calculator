@@ -117,11 +117,11 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. FOURTEEN: the nine through barSize, then transEvents /
-    # transManual, showEvents, holdMs and ctrlHeld, all APPENDED after barSize so nothing above them
-    # is renumbered.
+    # side only is invisible in the client. FIFTEEN: the nine through barSize, then transEvents /
+    # transManual, showEvents, holdMs, ctrlHeld and etaBattles, all APPENDED after barSize so
+    # nothing above them is renumbered.
     assert set(_push()) == _VM_PROPS
-    assert len(_VM_PROPS) == 14
+    assert len(_VM_PROPS) == 15
 
 
 def test_push_writes_the_two_transition_flags_master_folded():
@@ -197,3 +197,35 @@ def test_push_writes_hold_ms_as_seconds_times_a_thousand_and_is_not_master_folde
                      mod_settings.PROGRESS_HOLD_SECONDS_KEY: 12})
     assert props["holdMs"] == 12000
     assert props["transEvents"] is False and props["transManual"] is False
+
+
+def test_push_writes_eta_battles_from_the_domain_function(monkeypatch):
+    # etaBattles must be the domain function's own verdict, not something push_progress
+    # recomputes inline -- fake the function out and prove the pushed value came from it.
+    calls = []
+
+    def _fake_eta(proj_avg, axis_hi):
+        calls.append((proj_avg, axis_hi))
+        return 7
+
+    monkeypatch.setattr(battle_bridge, "battles_to_axis_hi", _fake_eta)
+    props = _push()
+    assert props["etaBattles"] == 7
+    assert len(calls) == 1
+
+
+def test_push_derives_has_data_from_mark_axis_not_the_display_floor():
+    # THE invariant: hasData is mark_axis's own verdict, computed BEFORE axisLo is overwritten
+    # with the display floor (progress_axis_lo). A rewrite that instead compared the PUSHED
+    # axisLo/axisHi would read this exact case as "no data", because the display floor can
+    # legitimately land anywhere below axisHi -- including, in this crafted case, right at it.
+    import moe_calculator.bridge.battle_bridge as _bb
+
+    real_axis_lo = _bb.progress_axis_lo
+    try:
+        _bb.progress_axis_lo = lambda axis_hi, pre_avg: axis_hi
+        props = _push()
+    finally:
+        _bb.progress_axis_lo = real_axis_lo
+    assert props["hasData"] is True
+    assert props["axisLo"] == props["axisHi"]

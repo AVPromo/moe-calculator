@@ -65,6 +65,15 @@ REVALIDATE_SECONDS = 24 * 3600
 EWMA_N = 100
 EWMA_K = 2.0 / (EWMA_N + 1)
 
+# Variant A: the Moving-Average bar's axis floor and remaining-battles readout. The mark axis is
+# hundreds-to-thousands of combined damage wide while one battle moves the EWMA by single/double
+# digits, so the bar read as dead -- the floor is rescaled to where the battle actually STARTED
+# (battle_builder.progress_axis_lo) and the delta caption carries a battles-remaining count
+# (battle_builder.battles_to_axis_hi). Values as prototyped in tools/dev/progress_bar_variant_a.html.
+PROGRESS_AXIS_MIN_WINDOW = 200.0   # combined damage; keeps the axis from collapsing
+PROGRESS_ETA_MARGIN = 0.10         # reference level sits this far above the requirement
+PROGRESS_ETA_CAP = 99              # readout ceiling (2 digits, see the clipping budget)
+
 # In-battle overlay window anchor, in FIXED logical-GUI-space px. WG's efficiency panel is
 # laid out in logical units (physical px / interfaceScale), so its screen corner sits at the
 # SAME logical coordinate at every interface scale -- a fixed logical offset tracks it with

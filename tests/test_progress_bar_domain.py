@@ -5,9 +5,11 @@ All pure -- no client, no game symbols.
 """
 import pytest
 
-from moe_calculator.domain.battle_builder import mark_axis, marks_from_percentile
+from moe_calculator.domain.battle_builder import (
+    battles_to_axis_hi, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
 from moe_calculator.domain.constants import (
-    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET)
+    EWMA_K, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET,
+    PROGRESS_ETA_CAP, PROGRESS_ETA_MARGIN)
 from moe_calculator.domain.positioning import anchor_centred
 
 # The shape battle_adapter fills from moe_wgapi.get_thresholds(): D65 / D85 / D95 / D100, keyed
@@ -168,3 +170,87 @@ def test_centred_anchor_fails_soft_on_an_unusable_offset(bad):
 
 def test_centred_anchor_fails_soft_on_an_unusable_extent():
     assert anchor_centred(None, None, 0.85) == (0, 0)
+
+
+# --- progress_axis_lo ----------------------------------------------------------
+
+def test_axis_lo_is_exactly_the_zero_damage_ewma_projection():
+    # NOT a recomputed pre * (1 - k) literal -- a call to the SAME fold the fill uses, so the
+    # floor and the fill can never drift apart. This must fail if someone inlines the arithmetic.
+    axis_hi, pre_avg = 4400.0, 1850.0
+    assert progress_axis_lo(axis_hi, pre_avg) == ewma_project_raw(pre_avg, 0, EWMA_K)
+
+
+def test_axis_lo_sits_strictly_below_the_pre_battle_average():
+    # "started the battle, did nothing" -- the zero-damage fold always pulls the average down.
+    assert progress_axis_lo(4400.0, 1850.0) < 1850.0
+
+
+def test_axis_lo_binds_to_the_min_window_near_the_top_of_the_axis():
+    # pre_avg sits within a few tens of damage of axis_hi -- the unclamped floor would leave a
+    # near-zero-width axis, so min_window forces the floor down to axis_hi - min_window.
+    assert progress_axis_lo(2950.0, 2900.0) == 2750.0
+
+
+def test_axis_lo_floors_at_zero_and_never_goes_negative():
+    # axis_hi below min_window collapses the clamp's upper bound below zero.
+    assert progress_axis_lo(100.0, 5000.0) == 0.0
+    # pre_avg 0 / None with a normal axis_hi -- the fold is 0, well inside [0, axis_hi - window].
+    assert progress_axis_lo(4400.0, 0) == 0.0
+    assert progress_axis_lo(4400.0, None) == 0.0
+
+
+# --- battles_to_axis_hi ---------------------------------------------------------
+
+def test_eta_is_monotone_non_increasing_as_the_battle_gets_worse():
+    # THE property the whole model exists to satisfy: a worse battle (lower proj_avg) must never
+    # read as FEWER remaining battles. A signed linear extrapolation was tried and rejected
+    # precisely because it fails this; this sweep is the guard against it coming back.
+    axis_hi = 4400.0
+    steps = [axis_hi * i / 500.0 for i in range(500)]  # 0 .. just under axis_hi
+    values = [battles_to_axis_hi(p, axis_hi) for p in steps]
+    for prev, cur in zip(values, values[1:]):
+        assert cur <= prev
+
+
+def test_eta_sentinels():
+    assert battles_to_axis_hi(1000.0, 0.0) == -1
+    assert battles_to_axis_hi(1000.0, -5.0) == -1
+    assert battles_to_axis_hi(4400.0, 4400.0) == 0
+    assert battles_to_axis_hi(5000.0, 4400.0) == 0
+
+
+def test_eta_never_raises_across_the_full_sweep():
+    axis_hi = 4400.0
+    for i in range(-100, 600):
+        battles_to_axis_hi(axis_hi * i / 500.0, axis_hi)
+
+
+@pytest.mark.parametrize("bad_axis_hi,bad_proj", [
+    (float("nan"), 1000.0),
+    (4400.0, float("nan")),
+])
+def test_eta_degenerates_to_the_cap_rather_than_raising(bad_axis_hi, bad_proj):
+    assert battles_to_axis_hi(bad_proj, bad_axis_hi) == PROGRESS_ETA_CAP
+
+
+def test_eta_degenerates_to_the_cap_on_a_k_that_never_converges():
+    # k == 1.0 makes ln(1 - k) == ln(0), which raises inside the fold -- the caller must still
+    # get a number back.
+    assert battles_to_axis_hi(1000.0, 4400.0, k=1.0) == PROGRESS_ETA_CAP
+
+
+def test_eta_clamps_at_the_cap_and_returns_at_least_one_short_of_the_goal():
+    assert battles_to_axis_hi(0.0, 4400.0) <= PROGRESS_ETA_CAP
+    for proj in (0.0, 100.0, 2000.0, 4399.0):
+        assert battles_to_axis_hi(proj, 4400.0) >= 1
+
+
+def test_eta_reads_its_defaults_from_the_constants_module():
+    # Pin against the CONSTANTS, not a hardcoded 99 / 0.10, so a knob change can't leave a
+    # stale-but-green test: an explicit-args call must match the bare-defaults call exactly.
+    proj_avg, axis_hi = 1200.0, 4400.0
+    assert (battles_to_axis_hi(proj_avg, axis_hi)
+            == battles_to_axis_hi(proj_avg, axis_hi, EWMA_K, PROGRESS_ETA_MARGIN, PROGRESS_ETA_CAP))
+    # And the cap is genuinely reachable at the constant's value, not some other number.
+    assert battles_to_axis_hi(4399.999999, 4400.0) <= PROGRESS_ETA_CAP

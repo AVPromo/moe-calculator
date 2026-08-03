@@ -5,8 +5,8 @@
    19 glyphs (digits % ( ) + - , . / space) -- NO LETTERS, a word label renders blank.
    Sizes in rem (1rem == 1 logical px); colours by VALUE (Gameface drops a declaration
    whose var() cannot resolve). JS sets .mp-fill width and the .mp-proj / .mp-capC left as
-   percentages, and toggles .mp-up/.mp-down on the fill + the bottom numerals. The two
-   axis-end captions are pure CSS (they hang off the track ends), so JS measures nothing. */
+   percentages, and toggles .mp-up/.mp-down on the fill + the bottom numerals. The axis-end
+   caption is pure CSS (it hangs off the track's right end), so JS measures nothing. */
 
 /* ADDITION 1 OF 2 TO THE TUNER'S EMITTED FILE. #moe-bar-root asks for font-family "MoEBattle"
    but the tuner ran in a browser and never emitted a face for it, and this document does NOT
@@ -227,10 +227,11 @@ body { margin: 0; }
 /* Captions live in the TRACK's coordinate space. The two CENTRE ones stack vertically on
    their tick: pre_avg ABOVE (.up), proj_avg BELOW (.dn, the only one that moves). THAT split
    is load-bearing -- those two sit ~1% apart, so putting them on one side would overlap.
-   The two AXIS-END ones are .side: vertically centred on the track's midline and hanging
-   OUTSIDE its left / right edge. Each caption is ONE ROW: icon LEFT (DOM order: icon, value,
-   delta), numerals right, margin-right as the single gap -- on the left-hand side label that
-   puts the NUMBER nearest the axis it labels, which is the right way round. GAMEFACE: plain
+   The AXIS-END one is .side: vertically centred on the track's midline and hanging OUTSIDE its
+   right edge (the left-hand .mp-capL twin was removed with the axis-floor numeral). Each caption
+   is ONE ROW: icon LEFT (DOM order: icon, value, delta -- and on .mp-capR a SECOND icon+value
+   pair for the remaining-battles count, in that order because setIco() / capV() both take the
+   FIRST match), numerals right, margin-right as the single gap. GAMEFACE: plain
    `flex-direction: row`; the earlier `column-reverse` variant (never verified in Coherent)
    is gone, so no unverified flex mode remains.
    WHAT translateX(-50%) CENTRES ON THE TICK IS THE NUMERAL, NOT THE ROW. Centring the whole
@@ -260,7 +261,7 @@ body { margin: 0; }
    right:100%). Same order of magnitude, and safe here for two reasons: neither caption paints a
    background / border / box-shadow, so the enlarged box is invisible; and padding grows the
    box on the anchored AXIS only, while the centring transforms act on the OTHER one
-   (translateX(-50%) on .up is unaffected by height, translateY(-50%) on .capL by width).
+   (translateX(-50%) on .up is unaffected by height, translateY(-50%) on .capR by width).
    The `top:100%` / `left:100%` twins below keep their margins -- those pairings DO work.
    NOT `calc(100% + 6rem)`: a % + rem mix inside one calc() is 0/515 in WG's corpus. */
 /* EVERY CAPTION PINS ITS LINE BOX, and that is a BUG FIX, not a style choice. With
@@ -289,12 +290,19 @@ body { margin: 0; }
        .mp-capC .mp-ico   (20.5 - 16  )/2 + 1    == 3.25  <- 0.25 off the device grid at factor 1,
                                                              0.50 off at factor 2: it CAN drift
        .mp-capP .mp-ico   (18   - 14  )/2 + 0    == 2.00  <- whole rem: whole device pixels at EVERY
-       .mp-capL .mp-ico   (18   - 17  )/2 + 0.5  == 1.00     factor, so it resolves identically at
-       .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00     both scales and takes no rule, ever
+       .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00     factor, so it resolves identically at
+       .mp-capR .mp-ico   (18   - 13  )/2 + 0.5  == 3.00     both scales and takes no rule, ever
+         ^ the SAME rule, a smaller box: the .battles glyph (see .mp-ico.battles)
        .mp-cap  .mp-d      0           + 2.5     == 2.50  <- 0.5 off the grid at factor 1, whole at
                                                              factor 2: it CAN drift, and the
                                                              maintainer reports it DOES.
-   The four ICON rows are flex items under align-items:center, so the centring term is the flex line's
+   (.mp-capL is GONE, and with it its ruleless (18 - 17)/2 + 0.5 == 1.00 row -- the axis-floor caption
+   was removed outright. The battles glyph took its place in the table.)
+   THE BATTLES GLYPH'S 13rem BOX IS NOT ARBITRARY: it is .mp-ico's BASE box, so the glyph needs no
+   width/height rule at all, and 13 is one of only two boxes (13 and 17) that land this .side
+   caption's anchor on a WHOLE rem and so keep the row correctly ruleless -- 14, 15 or 16rem would
+   each land on a half and owe a two-rule correction pair of their own.
+   The ICON rows are flex items under align-items:center, so the centring term is the flex line's
    cross size -- the numeral's line box, i.e. the pin -- minus the glyph's own square box, and the last
    term is the per-role translateY.
    THE DELTA ROW HAS NO CENTRING TERM, AND AN EARLIER REVISION OF THIS NOTE GOT THAT WRONG. The wrong
@@ -340,15 +348,18 @@ body { margin: 0; }
              line-height: 18rem; }
 .mp-cap.dn { top: 100%; margin-top: 6rem; font-size: 16rem;
              line-height: 20.5rem; }
-/* SIDE (axis-end) captions -- the .mp-tick vertical trick: top:50% + translateY(-50%) centres
-   the flex row's box on the track midline. `left: auto` is REQUIRED on the left one because
-   .mp-cap sets left:0 and right:100% alone would not release it. TWO classes so the transform
-   out-specifies .mp-cap's translateX(-50%): these are not centred on a tick, they are pushed
-   off the end by their own margin. Nothing shares a band with them, so there is no
-   de-collision pass and JS never measures or repositions them. The translateY(-50%) is on the
+/* SIDE (axis-end) caption -- ONE of them now (.mp-capR, off the RIGHT end): the axis-floor
+   .mp-capL was removed with its numeral, so `.side` is single-use and the `left: auto` +
+   `right: 100%` release it needed is gone with it. The class is KEPT rather than folded into
+   .mp-capR: it carries the whole side treatment (the .mp-tick vertical trick -- top:50% +
+   translateY(-50%) centring the flex row's box on the track midline -- the font-size, the pinned
+   line box and the numeral nudge below), and the tuner still emits both halves.
+   TWO classes so the transform out-specifies .mp-cap's translateX(-50%): this is not centred on
+   a tick, it is pushed off the end by its own margin. Nothing shares its band, so there is no
+   de-collision pass and JS never measures or repositions it. The translateY(-50%) is on the
    CAPTION box while the per-role icon nudge is on the .mp-ico CHILD, so the two transforms
-   cannot clobber each other and .mp-ico keeps its own stacking context (see below). Their
-   font-size is their OWN (not .up's): these are side labels, not top labels. */
+   cannot clobber each other and .mp-ico keeps its own stacking context (see below). Its
+   font-size is its OWN (not .up's): this is a side label, not a top label. */
 .mp-cap.side { top: 50%; transform: translateY(-50%); font-size: 14rem;
                line-height: 18rem; }
 /* SIDE-CAPTION NUMERAL NUDGE -- a FONT METRICS correction, not a box-height problem.
@@ -365,15 +376,28 @@ body { margin: 0; }
    factors, and the ink offset it corrects is a font-metrics constant either way.)
    Scoped to .side only: .up/.dn hang off the track edges instead of being centred on
    the midline, so they must never pick this up. .mp-v is a flex item of the .mp-cap row, so
-   a transform applies to it (it would not on a bare inline span). */
-.mp-cap.side .mp-v { transform: translateY(-0.5rem); }
-/* padding-right, not margin-right -- see the .mp-cap.up note above (right:100% anchor). */
-.mp-cap.side.mp-capL { left: auto; right: 100%; padding-right: 8rem; }
+   a transform applies to it (it would not on a bare inline span).
+   .mp-eta IS THE SAME CORRECTION ON THE SAME ROW, not an extra: the remaining-battles count is a
+   second numeral in this one flex line, at the same font-size and the same pinned line box, so
+   the ink offset is identical -- leave it out and the count sits 0.53rem BELOW the requirement it
+   counts down to, on the same baseline. */
+.mp-cap.side .mp-v,
+.mp-cap.side .mp-eta { transform: translateY(-0.5rem); }
 .mp-cap.side.mp-capR { left: 100%; margin-left: 3rem; }
-/* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
-   width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */
+/* The ONE gap, on every caption AND on every icon in it -- .mp-capR carries TWO (the mark and the
+   battles glyph) and both take this same 1rem. The two CENTRE captions then cancel their icon's
+   whole outer width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */
 .mp-cap .mp-ico { margin-right: 1rem; }
+/* .mp-eta shares the plain-white numeral treatment: same colour, weight and dark legibility drop as
+   .mp-v. It is deliberately NOT a second .mp-v -- capV() is a first-match querySelector(".mp-v") and
+   would keep resolving to the requirement, so a second .mp-v would work today and mis-target on the
+   next edit. It DOES glow now (.mp-eta.mp-up / .mp-eta.mp-down, below), but on the delta's OWN knobs
+   -- st.upCol/st.dnCol, st.dGlowW/st.dGlowT, the same DGA -- and gains no dedicated knobs of its own;
+   JS toggles it in lockstep with capDN off the identical d>0/d<0 test (MoEProgress.js showVal). So
+   .mp-capR is no longer a never-glows caption: its main requirement number (.mp-capR .mp-v) still
+   stays plain white, but the battles-countdown numeral rides the bottom-centre delta's sign. */
 .mp-cap .mp-v,
+.mp-cap .mp-eta,
 .mp-cap .mp-d {
   color: #ffffff;
   font-weight: 600;
@@ -448,14 +472,16 @@ body { margin: 0; }
   transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
 }
 .mp-v.mp-up,
-.mp-d-num.mp-up {
+.mp-d-num.mp-up,
+.mp-eta.mp-up {
   color: #ffffff;
   text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
                0rem 0rem 6rem rgba(123,236,55,0.9),
                0rem 0rem 1rem rgba(123,236,55,0.9);
 }
 .mp-v.mp-down,
-.mp-d-num.mp-down {
+.mp-d-num.mp-down,
+.mp-eta.mp-down {
   color: #ffffff;
   text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
                0rem 0rem 6rem rgba(211,68,63,0.9),
@@ -506,10 +532,17 @@ body { margin: 0; }
    resolves against a PADDING box carrying 6rem and would drop the glyph half that gap.
    PER CAPTION because the box is per caption (dmgP / dmgC are independent sliders), and
    DERIVED from those sliders + icoGap -- a literal would break the centring on the next
-   retune. NOT on the two .side captions: they are not centred on anything, they are pushed
-   off the axis ends by their own gap, so cancelling their icon would just slide the label
-   inwards over the track. */
-.mp-capL .mp-ico { transform: translate(0rem, 0.5rem); }
+   retune. NOT on the .side caption: it is not centred on anything, it is pushed off the axis
+   end by its own gap, so cancelling its icon would just slide the label inwards over the track.
+   .mp-capR NOW CARRIES TWO ICONS AND THIS ONE RULE NUDGES BOTH -- the mark glyph and the battles
+   glyph. That is deliberate, and it is arithmetic rather than luck: the 0.5rem was tuned to push
+   the marksOnGun cuts' ink (y 5..17 of a 24px canvas, ink centre 0.458 of the box) back onto the
+   numerals' centre, and the battles glyph's alpha>32 ink centre sits at 62.5/128 == 0.488 of its
+   own canvas -- 0.012 of a 13rem box == 0.16rem of residual, a sixth of the nudge itself. So no
+   second knob is added here: if a live pass ever shows the battles glyph wants its own Y it gets
+   its OWN rule (`.mp-capR .mp-ico.battles`, full declaration -- a transform REPLACES its base),
+   and this shared 0.5rem is NOT retuned, or the mark glyph moves with it.
+   NEEDS VISUAL CONFIRMATION IN-CLIENT: the 0.16rem residual is derived from the bbox, not seen. */
 .mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15rem; }
 .mp-capC .mp-ico { transform: translate(0rem, 1rem); margin-left: -17rem; }
 .mp-capR .mp-ico { transform: translate(0rem, 0.5rem); }
@@ -524,19 +557,27 @@ body { margin: 0; }
   transform: translate(-50%, -50%);
   background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
 }
-/* THE TWO AXIS-END (.side) MoE REQUIREMENT ICONS GLOW INDEPENDENTLY of the two centre damage
-   icons -- own colour, own alpha, and TUNED APART: these two are a DARK DROP (near-black
-   #1a1a1a at half alpha) rather than a halo, while the centre pair keeps the gold. Deliberate, not a
+/* THE AXIS-END (.side) CAPTION'S ICONS GLOW INDEPENDENTLY of the two centre damage icons -- own
+   colour, own alpha, and TUNED APART: these are a DARK DROP (near-black #1a1a1a at half alpha)
+   rather than a halo, while the centre pair keeps the gold. Deliberate, not a
    leftover -- the mark glyphs read better lifted off the map by a shadow.
    This targets ::before and sets BACKGROUND ONLY, so:
      - the base rule above still supplies z-index:-1, the 106% box and its own
        translate(-50%,-50%), i.e. the glow's radius geometry is identical for both groups;
      - .mp-ico's OWN transform is not touched, and that matters twice over -- it carries the
-       per-role Y nudge (icoYL / icoYR) AND it is the stacking context that scopes the
+       per-role Y nudge (icoYR) AND it is the stacking context that scopes the
        z-index:-1 to the icon. Never move this override onto .mp-ico.
-   Covers the general-MoE glyph that replaces the right mark at 3 marks (still .mp-capR
-   .mp-ico). Specificity (0,2,1) > the base (0,1,1), so only the gradient is replaced. */
-.mp-capL .mp-ico::before,
+   Matches BOTH of this caption's icons -- the mark (or the general-MoE glyph that replaces it at 3
+   marks) and the battles glyph -- because both are `.mp-capR .mp-ico`. Specificity (0,2,1) > the
+   base (0,1,1), so only the gradient is replaced. But only the MARK glyph actually shows this drop:
+   the battles glyph opts back OUT to gold via `.mp-ico.battles::before` (below), which matches
+   at the SAME (0,2,1) specificity, so the cascade falls through to SOURCE ORDER and the later rule
+   wins on that one icon. That is a source-order dependency, not a specificity one -- reorder the
+   two rules (or insert another (0,2,1) `::before` rule ahead of the battles one) and the battles
+   glyph silently reverts to the dark drop with no error anywhere; verify the resolved styles, not
+   the file's line numbers, after any such reorder.
+   (The tuner's emitted form groups `.mp-capL .mp-ico::before` in front of this; that half went
+   with the caption.) */
 .mp-capR .mp-ico::before {
   background: radial-gradient(circle at 50% 50%, rgba(26,26,26,0.5) 0%, transparent 73%);
 }
@@ -574,7 +615,41 @@ body { margin: 0; }
 .mp-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
 .mp-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
 .mp-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
-/* marks=0 -> the left caption carries NO icon at all. */
+/* THE REMAINING-BATTLES GLYPH -- the second icon on .mp-capR, marking the count of repeats of this
+   battle still needed to reach that requirement (domain.battles_to_axis_hi, capped at 99).
+   NO width/height OF ITS OWN, and that is a decision, not an omission: it takes .mp-ico's BASE
+   13rem box -- the only glyph in the file that does -- for two independent reasons. It reads as
+   SECONDARY to the 17rem mark it follows, and 13 is one of only two boxes that land this .side
+   caption's icon anchor on a whole rem, keeping the row correctly free of an interface-scale
+   correction pair (worked in the caption-pin table above).
+   img:// resolves against the packed .pkg at runtime, exactly like the three quest_type glyphs
+   above -- there is NOTHING to extract, ship or sync_gameface for this icon.
+   background-size IS THE SAME DERIVED RECIPE, 100/bb*icoFill with icoFill 0.75
+   (gen_bar_tuner.ps1:905's icoSz), fed the ALPHA>32 bbox and not a raw getbbox(): this art family
+   carries a faint halo that reads ~2.3x too big. Measured bbox (50,48)-(77,77) on the 128x128
+   canvas -> max dim 29 -> bb = 29/128 = 0.226563 -> 100/0.226563*0.75 = 331.03 -> 331.0%. Same
+   convention that produced 342.5 / 228.7 / 274.7 for damage / barrel_mark / top; all three
+   re-verified against it here. brightness(3) for the same reason as those three: the quest_type
+   line art ships as a flat grey #d1d1d1. */
+.mp-ico.battles { margin-left: 4rem; }
+/* GOLD, NOT THE SIDE CAPTION'S DARK DROP: same-specificity override of .mp-capR .mp-ico::before
+   (above, ~:581) by SOURCE ORDER alone -- both are two classes plus a pseudo-element, so the
+   cascade has no specificity tiebreaker here and falls through to "last rule wins". This rule
+   MUST stay after that one or the dark drop silently wins back and the gold never renders; if
+   this file is ever reordered, re-verify with the resolved styles, not the line numbers. */
+.mp-ico.battles::before {
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+.mp-ico.battles::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_battles.png);
+  background-size: 331.0%;
+  filter: brightness(3);
+}
+/* THE SUPPRESSION VARIANT, and `display: none` is load-bearing rather than incidental: it COLLAPSES
+   the flex item's whole box -- its square AND the shared 1rem margin-right -- so a suppressed glyph
+   leaves no hole in the row. A background-only blank would have left the battles glyph's 13rem + gap
+   as dead space beside an empty count. JS toggles this class on the battles icon
+   (MoEProgress.js paintStatic) and setIco() writes it for a 0 mark count. */
 .mp-ico.none { display: none; }
 /* proj_avg >= thresholds[m+1] -> the WHOLE bar takes the gold glow. */
 #moe-bar-root.mp-full .mp-track,
@@ -701,11 +776,17 @@ body { margin: 0; }
 }
 /* Tick WIDTH only -- its 9rem height is a y length. */
 .mp-lg .mp-tick { width: 2.667rem; }
-/* The ONE caption gap (icoGap), and the two axis-end gaps (gapEndL as padding on the right:100%
-   anchor, gapEndR as margin on the left:100% one -- see the base rules for which side Coherent
-   honours). 1 -> 1.333, 8 -> 10.667, 3 -> 4. */
+/* The ONE caption gap (icoGap -- it applies to BOTH of .mp-capR's icons), and the surviving
+   axis-end gap (gapEndR as margin on the left:100% anchor -- see the base rule for which side
+   Coherent honours). 1 -> 1.333, 3 -> 4. The tuner's gapEndL twin
+   (`.mp-lg .mp-cap.side.mp-capL { padding-right: 10.667rem; }`) went with the caption. */
 .mp-lg .mp-cap .mp-ico { margin-right: 1.333rem; }
-.mp-lg .mp-cap.side.mp-capL { padding-right: 10.667rem; }
+/* THE ETA GAP'S TWIN, and this is an x-length not a fixed-pixel correction: the base rule's
+   4rem gap widens the row's own reach (see MoEProgress.js's header comment), so under Large it
+   owes the block's SIZE_XF == 4/3 like every other x-length here, not the SIZE_F the root font
+   already carries. 4 * 4/3 == 5.333, to the block's 3dp -- same precision as the icon-width
+   cancels below (1rem -> 1.333, -11.5rem -> -15.333). */
+.mp-lg .mp-ico.battles { margin-left: 5.333rem; }
 .mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }
 /* THE DELTA'S GAP, and the ONE x-length here dialled in `em` rather than rem -- which is exactly why
    it was missing until now: 0.35em of the delta's OWN font-size already rides SIZE_F (the root font

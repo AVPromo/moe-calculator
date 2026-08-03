@@ -20,8 +20,8 @@ from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import sample_log
 from moe_calculator.domain.battle_builder import (
-    build_battle_model, battle_bar_visible, efficiency_band, efficiency_bar_x, efficiency_stops,
-    ewma_project_raw, mark_axis, marks_from_percentile)
+    build_battle_model, battle_bar_visible, battles_to_axis_hi, efficiency_band, efficiency_bar_x,
+    efficiency_stops, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
 from moe_calculator.domain.constants import EFFICIENCY_WIDE_THRESHOLD, EWMA_K
 from moe_calculator.domain.positioning import efficiency_panel_wide
 from moe_calculator.bridge import battle_view
@@ -663,7 +663,10 @@ def push_progress(rvm, snap, model):
     """Write the centre-screen progress bar's model into rvm (a ProgressVM).
 
     The bar works in COMBINED DAMAGE along the mark axis, so it takes the axis ends plus the two
-    averages and derives everything else (position, delta, requirement-met) in JS. Its `visible`
+    averages and derives everything else (position, delta, requirement-met) in JS. The pushed
+    axis_lo is NOT the held mark's requirement but the display floor a zero-damage battle lands on
+    (progress_axis_lo) -- the mark segment is hundreds-to-thousands of damage wide against a
+    single/double-digit per-battle nudge -- while hasData stays mark_axis's verdict. Its `visible`
     reuses battle_bar_visible's base gating (in battle, own vehicle, not spectating, no full-stats
     scoreboard) with its OWN checkbox as the master and alt_mode off -- Alt is an ADDITIVE show
     trigger for this widget (pushed as altHeld), not a gate. Without a career baseline
@@ -686,16 +689,24 @@ def push_progress(rvm, snap, model):
                    and model.has_baseline)
         pre_avg = snap.pre_avg_damage or 0
         proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
+        # hasData stays the MARK axis's verdict -- the display floor below must not change it.
         has_data = axis_hi > axis_lo
+        eta = battles_to_axis_hi(proj_avg, axis_hi)
+        if has_data:
+            # Variant A: the pushed floor is where a ZERO-damage battle lands, not the held mark's
+            # requirement -- the mark segment is hundreds-to-thousands of damage wide while one
+            # battle moves the EWMA by single/double digits, so the bar read as dead. capL's mark
+            # glyph is dropped JS-side to match (MoEProgress.js paintStatic).
+            axis_lo = progress_axis_lo(axis_hi, pre_avg)
         bar_size = mod_settings.progress_bar_size()
         # The two VISIBILITY switches, both resolved in mod_settings so the pair can never disagree
         # between the bars: `alt_held` carries "Alt Press" AND "Always" (a permanently-held Alt IS
         # the Always mode -- the JS pins the bar at its hold plateau), `showEvents` carries "Events".
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s ctrl=%s size=%d ev=%s" % (
-            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, alt_held, _ctrl_held,
-            bar_size, show_events))
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f eta=%d alt=%s ctrl=%s size=%d ev=%s" % (
+            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, eta, alt_held,
+            _ctrl_held, bar_size, show_events))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -718,6 +729,9 @@ def push_progress(rvm, snap, model):
             # Deliberately NOT run through progress_alt_held: that getter folds the VISIBILITY
             # switches in, and repositioning must work whatever they say.
             tx.setCtrlHeld(_ctrl_held)
+            # Repeats of this battle to reach axis_hi (0 = already there, -1 = no data). The JS
+            # appends it to the delta caption and renders nothing below 1.
+            tx.setEtaBattles(eta)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

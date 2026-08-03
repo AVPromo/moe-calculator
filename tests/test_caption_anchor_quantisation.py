@@ -78,8 +78,9 @@ takes the static position (see below) and its anchor is the nudge alone:
     .mp-capC .mp-ico   (20.5 - 16  )/2 + 1    == 3.25   <- 0.25 off the device grid at factor 1,
                                                            0.50 off at factor 2: it CAN drift
     .mp-capP .mp-ico   (18   - 14  )/2 + 0    == 2.00   <- whole rem: whole device pixels at EVERY
-    .mp-capL .mp-ico   (18   - 17  )/2 + 0.5  == 1.00      factor, so it cannot resolve differently
-    .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00      at the two scales and takes no rule
+    .mp-capR .mp-ico   (18   - 17  )/2 + 0.5  == 1.00      factor, so it cannot resolve differently
+    .mp-capR .mp-ico   (18   - 13  )/2 + 0.5  == 3.00      at the two scales and takes no rule
+      ^ the SAME nudge rule, the battles glyph's smaller box -- see .mp-ico.battles
     .mp-cap  .mp-d      0           + 2.5     == 2.50   <- 0.5 off the grid at factor 1, whole at
                                                            factor 2: it CAN drift, and does
 `.mp-cap.side .mp-v` is not in the table on purpose: its own box IS the line box, so the centring
@@ -194,9 +195,9 @@ _MA_CORRECTED = ((".mp-s1 .mp-capC .mp-ico", ".mp-capC .mp-ico", False),
 # model used stay visible next to the model that replaced it.
 _MA_PIECES = ((".mp-capC .mp-ico", ".mp-cap.dn", ".mp-ico.dmgc", "height", True),
               (".mp-capP .mp-ico", ".mp-cap.up", ".mp-ico.dmgp", "height", True),
-              (".mp-capL .mp-ico", ".mp-cap.side", ".mp-ico.mk", "height", True),
               (".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico.mk", "height", True),
               (".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico.moe", "height", True),
+              (".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico", "height", True),
               (".mp-cap .mp-d", ".mp-cap.dn", ".mp-cap .mp-d", "line-height", False))
 
 
@@ -408,10 +409,22 @@ def test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction():
     leave a fractional anchor uncorrected. It equally catches a future retune that pushes another
     caption off a whole rem."""
     css = _read(_WIDGET, "MoEProgress.css")
-    anchors = {row[0]: _ma_anchor(css, *row) for row in _MA_PIECES}
-    for row in _MA_PIECES:                      # the two .mp-capR glyph families must AGREE
-        assert _ma_anchor(css, *row) == anchors[row[0]], \
-            "%s anchors differently per glyph family -- one of them needs its own rule" % row[0]
+    by_selector = {}
+    for row in _MA_PIECES:
+        by_selector.setdefault(row[0], []).append(_ma_anchor(css, *row))
+    # THE "MUST AGREE" CHECK IS SCOPED TO FRACTIONAL PIECES ONLY. `.mp-capR .mp-ico` now covers
+    # THREE icons sharing one nudge rule: the interchangeable mark family (mk/moe, both a 17rem
+    # box, anchor 1.00) and the unrelated battles glyph (a 13rem box, anchor 3.00) -- two GENUINELY
+    # different whole-rem anchors that both need no correction, so requiring them to match
+    # NUMERICALLY would fail on a distinction that carries no consequence. What actually matters is
+    # that only ONE correction rule exists per selector: if any sharing piece is fractional, every
+    # piece sharing that selector must land on the exact SAME fractional anchor, or a single shared
+    # `.mp-s1` rule cannot correct all of them at once.
+    for sel, values in by_selector.items():
+        if any(v != v.to_integral_value() for v in values):
+            assert len(set(values)) == 1, \
+                "%s anchors differently per glyph family -- one of them needs its own rule" % sel
+    anchors = {sel: values[-1] for sel, values in by_selector.items()}
     drifting = {sel for sel, a in anchors.items() if a != a.to_integral_value()}
     assert drifting == {base for _sel, base, _large in _MA_CORRECTED}, \
         "the set of MA pieces off a whole rem changed: %s (anchors: %s)" % (
@@ -421,6 +434,37 @@ def test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction():
     ruled = set(re.findall(r"(?m)^\.mp-s1(?:\.mp-lg)? (\.\S+ \.\S+)\s*\{", _bare(css)))
     assert ruled == drifting, \
         "MoEProgress.css corrects %s but the arithmetic says %s" % (sorted(ruled), sorted(drifting))
+
+
+def test_the_battles_glyph_has_no_box_of_its_own_and_lands_on_a_whole_rem():
+    """.mp-ico.battles deliberately takes .mp-ico's BASE 13rem box (MoEProgress.css's own comment:
+    "13 is one of only two boxes (13 and 17) that land this .side caption's anchor on a WHOLE rem").
+    14/15/16rem would each owe a `.mp-s1`/`.mp-s1.mp-lg` correction pair of their own -- so a future
+    "let's make it 14rem" must fail HERE, at test time, rather than as a half-pixel drift in-client.
+
+    Two independent guards: the glyph must declare NO width/height override (or the anchor below is
+    computed against the wrong box), and the anchor it actually resolves to -- re-derived from the
+    shipped nudge/caption/box rules, never a transcribed literal -- must land on a whole rem."""
+    css = _read(_WIDGET, "MoEProgress.css")
+    assert not re.search(r"(?m)^\.mp-ico\.battles\s*\{[^}]*\b(?:width|height)\s*:", _bare(css)), \
+        "MoEProgress.css: .mp-ico.battles now declares its own box -- re-derive its anchor"
+    anchor = _ma_anchor(css, ".mp-capR .mp-ico", ".mp-cap.side", ".mp-ico", "height", True)
+    assert anchor == anchor.to_integral_value(), \
+        ".mp-ico.battles's box no longer lands the .side caption's icon anchor on a whole rem: " \
+        "%s" % anchor
+
+
+def test_the_battles_glyphs_background_size_is_the_derived_framing_recipe():
+    # 331.0% is DERIVED (100/bb*0.75 fed the alpha>32 bbox: (50,48)-(77,77) on a 128px canvas -> bb
+    # 0.226563 -> 331.03 -> 331.0), not a literal picked by eye -- see the rule's own comment.
+    # SCOPED TO THE OWNING RULE, never a bare substring: the repo lesson
+    # `unscoped-substring-assertion-is-not-an-assertion` -- an unscoped grep for "331.0%" would be
+    # satisfied by the derivation comment ABOVE the rule (which spells the number in prose) even
+    # after the declared value itself were reverted. `_decl` strips comments first and anchors on
+    # the selector at the start of a line, so it can only read the rule that actually ships it.
+    css = _read(_WIDGET, "MoEProgress.css")
+    got = _decl(css, ".mp-ico.battles::after", "background-size", "MoEProgress.css")
+    assert got == "331.0%", ".mp-ico.battles::after's background-size is not 331.0%%: %s" % got
 
 
 def test_the_ma_correction_is_the_base_rule_exactly_one_device_pixel_higher():

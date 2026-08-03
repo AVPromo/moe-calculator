@@ -221,21 +221,27 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=14, commands=0):
+    def __init__(self, properties=15, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
         super(ProgressVM, self)._initialize()
         self._addBoolProperty("visible", False)      # 0  false -> the bar never appears
         self._addNumberProperty("marks", 0)          # 1  marks held 0..3 (selects the end glyphs)
-        self._addRealProperty("axisLo", 0.0)         # 2  requirement for the mark HELD (0 at 0 marks)
+        self._addRealProperty("axisLo", 0.0)         # 2  the DISPLAY floor: where a zero-damage
+                                                     #    battle lands (domain.progress_axis_lo), NOT
+                                                     #    the held mark's requirement -- that segment
+                                                     #    is far too wide for one battle to move
+                                                     #    visibly. The JS paints no mark glyph here
         self._addRealProperty("axisHi", 0.0)         # 3  requirement CHASED (the 100 stop at 3 marks)
         self._addNumberProperty("preAvg", 0)         # 4  career moving-avg combined damage
         self._addRealProperty("projAvg", 0.0)        # 5  the same, with this battle folded in (EWMA).
                                                      #    Real, NOT Number: the per-battle nudge is a
                                                      #    few damage points, so int() quantised the
                                                      #    JS change-detect signal away entirely
-        self._addBoolProperty("hasData", False)      # 6  the mark axis is usable (axisHi > axisLo)
+        self._addBoolProperty("hasData", False)      # 6  the MARK axis is usable -- mark_axis's own
+                                                     #    verdict, which axisLo's display floor
+                                                     #    deliberately does not get to change
         self._addBoolProperty("altHeld", False)      # 7  Alt currently down -> pull the bar up and
                                                      #    hold it (an ADDITIVE show trigger, not a gate)
         self._addNumberProperty("barSize", 0)        # 8  mod_settings.progress_bar_size(): 0 = the
@@ -285,6 +291,15 @@ class ProgressVM(ViewModel):
                                                      #    It no longer opens an input hit rect: the
                                                      #    drag needs no mouse input in the document
                                                      #    at all, so that rect stays collapsed
+        self._addNumberProperty("etaBattles", -1)     # 14 repeats of THIS battle needed to reach
+                                                     #    axisHi (domain.battles_to_axis_hi): a
+                                                     #    positive count, 0 once the requirement is
+                                                     #    already met, -1 = no data. APPENDED.
+                                                     #    Number, not Real -- it is an integer count
+                                                     #    of battles. The JS appends it to the delta
+                                                     #    caption and renders nothing below 1, so
+                                                     #    the -1 default is also the safe absent
+                                                     #    value
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -327,6 +342,9 @@ class ProgressVM(ViewModel):
 
     def setCtrlHeld(self, v):
         self._setBool(13, v)
+
+    def setEtaBattles(self, v):
+        self._setNumber(14, v)
 
 
 class EfficiencyVM(ViewModel):
