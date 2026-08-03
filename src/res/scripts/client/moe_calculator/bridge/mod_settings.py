@@ -5,8 +5,10 @@ categories (MSA renders only two columns here, so a category cannot be a column 
 _template()). Column 1 holds "Battle Calculator" (the In-Battle Widget master, labelled "Enabled",
 grouped with its "Alt Press" + "Counted Assistance Row" children) then "Battle Progress" (the
 Progress Bar master, also "Enabled", with its three VISIBILITY children "Events" / "Alt Press" /
-"Always", then the standalone inline "Mode" and "Scale" radios, then the "Transitions" master with
-its "Events" + "Alt Press" children). Column 2 holds "Garage Widget" -- the garage master plus the
+"Always", then the standalone inline "Mode" and "Scale" radios) then "Transitions" (that master,
+also "Enabled", with its "Events" + "Alt Press" switches and the "Hold Duration (s)" slider that
+says how long the bar stays up) then "Bar Position" (the X/Y steppers mirroring the bar's
+Ctrl+drag). Column 2 holds "Garage Widget" -- the garage master plus the
 "Layout" group (also BOLD): Follow Carousel, then a non-bold "Position" sub-label heading the X/Y
 steppers.
 
@@ -64,8 +66,9 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # (Aslain folds them into _settingsStructure and _sync_template_text only ever rewrites
 # text/tooltip, never options[].label), so they can reach an existing install ONLY via this
 # bump. register()'s migration branch carries every saved value across it; the new
-# progress_bar_variant key takes its fresh 0 (= Moving Average) default, so an existing user
-# lands exactly on the bar they already had.
+# progress_bar_variant key takes its fresh 0 (= Moving Average, the option order AS SHIPPED AT
+# THIS BUMP -- bump 12->13 below flips it, so 0 means Damage Efficiency from v13 onward; see
+# PROGRESS_VARIANT_KEY) default, so an existing user lands exactly on the bar they already had.
 # Bumped 9 -> 10 to DROP the variant radio's own "Bar Type" label row, so its two options read as
 # direct children of the Progress Bar checkbox: the radio's text is now empty and its tooltip is
 # gone (folded into the master's, the only surface left to hover). Version 9 shipped to nobody but
@@ -130,7 +133,41 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # 14 -> 15 bump -- this is structural even though no varName changed; only a forward bump reaches
 # an existing install. No varName was added, removed or renamed, so the migration branch carries
 # every saved value across unchanged.
-SETTINGS_VERSION = 16
+# Bumped 16 -> 17 for the Transitions restructure plus a new varName, either of which alone would
+# already require it: "Transitions" is promoted from a bare third group inside the "Battle Progress"
+# category to a CATEGORY OF ITS OWN (a new bold Label header row ahead of the master, which shifts
+# every following control's positional pairing in _sync_template_text), and the category gains a
+# new control -- the progress_hold_seconds SLIDER, a brand-new varName AND a brand-new component
+# type, whose minimum/maximum/snapInterval Aslain folds into its _settingsStructure signature.
+# COL1_KEYS grows 17 -> 19. The slider hangs off the "Transitions" HEADER, NOT off the master: it is
+# a plain top-level un-indented row spliced on after the group, so the group keeps exactly its two
+# switch children and the slider carries no masterVarName. That is deliberate and matches
+# progress_hold_seconds(), the one member of the category that is not master-folded -- a duration
+# applies whether or not the enter/exit animate, so greying it under "Enabled" would have claimed
+# otherwise. The master's own label goes "Transitions" -> "Enabled" (the header now
+# names the feature, exactly as for the other three masters) but its varName is DELIBERATELY
+# unchanged -- merge_settings/_apply iterate DEFAULTS keys only with no rename/alias map, so a
+# rename would silently reset every existing user's value. register()'s saved-truthy path never
+# calls setModTemplate on an existing install, so only a forward bump reaches it; the migration
+# branch carries every saved value across and progress_hold_seconds takes its fresh 5 s default
+# (== the JS transient's baked HOLD_MS, so nobody's bar changes length without asking).
+# Bumped 17 -> 18 for the in-battle bar's Ctrl+drag POSITION controls: a FOURTH column-1 category
+# ("Bar Position" -- an Empty spacer plus its own bold Label header) and the two
+# progress_bar_pos_x / progress_bar_pos_y NumericSteppers, i.e. two brand-new varNames and four new
+# rows appended to column 1 (COL1_KEYS 19 -> 23). Structural twice over, and as always register()'s
+# saved-truthy path never calls setModTemplate on an existing install, so only a forward bump
+# reaches one. The migration branch carries every saved value across and the two new keys take
+# their fresh 0 (= auto) default, so every existing user's bar stays exactly where it has always
+# been -- 0/0 falls through to the shipped *_ANCHOR_* placement (domain.anchor_pinned).
+# Bumped 18 -> 19 for a FIFTH "Empty" spacer row in column 1, immediately ahead of the
+# hold-duration Slider (still inside the "Transitions" category, right after the group's "Alt
+# Press" child) -- purely visual breathing room, the same role every other spacer plays. No
+# varName was added, removed or renamed, but the new None-sentinel slot (COL1_KEYS 23 -> 24)
+# shifts the Slider's and every later control's positional pairing in _sync_template_text, so it
+# is structural regardless; register()'s saved-truthy path never calls setModTemplate on an
+# existing install, so only a forward bump reaches it. The migration branch carries every saved
+# value across unchanged.
+SETTINGS_VERSION = 19
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -195,8 +232,8 @@ PROGRESS_SHOW_EVENTS_KEY = "progress_show_events"
 PROGRESS_SHOW_ALT_KEY = "progress_show_alt_key"
 PROGRESS_SHOW_ALWAYS_KEY = "progress_show_always"
 
-# The Progress Bar's ENTER/EXIT TRANSITIONS (its fade + slide), as a THIRD grouped master in the
-# "Battle Progress" category with one child per trigger AREA. Plain bools, all defaulting True --
+# The Progress Bar's ENTER/EXIT TRANSITIONS (its fade + slide), as the master of its OWN
+# "Transitions" category with one child per trigger AREA. Plain bools, all defaulting True --
 # the animated bar is what shipped. Turning a child OFF makes that area's appearance AND
 # disappearance INSTANT: the bar still shows and still hides, only the motion is skipped. That
 # mimics the game's own HUD, which does not animate its elements on Alt.
@@ -207,6 +244,20 @@ PROGRESS_SHOW_ALWAYS_KEY = "progress_show_always"
 PROGRESS_TRANSITIONS_KEY = "progress_transitions_enabled"
 PROGRESS_TRANS_EVENTS_KEY = "progress_transitions_events"
 PROGRESS_TRANS_MANUAL_KEY = "progress_transitions_manual"
+
+# How long the Progress Bar STAYS UP once it is up, in whole SECONDS -- the fourth control of the
+# Transitions group and an MSA "Slider" (its only one). Pushed to both bars as `holdMs`
+# (seconds * 1000), where MoEBarTransient drives the hold with its own wall-clock timer rather than
+# the baked mp-life keyframe, whose 5000ms hold cannot be stretched in place.
+# WHOLE SECONDS ONLY: a fractional slider value's runtime type is a live-client unknown, and int
+# seconds are all a 1..30s range needs. NOT a bool, so _coerce needs its own branch (falling
+# through to bool() would turn 5 into True and destroy the setting -- exactly the radios' trap).
+# The default is the JS transient's OWN baked HOLD_MS / 1000, so an existing user's bar is
+# unchanged until they touch the slider.
+PROGRESS_HOLD_SECONDS_KEY = "progress_hold_seconds"
+PROGRESS_HOLD_MIN = 1
+PROGRESS_HOLD_MAX = 30
+PROGRESS_HOLD_DEFAULT = 5
 
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
@@ -219,6 +270,20 @@ POS_X_KEY = "posX"
 POS_Y_KEY = "posY"
 POS_W_KEY = "posW"
 POS_H_KEY = "posH"
+
+# Draggable IN-BATTLE BAR position -- the same 0 == auto scheme as the garage pair above, and
+# nothing else in common with it:
+#   * ONE PAIR FOR BOTH BARS. Moving Average and Damage Efficiency are radio ALTERNATIVES (only
+#     one is ever open), so a second pair would be two more settings rows describing the same
+#     spot on screen.
+#   * NO posW/posH TWIN. The garage pair is on-screen PIXELS and must be rescaled when the
+#     resolution changes, which is what those record. These two are the window's top-left in the
+#     engine's LOGICAL GUI SPACE -- already interface-scale invariant (see domain/positioning's
+#     header) -- so there is nothing to pin them to and nothing to rescale.
+# 0/0 means auto: the shipped *_ANCHOR_* constants stand, which is where every existing user is.
+# The varNames are FROZEN (there is no rename/alias map -- a rename silently resets every user).
+BAR_POS_X_KEY = "progress_bar_pos_x"
+BAR_POS_Y_KEY = "progress_bar_pos_y"
 # Follow Carousel Mode (default ON): keep nudging a pinned widget vertically as the carousel
 # state changes (1<->2 rows, small<->tall), so a dragged widget never overlaps the carousel.
 # The nudge is live-measured JS-side -- no extra persisted coordinate.
@@ -228,12 +293,13 @@ FOLLOW_CAROUSEL_KEY = "followCarousel"
 # typed / echoed value is clamped into [0, POS_MAX], with 0 meaning "auto / unseeded".
 POS_MAX = 20000
 
-_POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY)
+_POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, BAR_POS_X_KEY, BAR_POS_Y_KEY)
 
 # The two widgets and the counted-assistance row ship ON; the Alt-peek mode and the progress bar
 # ship OFF (opt-in), with the progress-bar VARIANT on Damage Efficiency (0, the v13 order) and both
-# of its VISIBILITY triggers on but "Always" off, and all three TRANSITION switches ON (the animated
-# bar is what shipped). The drag position ships at auto (0/0/0/0) and Follow Carousel ships ON.
+# of its VISIBILITY triggers on but "Always" off, all three TRANSITION switches ON (the animated
+# bar is what shipped) and the hold at 5s (the JS transient's baked HOLD_MS, so the default bar is
+# byte-identical to what shipped). The drag position ships at auto (0/0/0/0), Follow Carousel ON.
 # merge_settings only ever overlays these known keys, so an MSA store from a newer/older template
 # can never introduce or drop a flag we act on.
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
@@ -244,7 +310,9 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_SHOW_ALWAYS_KEY: False,
             PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
             PROGRESS_TRANS_MANUAL_KEY: True,
+            PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
+            BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
             FOLLOW_CAROUSEL_KEY: True}
 
 
@@ -283,6 +351,28 @@ def clamp_variant(v, max_index=PROGRESS_VARIANT_MOVING_AVERAGE):
         return v
     return 0
 
+
+def clamp_hold_seconds(v):
+    """Coerce the stored hold duration to a whole number of seconds in
+    [PROGRESS_HOLD_MIN, PROGRESS_HOLD_MAX]. Pure + engine-free (unit-tested).
+
+    Third trust boundary alongside clamp_pos / clamp_variant, and the same bool trap: bool is an
+    int subclass, so isinstance must be tested FIRST or True would pass through as a legal 1
+    second. Garbage (a bool, a non-numeric) falls back to the template DEFAULT; a merely
+    OUT-OF-RANGE number is clamped to the nearest bound, like clamp_pos -- the user asked for
+    "as long as possible", not for 5."""
+    if isinstance(v, bool):
+        return PROGRESS_HOLD_DEFAULT
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return PROGRESS_HOLD_DEFAULT
+    if v < PROGRESS_HOLD_MIN:
+        return PROGRESS_HOLD_MIN
+    if v > PROGRESS_HOLD_MAX:
+        return PROGRESS_HOLD_MAX
+    return v
+
 # Live flag state (seeded from MSA in register(); defaults until then / if MSA is absent).
 _settings = dict(DEFAULTS)
 
@@ -297,18 +387,20 @@ _registered = False
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
-    the progress-bar variant and size are clamped radio INDEXes, everything else is a bool.
-    Pure + engine-free.
+    the progress-bar variant and size are clamped radio INDEXes, the hold duration a clamped
+    second count, everything else is a bool. Pure + engine-free.
 
-    The two radio branches are load-bearing: falling through to bool() would turn a radio's
-    index 1 into True and index 0 into False, which then round-trips back to MSA as a bool
-    and destroys the setting."""
+    Every non-bool branch is load-bearing: falling through to bool() would turn a radio's
+    index 1 into True and index 0 into False (and the hold's 5 into True), which then
+    round-trips back to MSA as a bool and destroys the setting."""
     if key in _POS_KEYS:
         return clamp_pos(value)
     if key == PROGRESS_VARIANT_KEY:
         return clamp_variant(value)
     if key == PROGRESS_SIZE_KEY:
         return clamp_variant(value, PROGRESS_SIZE_LARGE)
+    if key == PROGRESS_HOLD_SECONDS_KEY:
+        return clamp_hold_seconds(value)
     return bool(value)
 
 
@@ -422,6 +514,26 @@ def progress_transitions_manual():
             and bool(_settings.get(PROGRESS_TRANS_MANUAL_KEY, True)))
 
 
+def progress_hold_seconds():
+    """How long the progress bar stays up once it is up, in whole seconds (default 5).
+
+    An int, NOT a bool -- so re-clamp on read (mirroring the two radio getters) and never let a
+    corrupt store leak a bool or an absurd duration to the widget.
+
+    DELIBERATELY NOT master-folded, unlike its two group siblings above: this is a DURATION, not a
+    switch, so ANDing the Transitions master in would report 0/False whenever transitions are off
+    -- a bar with no hold at all, which is not what that checkbox means. The master only decides
+    whether the enter/exit MOVE; the hold is how long the bar stays, animated or not (an un-animated
+    run ends AT the hold rather than fading out of it), and the JS gates showing on
+    transEvents/transManual instead.
+
+    ...and BECAUSE of that, its MSA control is deliberately UNGROUPED too -- a plain top-level row
+    under the "Transitions" header rather than a child of the "Enabled" master (see _template()).
+    Do not re-parent it into the group: greying the slider out while "Enabled" is off would tell the
+    user this value stops applying, which is exactly the claim this getter refuses to make."""
+    return clamp_hold_seconds(_settings.get(PROGRESS_HOLD_SECONDS_KEY, PROGRESS_HOLD_DEFAULT))
+
+
 def pos_x():
     """The pinned widget top-left x (px), or 0 for auto (CSS bottom-right default)."""
     return clamp_pos(_settings.get(POS_X_KEY, 0))
@@ -440,6 +552,17 @@ def pos_w():
 def pos_h():
     """The viewport height (px) a pinned position was captured at (0 = unknown)."""
     return clamp_pos(_settings.get(POS_H_KEY, 0))
+
+
+def bar_pos_x():
+    """The in-battle bar's dragged top-left x in LOGICAL GUI px, or 0 for auto (the shipped
+    centre anchor). Shared by both bars -- see BAR_POS_X_KEY."""
+    return clamp_pos(_settings.get(BAR_POS_X_KEY, 0))
+
+
+def bar_pos_y():
+    """The in-battle bar's dragged top-left y in LOGICAL GUI px, or 0 for auto."""
+    return clamp_pos(_settings.get(BAR_POS_Y_KEY, 0))
 
 
 def follow_carousel():
@@ -532,6 +655,45 @@ def _stepper(key, rendered):
     return control
 
 
+def _slider(key, rendered):
+    """One MSA Slider descriptor -- the hold duration, in whole SECONDS. `varName` matches a
+    DEFAULTS key so the returned int maps straight through merge_settings, and `snapInterval: 1`
+    keeps the value an int (see clamp_hold_seconds for why a fraction is not wanted).
+
+    Built as a plain dict rather than through Aslain's templates.createSlider, for the same reason
+    every other helper here is (see _radio): it keeps _template() a pure, unit-testable dict with
+    no gui.aslainMenu import, and MSA does no descriptor validation at all, so the dict IS what
+    that helper emits -- createSlider is createStepper(SLIDER, ...) plus a `format` key, i.e.
+    exactly _stepper's shape minus canManualInput. An API that does not know the Slider type at all
+    just skips the row (the AS3 panel logs "Unexpected type of component:"), leaving the three
+    Transitions checkboxes above it working and progress_hold_seconds() on its 5 s default.
+
+    NO `masterVarName`, and never one: this control is deliberately NOT a child of the Transitions
+    master (see _template() and progress_hold_seconds()), so it is emitted top-level and un-indented.
+    Nothing here sets the key -- only _grouped_column1 does, and this descriptor is never passed to
+    it -- so the key is genuinely ABSENT rather than present-and-None (MSA reads the key's presence,
+    so a None would still bind it to a master named None).
+
+    `{{value}}` is MSA's own substitution token, so the panel renders "5 s" rather than a bare
+    number. `tooltip` is OMITTED, never emitted empty, exactly like _checkbox / _radio / _label --
+    a hard index there is what killed the WHOLE settings panel once (a KeyError inside _template(),
+    i.e. inside register()'s guarded try, so the only symptom was no panel at all)."""
+    control = {
+        "type": "Slider",
+        "text": rendered["text"],
+        "value": DEFAULTS[key],
+        "minimum": PROGRESS_HOLD_MIN,
+        "maximum": PROGRESS_HOLD_MAX,
+        "snapInterval": 1,
+        "format": "{{value}} s",
+        "varName": key,
+    }
+    tooltip = rendered.get("tooltip")
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
+
+
 def _radio(key, rendered):
     """One MSA RadioButtonGroup descriptor for a mutually-exclusive choice. `varName` matches a
     DEFAULTS key and `value` is the 0-BASED OPTION INDEX (never a label); `options` is the
@@ -572,7 +734,7 @@ def _label(key, rendered):
     only when there IS one, so _sync_template_text can refresh it in lockstep with the column's
     other controls.
 
-    `rendered["text"]` arrives ALREADY wrapped in <b>...</b> for the four HEADER_KEYS --
+    `rendered["text"]` arrives ALREADY wrapped in <b>...</b> for the five HEADER_KEYS --
     settings_i18n.build() does that wrap, once, so this template and _sync_template_text see
     the IDENTICAL string (see that docstring for why: wrapping here too would make every
     register() call -- including the one that just built the freshly-bolded template -- see a
@@ -624,7 +786,10 @@ def _gate_and(control, conditions):
 def _grouped_column1(master, children):
     """ONE column-1 master with its indented children, greyed out while the master is off.
     Column 1 calls this THREE times -- for the "In-Battle Widget", "Progress Bar" and
-    "Transitions" masters -- and splices the flat lists together (see _template()).
+    "Transitions" masters -- and splices the flat lists together (see _template()). The children
+    are type-agnostic (createControlsGroup only writes a masterVarName), but the Transitions
+    category's hold-duration Slider is still NOT passed as one -- it is spliced on after the group
+    as a top-level row, which is the only reason it carries no masterVarName (see _slider()).
 
     Prefer Aslain's templates.createControlsGroup(master, children, indent=True) -- it returns
     the flat [master, child1, child2] list and binds each child to the master (a masterVarName
@@ -648,14 +813,16 @@ def _template():
     by that feature's controls, and categories are separated by an "Empty" spacer row.
     Column 1: "Battle Calculator" (the In-Battle Widget master + its "Alt Press" and "Counted
     Assistance Row" children), then "Battle Progress" (the Progress Bar master + its three
-    VISIBILITY children, an Empty spacer, the standalone Mode and Scale radios, a SECOND Empty
-    spacer, then the Transitions master + its Events and Alt Press children). Column 2: "Garage
+    VISIBILITY children, an Empty spacer, the standalone Mode and Scale radios), then a SECOND
+    Empty spacer and "Transitions" (its own header + the Transitions master with its Events, Alt
+    Press children, a spacer, then the UNGROUPED Hold Duration slider), then a THIRD Empty spacer
+    and "Bar Position" (its own header + the two standalone X/Y steppers). Column 2: "Garage
     Widget" (the garage master), then the "Layout" group -- a header, Follow Carousel, an Empty
     spacer, a "Position" sub-label, then the X/Y numeric steppers. Because the header names the
     feature, each master's
     own label is just "Enabled".
     Every visible label/tooltip comes from settings_i18n at the client's language (English
-    fallback). The four category/group headers render BOLD (see _label); "Position" does not."""
+    fallback). The five category/group headers render BOLD (see _label); "Position" does not."""
     t = settings_i18n.panel_text()
     battle_master = _checkbox(BATTLE_KEY, t["battleWidget"])
     battle_alt = _checkbox(BATTLE_ALT_KEY, t["battleAltKey"])
@@ -669,6 +836,7 @@ def _template():
     trans_master = _checkbox(PROGRESS_TRANSITIONS_KEY, t["progressTransitions"])
     trans_events = _checkbox(PROGRESS_TRANS_EVENTS_KEY, t["progressTransEvents"])
     trans_manual = _checkbox(PROGRESS_TRANS_MANUAL_KEY, t["progressTransManual"])
+    trans_hold = _slider(PROGRESS_HOLD_SECONDS_KEY, t["progressHoldSeconds"])
     garage = _checkbox(GARAGE_KEY, t["garageWidget"])
     # The Progress Bar master with its three VISIBILITY children. _grouped_column1 binds all three
     # to PROGRESS_BAR_KEY; the first two then TRADE that binding for an AND gate, because they are
@@ -681,7 +849,7 @@ def _template():
         "modDisplayName": MOD_DISPLAY_NAME,
         "enabled": True,
         "settingsVersion": SETTINGS_VERSION,
-        # column1: TWO categories separated by an Empty spacer, each a bare Label header followed
+        # column1: THREE categories separated by Empty spacers, each a bare Label header followed
         # by that feature's controls. The header rows carry no varName and no tooltip.
         #
         # The Progress Bar controls are deliberately NOT passed as children of the In-Battle
@@ -703,19 +871,39 @@ def _template():
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
         #
         # The Transitions master is a THIRD _grouped_column1 call spliced on, for the same reason
-        # the Progress Bar one is its own group: its two children must grey out with IT and with
-        # nothing else. Same "Battle Progress" category, so it gets NO header row of its own --
-        # only an Empty spacer ahead of it, breathing room after the two radios (same purely
-        # visual role as the spacer ahead of "Battle Progress" itself).
+        # the Progress Bar one is its own group: its TWO switch children must grey out with IT and
+        # with nothing else. It is a CATEGORY of its own -- an Empty spacer and its own bold Label
+        # header -- which is what lets its master read just "Enabled" like the other three.
         #
-        # Both category headers render BOLD -- settings_i18n.build() already wrapped their text
-        # (see _label); this only adds the matching useHTML key.
+        # THE HOLD SLIDER IS DELIBERATELY *NOT* A CHILD OF THAT MASTER: it hangs off the
+        # "Transitions" HEADER instead, as a plain top-level un-indented row spliced on AFTER the
+        # group, with an Empty spacer immediately ahead of it (same purely visual role as every
+        # other spacer in this column). The panel order is unchanged (header, Enabled, Events, Alt
+        # Press, spacer, Hold Duration) -- it just neither indents nor greys out with "Enabled".
+        # That matches the getter: progress_hold_seconds() is the one member of this group that is
+        # NOT master-folded, because a DURATION is not a switch -- the bar stays up for that long
+        # whether or not the enter/exit animate (an un-animated run ends AT the hold rather than
+        # fading out of it). Greying it under "Enabled" claimed the opposite. See
+        # progress_hold_seconds().
+        #
+        # All three category headers render BOLD -- settings_i18n.build() already wrapped their
+        # text (see _label); this only adds the matching useHTML key.
+        #
+        # ...and a FOURTH category closes the column: "Bar Position", the two steppers that mirror
+        # the Ctrl+drag. STANDALONE like the column-2 pair (no master, no condition) for the same
+        # reason: a coordinate stays readable and editable while the feature is off. They are
+        # APPENDED at the very end, so no earlier control's positional pairing moves.
         "column1": ([_label("catBattleCalc", t["catBattleCalc"])]
                     + _grouped_column1(battle_master, [battle_alt, counted])
                     + [_empty(), _label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
-                    + [_empty(), progress_variant, progress_size, _empty()]
-                    + _grouped_column1(trans_master, [trans_events, trans_manual])),
+                    + [_empty(), progress_variant, progress_size,
+                       _empty(), _label("catTransitions", t["catTransitions"])]
+                    + _grouped_column1(trans_master, [trans_events, trans_manual])
+                    + [_empty(), trans_hold,
+                       _empty(), _label("catBarPosition", t["catBarPosition"]),
+                       _stepper(BAR_POS_X_KEY, t["barPosX"]),
+                       _stepper(BAR_POS_Y_KEY, t["barPosY"])]),
         # column2: the BOLD category header, the garage master, an Empty spacer, then the "Layout"
         # group -- its own BOLD header, Follow Carousel, a SECOND Empty spacer, a non-bold
         # "Position" sub-label, then the X/Y steppers. Follow Carousel sits ABOVE the steppers
@@ -943,9 +1131,10 @@ def _on_changed(linkage, new_settings):
 
 def _on_reset(linkage, defaults):
     """Panel 'reset to defaults' button. The host fires onResetMod (NOT onSettingsChanged),
-    globally across every mod, so this is linkage-scoped. Restore our defaults, then force the
-    position back to AUTO (0/0/0/0) and Follow Carousel Mode back ON regardless of any seeded
-    value the host snapshot may still carry, and fan out."""
+    globally across every mod, so this is linkage-scoped. Restore our defaults, then force BOTH
+    positions back to AUTO (the garage widget's 0/0/0/0 and the in-battle bar's 0/0) and Follow
+    Carousel Mode back ON regardless of any seeded value the host snapshot may still carry, and
+    fan out."""
     try:
         if linkage != LINKAGE:
             return
@@ -954,6 +1143,8 @@ def _on_reset(linkage, defaults):
         _settings[POS_Y_KEY] = 0
         _settings[POS_W_KEY] = 0
         _settings[POS_H_KEY] = 0
+        _settings[BAR_POS_X_KEY] = 0
+        _settings[BAR_POS_Y_KEY] = 0
         _settings[FOLLOW_CAROUSEL_KEY] = True
         LOG_DEBUG("[moe] settings reset -> %r" % (_settings,))
         _notify()
@@ -1011,3 +1202,31 @@ def set_position(x, y, w=0, h=0):
             LOG_CURRENT_EXCEPTION()
     # else MSA absent -> position still applies this session, just not persisted.
     _notify()
+
+
+def set_bar_position(x, y, persist=True):
+    """Store the in-battle bar's dragged top-left (LOGICAL GUI px; 0 == auto). Called from the bars'
+    Ctrl+drag gesture, which is driven entirely from Python -- see bar_window.BarHost.drag.
+
+    `persist` FALSE is the live drag: the in-memory value is all a re-place reads, so every mouse
+    movement updates that and nothing else. TRUE (the gesture end) additionally writes it through MSA
+    so the panel's steppers track the drag and the position survives the session.
+
+    NO _notify(), unlike set_position: the bar's own host re-places the window directly in the same
+    handler, so a fan-out would only cost every OTHER feature a needless apply_settings + re-push
+    -- at pointer rate during a drag. Guarded so a missing / broken MSA never breaks the gesture."""
+    _settings[BAR_POS_X_KEY] = clamp_pos(x)
+    _settings[BAR_POS_Y_KEY] = clamp_pos(y)
+    if not persist:
+        return
+    g = _primary_api()
+    if g is None:
+        return   # MSA absent -> the position still applies this session, just not persisted.
+    try:
+        g.updateModSettings(LINKAGE, _full_settings_for_write(g))
+        try:
+            g.saveState()
+        except Exception:
+            LOG_CURRENT_EXCEPTION()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()

@@ -128,21 +128,21 @@ PROGRESS_ANCHOR_Y_OFFSET = 36
 
 # ...and the SAME two-term compensation for the LARGE size mode (mod_settings.progress_bar_size == 1),
 # which is a pure scale-up of the composition and must NOT move the bar on screen. The mode's two
-# factors live in MoEBarTransient.js -- SIZE_F = 1.5 (delivered by the ROOT FONT SIZE, so every rem
-# length renders 1.5x with no CSS edit) and SIZE_XF = 4/3 (the EXTRA factor an x-length carries in the
-# stylesheets' .mp-lg block, to reach 2x total). Neither term below takes SIZE_XF: this is the Y axis.
-#   1. -(SHIFT_Y_REM * SIZE_F) == -(44 * 1.5) == -66. SHIFT_Y_REM is UNCHANGED at 44 -- it is a rem
+# factors live in MoEBarTransient.js -- SIZE_F = 1.25 (delivered by the ROOT FONT SIZE, so every rem
+# length renders 1.25x with no CSS edit) and SIZE_XF = 4/3 (the EXTRA factor an x-length carries in the
+# stylesheets' .mp-lg block, to reach 5/3 total). Neither term below takes SIZE_XF: this is the Y axis.
+#   1. -(SHIFT_Y_REM * SIZE_F) == -(44 * 1.25) == -55. SHIFT_Y_REM is UNCHANGED at 44 -- it is a rem
 #      length in the CSS (root.style.top), so the root font scales it for free -- but THIS constant is
-#      logical px, which is what the extra * 1.5 converts.
-#   2. +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 92 * 1.5)
-#      == round(0.865 * 138) == +119. Same unit conversion as above; VIEW_H_REM is still 92 (a
-#      y/uniform rem length), and 138 is the logical-px height the JS actually pushes to
+#      logical px, which is what the extra * 1.25 converts.
+#   2. +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 92 * 1.25)
+#      == round(0.865 * 115) == +99. Same unit conversion as above; VIEW_H_REM is still 92 (a
+#      y/uniform rem length), and 115 is the logical-px height the JS actually pushes to
 #      resizeViewRem -- an ENGINE API, whose rem is C++'s and is NOT affected by our root font.
-#   sum: -66 + 119 = 53. At 1080 the track top lands at int((1080-138)*0.865) + 53 + 66 = 933,
+#   sum: -55 + 99 = 44. At 1080 the track top lands at int((1080-115)*0.865) + 44 + 55 = 933,
 #   i.e. 0.865*1080 within the extent term's 1px int() floor -- exactly where the 1x bar sits.
 # X still gets NO compensation, and only because the .mp-lg block keeps the backdrop SYMMETRIC about
 # the track (left == -bleed', width == track' + 2*bleed'), so `max_x // 2` centres it for free.
-PROGRESS_ANCHOR_Y_OFFSET_LARGE = 53
+PROGRESS_ANCHOR_Y_OFFSET_LARGE = 44
 
 # The damage-efficiency bar's window anchor -- its OWN three constants, not the progress bar's.
 # Only one of the two centre-screen bars is ever open (they are radio alternatives), but the
@@ -173,11 +173,11 @@ EFFICIENCY_ANCHOR_Y_OFFSET = 50
 
 # ...and its LARGE-mode twin, derived exactly as PROGRESS_ANCHOR_Y_OFFSET_LARGE documents at length
 # (read that first -- it explains why only SIZE_F appears here and never SIZE_XF):
-#   1. -(SHIFT_Y_REM * SIZE_F) == -(50 * 1.5) == -75.
-#   2. +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 116 * 1.5)
-#      == round(0.865 * 174) == +151. 174 is the logical-px height MoEEfficiency's transient pushes.
-#   sum: -75 + 151 = 76. At 1080 the track top lands at int((1080-174)*0.865) + 76 + 75 = 934, i.e.
+#   1. -(SHIFT_Y_REM * SIZE_F) == -(50 * 1.25) == -63 (50*1.25 == 62.5, half-away rounds up).
+#   2. +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 116 * 1.25)
+#      == round(0.865 * 145) == +125. 145 is the logical-px height MoEEfficiency's transient pushes.
+#   sum: -63 + 125 = 62. At 1080 the track top lands at int((1080-145)*0.865) + 62 + 63 = 933, i.e.
 #   0.865*1080 within the int() floor -- the same place the 1x bar sits.
 # NOT a mirror of anything: unlike the 1x pair (where round(0.865*116) happened to be 2*50), the two
 # terms here share no coincidence at all. Any JS pad/box/frac change moves this value.
-EFFICIENCY_ANCHOR_Y_OFFSET_LARGE = 76
+EFFICIENCY_ANCHOR_Y_OFFSET_LARGE = 62

@@ -117,10 +117,11 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. TWELVE: the nine through barSize, then transEvents /
-    # transManual and showEvents, all APPENDED after barSize so nothing above them is renumbered.
+    # side only is invisible in the client. FOURTEEN: the nine through barSize, then transEvents /
+    # transManual, showEvents, holdMs and ctrlHeld, all APPENDED after barSize so nothing above them
+    # is renumbered.
     assert set(_push()) == _VM_PROPS
-    assert len(_VM_PROPS) == 12
+    assert len(_VM_PROPS) == 14
 
 
 def test_push_writes_the_two_transition_flags_master_folded():
@@ -177,3 +178,22 @@ def test_push_writes_the_visibility_switches_with_always_folded_in(monkeypatch):
     for key in ("showAlways", "showAltKey", mod_settings.PROGRESS_SHOW_ALWAYS_KEY,
                 mod_settings.PROGRESS_SHOW_ALT_KEY):
         assert key not in props
+
+
+def test_push_writes_hold_ms_as_seconds_times_a_thousand_and_is_not_master_folded():
+    # holdMs is progress_hold_seconds() * 1000, in MS for the JS clock -- and, unlike transEvents /
+    # transManual above, it is DELIBERATELY NOT ANDed with the Transitions master: a duration ANDed
+    # with a switch would push 0 (no hold at all), which is not what that checkbox means.
+    props = _push(**{mod_settings.PROGRESS_HOLD_SECONDS_KEY: 17})
+    assert props["holdMs"] == 17000
+    # The default (5s) survives untouched end to end.
+    props = _push(**{mod_settings.PROGRESS_HOLD_SECONDS_KEY: mod_settings.PROGRESS_HOLD_DEFAULT})
+    assert props["holdMs"] == mod_settings.PROGRESS_HOLD_DEFAULT * 1000 == 5000
+    # Turning the Transitions master OFF must not fold the duration to 0 -- only its own two
+    # sibling switches (transEvents/transManual) fold; the hold is a duration, not a switch.
+    props = _push(**{mod_settings.PROGRESS_TRANSITIONS_KEY: False,
+                     mod_settings.PROGRESS_TRANS_EVENTS_KEY: False,
+                     mod_settings.PROGRESS_TRANS_MANUAL_KEY: False,
+                     mod_settings.PROGRESS_HOLD_SECONDS_KEY: 12})
+    assert props["holdMs"] == 12000
+    assert props["transEvents"] is False and props["transManual"] is False

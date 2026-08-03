@@ -125,6 +125,50 @@ function parseHTML(html, parent) {
     }
 }
 
+// --- document-level mouse events (CAPTURE phase) ---------------------------------------------
+// A document-level mouse bus: addEventListener / removeEventListener("mousedown"/"mousemove"/
+// "mouseup", fn, useCapture) on `document` itself, separate from the El class above (which models a
+// single element's own listeners, e.g. root's "animationend"). It was built for MoEBarTransient.js's
+// `installDrag`, and it OUTLIVED it: the Ctrl+drag reposition moved wholly into Python, so what the
+// two harnesses now use this for is asserting that a whole down/move/up gesture is NEITHER CLAIMED
+// NOR STOPPED by the bar -- i.e. that no document listener exists at all. CAPTURE-phase is still
+// load-bearing for that: capture-registered listeners run BEFORE bubble ones, mirroring the real DOM.
+// `dispatch` returns the (possibly synthetic) event so a caller can read `defaultPrevented` /
+// whether it was stopped.
+function makeDocumentEvents() {
+    const capture = {}, bubble = {};
+    function store(useCapture) { return useCapture ? capture : bubble; }
+    return {
+        addEventListener(type, fn, useCapture) {
+            const s = store(useCapture);
+            (s[type] = s[type] || []).push(fn);
+        },
+        removeEventListener(type, fn, useCapture) {
+            const s = store(useCapture);
+            if (s[type]) s[type] = s[type].filter((f) => f !== fn);
+        },
+        dispatch(type, ev) {
+            let stopped = false;
+            // Plain mutable field, not a getter: Object.assign COPIES a getter's current value
+            // rather than the accessor itself, which would freeze defaultPrevented at its initial
+            // false forever.
+            const e = Object.assign({ defaultPrevented: false }, ev, {
+                stopImmediatePropagation() { stopped = true; },
+                preventDefault() { e.defaultPrevented = true; },
+            });
+            for (const fn of (capture[type] || []).slice()) {
+                if (stopped) return e;
+                fn(e);
+            }
+            for (const fn of (bubble[type] || []).slice()) {
+                if (stopped) return e;
+                fn(e);
+            }
+            return e;
+        },
+    };
+}
+
 // --- the virtual clock ----------------------------------------------------------------------
 // setTimeout / clearTimeout / Date.now / requestAnimationFrame, all driven by advance(ms). Frame
 // callbacks flush on every advance, so a rAF-deferred write lands in a LATER turn than the class
@@ -341,7 +385,7 @@ function probeAll(label, MUTATIONS) {
 module.exports = {
     WIDGET, read,
     counts, section, eq, ok, fail,
-    El, parseHTML, makeClock, makeRootFont,
+    El, parseHTML, makeClock, makeRootFont, makeDocumentEvents,
     jsConst, jsArray, jsFactor, stripComments,
     stripModuleSyntax, concatModules, applyMutation,
     main,

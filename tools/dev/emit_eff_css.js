@@ -244,23 +244,25 @@ const twinRules = life[0].replace(/mp-life/g, "mp-life-b").replace(/mp-run/g, "m
 
 // BLOCK 3: the LARGE size mode (mod_settings.progress_bar_size == 1). The tuner has no size mode, so
 // every declaration here is hand-added -- but there are very few of them, because the mode is
-// delivered by the ROOT FONT SIZE (MoEBarTransient.js's SIZE_F == 1.5, the rem->px factor in
-// Gameface) and only the HORIZONTAL x2 needs CSS: an x-length carries an extra SIZE_XF == 4/3 on top
-// of that root font to reach 2x total. So this block re-declares X-LENGTHS AND NOTHING ELSE.
+// delivered by the ROOT FONT SIZE (MoEBarTransient.js's SIZE_F == 1.25, the rem->px factor in
+// Gameface) and only the HORIZONTAL x-lengths need CSS: an x-length carries an extra SIZE_XF == 4/3
+// on top of that root font to reach 5/3 total. So this block re-declares X-LENGTHS AND NOTHING ELSE
+// -- and none of its VALUES move with SIZE_F (they are the base times SIZE_XF alone, unchanged at
+// 4/3): only the Y in BLOCK 4 below is a function of SIZE_F.
 const LARGE = `
 /* ===== HAND-ADDED BLOCK 3 OF 4 -- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size == 1).
    NOT tuned, and no tuned value above is touched. The tuner has no size mode at all, which is why
    this cannot come out of the emit.
    WHY SO LITTLE CSS: the mode is delivered by the ROOT FONT SIZE (MoEBarTransient.js's SIZE_F ==
-   1.5, which IS the rem->px factor in Gameface -- WG's own bootstrap writes it from
+   1.25, which IS the rem->px factor in Gameface -- WG's own bootstrap writes it from
    self.onScaleUpdated, and our registered views never load that bootstrap, hence every
-   "1rem == 1 logical px" comment in this mod). That single write re-lays the whole composition 1.5x
-   larger, CRISPLY, and correctly leaves every %, em, \`contain\`, gradient stop and derived icon
-   background-size ratio alone -- so height, every font, every icon box, every glow radius, the
+   "1rem == 1 logical px" comment in this mod). That single write re-lays the whole composition
+   1.25x larger, CRISPLY, and correctly leaves every %, em, \`contain\`, gradient stop and derived
+   icon background-size ratio alone -- so height, every font, every icon box, every glow radius, the
    vertical gaps and mp-life's 20rem slide all scale with NO rule below. What is left is the
-   HORIZONTAL x2: an x-length must carry an extra SIZE_XF == 4/3 (1.5 * 4/3 == 2), so EVERY
-   declaration below is an x-length and nothing else. Do NOT add a font-size, a height or a keyframe
-   here -- that would double-apply SIZE_F.
+   HORIZONTAL x-lengths: an x-length must carry an extra SIZE_XF == 4/3 (1.25 * 4/3 == 5/3), so
+   EVERY declaration below is an x-length and nothing else. Do NOT add a font-size, a height or a
+   keyframe here -- that would double-apply SIZE_F.
    SCOPE: \`.mp-lg\` goes on the BODY (MoEBarTransient.applySize), WG's own ancestor-class idiom
    (.mediaLargeWidth ...). It cannot go on #moe-bar-root: #moe-bar-box is a body-level SIBLING of the
    JS-created root. Every selector is its base rule plus one class, so it out-specifies it (the .bm
@@ -319,11 +321,13 @@ const QUANT = `
    ...PLUS, ON THE TWO LARGE RULES ONLY, A PER-PIXEL NUDGE EYEBALLED AGAINST THE LARGE RENDER AT
    INTERFACE SCALE 1. Distinct in kind from the -1rem above, which came off ink extents: these two
    are the maintainer's eye on the composition, so they are a CALIBRATION, not a derivation.
-       icon   1 device px DOWN   -0.5 + 0.667 == 0.167rem
-       delta  2 device px UP      1.5 - 1.333 == 0.167rem
-   1 device px is 1/SIZE_F rem here, because Large IS the root font: baseFont * SIZE_F == 1 * 1.5, so
-   0.667rem. THAT BOTH LAND ON 0.167 IS A COINCIDENCE of two opposite nudges one rem apart -- they
-   are independently measured, will move independently, and must NEVER be factored into a shared
+       icon   1 device px DOWN   -0.5 + 0.8 == 0.3rem
+       delta  1 device px UP      1.5 - 0.8 == 0.7rem
+   1 device px is 1/SIZE_F rem here, because Large IS the root font: baseFont * SIZE_F == 1 * 1.25,
+   so 0.8rem exactly. The two nudges are INDEPENDENT -- they landed on the same 0.167rem at the
+   earlier SIZE_F == 1.5 (a coincidence of two opposite nudges one rem apart) and no longer agree at
+   SIZE_F == 1.25, and the delta's own pixel count moved again for a later 1px-down retune (2 device
+   px UP -> 1 device px UP) while the icon's did not -- they must NEVER be factored into a shared
    constant. A future retune of a base Y has to carry BOTH terms (see the pin in
    tests/test_caption_anchor_quantisation.py, which re-derives each value as base - 1rem +/- an
    explicit device-PIXEL COUNT over SIZE_F).
@@ -343,9 +347,9 @@ const QUANT = `
    render. Same for an untrusted read (see the trust gate in MoEBarTransient.js).
 ===== */
 .mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(-0.5rem); }
-.mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.167rem); }
+.mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.3rem); }
 .mp-s1 .mp-cap .mp-d            { transform: translate(4.2rem, 1.5rem); }
-.mp-s1.mp-lg .mp-cap .mp-d      { transform: translate(5.6rem, 0.167rem); }
+.mp-s1.mp-lg .mp-cap .mp-d      { transform: translate(5.6rem, 0.7rem); }
 /* ===== END HAND-ADDED BLOCK 4 ===== */
 `;
 

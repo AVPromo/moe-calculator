@@ -29,10 +29,12 @@ itself pixel-identical to the approved render (shot_052 against shot_049).
 
 THE LARGE MODE AT FACTOR 1 TAKES TWO MORE TERMS, EYEBALLED AND NOT MEASURED -- a calibration of the
 composition by the maintainer's eye, distinct in kind from the -1rem above, which came off ink
-extents. On top of the -1rem: the ICON goes 1 device pixel DOWN, the DELTA 2 device pixels UP. One
-device pixel is 1/SIZE_F rem there, because Large IS the root font (baseFont * SIZE_F == 1 * 1.5),
-i.e. 0.667rem. Both values land on 0.167rem, which is a COINCIDENCE of two opposite nudges one rem
-apart -- they are independent, will move independently, and must never be factored into one constant.
+extents. On top of the -1rem: the ICON goes 1 device pixel DOWN, the DELTA 1 device pixel UP (was 2,
+retuned 1px down). One device pixel is 1/SIZE_F rem there, because Large IS the root font
+(baseFont * SIZE_F == 1 * 1.25), i.e. 0.8rem exactly. The two land on DIFFERENT values (0.3 / 0.7) --
+they are independent, move independently, and must never be factored into one constant (at the
+earlier SIZE_F == 1.5 they happened to coincide on 0.167rem, which is exactly the coincidence this
+independence claim warns against banking on).
 The Default-size pair takes NO nudge (verified above), and Large at factor 2 carries no class at all,
 so it renders the untouched base.
 
@@ -154,12 +156,14 @@ from test_caption_line_box_pins import _read, _WIDGET
 # a calibration of the composition, not a derivation, so it is spelled as the pixel count the
 # maintainer actually judged and converted here -- retuning a shipped value by hand without moving its
 # pixel count fails this file.
-# THE TWO NUDGES ARE INDEPENDENT. They currently produce the SAME 0.167rem, which is a coincidence of
-# two opposite nudges one rem apart; they will move independently and must never become one constant.
+# THE TWO NUDGES ARE INDEPENDENT. They landed on the SAME 0.167rem at the old SIZE_F == 1.5 (a
+# coincidence of two opposite nudges one rem apart) and no longer agree at SIZE_F == 1.25 (0.3 vs
+# 0.7) -- proof they were never one constant. The delta's own pixel count also moved with the 1px-
+# down retune (2 device px UP -> 1 device px UP); the icon's is untouched by that retune.
 _CORRECTED = ((".mp-s1 .mp-cap.up .mp-ico", ".mp-cap.up .mp-ico", 0),
               (".mp-s1.mp-lg .mp-cap.up .mp-ico", ".mp-lg .mp-cap.up .mp-ico", +1),
               (".mp-s1 .mp-cap .mp-d", ".mp-cap .mp-d", 0),
-              (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-lg .mp-cap .mp-d", -2))
+              (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-lg .mp-cap .mp-d", -1))
 
 # --- THE MOVING AVERAGE BAR (MoEProgress.css): TWO pieces, FOUR rules -----------------------------
 # Everything below is re-derived FROM MoEProgress.css; nothing is transcribed, so a retune of any
@@ -169,6 +173,11 @@ _CORRECTED = ((".mp-s1 .mp-cap.up .mp-ico", ".mp-cap.up .mp-ico", 0),
 # rule, which is where this bar differs from the sibling: NEITHER size-mode twin
 # (`.mp-lg .mp-capC .mp-ico`, `.mp-lg .mp-cap .mp-d`) declares a transform -- both are margin-left --
 # so the Large render's Y comes from the base rule too.
+# THE DELTA IS BACK: the base rule's anchor is 1.5rem (translateY(2.5rem) -> translateY(1rem) ->
+# translateY(1.5rem)), which is fractional again, so it resolves differently at the two factors and
+# takes the same one-device-pixel correction as the icon -- see
+# test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction, which still derives that from the
+# arithmetic rather than assuming it.
 _MA_CORRECTED = ((".mp-s1 .mp-capC .mp-ico", ".mp-capC .mp-ico", False),
                  (".mp-s1.mp-lg .mp-capC .mp-ico", ".mp-capC .mp-ico", True),
                  (".mp-s1 .mp-cap .mp-d", ".mp-cap .mp-d", False),
@@ -453,8 +462,7 @@ def test_the_ma_large_twin_is_a_compound_and_keeps_the_base_x_verbatim():
     css = _bare(_read(_WIDGET, "MoEProgress.css"))
     assert not re.search(r"(?m)^\.mp-s1 \.mp-lg", css), \
         "the MA Large correction is a DESCENDANT selector -- it cannot out-specify the size mode"
-    for plain_row, large_row in ((_MA_CORRECTED[0], _MA_CORRECTED[1]),
-                                 (_MA_CORRECTED[2], _MA_CORRECTED[3])):
+    for plain_row, large_row in ((_MA_CORRECTED[0], _MA_CORRECTED[1]),):
         base = _transform(css, plain_row[1], "MoEProgress.css")
         base_match, _base_y = _y_term(base)
         skeleton = (base[:base_match.start(1)], base[base_match.end(1):])

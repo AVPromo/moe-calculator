@@ -11,6 +11,13 @@
 //   * the negative-`animation-delay` debounce (armRun's seek) -- mp-life bakes fade-in, hold and
 //     fade-out into ONE both-filled keyframe, so its hold CANNOT be extended in place;
 //   * holding a peek open by pausing `animationPlayState` and, on release, seeking -3600ms;
+//   * ...and, for exactly that reason, the CONFIGURABLE hold is a CORRECTION to the keyframe's own
+//     deadline (holdFrom), NEVER a replacement for it: at the default it does NOTHING, so the run
+//     stays byte-for-byte the shipped one -- ONE identity, ended by its own animationend. Do NOT
+//     "unify" that into always-pause-then-re-arm: that costs every ordinary auto-hide an extra
+//     mp-run/mp-run-b flip mid-run (a flicker risk, and 11 red assertions in
+//     tools/dev/check_progress_js.js). Do NOT scale `animation-duration` either -- mp-life's stops
+//     are PERCENTAGES, so that stretches the fades too;
 //   * deriving the peek phase from ELAPSED TIME (plateauAt + HOLD_MS), never from a `showing` flag
 //     -- `showing` stays true through the whole fade-out, so a flag-based branch pins the bar at
 //     partial opacity;
@@ -33,7 +40,10 @@
 // Declared as bare `const` and re-exported below so a plain `^const NAME = <int>;` scrape still
 // finds them (the mirror tests and the dev harnesses read these out of the source text).
 const FADE_IN_MS = 600;              // meta.fadeInMs == the 9.68% keyframe stop of mp-life
-const HOLD_MS = 5000;                // meta.holdMs
+const HOLD_MS = 5000;                // meta.holdMs -- the BAKED hold. The LIVE one is the closure's
+                                     // `holdMs` (see applyHold): user-configurable, JS-driven, and
+                                     // defaulting to exactly this. HOLD_MS stays the keyframe's own
+                                     // contract, so SEEK_FADE_OUT below is still the 90.32% stop.
 const FADE_OUT_MS = 600;             // meta.fadeOutMs (== fadeInMs in both tuned JSONs)
 const TOTAL_MS = FADE_IN_MS + HOLD_MS + FADE_OUT_MS;   // meta.totalMs == mp-life's own 6200ms
 
@@ -76,11 +86,14 @@ const END_MARGIN_MS = 250;
 // THE SURFACE RECT IS THE MOUSE HIT RECT -- exactly why WindowFlags.WINDOW_FULLSCREEN was rejected
 // for these windows (bridge/battle_view.py). A ~480rem-wide surface across screen centre would be an
 // input-stealing strip, and these bars are purely decorative and must never take input. So collapse
-// the input rect with an EQUAL padding on all four sides. Confirmed against WG's own JS wrapper
-// (gui-part3.pkg battle/battle_notifier/BattleNotifierView/BattleNotifierView.js): the order is
-// (top, right, bottom, left, 15) -- but our four values are equal anyway, so the order is moot. Do
-// NOT "clean this up" into asymmetric per-side values. Negative values are rejected, so a padding
-// can only shrink the rect inward; half the LARGER dimension therefore collapses both axes to
+// the input rect with an EQUAL padding on all four sides, PERMANENTLY -- this document needs no
+// mouse input at ALL any more: the Ctrl+drag reposition is driven entirely from Python
+// (adapter/battle_input samples the keys, bridge/bar_window re-places the window from the live
+// cursor), so the rect that used to be OPENED for the gesture never opens again. Confirmed against
+// WG's own JS wrapper (gui-part3.pkg battle/battle_notifier/BattleNotifierView/BattleNotifierView.js):
+// the order is (top, right, bottom, left, 15) -- but our four values are equal anyway, so the order
+// is moot. Do NOT "clean this up" into asymmetric per-side values. Negative values are rejected, so a
+// padding can only shrink the rect inward; half the LARGER dimension therefore collapses both axes to
 // nothing. HIT_MAGIC mirrors WG's constant; its meaning is unknown, so the call is retried without
 // it if the 5-argument form is rejected.
 const HIT_MAGIC = 15;
@@ -93,16 +106,17 @@ const HIT_MAGIC = 15;
 // root font size, and WG's own bootstrap (gui/gameface/js/index.js) ends by writing it from
 // `self.onScaleUpdated` -- a bootstrap our REGISTERED views never load, which is exactly why every
 // comment in this mod asserts 1rem == 1 logical px. So one write of `base * SIZE_F` re-lays the whole
-// composition 1.5x larger, CRISPLY (a real reflow, not a bitmap upscale), and leaves every %, em,
+// composition 1.25x larger, CRISPLY (a real reflow, not a bitmap upscale), and leaves every %, em,
 // `contain`, gradient stop and derived icon background-size ratio correctly untouched: height, fonts,
 // icon boxes, glow radii, vertical gaps and mp-life's slide all scale with NO CSS edit at all.
-// SIZE_XF is what is left over: an x-length must reach 2x TOTAL, and the root font already gives it
+// SIZE_XF is what is left over: an x-length must reach 5/3 TOTAL, and the root font already gives it
 // SIZE_F, so the stylesheets' one appended `.mp-lg` block re-declares ONLY the x-lengths, multiplied
-// by this. 1.5 * 4/3 == 2 exactly.
+// by this. 1.25 * 4/3 == 5/3 exactly (~1.667x -- was 1.5 * 4/3 == 2x before the Large mode was
+// eased off a pure 1.5x/2x scale-up).
 // THE ENGINE APIs ARE NOT AFFECTED BY OUR ROOT FONT: resizeViewRem / setHitAreaPaddingsRem are C++
 // and take logical px, so their arguments carry BOTH factors (see applySize). The CSS `left`/`top`
 // rigid shift stays in rem and self-scales, which is why shiftY needs no term at all.
-const SIZE_F = 1.5;
+const SIZE_F = 1.25;
 const SIZE_XF = 4 / 3;
 
 
@@ -138,7 +152,7 @@ function fmt(n) {
 //   onEnd()                       OPTIONAL. endRun's force-settle tail.
 //   onIdle()                      OPTIONAL. reset's tail (the resting/hidden state).
 //
-// Returns { mount, settled, show, peek, size, anim, reset, disarm }.
+// Returns { mount, settled, show, peek, ctrl, size, anim, hold, reset, disarm }.
 export function createTransient(cfg) {
     const root = cfg.root;
     const nop = function () {};
@@ -171,8 +185,18 @@ export function createTransient(cfg) {
     let large = false;
     let baseFont = 0;
 
+    // THE CTRL+DRAG's ONLY remaining state here: `ctrlHeld` is the pushed key state (VM `ctrlHeld`),
+    // and all it does now is HOLD THE BAR UP while the key is down, so there is something on screen
+    // to grab. The gesture itself is Python's end to end (adapter/battle_input +
+    // bridge/bar_window.drag) -- this document has no mousedown/mousemove/mouseup listener, no
+    // reverse command, and no delta to report.
+    let ctrlHeld = false;
+
     // Animation state. `showing` = the bar is visibly up (running or peek-held). `peeking` = Alt is
-    // held, so the bar is pinned at the hold plateau with no fade-out. `plateauAt` = the wall-clock
+    // held, so the bar is pinned at the hold plateau with no fade-out (`peekT` is that pause's
+    // timer). `holdT` is a SEPARATE timer that only exists while a configured hold differs from the
+    // keyframe's baked one -- see holdFrom, which is a no-op (and leaves this null) at the default.
+    // `plateauAt` = the wall-clock
     // ms at which the running animation reaches (or reached) that plateau -- the ONLY thing the
     // peek needs to know about the animation's progress, since Gameface exposes no readable
     // playback position. `dmgPlateauAt` = the same instant for the most recent DAMAGE-driven show
@@ -185,6 +209,7 @@ export function createTransient(cfg) {
     // is neither clipped nor mis-placed. Until then the bar must NOT be shown by ANY trigger.
     let settled = false;
     let peekT = null;
+    let holdT = null;
     let showing = false;
     let peeking = false;
     let plateauAt = 0;
@@ -204,6 +229,13 @@ export function createTransient(cfg) {
     let animEvents = true;
     let animManual = true;
     let animated = true;
+
+    // THE HOLD DURATION in ms (mod_settings.progress_hold_seconds * 1000, pushed as the VM's
+    // `holdMs`). Read by holdFrom at the moment a hold STARTS, so a live settings change lands on
+    // the next show instead of truncating a hold in flight. Defaults to the keyframe's OWN baked
+    // HOLD_MS, which is what makes holdFrom a no-op -- and therefore the whole feature inert -- for
+    // an unpushed model, an old harness fixture, and every user who never moves the slider.
+    let holdMs = HOLD_MS;
 
     // The live run's id, and the last id already ended. endRun is idempotent on this pair:
     // whichever of animationend / the fallback timer arrives first wins and the other becomes a
@@ -244,6 +276,9 @@ export function createTransient(cfg) {
         // seekMs is exactly the ms left until it. endRun's disarm() drops the run class there and the
         // base #moe-bar-root{opacity:0} applies the same frame, so the fade-out never plays; the real
         // animationend arriving later is a no-op through the endedId guard.
+        // BOTH of those instants assume the keyframe's OWN baked hold. A configured hold that
+        // differs re-targets them -- see holdFrom, which is the one place that corrects this and
+        // which is a NO-OP at the default, so this line stays the whole story for the shipped bar.
         endT = setTimeout(function () { endRun(id); },
                           animated ? TOTAL_MS - seekMs + END_MARGIN_MS
                                    : Math.max(0, SEEK_FADE_OUT - seekMs));
@@ -253,6 +288,79 @@ export function createTransient(cfg) {
         // peek knows where the run is -- see peekOn. Only meaningful while the run is NOT paused
         // (wall-clock keeps running, the animation does not).
         plateauAt = Date.now() + FADE_IN_MS - seekMs;
+    }
+
+    // THE CONFIGURABLE HOLD, as a CORRECTION to the run mp-life already bakes -- deliberately NOT a
+    // replacement for it. mp-life bakes fade-in + a HOLD_MS hold + fade-out into ONE both-filled
+    // keyframe, so every armed run already leaves its hold at `plateauAt + HOLD_MS` (which is also
+    // where armRun's un-animated endT lands). All this does is move that one instant to
+    // `plateau + holdMs`, and it is the ONLY thing in the module that knows the hold is
+    // configurable.
+    //
+    // THAT FRAMING IS LOAD-BEARING, NOT STYLE. An earlier build drove the hold entirely from JS --
+    // pause EVERY run at its plateau and release it with an explicit armRun(SEEK_FADE_OUT) -- which
+    // works, but cost every ordinary auto-hide an EXTRA .mp-run/.mp-run-b identity flip mid-run that
+    // the shipped single-run path never had (a live flicker risk on the most common path, and 11
+    // red assertions in tools/dev/check_progress_js.js). As a correction instead, `want === baked`
+    // at the default and this function RETURNS HAVING DONE NOTHING: the shipped run plays start to
+    // finish on one identity, ends on its own animationend, and the whole feature is inert until the
+    // user actually moves the slider. That is not a "default uses the baked hold" special case --
+    // it is the fixed point of "move the deadline to where it already is".
+    //
+    // LONGER  -> the keyframe would fade out too early, so PAUSE the run at its plateau (opacity 1
+    //            and the slide both COMPLETE, so the pause is invisible) and release it at `want`.
+    // SHORTER -> nothing to pause; just release early.
+    // Either way the release is peekOff's own proven idiom (releaseHold), so a re-arm -- and its one
+    // identity flip -- happens ONLY on a hold the user actually changed away from 5s. Resuming a
+    // pause IN PLACE would avoid even that, but `animationPlayState = ""` on a PAUSED animation is
+    // unproven in Coherent (peekOff has always re-armed rather than resume), so it is not used.
+    //
+    // `plateau` is the wall-clock instant the hold STARTS, never a duration -- which is what lets
+    // peekOff resume an interrupted event hold at its ORIGINAL deadline (dmgPlateauAt) rather than
+    // granting it a fresh one. `baked` is read off plateauAt (armRun's clock) rather than assumed,
+    // so it is correct for ANY seek the run was armed with, including peekOff's resume seek.
+    // The runId capture makes a correction from a superseded run a no-op, exactly like endT.
+    function holdFrom(plateau) {
+        clearTimeout(holdT);
+        const baked = plateauAt + HOLD_MS;      // when THIS run's keyframe leaves the hold
+        const want = plateau + holdMs;          // ...and when the setting says it should
+        if (want === baked) return;             // the keyframe IS the hold -- nothing to correct
+        const id = runId;
+        const release = function () { if (id === runId) releaseHold(); };
+        if (want < baked) {
+            holdT = setTimeout(release, Math.max(0, want - Date.now()));
+            return;
+        }
+        holdT = setTimeout(function () {
+            if (id !== runId) return;
+            root.style.animationPlayState = "paused";
+            clearTimeout(endT);                 // a paused run never reaches its own end
+            // While Alt is held the pause simply has no expiry -- peekOff is then the release, and
+            // its resume branch calls back in here to re-apply the correction.
+            if (!peeking) holdT = setTimeout(release, Math.max(0, want - Date.now()));
+        }, Math.max(0, plateauAt - Date.now()));
+    }
+
+    // Leave the hold the way the LIVE RUN's `animated` says. Shared by holdFrom's correction and by
+    // peekOff, so "the configured hold ran out" and "Alt was released" are one exit.
+    // `inLeft` is how much of the ENTRY was still owed, mirrored back BEFORE the 90.32% stop so the
+    // fade-out starts at the opacity the bar is already at. It is 0 for a hold correction (which
+    // fires at or past the plateau by construction) and only ever nonzero for a release that beat
+    // the pause -- THE PEEK IS STRICTLY HOLD-TO-SHOW, including a sub-FADE_IN_MS tap. (An earlier
+    // build bailed on `animationPlayState !== "paused"` instead, which re-armed nothing, so a tap
+    // served the whole transient and read as a toggle-on with a 5s auto-hide.) COSMETIC,
+    // DELIBERATELY NOT FIXED: the mirror is linear while both fade halves are ease-in, so a release
+    // mid-fade-in can step opacity by up to ~0.2 -- only reachable on that same barely-visible tap.
+    function releaseHold() {
+        // Un-animated: end it outright rather than arming a fade-out. endRun does the disarm (base
+        // opacity 0, same frame) plus the bookkeeping every other end does, and the endedId guard
+        // makes any late real animationend a no-op.
+        if (!animated) {
+            endRun(runId);
+            return;
+        }
+        const inLeft = Math.min(FADE_IN_MS, Math.max(0, plateauAt - Date.now()));
+        armRun(SEEK_FADE_OUT + inLeft);
     }
 
     // COLD SHOW: the bar is not up -> play the whole mp-life transient. `fromDamage` distinguishes
@@ -273,6 +381,7 @@ export function createTransient(cfg) {
         // A cold show plays the entry in full (plateauAt too) -- unless it is un-animated, where
         // arming AT the plateau (opacity 1, translateY(0) both complete) IS the instant appearance.
         armRun(animated ? SEEK_NONE : SEEK_PLATEAU);
+        holdFrom(plateauAt);        // ... and the hold this entry earns starts THERE, not now
         if (fromDamage) dmgPlateauAt = plateauAt;
         showing = true;
         if (fromDamage && animated) onCommit(true);   // cold: the target must land in a LATER frame
@@ -291,6 +400,7 @@ export function createTransient(cfg) {
         animated = animEvents;
         if (!peeking) {
             armRun(SEEK_PLATEAU);        // the seek lands us AT the plateau (armRun sets plateauAt)
+            holdFrom(plateauAt);         // ... and this event's hold starts there, fresh
         }
         // THIS event's hold, remembered so an Alt release resumes it instead of discarding it
         // (peekOff). The peeking branch is the whole reason this is not just read off `plateauAt`:
@@ -311,7 +421,13 @@ export function createTransient(cfg) {
         clearTimeout(peekT);
         if (!showing) {
             coldShow(false);            // full entry, then pause below once it lands
-        } else if (!peeking && Date.now() >= plateauAt + HOLD_MS) {
+        } else if (!peeking && root.style.animationPlayState !== "paused"
+                   && Date.now() >= plateauAt + HOLD_MS) {
+            // NOT PAUSED is a cheap extra guard for the LONGER hold correction, which parks the run
+            // at its plateau at full opacity: there the wall-clock test alone can read true mid-hold,
+            // and a paused run is by definition already AT the plateau, so there is nothing to catch.
+            // At the default (and for any SHORTER hold) nothing is ever paused here and this term is
+            // constant, so the branch below is the shipped one.
             // ALT PRESSED DURING THE FADE-OUT -- `showing` stays true all the way through it (only
             // endRun clears it), so pausing here would pin the bar at partial opacity.
             // plateauAt + HOLD_MS is the 90.32% stop (== elapsed SEEK_FADE_OUT, see armRun's run
@@ -326,6 +442,13 @@ export function createTransient(cfg) {
             animated = animManual;
             armRun(SEEK_PLATEAU);
         }
+        // ALT OWNS THE HOLD FROM HERE, so drop any pending hold CORRECTION -- peekOff's resume
+        // branch re-applies it on release. This has to come AFTER the branch above, not before it:
+        // the cold entry inside it goes through coldShow, which arms a correction of its OWN, so
+        // clearing first left a SHORTER-than-baked hold free to release the bar out from under a
+        // still-held Alt (measured: a 2s hold ended the peek 3.2s in, ignoring the key entirely).
+        // A LONGER hold loses nothing by this -- peekT below is the pause that parks the bar anyway.
+        clearTimeout(holdT);
         peeking = true;
         // Pause once the entry has completed -- pausing mid-fade-in would freeze the bar at partial
         // opacity. If the bar was already PAST the entry the wait is 0 and it pauses on this tick.
@@ -338,45 +461,37 @@ export function createTransient(cfg) {
         }, Math.max(0, plateauAt - Date.now()));
     }
 
-    // Alt released -> fade out NOW rather than serving the rest of the hold: unpause and seek
-    // straight to the 90.32% stop, so only the fade-out plays. THE PEEK IS STRICTLY HOLD-TO-SHOW,
-    // so this must be true for EVERY release, including one that beats the pause -- hence the
-    // MIRROR: `inLeft` is how much of the entry was still owed, and starting that far BEFORE the
-    // 90.32% stop lands the run at the same opacity it was already at. A peek that did pause is
-    // past the plateau, so inLeft == 0 and the seek is exactly SEEK_FADE_OUT. (An earlier build
-    // bailed on `animationPlayState !== "paused"` instead, which re-armed nothing, so a
-    // sub-FADE_IN_MS tap served the whole transient and read as a toggle-on with a 5s auto-hide.)
-    // COSMETIC, DELIBERATELY NOT FIXED: the mirror is linear while both fade halves are ease-in, so
-    // a release mid-fade-in can step opacity by up to ~0.2. Only reachable on a sub-600ms tap,
-    // where the bar is barely visible at all.
+    // Alt released -> fade out NOW rather than serving the rest of the hold: releaseHold, which
+    // unpauses and seeks straight to the 90.32% stop so only the fade-out plays (see it for the
+    // sub-FADE_IN_MS tap mirror -- THE PEEK IS STRICTLY HOLD-TO-SHOW, and a release NEVER earns
+    // another `holdMs`).
     //
     // EXCEPT when the peek interrupted a DATA-driven show that still has hold left: players hold
-    // Alt near-constantly (extended markers), so fading out there would truncate an event's 5s to
+    // Alt near-constantly (extended markers), so fading out there would truncate an event's hold to
     // whatever was left of the peek. RESUME that hold instead, at its true elapsed position:
     // seeking (now - dmgPlateauAt) PAST the plateau makes armRun's clock re-derive
     // plateauAt == dmgPlateauAt, so the resumed run's fade-out starts at exactly the instant the
     // original hold would have -- not later. The pause is simply not credited back: the hold is
     // wall-clock, as it was before any Alt.
+    // THE SEEK IS CAPPED AT THE BAKED HOLD, because that is all the keyframe HAS: past
+    // SEEK_FADE_OUT it would land in (or beyond) the fade-out. Only reachable with a hold LONGER
+    // than HOLD_MS, and holdFrom then carries the rest -- it re-derives `baked` off the seeked
+    // plateauAt, so the capped seek plus the correction still add up to dmgPlateauAt + holdMs. At
+    // the default the cap can never bind (the branch above requires elapsed < holdMs == HOLD_MS),
+    // so this is the shipped seek exactly.
     function peekOff() {
         clearTimeout(peekT);
         if (!peeking) return;
         peeking = false;
-        if (dmgPlateauAt + HOLD_MS > Date.now()) {
+        if (dmgPlateauAt + holdMs > Date.now()) {
             // The run being resumed is the EVENT's hold, so it exits the EVENT's way.
             animated = animEvents;
-            armRun(SEEK_PLATEAU + (Date.now() - dmgPlateauAt));
+            armRun(SEEK_PLATEAU + Math.min(Date.now() - dmgPlateauAt, HOLD_MS));
+            holdFrom(dmgPlateauAt);
             return;
         }
-        // ...otherwise this release IS the exit of the run Alt armed, so it follows `animated`: end
-        // it outright rather than arming a fade-out. endRun does the disarm (base opacity 0, same
-        // frame) plus the bookkeeping every other end does, and the endedId guard makes the late real
-        // animationend a no-op.
-        if (!animated) {
-            endRun(runId);
-            return;
-        }
-        const inLeft = Math.min(FADE_IN_MS, Math.max(0, plateauAt - Date.now()));
-        armRun(SEEK_FADE_OUT + inLeft);
+        // ...otherwise this release IS the exit of the run Alt armed, so it follows `animated`.
+        releaseHold();
     }
 
     // FORCE-SETTLE, and the ONE place the "run is over" state is cleared. mp-life is both-filled so
@@ -389,6 +504,7 @@ export function createTransient(cfg) {
         endedId = id;
         clearTimeout(endT);
         clearTimeout(peekT);
+        clearTimeout(holdT);
         disarm();
         showing = false;
         peeking = false;
@@ -410,9 +526,15 @@ export function createTransient(cfg) {
     // scoreboard opening and closing must not replay the bar).
     function reset() {
         clearTimeout(peekT);
+        clearTimeout(holdT);
         clearTimeout(endT);
         endedId = runId;                 // no live run left for a late animationend to end
         disarm();
+        // DROP THE HELD-CTRL FLAG HERE TOO. This is the "bar hidden" path (a scoreboard, a spectate,
+        // the feature switched off mid-battle, a new battle), and it can land with Ctrl still down --
+        // leaving the flag set would let the next peek() call pin a bar that was just reset. Ctrl
+        // coming back up sets it again through the same one-line applyCtrl.
+        applyCtrl(false);
         root.style.animationPlayState = "";
         root.style.animationDelay = "0ms";
         showing = false;
@@ -435,6 +557,17 @@ export function createTransient(cfg) {
         try {
             if (viewEnv.resizeViewRem) viewEnv.resizeViewRem(viewW, viewH);
         } catch (e) { /* fail-soft: a clipped bar beats a dead one */ }
+        pushHitArea();
+    }
+
+    // THE INPUT RECT, kept as its own function because it is the one engine call with a two-tier
+    // argument fallback. It is ALWAYS the collapsing push now: the rect used to be OPENED (padding
+    // 0, i.e. the whole surface rect live) while Ctrl was held, so the bar's own document could
+    // receive the drag's mouse events -- and that opening was the HUD-input-stealing hazard the old
+    // design had to manage on every path that could leave the gesture. Python owning the gesture
+    // retires it: nothing in here needs a mouse event, so the rect never opens.
+    function pushHitArea() {
+        if (typeof viewEnv === "undefined" || !viewEnv) return;
         if (!viewEnv.setHitAreaPaddingsRem) return;
         try {
             viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad, HIT_MAGIC);
@@ -528,8 +661,8 @@ export function createTransient(cfg) {
         large = flag;
         const xf = large ? SIZE_XF : 1;
         const f = large ? SIZE_F : 1;
-        // ROUNDED, because 4/3 is not representable: (460 * 4/3 + 20) * 1.5 evaluates to
-        // 949.9999999999999, and the engine takes whole logical px (a floor there would hand us a
+        // ROUNDED, because 4/3 is not representable: (460 * 4/3 + 20) * 1.25 evaluates to
+        // 791.6666666666665, and the engine takes whole logical px (a floor there would hand us a
         // 1px-narrow surface). Both factors are exact at the shipped size, so this is identity there.
         viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);
         viewH = Math.round((cfg.boxH + 2 * cfg.pad) * f);
@@ -570,6 +703,52 @@ export function createTransient(cfg) {
     function applyAnim(events, manual) {
         animEvents = events !== false;
         animManual = manual !== false;
+    }
+
+    // The pushed HOLD DURATION (VM `holdMs`). Plumbed exactly like applyAnim -- idempotent, safe on
+    // every render, and it only records what the NEXT hold reads (holdFrom), so a live settings
+    // change lands on the next show rather than truncating a hold in flight.
+    // ABSENT MEANS THE SHIPPED 5000, NEVER 0, which is why the test is `> 0` and not a bare cast: a
+    // model that does not carry the field at all (a pre-push frame, an old harness fixture, a
+    // marshal that dropped it) yields NaN, and `NaN > 0` is false -- so it degrades to the BAKED
+    // hold, the same fail-soft direction applyAnim takes. A 0 would mean "no hold at all".
+    function applyHold(ms) {
+        const v = Number(ms);
+        holdMs = v > 0 ? v : HOLD_MS;
+    }
+
+    // --- CTRL+DRAG TO REPOSITION: NOT IN THIS FILE ANY MORE -------------------------------
+    // The gesture is Python's, end to end. adapter/battle_input samples Ctrl AND the left mouse
+    // button off WG's own input dispatchers and reports start/move/end; bridge/bar_window re-places
+    // the window ABSOLUTELY from GUI.mcursor().position on every movement. This document's only part
+    // is `ctrlHeld` below, which holds the bar up so there is something to grab.
+    //
+    // WHAT WAS DELETED AND WHY IT CANNOT COME BACK. There used to be a document-level
+    // mousedown/mousemove/mouseup drag here (`installDrag`) reporting a cursor DELTA through a
+    // `setPosition` reverse command. Three structural failures, not three bugs:
+    //   (1) the reported delta was DEVICE px while window.move takes LOGICAL px, so it needed a gain
+    //       factor -- and interfaceScale, the obvious candidate, over-corrected;
+    //   (2) each bar IS its own window and THE SURFACE RECT IS THE MOUSE HIT RECT, so mouse events
+    //       only reached this document while the cursor stayed inside the bar-sized rect. Any gain
+    //       error or round-trip lag let the cursor drift out; events stopped, then resumed, and the
+    //       bar lurched ("jumps wildly near the edges of the bar"). Capture-phase listeners do NOT
+    //       help -- that is DOM propagation inside a document, not the engine's hit test;
+    //   (3) the JS -> Python -> engine round trip lags under battle load.
+    // An ABSOLUTE mapping has no gain factor to get wrong and needs no mouse input in the document
+    // at all, which is also why the hit rect is now permanently collapsed (see pushHitArea).
+    // Re-introducing any delta protocol re-introduces all three.
+
+    // The pushed CTRL state (VM `ctrlHeld`), read every render like applySize / applyAnim, and now
+    // just a flag: `peek()` reads it back, so a held Ctrl pins the bar at its hold plateau exactly
+    // like a held Alt.
+    //
+    // `=== true`, NOT `!== false`, and that is the OPPOSITE of the two switches above ON PURPOSE:
+    // both rules say "fail soft toward the SHIPPED behaviour", and the shipped bar is NOT pinned up.
+    // An absent field (a pre-push frame, an old harness fixture, a marshal that dropped it) must
+    // therefore read as NOT HELD -- `!== false` would peek forever on any model that never carries
+    // the flag, and the bar would never come down.
+    function applyCtrl(held) {
+        ctrlHeld = held === true;
     }
 
     // Wire the bar up, ONCE, on engine ready. Three parts, in this order:
@@ -644,13 +823,23 @@ export function createTransient(cfg) {
         },
         // Alt is an ADDITIVE trigger, never a gate. Re-peeking while already peeking is a no-op, so
         // a re-push that merely carries altHeld again cannot restart the hold.
+        //
+        // CTRL RIDES THE SAME PEEK, deliberately reusing it rather than adding a hold path: the
+        // reposition gesture needs the bar up and pinned for exactly as long as the key is down,
+        // which IS what peekOn does (pause at the hold plateau, never end the run). So a held Ctrl
+        // peeks like a held Alt, and releasing either one releases the peek only if the other is up
+        // too. This is now the bar's ENTIRE part in the gesture -- Python does the rest.
         peek: function (held) {
-            if (held) {
+            if (held || ctrlHeld) {
                 if (!peeking && settled) peekOn();
             } else {
                 peekOff();
             }
         },
+        // The pushed Ctrl state (VM `ctrlHeld`): it holds the bar up for the reposition gesture and
+        // does nothing else. Read every render, like size / anim / hold -- and BEFORE peek(), which
+        // reads the flag back.
+        ctrl: applyCtrl,
         // The pushed size flag (VM `barSize` == 1). Idempotent, so it is safe on every render; the
         // flag arrives AFTER the mount-time surface push, so the correct size lands on the
         // POST-DEADLINE re-assert -- which is fine precisely because `settled` hides the bar until
@@ -659,6 +848,8 @@ export function createTransient(cfg) {
         // The pushed transition switches (VM transEvents / transManual, master already folded in
         // Python). Read every render, like size.
         anim: applyAnim,
+        // The pushed hold duration (VM holdMs). Read every render, like anim.
+        hold: applyHold,
         reset: reset,
         disarm: disarm,
     };

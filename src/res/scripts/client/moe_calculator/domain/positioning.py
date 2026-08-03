@@ -96,6 +96,125 @@ def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
     return x, y
 
 
+def anchor_pinned(max_x, max_y, pos_x, pos_y, y_frac, x_offset=0, y_offset=0):
+    """Top-left (x, y) for a centre-screen bar the user may have Ctrl+DRAGGED somewhere.
+
+    `pos_x` / `pos_y` are the stored drag position (mod_settings.bar_pos_x / bar_pos_y) in the
+    SAME LOGICAL GUI SPACE the window is moved in -- deliberately NOT pinned to a viewport like
+    the garage widget's posW/posH pair, because that space is already interface-scale invariant
+    (see the module header), so there is nothing to rescale.
+
+    0 MEANS AUTO, on both axes: an untouched install falls straight through to anchor_centred,
+    so the shipped *_ANCHOR_* placement stays byte-identical for every user who never drags.
+    BOTH coordinates must be > 0 to count as a pin -- a lone axis is a half-written pair, not a
+    half-placement -- and 0 is also where a drag into the top/left screen edge would land, which
+    is why the writer clamps a drag to 1 rather than 0 (cursor_top_left below).
+
+    A pin is clamped into the movable extent (= logical space - surface), exactly as
+    anchor_centred clamps its own result, so a position stored at one resolution can never leave
+    the bar off-screen at another."""
+    x = _int(pos_x)
+    y = _int(pos_y)
+    if x > 0 and y > 0:
+        return min(max(0, x), _int(max_x)), min(max(0, y), _int(max_y))
+    return anchor_centred(max_x, max_y, y_frac, x_offset, y_offset)
+
+
+def cursor_logical(cursor, screen, space_x, space_y):
+    """The mouse cursor's position IN THE WINDOW'S LOGICAL GUI SPACE, or None if unreadable.
+
+    `cursor` is the raw engine read (GUI.mcursor().position or a mouse event's .cursorPosition -- a
+    Vector2, but a plain pair reads identically) and `screen` the raw GUI.screenResolution() pair.
+    `space_x, space_y` is the FULL logical space the window is moved in, which the caller recovers as
+    extent + surface size (see bridge/bar_window._space) -- NOT the movable extent, see the gain note
+    on cursor_top_left.
+
+    THE UNITS ARE DECIDED AT RUNTIME, not assumed: the decompiled call sites DISAGREE (armor/utils
+    .getCollisionsAtCursor feeds the same read to a clip-space ray cast, i.e. [-1, 1]; radial_menu
+    pairs a cursor pair with GUI.screenResolution(), i.e. device px). So a read whose components are
+    both within [-1, 1] is taken as clip space -- x left..right, y BOTTOM..TOP, because BigWorld's
+    clip y is UP -- and anything larger is normalised against `screen`, whose y runs DOWN from the
+    top. The only ambiguity is the 2px corner at the screen origin, which reads as near-centre.
+
+    UNCLAMPED AND FLOAT, on purpose: this is what the drag's grab offset is measured from, and a
+    cursor beyond the movable extent (which is SMALLER than the space by the surface size, so the
+    bottom-right corner of the screen always is) would otherwise bake the clamp's own error into the
+    offset for the rest of the gesture. Returns None -- "leave the window exactly where it is" -- for
+    any unusable cursor, or for a pixel-space cursor with no usable resolution to normalise it
+    against."""
+    point = _xy(cursor)
+    if point is None:
+        return None
+    cx, cy = point
+    if -1.0 <= cx <= 1.0 and -1.0 <= cy <= 1.0:
+        fx = (cx + 1.0) / 2.0
+        fy = (1.0 - cy) / 2.0            # clip y is UP; a window top-left is measured from the TOP
+    else:
+        res = _xy(screen)
+        if res is None or res[0] <= 0 or res[1] <= 0:
+            return None
+        fx = cx / res[0]
+        fy = cy / res[1]
+    return fx * _int(space_x), fy * _int(space_y)
+
+
+def cursor_top_left(cursor, screen, space_x, space_y, max_x, max_y, grab_x=0, grab_y=0):
+    """Top-left (x, y) for a bar being Ctrl+DRAGGED, mapped ABSOLUTELY from the mouse cursor.
+
+    THE WHOLE POINT IS THAT NOTHING HERE IS A DELTA. The superseded protocol had the bar's own JS
+    report a mouse delta for Python to add: that needed a device-px -> logical-px gain factor
+    (guessed wrong twice), and it could only see mouse events while the cursor stayed inside the
+    bar-sized surface rect -- so any gain error or round-trip lag let the cursor escape the rect,
+    events stopped and resumed, and the bar lurched. An absolute mapping has no factor to get wrong
+    and no dependence on any hit rect.
+
+    THE GAIN IS EXACTLY 1, AND THAT IS WHY `space_*` AND `max_*` ARE BOTH ARGUMENTS. The window's
+    position IS the cursor's position in logical space, less the offset it was grabbed by:
+
+        window_pos = cursor_logical(...) + grab            (grab = window_pos - cursor, at start)
+
+    so N logical units of cursor travel move the window N logical units, until it clamps. Mapping
+    the cursor's SCREEN FRACTION onto the movable extent instead (`max_*` alone -- the extent is
+    space - surface, which is all a far-sentinel clamp can recover) silently bakes in a gain of
+    (space - surface) / space: measured ~0.74 on x, i.e. "the bar moves slower than the cursor",
+    which is the exact live symptom this whole absolute mapping replaces. `max_*` is therefore only
+    the CLAMP, never the scale.
+
+    `grab_x` / `grab_y` is the offset recorded between the window's top-left and cursor_logical at
+    gesture START, carried for the whole gesture so the bar keeps the point it was grabbed by
+    instead of teleporting its corner under the cursor on the first event.
+
+    CLAMPED TO [1, max], not [0, max]: 0 is anchor_pinned's "auto" sentinel, so a drag into the
+    top/left screen edge must never store it. Returns None whenever cursor_logical does."""
+    point = cursor_logical(cursor, screen, space_x, space_y)
+    if point is None:
+        return None
+    max_x = _int(max_x)
+    max_y = _int(max_y)
+    x = min(max(1, int(point[0] + _float(grab_x))), max_x)
+    y = min(max(1, int(point[1] + _float(grab_y))), max_y)
+    return x, y
+
+
+def _xy(value):
+    """(x, y) as floats from a Vector2-like OR a plain pair, or None for anything unusable.
+
+    Both shapes are real: the decompiled client reads `.x`/`.y` off GUI.mcursor().position in one
+    place and tuple-unpacks it in another, and GUI.screenResolution() is a plain pair. A NaN
+    component is unusable (it would poison every comparison downstream)."""
+    try:
+        x = float(value.x)
+        y = float(value.y)
+    except (AttributeError, TypeError, ValueError):
+        try:
+            x, y = value
+            x = float(x)
+            y = float(y)
+        except (AttributeError, TypeError, ValueError):
+            return None
+    return None if (x != x or y != y) else (x, y)
+
+
 def _int(value):
     """int(value), or 0 for anything unusable (None / non-numeric / NaN)."""
     try:

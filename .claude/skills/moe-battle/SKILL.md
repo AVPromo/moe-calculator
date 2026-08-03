@@ -154,6 +154,32 @@ and append; the backlog notes' "spare slot 7/8/9" assumption is obsolete.
 - Fixed box `340rem × 130rem`, `pointer-events:none`; `.mb-ico` uses `background-size:260%` +
   `brightness(3) drop-shadow(...)` (the glyph fills ~¼ its PNG). Numbers use layered `text-shadow`, no stroke.
 
+## Ctrl+drag reposition (the two centre-screen bars, Python-owned end to end)
+
+Holding **Ctrl + left mouse button** over a bar drags it; releasing persists the position. There
+is **no JS drag code and no wire protocol** for this — Python samples the gesture and moves the
+window directly:
+
+- `adapter/battle_input.py` samples Ctrl/left-button state off `AvatarInputHandler.handleKeyEvent`
+  / `handleMouseEvent` (wrapped, observe-only) **plus** a `gui.g_mouseEventHandlers` set member
+  (added via `set.add`, no monkey-patch) — three vantage points because the raised-cursor Gameface
+  input can swallow either dispatcher alone. Reports `on_drag(phase, cursor)` — `"start"`/`"move"`/
+  `"end"` — through the **same single callback slot** the Alt-peek listener uses
+  (`install_alt_key_listener(on_change, on_drag)`); a second `install_alt_key_listener` call would
+  silently replace it.
+- `bridge/bar_window.BarHost.drag()` maps the live cursor into the window's own logical GUI space
+  (`domain/positioning.cursor_logical` / `cursor_top_left`) and moves the window there, offset by
+  the grab point recorded at gesture start — an **absolute placement every event**, never a delta.
+  `mod_settings.set_bar_position(x, y, persist=False)` updates the in-memory value on every move;
+  `persist=True` on `"end"` writes it through MSA (see `moe-settings`).
+- Both bar VMs are `commands=0` — there is no `setPosition` command anymore. `ctrlHeld` is still
+  pushed to JS (`ProgressVM`/`EfficiencyVM`) so `MoEBarTransient` holds the bar visible while
+  dragging, but JS does not move anything.
+- Superseded design (do not resurrect): a JS `installDrag`-style delta protocol reporting mouse
+  deltas for Python to add. It failed structurally — see the memory
+  `[[absolute-cursor-placement-replaces-js-delta-drag-protocol]]` for why a delta can't work when
+  the dragged thing is the surface the cursor is measured against.
+
 ## Placement (`bridge/battle_view.py` + `domain/positioning.py`)
 
 - Anchor constants (`domain/constants.py`, fixed **logical-GUI-space px**, scale-invariant):

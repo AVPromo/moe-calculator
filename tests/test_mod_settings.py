@@ -17,12 +17,15 @@ from moe_calculator.bridge.mod_settings import (
     PROGRESS_SIZE_KEY, PROGRESS_SIZE_DEFAULT, PROGRESS_SIZE_LARGE,
     PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
     PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
+    PROGRESS_HOLD_SECONDS_KEY, PROGRESS_HOLD_DEFAULT, PROGRESS_HOLD_MIN, PROGRESS_HOLD_MAX,
     battle_alt_key_enabled, battle_enabled, counted_assistance_enabled,
     progress_bar_enabled, progress_bar_variant, progress_bar_size, clamp_variant,
     progress_transitions_events, progress_transitions_manual,
-    progress_show_events, progress_alt_held,
+    progress_show_events, progress_alt_held, clamp_hold_seconds, progress_hold_seconds,
     POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, FOLLOW_CAROUSEL_KEY, POS_MAX,
-    clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position)
+    BAR_POS_X_KEY, BAR_POS_Y_KEY,
+    clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position,
+    bar_pos_x, bar_pos_y, set_bar_position)
 from moe_calculator.adapter import settings_i18n
 
 
@@ -47,8 +50,11 @@ def test_defaults_when_empty_or_none():
     # No saved store (fresh install / MSA absent) -> both widgets and the counted-assistance row
     # on, the Alt-peek mode and the Progress Bar off (opt-in), the Progress Bar variant on Damage
     # Efficiency (0, the v13 order), both of its VISIBILITY triggers on with "Always" off, all
-    # three TRANSITION switches on (the animated bar is what shipped), the drag position at auto
-    # (0/0/0/0) and Follow Carousel on.
+    # three TRANSITION switches on (the animated bar is what shipped), BOTH drag positions at auto
+    # (the garage widget's 0/0/0/0 and the in-battle bar's 0/0 -- the v18 pair, which is what keeps
+    # every existing user's bar on the shipped anchor) and Follow Carousel on. The hold duration
+    # defaults to 5 SECONDS -- the JS transient's own baked HOLD_MS / 1000, so an existing bar's
+    # length does not change on update.
     assert merge_settings(None) == DEFAULTS
     assert merge_settings({}) == DEFAULTS
     assert DEFAULTS == {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
@@ -58,8 +64,15 @@ def test_defaults_when_empty_or_none():
                         PROGRESS_SHOW_ALWAYS_KEY: False,
                         PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
                         PROGRESS_TRANS_MANUAL_KEY: True,
+                        PROGRESS_HOLD_SECONDS_KEY: 5,
                         POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
+                        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                         FOLLOW_CAROUSEL_KEY: True}
+    # An INT, never a bool -- the same trap as the two radios: a bool here would poison every
+    # _coerce round-trip and the panel would store True instead of a second count.
+    assert DEFAULTS[PROGRESS_HOLD_SECONDS_KEY] is PROGRESS_HOLD_DEFAULT
+    assert isinstance(DEFAULTS[PROGRESS_HOLD_SECONDS_KEY], int)
+    assert not isinstance(DEFAULTS[PROGRESS_HOLD_SECONDS_KEY], bool)
     # The three transitions flags are real BOOLS, not the radios' int indices: they must default
     # True (== "animate", what shipped) so an existing install's bar does not go instant on update.
     for key in (PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY):
@@ -103,7 +116,9 @@ def test_overlays_known_keys():
                     PROGRESS_SHOW_ALWAYS_KEY: False,
                     PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
                     PROGRESS_TRANS_MANUAL_KEY: True,
+                    PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
                     POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
+                    mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                     FOLLOW_CAROUSEL_KEY: False}
 
 
@@ -451,6 +466,148 @@ def test_clamp_variant_max_index_is_per_radio():
     assert clamp_variant(True, max_index=2) == 0    # a bool is illegal at ANY ceiling
 
 
+# --- the hold-duration Slider: a whole-seconds int, and NOT master-folded --------------------
+
+def test_clamp_hold_seconds_bounds_and_bool_trap():
+    # A THIRD trust boundary alongside clamp_pos / clamp_variant, and the same bool trap: bool is
+    # an int SUBCLASS, so isinstance must be tested BEFORE int() or True/False would pass through
+    # as legal 1/0-second holds. Legal in-range ints pass through unchanged.
+    assert clamp_hold_seconds(PROGRESS_HOLD_MIN) == PROGRESS_HOLD_MIN
+    assert clamp_hold_seconds(PROGRESS_HOLD_MAX) == PROGRESS_HOLD_MAX
+    assert clamp_hold_seconds(12) == 12
+    assert not isinstance(clamp_hold_seconds(12), bool)
+    # Numeric strings / floats coerce through int(), like clamp_pos / clamp_variant.
+    assert clamp_hold_seconds("12") == 12
+    assert clamp_hold_seconds(12.9) == 12
+    # A bool ALWAYS falls back to the DEFAULT (not to MIN, and never treated as a legal 0/1 s).
+    assert clamp_hold_seconds(True) == PROGRESS_HOLD_DEFAULT
+    assert clamp_hold_seconds(False) == PROGRESS_HOLD_DEFAULT
+    for bad in (True, False):
+        assert not isinstance(clamp_hold_seconds(bad), bool) or clamp_hold_seconds(bad) != bad
+    # Garbage (None, a non-numeric string, a list, an object) also falls back to the DEFAULT --
+    # NOT to MIN, which would silently shorten a corrupt store's hold to the floor instead of the
+    # shipped 5 s.
+    for bad in (None, "x", [], {}, object()):
+        got = clamp_hold_seconds(bad)
+        assert got == PROGRESS_HOLD_DEFAULT, "%r leaked %r" % (bad, got)
+        assert not isinstance(got, bool)
+    # Merely OUT-OF-RANGE (a real int, just outside [MIN, MAX]) clamps to the nearest bound --
+    # unlike garbage, this does NOT fall back to the default: "as long as possible" is a real ask.
+    assert clamp_hold_seconds(PROGRESS_HOLD_MIN - 1) == PROGRESS_HOLD_MIN
+    assert clamp_hold_seconds(0) == PROGRESS_HOLD_MIN
+    assert clamp_hold_seconds(-100) == PROGRESS_HOLD_MIN
+    assert clamp_hold_seconds(PROGRESS_HOLD_MAX + 1) == PROGRESS_HOLD_MAX
+    assert clamp_hold_seconds(10 ** 6) == PROGRESS_HOLD_MAX
+
+
+def test_coerce_hold_seconds_key_is_not_booled():
+    # The branch is wired to the right key: a stored 12 must survive as 12 (never booled to True by
+    # the default branch), and a stored 0 must clamp to MIN rather than becoming False.
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, 12) == 12
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, 12) is not True
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, 0) == PROGRESS_HOLD_MIN
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, 0) is not False
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, True) == PROGRESS_HOLD_DEFAULT
+    assert mod_settings._coerce(PROGRESS_HOLD_SECONDS_KEY, None) == PROGRESS_HOLD_DEFAULT
+    # ...and end to end through merge_settings, the path MSA's payload actually takes.
+    assert merge_settings({PROGRESS_HOLD_SECONDS_KEY: 12})[PROGRESS_HOLD_SECONDS_KEY] == 12
+    assert merge_settings({PROGRESS_HOLD_SECONDS_KEY: "12"})[PROGRESS_HOLD_SECONDS_KEY] == 12
+    assert merge_settings({PROGRESS_HOLD_SECONDS_KEY: 0})[PROGRESS_HOLD_SECONDS_KEY] == \
+        PROGRESS_HOLD_MIN
+    assert merge_settings({PROGRESS_HOLD_SECONDS_KEY: True})[PROGRESS_HOLD_SECONDS_KEY] == \
+        PROGRESS_HOLD_DEFAULT
+
+
+def test_progress_hold_seconds_getter_defaults_tracks_and_reclamps():
+    # Ships on the JS transient's own baked default (5 s) and the getter tracks live changes, RE-
+    # CLAMPING on read like the position/radio getters -- a store corrupted outside _coerce must
+    # never leak a bool or an out-of-range duration to the widget.
+    mod_settings._seed(dict(DEFAULTS))
+    assert progress_hold_seconds() == PROGRESS_HOLD_DEFAULT
+    mod_settings._apply({PROGRESS_HOLD_SECONDS_KEY: 20})
+    assert progress_hold_seconds() == 20
+    mod_settings._apply({PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT})
+    assert progress_hold_seconds() == PROGRESS_HOLD_DEFAULT
+    for junk in (True, False, 999, -5, None, "x"):
+        mod_settings._settings[PROGRESS_HOLD_SECONDS_KEY] = junk
+        got = progress_hold_seconds()
+        assert not isinstance(got, bool)
+        assert PROGRESS_HOLD_MIN <= got <= PROGRESS_HOLD_MAX
+    del mod_settings._settings[PROGRESS_HOLD_SECONDS_KEY]
+    assert progress_hold_seconds() == PROGRESS_HOLD_DEFAULT
+
+
+def test_progress_hold_seconds_is_not_master_folded_by_the_transitions_switch():
+    # THE invariant a later "tidy-up" is most likely to break: the hold is a DURATION, not a switch,
+    # so it must NOT be ANDed with progress_transitions_enabled the way progress_transitions_events /
+    # _manual are. With the Transitions master OFF (and even with every switch off), the configured
+    # hold must still come back as the user's stored seconds -- never 0, never False.
+    mod_settings._seed(_defaults_with({
+        mod_settings.PROGRESS_TRANSITIONS_KEY: False,
+        mod_settings.PROGRESS_TRANS_EVENTS_KEY: False,
+        mod_settings.PROGRESS_TRANS_MANUAL_KEY: False,
+        PROGRESS_HOLD_SECONDS_KEY: 17,
+    }))
+    assert progress_hold_seconds() == 17
+    assert progress_hold_seconds() is not False
+    assert progress_transitions_events() is False       # the master fold still holds for its OWN pair
+    assert progress_transitions_manual() is False
+
+
+def test_slider_descriptor_shape_and_tipless_omission():
+    # The Slider descriptor's shape mirrors _stepper's (a plain dict, no gui.aslainMenu import): a
+    # `minimum`/`maximum`/`snapInterval` triple Aslain folds into its _settingsStructure signature,
+    # `format` as MSA's own "{{value}} s" substitution token, and the tooltip key OMITTED (not
+    # emitted empty) when the rendered row has none -- the same hard-index trap that once killed the
+    # WHOLE panel from inside _checkbox / _stepper (a KeyError inside _template(), i.e. inside
+    # register()'s guarded try).
+    control = mod_settings._slider(PROGRESS_HOLD_SECONDS_KEY, {"text": u"Hold Duration"})
+    assert control["type"] == "Slider"
+    assert control["text"] == u"Hold Duration"
+    assert control["varName"] == PROGRESS_HOLD_SECONDS_KEY
+    assert control["value"] == DEFAULTS[PROGRESS_HOLD_SECONDS_KEY]
+    assert control["minimum"] == PROGRESS_HOLD_MIN
+    assert control["maximum"] == PROGRESS_HOLD_MAX
+    assert control["snapInterval"] == 1
+    assert control["format"] == "{{value}} s"
+    assert "tooltip" not in control
+    # THE HELPER ITSELF NEVER EMITS A masterVarName -- only _grouped_column1 writes that key, and
+    # this descriptor is never passed to it (see below). Asserted on the raw helper too, so a
+    # "helpful" default added here is caught even if _template() stopped grouping anything.
+    assert "masterVarName" not in control
+    # ...and a row that HAS one still carries it.
+    tipped = mod_settings._slider(PROGRESS_HOLD_SECONDS_KEY, {"text": u"H", "tooltip": u"T"})
+    assert tipped["tooltip"] == u"T"
+    # End to end in the built template: the Slider hangs off the "Transitions" HEADER, NOT off the
+    # "Enabled" master -- a plain top-level UNGROUPED row spliced on after the group. It must carry
+    # NO masterVarName AT ALL: MSA reads the key's PRESENCE, so a None would still bind it to a
+    # master named None, and any real value would grey it out (PROGRESS_TRANSITIONS_KEY would claim
+    # the duration stops applying when the motion is off -- see progress_hold_seconds(), which is
+    # deliberately NOT master-folded; PROGRESS_BAR_KEY would be the wrong feature entirely).
+    # It does carry a real tooltip: the Transitions prose lives on the master and its label-only
+    # children, but the Slider is a real value control, not a label-only switch.
+    col1 = mod_settings._template()["column1"]
+    slider = _at(col1, PROGRESS_HOLD_SECONDS_KEY)[0]
+    assert slider["type"] == "Slider"
+    assert "masterVarName" not in slider, \
+        "the hold slider was re-parented into a group -- it must hang off the header (see " \
+        "progress_hold_seconds: a duration is not master-folded, so it must not grey out)"
+    # ...and it is not gated the OTHER way either (the _gate_and form REPLACES group parenting, so
+    # an absent masterVarName alone would not notice a conditions-based gate).
+    assert "conditions" not in slider and "masterIndent" not in slider
+    assert slider["minimum"] == PROGRESS_HOLD_MIN
+    assert slider["maximum"] == PROGRESS_HOLD_MAX
+    assert slider["snapInterval"] == 1
+    assert slider["format"] == "{{value}} s"
+    assert slider["value"] == PROGRESS_HOLD_DEFAULT
+    # ...while its two SIBLING switches DO stay grouped under the master -- the reparent moved one
+    # control, not the group. Pinning both halves is what makes this a boundary rather than a
+    # blanket "nothing in this category is grouped".
+    assert [_at(col1, k)[0]["masterVarName"] for k in
+            (PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY)] == \
+        [PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANSITIONS_KEY]
+
+
 # --- the foreign-broadcast bug: a payload with none of our keys must NOT reset us ----------
 
 def test_apply_preserves_current_for_absent_keys():
@@ -568,21 +725,39 @@ def test_template_settings_version_pins_the_current_layout():
     # -- again purely visual (no tooltip moved, no varName touched), but the new None-sentinel slot
     # (COL1_KEYS 16 -> 17) shifts every later control's positional pairing, so it is structural
     # regardless. The migration branch carries every saved value across unchanged.
-    assert SETTINGS_VERSION == 16
+    # Bumped 16 -> 17 for the Transitions restructure plus a new varName, either of which alone
+    # would owe it: "Transitions" is promoted to a CATEGORY of its own (a new bold Label header row
+    # ahead of the master, shifting every later control's positional pairing), and the group gains a
+    # FOURTH control -- progress_hold_seconds, a new varName AND a new component type (Slider), whose
+    # minimum/maximum/snapInterval Aslain folds into _settingsStructure. COL1_KEYS 17 -> 19. The
+    # master's label goes "Transitions" -> "Enabled" but its varName is deliberately UNCHANGED, so
+    # the migration branch carries every saved value across and only the new key takes a default.
+    # Bumped 17 -> 18 for the in-battle bar's Ctrl+drag POSITION controls: a FOURTH column-1
+    # category ("Bar Position" -- an Empty spacer plus its own bold Label header) and the two
+    # progress_bar_pos_x / progress_bar_pos_y NumericSteppers, i.e. two new varNames AND four new
+    # rows (COL1_KEYS 19 -> 23). Structural twice over. The two new keys take their fresh 0 (=
+    # auto) default, which is what leaves every existing user's bar on the shipped anchor.
+    # Bumped 18 -> 19 for a FIFTH Empty spacer in column 1, immediately ahead of the hold-duration
+    # Slider (COL1_KEYS 23 -> 24) -- no varName touched, but the new None-sentinel slot still
+    # shifts the Slider's and every later control's positional pairing.
+    assert SETTINGS_VERSION == 19
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
-def test_template_column1_is_two_categories_each_a_label_then_its_group():
+def test_template_column1_is_three_categories_each_a_label_then_its_group():
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # SEVENTEEN controls = TWO CATEGORIES separated by an Empty spacer, each a bare Label header
+    # TWENTY-FOUR controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
     # followed by that feature's controls: "Battle Calculator" + [In-Battle master, Alt child,
     # counted-assist child], spacer, then "Battle Progress" + [Progress Bar master + its three
-    # VISIBILITY children] + a SECOND Empty spacer (new in this bump, ahead of "Mode") + [the two
-    # standalone radios] + a THIRD Empty spacer + [Transitions master, Events child, Alt Press
-    # child]. The Transitions group is a SECOND group under the SAME category header, so it adds
-    # three rows but NO Label -- there are still exactly two headers. The header names the
-    # feature, which is why both masters read just "Enabled" (was "Show").
+    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two standalone radios],
+    # then a THIRD Empty spacer and "Transitions" -- its OWN header since the hold-duration Slider
+    # arrived -- + [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer
+    # (ahead of the Slider, v19) + the UNGROUPED hold Slider, which hangs off that header rather
+    # than the master (its masterVarName absence is pinned in
+    # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
+    # "Bar Position" + [the two standalone position steppers] (v18). The header names the feature,
+    # which is why every master reads just "Enabled" (was "Show").
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
@@ -590,30 +765,45 @@ def test_template_column1_is_two_categories_each_a_label_then_its_group():
         "Empty",
         "RadioButtonGroup", "RadioButtonGroup",
         "Empty",
-        "CheckBox", "CheckBox", "CheckBox"]
+        "Label", "CheckBox", "CheckBox", "CheckBox",
+        "Empty",
+        "Slider",
+        "Empty",
+        "Label", "NumericStepper", "NumericStepper"]
     # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
     assert [c["varName"] for c in col1 if "varName" in c] == [
         BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
         PROGRESS_BAR_KEY,
         PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
         PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY,
-        PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY]
-    # ...and the two category headers carry no varName at all -- and they are the ONLY two, so the
-    # Transitions group cannot quietly grow a third header row (it belongs to Battle Progress).
-    assert "varName" not in col1[0] and "varName" not in col1[5]
-    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 5]
-    # Both category headers are BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
+        PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
+        PROGRESS_HOLD_SECONDS_KEY,
+        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
+    # ...and the four category headers carry no varName at all -- and they are the ONLY four, so
+    # no group can quietly grow a header row of its own.
+    assert ("varName" not in col1[0] and "varName" not in col1[5]
+            and "varName" not in col1[14] and "varName" not in col1[21])
+    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 5, 14, 21]
+    # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
     # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
     assert col1[0]["text"] == u"<b>Battle Calculator</b>" and col1[0]["useHTML"] is True
     assert col1[5]["text"] == u"<b>Battle Progress</b>" and col1[5]["useHTML"] is True
-    # All THREE Empty spacers are a bare type and NOTHING else: no varName, and above all no
+    assert col1[14]["text"] == u"<b>Transitions</b>" and col1[14]["useHTML"] is True
+    assert col1[21]["text"] == u"<b>Bar Position</b>" and col1[21]["useHTML"] is True
+    # All FIVE Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
-    # key. The first heads "Battle Progress"; the second (this bump) heads "Mode"; the third heads
-    # "Transitions".
+    # key. The first heads "Battle Progress"; the second heads "Mode"; the third heads
+    # "Transitions"; the fourth heads the hold Slider (v19); the fifth heads "Bar Position".
     assert col1[4] == {"type": "Empty"}
     assert col1[10] == {"type": "Empty"}
     assert col1[13] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13]
+    assert col1[18] == {"type": "Empty"}
+    assert col1[20] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13, 18, 20]
+    # The two position steppers are STANDALONE -- no masterVarName, no conditions -- so they stay
+    # readable and editable while the Progress Bar master is off, exactly like the column-2 pair.
+    for control in col1[22:]:
+        assert "masterVarName" not in control and "conditions" not in control
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -693,18 +883,31 @@ def test_template_size_radio_shape(monkeypatch):
     # hardcoded in _radio.
     col1 = mod_settings._template()["column1"]
     radio, index = _at(col1, PROGRESS_SIZE_KEY)
-    # POSITION, anchored to NAMED neighbours rather than to a length: an Empty spacer (new in this
-    # bump) now sits between the Scale radio and the Transitions master, and the Transitions group
-    # is still the contiguous THREE-row tail of the column. So an insertion anywhere else (which
-    # shifts every later control's text -- COL1_KEYS' zip is positional) still fails here, while a
-    # legitimate append does not.
+    # POSITION, anchored to NAMED neighbours rather than to a length: an Empty spacer and the
+    # "Transitions" category header now sit between the Scale radio and the Transitions master, and
+    # that master plus its two switches plus the ungrouped hold Slider are still a contiguous
+    # FOUR-row run. So an insertion anywhere else (which shifts every later control's text --
+    # COL1_KEYS' zip is positional) still fails here, while a legitimate append does not.
+    # NOT `col1[-4:]` any more: v18 appended a fourth category ("Bar Position") after the group, so
+    # that literal would now read the two steppers. Anchored to the master's own index instead --
+    # which is what the tail slice was always reaching for.
     assert col1[index + 1] == {"type": "Empty"}, \
         "a control was inserted between the Scale radio and its spacer"
-    assert index + 2 == _at(col1, PROGRESS_TRANSITIONS_KEY)[1], \
-        "the spacer ahead of the Transitions master moved or disappeared"
-    assert [c.get("varName") for c in col1[-3:]] == [
+    assert col1[index + 2]["type"] == "Label", \
+        "the Transitions category header moved or disappeared"
+    master_at = _at(col1, PROGRESS_TRANSITIONS_KEY)[1]
+    assert index + 3 == master_at, \
+        "the spacer + header ahead of the Transitions master moved or disappeared"
+    # The group's THREE varName-bearing controls (master + two switches) are still a contiguous
+    # run; the hold Slider is one further slot out, with a FIFTH Empty spacer (v19) between it and
+    # "Alt Press" -- so the run is 5 rows wide, not 4, once that spacer joined.
+    assert [c.get("varName") for c in col1[master_at:master_at + 3]] == [
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY], \
-        "the Transitions group is no longer the column-1 tail (COL1_KEYS' zip is positional)"
+        "the Transitions group is no longer contiguous (COL1_KEYS' zip is positional)"
+    assert col1[master_at + 3] == {"type": "Empty"}, \
+        "the spacer ahead of the hold Slider moved or disappeared"
+    assert col1[master_at + 4].get("varName") == PROGRESS_HOLD_SECONDS_KEY, \
+        "the hold Slider moved (COL1_KEYS' zip is positional)"
     assert radio["type"] == "RadioButtonGroup"
     assert radio["value"] == DEFAULTS[PROGRESS_SIZE_KEY] == 0
     assert not isinstance(radio["value"], bool)
@@ -903,15 +1106,15 @@ def test_template_children_bind_to_their_own_master_only():
 def test_template_control_defaults_match_defaults_dict():
     # Each value-bearing control's initial `value` mirrors its DEFAULTS entry (varName ==
     # DEFAULTS key). Label headers and Empty spacers carry no varName/value and are skipped.
-    # Covers the checkboxes, both radios and the numeric steppers (steppers default to 0 = auto),
-    # across EVERY column.
+    # Covers the checkboxes, both radios, the hold Slider and the numeric steppers (steppers
+    # default to 0 = auto), across EVERY column.
     tmpl = mod_settings._template()
     for col, _keys in _column_pairs(tmpl):
         for c in tmpl[col]:
             if "varName" not in c:            # a Label header / an Empty spacer
                 assert c["type"] in ("Label", "Empty")
                 continue
-            assert c["type"] in ("CheckBox", "NumericStepper", "RadioButtonGroup")
+            assert c["type"] in ("CheckBox", "NumericStepper", "RadioButtonGroup", "Slider")
             assert c["value"] == DEFAULTS[c["varName"]]
 
 
@@ -973,11 +1176,12 @@ def test_col_keys_lockstep_with_template_order():
             assert control["text"] == text[key]["text"]
             assert control.get("tooltip") == text[key].get("tooltip")
     # ...and every Empty in the template is covered by one: a spacer added without a sentinel would
-    # shift the whole tail of the zip and silently retitle every control after it. FIVE now (grew
-    # from four in this bump): column 1 has a spacer ahead of "Transitions" AND (new) one ahead of
-    # "Mode"; column 2 has one ahead of "Position".
+    # shift the whole tail of the zip and silently retitle every control after it. SEVEN now (grew
+    # from six in v19): column 1 has a spacer ahead of "Battle Progress", "Mode", "Transitions",
+    # the hold Slider (new, v19) and "Bar Position"; column 2 has one ahead of "Layout" and one
+    # ahead of "Position".
     assert sentinels == sum(1 for col, _k in _column_pairs(tmpl)
-                            for c in tmpl[col] if c["type"] == "Empty") == 5
+                            for c in tmpl[col] if c["type"] == "Empty") == 7
 
 
 def test_sync_template_text_walks_built_template_in_lockstep():
@@ -1036,8 +1240,8 @@ def test_sync_template_text_walks_built_template_in_lockstep():
                 # never be removed again.
                 assert control["tooltip"] == u"STALE"
                 tipless += 1
-    # FIVE tipless controls: the three bare CATEGORY headers (Battle Calculator / Battle Progress /
-    # Garage Widget -- a feature name has nothing to explain and nothing to hover), and the
+    # SIX tipless controls: the FOUR bare CATEGORY headers (Battle Calculator / Battle Progress /
+    # Transitions / Garage Widget -- a feature name has nothing to explain and nothing to hover), and the
     # Transitions group's two children (Events / Alt Press) -- one-word switches whose meaning the
     # Transitions master's tooltip spells out. BOTH radios (Mode / Scale) and the "Position"
     # sub-label used to be tipless too (bringing the count to EIGHT), but a maintainer OVERRIDE
@@ -1051,12 +1255,20 @@ def test_sync_template_text_walks_built_template_in_lockstep():
     # hard-indexed rendered["tooltip"], so building the template raised KeyError before this walk
     # was even reached. Keep it exact rather than a `>= 1`, because a NEW tipless row is exactly
     # the change that owes a bump (and a control LOSING its tipless status is the change this
-    # bump made). v16 added a THIRD Empty spacer (ahead of "Mode") but moved no tooltip, so this
-    # count is UNCHANGED at 5 -- a pure-layout bump can grow the spacer count without touching this
-    # one, and pinning both separately is what proves that.
-    assert tipless == 5, "expected 5 tooltip-less controls, got %d" % tipless
-    # ...and all FIVE Empty spacers were walked and left untouched (see the sentinel branch above).
-    assert spacers == 5, "expected 5 text-less spacer rows, got %d" % spacers
+    # bump made). v16 added a THIRD Empty spacer (ahead of "Mode") but moved no tooltip, so that
+    # bump left this count alone -- a pure-layout bump can grow the spacer count without touching
+    # this one, and pinning both separately is what proves that. v17 took it 5 -> 6: "Transitions"
+    # became a CATEGORY, so it gained a fourth bare header row (the new hold-duration Slider does
+    # carry a tooltip, and the master kept the one it always had). v18 took it 6 -> 8: the "Bar
+    # Position" category's two NumericSteppers are label-only rows -- their axis hint says it all
+    # and the header above them carries the Ctrl+drag prose, exactly as the Transitions children
+    # sit under theirs. That header is NOT in this count: it is the one category header that DOES
+    # carry a tooltip (the column-2 "Layout" header is its precedent).
+    assert tipless == 8, "expected 8 tooltip-less controls, got %d" % tipless
+    # v19 added a FIFTH column-1 Empty spacer (ahead of the hold Slider) but moved no tooltip, so
+    # it grew the spacer count alone -- same as v16's spacer-only bump.
+    # ...and all SEVEN Empty spacers were walked and left untouched (see the sentinel branch above).
+    assert spacers == 7, "expected 7 text-less spacer rows, got %d" % spacers
     assert saved["called"] is True   # something changed -> state persisted
 
 
@@ -1233,7 +1445,59 @@ def test_on_reset_ignores_foreign_linkage():
     mod_settings._on_reset("com.someone.othermod", {})
     assert pos_x() == 500
     assert pos_y() == 300
-    assert follow_carousel() is False
+
+
+def test_bar_position_accessors_round_trip_and_clamp():
+    mod_settings._seed(dict(DEFAULTS))
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+    mod_settings._apply({BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640})
+    assert bar_pos_x() == 810
+    assert bar_pos_y() == 640
+    # A getter re-clamps whatever is cached, same as pos_x/pos_y.
+    mod_settings._settings[BAR_POS_X_KEY] = -50
+    mod_settings._settings[BAR_POS_Y_KEY] = POS_MAX + 500
+    assert bar_pos_x() == 0
+    assert bar_pos_y() == POS_MAX
+
+
+def test_set_bar_position_live_drag_does_not_persist(monkeypatch):
+    # persist=False (every mouse move during a drag): the in-memory value updates so _resolve
+    # sees it immediately, but MSA is never touched -- no updateModSettings, no saveState.
+    mod_settings._seed(dict(DEFAULTS))
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    set_bar_position(120, 240, persist=False)
+
+    assert (bar_pos_x(), bar_pos_y()) == (120, 240)
+    assert fake.written is None
+    assert fake.saved is False
+
+
+def test_set_bar_position_mouseup_persists(monkeypatch):
+    # persist=True (the mouse-up): the full settings dict is written through MSA and flushed,
+    # same replace-not-merge contract as set_position.
+    mod_settings._seed(dict(DEFAULTS))
+    fake = _FakeMsa({"enabled": True, "someHostKey": 7})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    set_bar_position(120, 240, persist=True)
+
+    assert (bar_pos_x(), bar_pos_y()) == (120, 240)
+    assert fake.saved is True
+    data = fake.written
+    assert data is not None
+    assert data[BAR_POS_X_KEY] == 120
+    assert data[BAR_POS_Y_KEY] == 240
+    assert data["someHostKey"] == 7   # preserved, not clobbered
+
+
+def test_set_bar_position_clamps_and_survives_absent_msa(monkeypatch):
+    mod_settings._seed(dict(DEFAULTS))
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: None)
+    set_bar_position(-5, POS_MAX + 100, persist=True)
+    assert bar_pos_x() == 0
+    assert bar_pos_y() == POS_MAX
 
 
 def test_coerce_types_per_key():
@@ -1412,8 +1676,11 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
         PROGRESS_TRANSITIONS_KEY: False,    # default True (animated -- what shipped)
         PROGRESS_TRANS_EVENTS_KEY: False,   # default True
         PROGRESS_TRANS_MANUAL_KEY: False,   # default True
+        PROGRESS_HOLD_SECONDS_KEY: 12,      # default 5 s
         POS_X_KEY: 700, POS_Y_KEY: 300, # default 0 (auto)
         POS_W_KEY: 1920, POS_H_KEY: 1080,
+        mod_settings.BAR_POS_X_KEY: 810,    # default 0 (auto -- the shipped bar anchor)
+        mod_settings.BAR_POS_Y_KEY: 640,
         FOLLOW_CAROUSEL_KEY: False,     # default True
     }
     for key in DEFAULTS:
@@ -1445,6 +1712,11 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     # again").
     assert progress_transitions_events() is False
     assert progress_transitions_manual() is False
+    # ...and the hold DURATION, the third non-bool value: an int seconds count out the other side,
+    # never booled into True by _coerce's default branch, and NOT master-folded to 0 by the
+    # Transitions master being off above (a duration is not a switch).
+    assert mod_settings.progress_hold_seconds() == 12
+    assert not isinstance(mod_settings._settings[PROGRESS_HOLD_SECONDS_KEY], bool)
     assert (mod_settings.pos_x(), mod_settings.pos_y()) == (700, 300)
     assert (mod_settings.pos_w(), mod_settings.pos_h()) == (1920, 1080)
     assert mod_settings.follow_carousel() is False

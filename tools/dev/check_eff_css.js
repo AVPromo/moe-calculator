@@ -35,6 +35,49 @@ const stripped = shipped.replace(RE, "");
 assert.strictEqual(stripped, emit,
     "the shipped CSS is NOT the emit plus only the two marked blocks -- silent drift");
 
+// --- HAND-ADDED BLOCK 4 (the interface-scale QUANT correction) is stripped whole above and
+// otherwise gets NO content check -- an approved-value retune (the 0.7rem/5.6rem delta nudge)
+// could silently drift back and every assertion above would still pass. Pin the four rules verbatim.
+const block4 = found.find((b) => /HAND-ADDED BLOCK 4 OF 4/.test(b));
+assert.ok(block4, "no HAND-ADDED BLOCK 4 (QUANT) found");
+[
+    ".mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(-0.5rem); }",
+    ".mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.3rem); }",
+    ".mp-s1 .mp-cap .mp-d            { transform: translate(4.2rem, 1.5rem); }",
+    ".mp-s1.mp-lg .mp-cap .mp-d      { transform: translate(5.6rem, 0.7rem); }",
+].forEach((line) => assert.ok(block4.includes(line),
+    "HAND-ADDED BLOCK 4 missing/drifted rule: " + line));
+
+// --- HAND-ADDED BLOCK 3 (the .mp-lg LARGE size-mode x-lengths) is stripped whole above and
+// otherwise gets NO content check -- an approved x-length retune could silently drift back and every
+// assertion above would still pass. Pin every rule verbatim, SCOPED to its own selector (comments
+// stripped first): these values (2.667rem, 5.6rem, -1.333rem, ...) also appear inside OTHER rules'
+// declarations, so a bare substring grep would pass even after the owning rule was reverted.
+const block3 = found.find((b) => /HAND-ADDED BLOCK 3 OF 4/.test(b));
+assert.ok(block3, "no HAND-ADDED BLOCK 3 (.mp-lg) found");
+const block3Decl = block3.replace(/\/\*[\s\S]*?\*\//g, "");
+const ruleIn = (text, sel) => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = new RegExp(esc + "\\s*\\{([^}]*)\\}").exec(text);
+    assert.ok(m, "no rule for " + sel + " in HAND-ADDED BLOCK 3");
+    return m[1].replace(/\s+/g, " ").trim();
+};
+[
+    [".mp-lg #moe-bar-box", "width: 613.333rem;"],
+    [".mp-lg #moe-bar-root", "width: 400rem;"],
+    [".mp-lg .mp-backdrop", "left: -106.667rem; width: 613.333rem;"],
+    [".mp-lg .mp-track::after",
+     "background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem); background-size: 4rem 100%;"],
+    [".mp-lg .mp-tick", "width: 2.667rem;"],
+    [".mp-lg .mp-tick.mp-cur", "width: 2.667rem;"],
+    [".mp-lg .mp-cap .mp-d", "transform: translate(5.6rem, 2.5rem);"],
+    [".mp-lg .mp-ico", "transform: translate(-1.333rem, -50%);"],
+    [".mp-lg .mp-cap.dn .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.25rem);"],
+    [".mp-lg .mp-cap.up .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.5rem);"],
+    [".mp-lg .mp-cap.dn .mp-ico.bm", "transform: translate(-1.333rem, -50%) translateY(-0.25rem);"],
+].forEach(([sel, expected]) => assert.strictEqual(ruleIn(block3Decl, sel), expected,
+    "HAND-ADDED BLOCK 3 rule drifted: " + sel));
+
 // --- the twin is the emitted pair, renamed ---------------------------------------------------
 const pair = (css, suf) => {
     const m = new RegExp("@keyframes mp-life" + suf + "\\{[\\s\\S]*?\\}\\}\\n#moe-bar-root\\.mp-run" +

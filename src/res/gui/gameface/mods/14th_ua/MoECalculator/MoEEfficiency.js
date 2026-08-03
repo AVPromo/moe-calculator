@@ -68,7 +68,7 @@ const BAND_CLASSES = ["mp-b-w", "mp-b-g", "mp-b-t", "mp-b-v", "mp-b-au"];
 
 // The pushed LARGE size mode (VM `barSize`), mirrored here because capClampPct needs it -- it is the
 // one place on either bar that mixes a MEASURED px width with rem literals, so the 1rem == 1 logical
-// px identity it rests on breaks under the large mode's 1.5x root font. The transient owns everything
+// px identity it rests on breaks under the large mode's 1.25x root font. The transient owns everything
 // else about the flag (see its SIZE_F / SIZE_XF).
 let large = false;
 
@@ -216,7 +216,7 @@ let deltaT = null;
 //   * every rem CONSTANT above is an x-length (the bar's width, the corridor's two bounds, the icon's
 //     transform gap), so each takes SIZE_XF -- the corridor bounds included, since they are the
 //     backdrop inset by an equal x-length each side and so scale with it;
-//   * offsetWidth is MEASURED PX, and under the large mode's 1.5x root font 1rem is SIZE_F px, so
+//   * offsetWidth is MEASURED PX, and under the large mode's root font 1rem is SIZE_F px, so
 //     every measurement is divided back into document rem. A caption's width in rem is unchanged by
 //     the root font (its font-size is a rem too), which is exactly why this cannot be normalised
 //     away: the corridor scales by SIZE_XF while the caption inside it does not.
@@ -330,6 +330,16 @@ function render(model) {
     // transient reads an ABSENT field as animated (see applyAnim), which is the fail-soft direction --
     // a `!!` here would turn a missing prop into "instant" instead.
     T.anim(model.transEvents, model.transManual);
+    // The pushed HOLD DURATION (mod_settings.progress_hold_seconds * 1000). Passed RAW for the same
+    // reason as the two switches: the transient reads an absent / non-positive field as the baked
+    // 5000ms (see applyHold), which is the fail-soft direction -- a `|| 0` here would mean no hold.
+    T.hold(model.holdMs);
+    // The pushed CTRL key state (battle_bridge._ctrl_held): the drag-to-reposition gesture, which
+    // opens the input hit rect and holds the bar up for as long as the key is down. Passed RAW like
+    // the three above -- the transient tests it with `=== true`, so an absent field reads as NOT
+    // held, which is the fail-soft direction HERE (an open hit rect would steal HUD input). Ahead
+    // of T.peek() below, which ORs this state in.
+    T.ctrl(model.ctrlHeld);
 
     cur = {
         damage: Number(model.damage) || 0,

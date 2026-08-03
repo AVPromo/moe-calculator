@@ -115,6 +115,15 @@ _battle_epoch = 0
 _alt_held = False
 
 
+# Whether CTRL is currently held, from the SAME single battle_input listener (which is exactly why
+# it reports both keys at once -- see that module). ONE reader: the two centre-screen bars, which
+# get it pushed as `ctrlHeld` and use it to open their input hit rect for the Ctrl+DRAG reposition
+# gesture (and, like altHeld, to hold themselves up while it lasts -- you cannot grab a bar that
+# has faded out). Raw, NOT settings-folded: it is a key state, not a switch, and the position
+# controls stay usable whatever the visibility switches say.
+_ctrl_held = False
+
+
 # --- which centre-screen bar is up -------------------------------------------
 
 def _window_gates():
@@ -295,15 +304,33 @@ def _on_scoreboard_toggled(event):
         LOG_CURRENT_EXCEPTION()
 
 
-def _set_alt_held(down):
-    # battle_input's transition callback: Alt was pressed / released. Store it and re-push so
-    # the overlay reveals/hides live under the "Battle Widget on Alt Key" peek mode. refresh()
-    # is cheap and no-ops when no window is open (always-on off + peek off), so it's safe to
-    # fire on every Alt transition regardless of which mode is active.
-    global _alt_held
+def _set_alt_held(alt_down, ctrl_down=False):
+    # battle_input's transition callback: Alt and/or Ctrl was pressed / released. Store BOTH and
+    # re-push so the overlay reveals/hides live under the "Battle Widget on Alt Key" peek mode and
+    # the bars open/collapse their drag hit rect. refresh() is cheap and no-ops when no window is
+    # open (always-on off + peek off), so it's safe to fire on every transition regardless of
+    # which mode is active. `ctrl_down` defaults False so an older single-arg caller (a dev reload
+    # against a stale battle_input) degrades to the shipped Alt-only behaviour rather than raising.
+    global _alt_held, _ctrl_held
     try:
-        _alt_held = bool(down)
+        _alt_held = bool(alt_down)
+        _ctrl_held = bool(ctrl_down)
         refresh()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _on_drag(phase, cursor=None):
+    # battle_input's gesture callback: Ctrl + the left mouse button is the bars' REPOSITION gesture,
+    # reported as "start" / "move" (once per mouse movement) / "end". `cursor` is the reporting mouse
+    # event's own cursorPosition when there was one (the gui.g_mouseEventHandlers hook), else None and
+    # the host reads GUI.mcursor() itself. Handed to BOTH centre-screen bars because either may be the
+    # open one -- and a live radio switch mid-battle can briefly have both open -- while each host
+    # no-ops when its own window is closed. No refresh(): the host moves its window directly, and a
+    # re-push per mouse movement would be a full recompute at pointer rate.
+    try:
+        progress_view.drag(phase, cursor)
+        efficiency_view.drag(phase, cursor)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -398,10 +425,12 @@ def install_all_listeners():
         except Exception:
             LOG_CURRENT_EXCEPTION()
     _arm_overlay_listeners()
-    # Event-driven Alt-key hook for the "Battle Widget on Alt Key" peek mode. Installed once
-    # (idempotent + self-healing: AvatarInputHandler may not be importable until a battle
-    # exists, so a failed attempt retries on the next mount).
-    battle_input.install_alt_key_listener(_set_alt_held)
+    # Event-driven input hooks: the Alt/Ctrl transitions ("Battle Widget on Alt Key", the bars' Ctrl
+    # hold) AND the bars' Ctrl+left-button reposition gesture. ONE install for both, because
+    # battle_input keeps a SINGLE callback slot per concern -- a second install would silently
+    # replace this one. Idempotent + self-healing: AvatarInputHandler may not be importable until a
+    # battle exists, so a failed attempt retries on the next mount.
+    battle_input.install_alt_key_listener(_set_alt_held, _on_drag)
 
 
 def _arm_overlay_listeners():
@@ -664,9 +693,9 @@ def push_progress(rvm, snap, model):
         # the Always mode -- the JS pins the bar at its hold plateau), `showEvents` carries "Events".
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s size=%d ev=%s" % (
-            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, alt_held, bar_size,
-            show_events))
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f alt=%s ctrl=%s size=%d ev=%s" % (
+            visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, alt_held, _ctrl_held,
+            bar_size, show_events))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -682,6 +711,13 @@ def push_progress(rvm, snap, model):
             tx.setTransEvents(mod_settings.progress_transitions_events())
             tx.setTransManual(mod_settings.progress_transitions_manual())
             tx.setShowEvents(show_events)
+            # The hold duration, in MS for the JS clock. NOT master-folded (see the getter): a
+            # duration ANDed with a switch would push 0, i.e. no hold at all.
+            tx.setHoldMs(mod_settings.progress_hold_seconds() * 1000)
+            # The raw Ctrl state -- the bar's drag gesture (open the hit rect, hold the bar up).
+            # Deliberately NOT run through progress_alt_held: that getter folds the VISIBILITY
+            # switches in, and repositioning must work whatever they say.
+            tx.setCtrlHeld(_ctrl_held)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -726,9 +762,9 @@ def push_efficiency(rvm, snap, model):
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
-                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s epoch=%d size=%d ev=%s" % (
-                      visible, has_data, damage, bar_x, band,
-                      r[1], r[2], r[3], r[4], alt_held, _battle_epoch, bar_size, show_events))
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s" % (
+                      visible, has_data, damage, bar_x, band, r[1], r[2], r[3], r[4], alt_held,
+                      _ctrl_held, _battle_epoch, bar_size, show_events))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -747,6 +783,11 @@ def push_efficiency(rvm, snap, model):
             tx.setTransEvents(mod_settings.progress_transitions_events())
             tx.setTransManual(mod_settings.progress_transitions_manual())
             tx.setShowEvents(show_events)
+            # The hold duration in MS -- see push_progress; both bars share the setting.
+            tx.setHoldMs(mod_settings.progress_hold_seconds() * 1000)
+            # The raw Ctrl state -- the drag gesture. Same wire meaning as push_progress's, and
+            # both bars share the ONE stored position pair (bar_window / mod_settings).
+            tx.setCtrlHeld(_ctrl_held)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -762,8 +803,8 @@ def apply_settings():
     the next battle. Because the loop closes as well as opens, flipping the variant live swaps the
     two bars in one pass: the deselected one is closed and the selected one opened. (Under the
     Alt-key mode the overlay window opens but stays hidden until Alt is held --
-    push/battle_bar_visible decides visible.) A trailing re-push makes a live MODE switch, which
-    opens nothing, take effect too."""
+    push/battle_bar_visible decides visible.) A trailing re-place + re-push makes a live MODE switch
+    or a position-stepper edit, neither of which opens anything, take effect too."""
     try:
         opened = False
         for enabled, module in _window_gates():
@@ -776,6 +817,12 @@ def apply_settings():
         if opened:
             install_all_listeners()
             moe_wgapi.start()
+        # A panel edit can move the bars: the two position steppers, and the per-mod Reset that
+        # forces them back to auto. Nothing else re-places them off a settings change (the DRAG
+        # re-places itself, in the same handler that stores the delta), so it happens here.
+        # Idempotent and a no-op on a closed window, so this costs nothing on every other change.
+        progress_view.apply_position()
+        efficiency_view.apply_position()
         refresh()
     except Exception:
         LOG_CURRENT_EXCEPTION()

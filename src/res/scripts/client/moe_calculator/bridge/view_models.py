@@ -203,7 +203,11 @@ class ProgressVM(ViewModel):
     Its OWN model, not an extension of BattleMoEVM: all ten of that model's slots are in use and
     the bar needs almost none of them (it works in COMBINED DAMAGE along the mark axis, not in
     percentiles). Like BattleMoEVM this IS the registered view's root ViewModel -- the JS reads it
-    with a bare ModelObserver() and no unwrap. Read-only (no reverse-channel commands).
+    with a bare ModelObserver() and no unwrap. READ-ONLY, like BattleMoEVM: the Ctrl+drag reposition
+    is driven entirely from Python now (adapter/battle_input samples the keys, bar_window re-places
+    the window absolutely from the live cursor), so the `setPosition` reverse command this model used
+    to carry is gone and `commands` is back to 0. Nothing else ever used it -- the settings panel's
+    position steppers write mod_settings directly.
 
     Deliberately NO `rev` push counter: the battle window is a private, always-compositing view
     (never a cold hangar sub-view), so it has never needed the garage's cold-mount change signal.
@@ -217,7 +221,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=12, commands=0):
+    def __init__(self, properties=14, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -235,10 +239,10 @@ class ProgressVM(ViewModel):
         self._addBoolProperty("altHeld", False)      # 7  Alt currently down -> pull the bar up and
                                                      #    hold it (an ADDITIVE show trigger, not a gate)
         self._addNumberProperty("barSize", 0)        # 8  mod_settings.progress_bar_size(): 0 = the
-                                                     #    shipped size, 1 = LARGE (x2 wide, x1.5 tall,
-                                                     #    fonts + icons x1.5). APPENDED, so nothing
-                                                     #    above is renumbered. The JS turns it into a
-                                                     #    1.5x ROOT FONT, the .mp-lg body class and a
+                                                     #    shipped size, 1 = LARGE (x5/3 wide, x1.25
+                                                     #    tall, fonts + icons x1.25). APPENDED, so
+                                                     #    nothing above is renumbered. The JS turns it
+                                                     #    into a 1.25x ROOT FONT, the .mp-lg body class and a
                                                      #    re-derived surface push
                                                      #    (MoEBarTransient.applySize); Python's half
                                                      #    is PROGRESS_ANCHOR_Y_OFFSET_LARGE
@@ -262,6 +266,25 @@ class ProgressVM(ViewModel):
                                                      #    into `altHeld` by
                                                      #    mod_settings.progress_alt_held(), because
                                                      #    a permanently-held Alt IS "Always"
+        self._addNumberProperty("holdMs", 5000)        # 12 how long the bar stays up once it is up,
+                                                     #    in MS (mod_settings.progress_hold_seconds
+                                                     #    * 1000). APPENDED. NOT master-folded --
+                                                     #    a duration, not a switch. The default IS
+                                                     #    MoEBarTransient's baked HOLD_MS, and the
+                                                     #    JS reads an absent field as that same
+                                                     #    5000 rather than 0 (fail soft toward the
+                                                     #    SHIPPED bar)
+        self._addBoolProperty("ctrlHeld", False)      # 13 Ctrl currently down -> the bar HOLDS ITSELF
+                                                     #    UP for the reposition gesture, exactly like
+                                                     #    altHeld (you cannot grab a bar that has
+                                                     #    faded out). APPENDED. NOT settings-folded:
+                                                     #    it is a raw key state, not a switch. The JS
+                                                     #    reads it as `=== true` -- absent must mean
+                                                     #    NOT held, or an unpushed frame would peek
+                                                     #    forever and the bar would never come down.
+                                                     #    It no longer opens an input hit rect: the
+                                                     #    drag needs no mouse input in the document
+                                                     #    at all, so that rect stays collapsed
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -299,6 +322,12 @@ class ProgressVM(ViewModel):
     def setShowEvents(self, v):
         self._setBool(11, v)
 
+    def setHoldMs(self, v):
+        self._setNumber(12, v)
+
+    def setCtrlHeld(self, v):
+        self._setBool(13, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -308,8 +337,9 @@ class EfficiencyVM(ViewModel):
     (axisLo/axisHi) must keep working byte-identically, while this one plots THIS BATTLE's
     combined damage against ALL FOUR requirements at once, so it needs four axis stops rather
     than two. Like the other two battle models this IS the registered view's root ViewModel (the
-    JS reads it with a bare ModelObserver() and no unwrap). Read-only; no `rev` counter for the
-    same reason as ProgressVM (a private, always-compositing battle view).
+    JS reads it with a bare ModelObserver() and no unwrap). READ-ONLY -- see ProgressVM on why the
+    `setPosition` reverse command is gone and `commands` is 0; no `rev` counter for the same reason
+    as ProgressVM (a private, always-compositing battle view).
 
     THE FOUR REQUIREMENT STOPS ARE Real, NOT Number: _setNumber casts to int() (ProgressVM's
     docstring, and the same trap that quantised projAvg away), which would round a requirement
@@ -325,7 +355,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=15, commands=0):
+    def __init__(self, properties=17, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -353,11 +383,11 @@ class EfficiencyVM(ViewModel):
                                                     #    MoEEfficiency.js's battle-boundary signal
                                                     #    for resetting its damage-delta latch
         self._addNumberProperty("barSize", 0)       # 11 mod_settings.progress_bar_size(): 0 = the
-                                                    #    shipped size, 1 = LARGE (x2 wide, x1.5 tall,
-                                                    #    fonts + icons x1.5). APPENDED, so nothing
-                                                    #    above is renumbered. Same wire meaning as
-                                                    #    ProgressVM's -- the JS turns it into a 1.5x
-                                                    #    ROOT FONT, the .mp-lg body class, a
+                                                    #    shipped size, 1 = LARGE (x5/3 wide, x1.25
+                                                    #    tall, fonts + icons x1.25). APPENDED, so
+                                                    #    nothing above is renumbered. Same wire meaning
+                                                    #    as ProgressVM's -- the JS turns it into a
+                                                    #    1.25x ROOT FONT, the .mp-lg body class, a
                                                     #    re-derived surface AND (this bar only) the
                                                     #    caption clamp's px<->rem factor
         self._addBoolProperty("transEvents", True)   # 12 animate the enter/exit when a BATTLE EVENT
@@ -376,6 +406,17 @@ class EfficiencyVM(ViewModel):
                                                     #    is WHETHER it comes up, that is only HOW.
                                                     #    "Alt Press" / "Always" ride on `altHeld`
                                                     #    (mod_settings.progress_alt_held)
+        self._addNumberProperty("holdMs", 5000)      # 15 how long the bar stays up once it is up, in
+                                                    #    MS (mod_settings.progress_hold_seconds *
+                                                    #    1000). APPENDED. Same wire meaning as
+                                                    #    ProgressVM's; NOT master-folded (a
+                                                    #    duration, not a switch), and the default IS
+                                                    #    MoEBarTransient's baked HOLD_MS
+        self._addBoolProperty("ctrlHeld", False)    # 16 Ctrl currently down -> HOLD the bar up for
+                                                    #    the reposition gesture (it opens no input
+                                                    #    hit rect any more). APPENDED. Same wire
+                                                    #    meaning as ProgressVM's, including the
+                                                    #    `=== true` read on the JS side
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -421,3 +462,9 @@ class EfficiencyVM(ViewModel):
 
     def setShowEvents(self, v):
         self._setBool(14, v)
+
+    def setHoldMs(self, v):
+        self._setNumber(15, v)
+
+    def setCtrlHeld(self, v):
+        self._setBool(16, v)

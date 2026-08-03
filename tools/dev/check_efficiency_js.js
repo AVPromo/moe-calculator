@@ -40,7 +40,8 @@
 "use strict";
 
 const S = require("./lib/gf_check_shim.js");
-const { section, eq, ok, El, parseHTML, makeClock, makeRootFont, jsConst, jsArray, jsFactor } = S;
+const { section, eq, ok, El, parseHTML, makeClock, makeRootFont, makeDocumentEvents,
+        jsConst, jsArray, jsFactor } = S;
 
 const T_SRC = S.read("MoEBarTransient.js");         // the shared transient  -> "T"
 const B_SRC = S.read("MoEEfficiency.js");           // this bar              -> "B"
@@ -104,10 +105,32 @@ const MUTATIONS = {
     // fmt() moved with the transient; every numeral on this bar is a readout of it.
     "no-thousands-sep": ["T", '.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",")', ""],
 
+    // ===== the SHARED transient: the configurable hold duration (VM `holdMs`) =================
+    // The fail-soft direction: an absent/non-positive push must degrade to the BAKED HOLD_MS, never
+    // to "no hold at all". Anchored on BOTH bars -- see check_progress_js.js's twin.
+    "hold-fail-soft-broken": ["T", "        holdMs = v > 0 ? v : HOLD_MS;", "        holdMs = v;"],
+    // THIS BAR's one line: the pushed duration has to reach the transient at all.
+    "hold-flag-never-pushed": ["B", "    T.hold(model.holdMs);", "    void 0;"],
+    // Drop the one line that makes Alt own the hold: without it a pending correction -- including the
+    // one the peek's OWN cold entry just armed, which is why this clear has to sit AFTER that branch
+    // and not before it -- releases the bar mid-peek on any hold shorter than the baked one.
+    "peek-does-not-own-the-hold": ["T",
+        "        clearTimeout(holdT);\n        peeking = true;", "        peeking = true;"],
+
     // ===== the SHARED transient: the Alt peek ==================================================
+    // ANCHORED ON peekT's setTimeout, not on the bare pause line: holdFrom's LONGER-hold branch
+    // pauses at exactly the same indentation and is defined FIRST, and applyMutation replaces only
+    // the FIRST match -- so the bare line silently re-homed this probe onto the wrong pause.
     "peek-no-pause": ["T",
+        "        peekT = setTimeout(function () {\n" +
         '            root.style.animationPlayState = "paused";',
-        '            root.style.animationPlayState = "";'],
+        '        peekT = setTimeout(function () {\n            root.style.animationPlayState = "";'],
+    // ...and the OTHER pause: a hold LONGER than the baked one is served by parking the run at its
+    // plateau, so without this the keyframe fades out at HOLD_MS and the extra time shows nothing.
+    "long-hold-does-not-park-the-run": ["T",
+        "            if (id !== runId) return;\n" +
+        '            root.style.animationPlayState = "paused";',
+        "            if (id !== runId) return;"],
     "peek-ends-while-held": ["T",
         "            clearTimeout(endT);\n        }, Math.max(0, plateauAt - Date.now()));",
         "        }, Math.max(0, plateauAt - Date.now()));"],
@@ -116,15 +139,17 @@ const MUTATIONS = {
     // fade-out, so branching on it freezes the widget at partial opacity -- the phase has to come
     // from elapsed time. Two mutations: drop the re-arm entirely, and the tempting `showing` form.
     "no-fadeout-rearm": ["T",
-        "        } else if (!peeking && Date.now() >= plateauAt + HOLD_MS) {",
+        '        } else if (!peeking && root.style.animationPlayState !== "paused"\n' +
+        "                   && Date.now() >= plateauAt + HOLD_MS) {",
         "        } else if (false) {"],
     "peek-phase-from-showing": ["T",
-        "        } else if (!peeking && Date.now() >= plateauAt + HOLD_MS) {",
+        '        } else if (!peeking && root.style.animationPlayState !== "paused"\n' +
+        "                   && Date.now() >= plateauAt + HOLD_MS) {",
         "        } else if (!peeking && !showing) {"],
     // ...and peekOff's half: a release mid-damage-hold RESUMES it (players hold Alt near-constantly),
     // but a hold that already died must NOT be resurrected.
     "no-dmg-hold-resume": ["T",
-        "        if (dmgPlateauAt + HOLD_MS > Date.now()) {", "        if (false) {"],
+        "        if (dmgPlateauAt + holdMs > Date.now()) {", "        if (false) {"],
     "endrun-keeps-dmg-plateau": ["T",
         "        dmgPlateauAt = 0;                // the hold is over",
         "        // dmgPlateauAt = 0;  // the hold is over"],
@@ -170,7 +195,9 @@ const MUTATIONS = {
         "        if (fromDamage) dmgPlateauAt = plateauAt;\n        if (cfg.damage > 0) void 0;"],
 
     // ===== THIS BAR: the show gate, and the silent baseline that must NOT be gated =============
-    "no-hit-gate": ["B", "if (gained && T.settled()) {", "if (gained) {"],
+    "no-hit-gate": ["B",
+        "if (gained && model.showEvents !== false && T.settled()) {",
+        "if (gained && model.showEvents !== false) {"],
     // ...but the BASELINE must still run before the settle, or `last` is never recorded and the
     // first real hit is missed entirely.
     "baseline-gated-too": ["B",
@@ -346,6 +373,20 @@ const MUTATIONS = {
         'document.body.classList.toggle("mp-s1", px > 0 && px < 1.5);',
         'document.body.classList.toggle("mp-s1", px < 1.5);'],
     "quant-gate-not-re-evaluated-on-a-size-flip": ["T", "\n        setQuantClass();", ""],
+
+    // ===== CTRL HOLDS THE BAR UP (VM `ctrlHeld`) ==============================================
+    // See check_progress_js.js's own twin block (this bar drives the SAME shared transient). The five
+    // drag mutations that used to live here are DELETED with the code they probed: the reposition
+    // gesture is Python's now (adapter/battle_input + bridge/bar_window), so this document has no
+    // mousedown/mousemove/mouseup listener and no `setPosition` report. Their Python-side
+    // replacements are in tests/test_battle_input.py and tests/test_bar_window.py.
+    //
+    // THE FAIL-SOFT DIRECTION: `=== true` (not `!== false`) is deliberately the OPPOSITE of
+    // applyAnim/applyHold -- the shipped bar is NOT pinned up, so an absent/undefined ctrlHeld must
+    // read as NOT held. `!== false` peeks forever.
+    "ctrl-absent-reads-as-held": ["T",
+        "        ctrlHeld = held === true;", "        ctrlHeld = held !== false;"],
+    "ctrl-flag-never-pushed": ["B", "    T.ctrl(model.ctrlHeld);", "    void 0;"],
 };
 
 // --- the modules' own constants, SCRAPED (never written down here) ---------------------------
@@ -430,12 +471,12 @@ function mount(srcs, unsettled, unsized) {
     // regression that gate exists for is asserted in check_progress_js.js's own large-size section.
     const { documentElement, getComputedStyle, font, win } =
         makeRootFont(unsized ? UA_FONT_PX : ROOT_FONT_PX, unsized);
-    const document = {
+    const document = Object.assign({
         body,
         documentElement,
         createElement: (tag) => new El(tag),
         getElementById: (id) => body.byId(id),
-    };
+    }, makeDocumentEvents());
     const calls = { resize: [], hit: [], freeze: 0 };
     const viewEnv = {
         resizeViewRem(w, h) { calls.resize.push([w, h]); },
@@ -960,6 +1001,86 @@ function run(mutation) {
     eq("nothing reads a damageDelta off the model (the latch replaced it)",
        code.filter((l) => /damageDelta/.test(l)), []);
 
+    // --- THE CONFIGURABLE HOLD DURATION (mod_settings.progress_hold_seconds, pushed as `holdMs`) --
+    // The shared half is identical to check_progress_js.js's twin: applyHold's fail-soft cast and
+    // T.hold(model.holdMs) both live where BOTH bars call them, so both harnesses assert it, on this
+    // bar's own hit-driven cold show.
+    //
+    // holdFrom CORRECTS the deadline mp-life already bakes rather than replacing it, so the two
+    // directions are observably different:
+    //   AT THE BAKED HOLD (default, unpushed, or a hostile value failing soft to it) it does NOTHING
+    //     -- animationDelay stays "0ms", the identity never flips, and the keyframe's own fade-out
+    //     plus animationend end the run. Asserted, not assumed: the obvious "always pause and
+    //     re-arm" implementation satisfies every duration below while costing EVERY ordinary
+    //     auto-hide an extra identity flip mid-run (a live flicker risk).
+    //   AWAY FROM IT the exit is re-targeted through releaseHold, which seeks the replacement run to
+    //     the fade-out stop (see "peek hold + release"), so animationDelay says WHEN.
+    section("configurable hold duration");
+    s = mount(srcs);
+    s.push(M());                                   // no holdMs field at all
+    s.push(M({ damage: 1900, barX: 45, band: 1 })); // cold show -- the plain shipped entry
+    const unpushedRun = s.run();
+    s.clock.advance(FADE_IN + HOLD - 1);
+    eq("an unpushed hold has not released just before the BAKED HOLD_MS elapses",
+       s.root.style.animationDelay, "0ms");
+    s.clock.advance(1);
+    eq("...and AT the baked deadline it still has not touched the run: no re-arm, no seek, no "
+       + "identity flip -- the keyframe's own fade-out is what plays",
+       [s.root.style.animationDelay, s.run()], ["0ms", unpushedRun]);
+    s.clock.advance(FADE_OUT);
+    s.animEnd(RUN_NAMES[0]);
+    eq("...and its OWN animationend ends it, one fade-out after the baked deadline", s.run(), null);
+
+    s = mount(srcs);
+    s.push(M({ holdMs: 10000 }));                  // a configured hold, longer than the baked one
+    s.push(M({ damage: 1900, barX: 45, band: 1, holdMs: 10000 }));  // T.hold() reads EVERY render
+    s.clock.advance(FADE_IN);
+    eq("a LONGER hold parks the run AT its plateau -- without the pause the keyframe would fade out "
+       + "at the baked HOLD_MS and the extra seconds would show nothing",
+       s.root.style.animationPlayState, "paused");
+    s.clock.advance(HOLD + 1);                     // past where the BAKED hold would have released
+    eq("a configured hold outlives the BAKED HOLD_MS", s.root.style.animationDelay, "0ms");
+    eq("...and is still parked there", s.root.style.animationPlayState, "paused");
+    s.clock.advance((FADE_IN + 10000) - (FADE_IN + HOLD + 1) - 1);
+    eq("...still running right up to its OWN configured deadline", s.root.style.animationDelay,
+       "0ms");
+    s.clock.advance(2);
+    eq("...and releases exactly at the configured duration", s.root.style.animationDelay,
+       "-" + SEEK_FADE_OUT + "ms");
+    eq("...unpaused, so the fade-out actually plays", s.root.style.animationPlayState, "");
+
+    s = mount(srcs);
+    s.push(M({ holdMs: 0 }));                      // a hostile push must fail SOFT, not release now
+    s.push(M({ damage: 1900, barX: 45, band: 1, holdMs: 0 }));
+    const softRun = s.run();
+    s.clock.advance(FADE_IN + HOLD - 1);
+    eq("a zero holdMs has not released just before the BAKED HOLD_MS",
+       s.root.style.animationDelay, "0ms");
+    s.clock.advance(2);
+    eq("...it degrades to the baked HOLD_MS -- which means the correction is INERT, exactly as for "
+       + "an unpushed field, so the run is still the untouched shipped one",
+       [s.root.style.animationDelay, s.run()], ["0ms", softRun]);
+    s.clock.advance(FADE_OUT + MARGIN);
+    eq("...and ends no later than its own fallback timer, never immediately", s.run(), null);
+
+    // THE HOLD CORRECTION MUST NEVER OUTLIVE AN ALT PRESS -- a REGRESSION, found by probe and fixed
+    // in peekOn. A peek's own cold entry runs through coldShow, which arms a correction of its own,
+    // so peekOn has to drop it AFTER that branch rather than before: clearing first left a hold
+    // SHORTER than the baked one free to release the bar out from under a still-held key (measured:
+    // a 2s hold ended the peek 3.2s in and ignored Alt entirely). "Always" is a permanently-held
+    // Alt, so this is also what stops a short hold from un-pinning the always-on mode.
+    s = mount(srcs);
+    s.push(M({ holdMs: 2000 }));
+    s.push(M({ holdMs: 2000, altHeld: true }));    // Alt cold-shows the bar
+    s.clock.advance(FADE_IN + 2000 + FADE_OUT + MARGIN);   // well past the CONFIGURED hold
+    ok("a hold shorter than the baked one does not release a HELD Alt", s.run() !== null);
+    eq("...and the bar is still parked at its plateau", s.root.style.animationPlayState, "paused");
+    s.push(M({ holdMs: 2000, altHeld: false }));   // ...only the release ends it
+    eq("the RELEASE is what fades it out", s.root.style.animationDelay,
+       "-" + SEEK_FADE_OUT + "ms");
+    s.clock.advance(FADE_OUT + MARGIN);
+    eq("...and it is gone one fade-out later", s.run(), null);
+
     // --- THE LARGE SIZE MODE (mod_settings.progress_bar_size, pushed as `barSize`) -----------
     // The shared half (root font, body class, re-derived surface / hit rect / shift, idempotence,
     // the scale-update re-apply) is identical to check_progress_js.js's -- it lives in the shared
@@ -1226,6 +1347,87 @@ function run(mutation) {
     s.push(F(NONE, { damage: 1900, barX: 45, altHeld: false }));
     eq("...so its release still MIRRORS into the fade-out instead of ending outright",
        [s.root.style.animationDelay, s.run() !== null], ["-" + SEEK_FADE_OUT + "ms", true]);
+
+    // --- CTRL: HOLD THE BAR UP, AND NOTHING ELSE (VM `ctrlHeld`) ------------------------------
+    // THE DRAG IS GONE FROM THIS DOCUMENT. The Ctrl+left-button reposition gesture is Python's end
+    // to end (adapter/battle_input samples the keys off WG's dispatchers; bridge/bar_window re-places
+    // the window ABSOLUTELY from GUI.mcursor().position), so there is no document mousedown/
+    // mousemove/mouseup listener, no `setPosition` reverse command, and no delta protocol left to
+    // test. See check_progress_js.js's own twin section, which drives the SAME shared transient --
+    // this bar only differs in its own value fixture (damage/barX) -- and MoEBarTransient's
+    // "NOT IN THIS FILE ANY MORE" block for the three structural failures that killed the delta
+    // design. Two things replace ~150 lines of harness:
+    //
+    //   (1) THE HIT RECT IS NOW PERMANENTLY COLLAPSED. It used to be OPENED (padding 0 == the whole
+    //       surface rect live) while Ctrl was held, so this document could receive the drag's mouse
+    //       events -- and the rect IS the mouse hit rect, so an open one steals HUD input across the
+    //       bar's footprint. With no mouse input needed at all it never opens again.
+    //   (2) CTRL RIDES THE SAME PEEK AS ALT, which is the bar's whole remaining part in the gesture
+    //       (you cannot grab a bar that has faded out).
+    section("ctrl");
+    const lastHit = (st) => st.calls.hit[st.calls.hit.length - 1] || [];
+    const setPos = [];
+    // The VM the bars are pushed: a `setPosition` command is offered DELIBERATELY, so a reintroduced
+    // reverse-channel report would be recorded here rather than silently swallowed.
+    const VM = (extra) => Object.assign({ setPosition: (arg) => setPos.push(arg) }, extra);
+
+    // (a) the rect is collapsed at mount, and STAYS collapsed with Ctrl held.
+    s = mount(srcs);
+    s.push(M(VM()));
+    eq("the input rect is collapsed at mount", lastHit(s),
+       [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
+    s.push(M(VM({ ctrlHeld: true })));
+    eq("a held Ctrl no longer opens the input rect -- the HUD-input-steal hazard is retired",
+       lastHit(s), [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
+    s.push(M(VM({ ctrlHeld: false })));
+    eq("...and releasing it changes nothing either", lastHit(s),
+       [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
+
+    // (b) CTRL RIDES THE PEEK: held -> the bar comes up and pauses at the hold plateau; released ->
+    // it leaves. This is the one behaviour the flag still drives, and it is what `T.ctrl(...)` being
+    // pushed at all buys.
+    s = mount(srcs);
+    s.push(M(VM()));
+    s.push(M(VM({ ctrlHeld: true })));
+    s.clock.advance(FADE_IN);
+    eq("a held Ctrl pins the bar at the hold plateau, exactly like a held Alt",
+       [s.run() !== null, s.root.style.animationPlayState], [true, "paused"]);
+    s.push(M(VM({ ctrlHeld: false })));
+    eq("...and releasing it seeks straight to the fade-out",
+       s.root.style.animationDelay, "-" + SEEK_FADE_OUT + "ms");
+    s.clock.advance(FADE_OUT + MARGIN);
+    eq("...which then ends the run", s.run(), null);
+
+    // (c) THE FAIL-SOFT DIRECTION: `=== true`, not `!== false` -- the OPPOSITE of applyAnim /
+    // applyHold, because the shipped bar is NOT pinned up. A model that never carries the field (a
+    // pre-push frame, an old fixture, a marshal that dropped it) must read as NOT held; `!== false`
+    // would peek forever and the bar would never come down.
+    s = mount(srcs);
+    s.push(M(VM()));
+    s.push(M(VM()));
+    s.clock.advance(FADE_IN);
+    eq("a model that never carries ctrlHeld never peeks", s.run(), null);
+
+    // (d) NO MOUSE LISTENER EXISTS. A Ctrl+mousedown over a showing bar is neither claimed nor
+    // stopped -- a foreign listener sees it untouched -- and nothing is ever reported back through
+    // the reverse channel. This pins the deletion: any reintroduced document drag fails here.
+    s = mount(srcs);
+    s.push(M(VM()));
+    s.push(M(VM({ damage: 1900, barX: 45, ctrlHeld: true })));   // cold show, Ctrl already down
+    let foreign = 0;
+    s.document.addEventListener("mousedown", () => { foreign += 1; }, true);
+    setPos.length = 0;
+    const ev = s.document.dispatch("mousedown", { ctrlKey: true, buttons: 1, screenX: 100,
+                                                  screenY: 50, clientX: 100, clientY: 50,
+                                                  target: s.body });
+    s.document.dispatch("mousemove", { buttons: 1, screenX: 160, screenY: 90,
+                                       clientX: 160, clientY: 90 });
+    s.document.dispatch("mouseup", { screenX: 160, screenY: 90, clientX: 160, clientY: 90 });
+    eq("a Ctrl+mousedown over a showing bar is NOT claimed -- this document takes no mouse input",
+       ev.defaultPrevented, false);
+    eq("...and is not stopped: a foreign listener still sees it", foreign, 1);
+    eq("...and a whole down/move/up gesture reports nothing on the reverse channel",
+       setPos.length, 0);
 }
 
 S.main("MoEEfficiency.js + MoEBarTransient.js", MUTATIONS, run);

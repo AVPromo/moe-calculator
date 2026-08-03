@@ -143,12 +143,12 @@ def _push(damage, **snap_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # The bridge is this model's only producer: a prop added on one side without the other would
-    # silently leave the JS reading a default forever. FIFTEEN: the ten that survived
+    # silently leave the JS reading a default forever. SEVENTEEN: the ten that survived
     # `damageDelta`'s removal (which RENUMBERED every property after it), then `battleEpoch`,
-    # `barSize`, `transEvents` / `transManual` and `showEvents` -- every one APPENDED after altHeld
-    # for exactly that reason, since an append renumbers nothing.
+    # `barSize`, `transEvents` / `transManual`, `showEvents`, `holdMs` and `ctrlHeld` -- every one
+    # APPENDED after altHeld for exactly that reason, since an append renumbers nothing.
     assert set(_push(2000)) == _VM_PROPS
-    assert len(_VM_PROPS) == 15
+    assert len(_VM_PROPS) == 17
 
 
 def test_the_push_keeps_no_state_between_calls(epoch):
@@ -247,6 +247,29 @@ def test_push_writes_the_two_transition_flags_master_folded(monkeypatch):
         # The master itself is never pushed under any name.
         assert mod_settings.PROGRESS_TRANSITIONS_KEY not in props
         assert "transitions" not in props and "transEnabled" not in props
+    finally:
+        mod_settings._seed(saved)
+
+
+def test_push_writes_hold_ms_as_seconds_times_a_thousand_and_is_not_master_folded():
+    # holdMs is progress_hold_seconds() * 1000, in MS for the JS clock, on the SECOND bar (proven
+    # separately from test_progress_bridge.py's -- the two pushes are independent code). Unlike
+    # transEvents/transManual above it is deliberately NOT ANDed with the Transitions master: a
+    # duration ANDed with a switch would push 0 (no hold at all).
+    saved = dict(mod_settings._settings)
+    try:
+        mod_settings._apply({mod_settings.PROGRESS_HOLD_SECONDS_KEY: 17})
+        assert _push(2000)["holdMs"] == 17000
+        mod_settings._apply({mod_settings.PROGRESS_HOLD_SECONDS_KEY:
+                             mod_settings.PROGRESS_HOLD_DEFAULT})
+        assert _push(2000)["holdMs"] == mod_settings.PROGRESS_HOLD_DEFAULT * 1000 == 5000
+        mod_settings._apply({mod_settings.PROGRESS_TRANSITIONS_KEY: False,
+                             mod_settings.PROGRESS_TRANS_EVENTS_KEY: False,
+                             mod_settings.PROGRESS_TRANS_MANUAL_KEY: False,
+                             mod_settings.PROGRESS_HOLD_SECONDS_KEY: 12})
+        props = _push(2000)
+        assert props["holdMs"] == 12000
+        assert props["transEvents"] is False and props["transManual"] is False
     finally:
         mod_settings._seed(saved)
 

@@ -36,9 +36,10 @@ def test_the_text_less_spacer_rows_take_a_none_sentinel_slot():
     # slot would shift every later control's text by one. `None` specifically, because
     # `panel_text().get(None)` is falsy and the sync walk's existing `if not rendered: continue`
     # then skips it with no new branch (the template-side pairing is pinned in test_mod_settings).
-    # THREE in column 1, TWO in column 2: column 1 gained a spacer heading "Transitions" and (this
-    # bump) a second one heading "Mode"; column 2 gained one heading "Position".
-    assert S.COL1_KEYS.count(None) == 3
+    # FIVE in column 1, TWO in column 2: column 1 has one heading "Battle Progress", one heading
+    # "Mode", one heading "Transitions", one (v19) heading the hold Slider and one (v18) heading
+    # "Bar Position"; column 2 has one heading "Layout" and one heading "Position".
+    assert S.COL1_KEYS.count(None) == 5
     assert S.COL2_KEYS.count(None) == 2
     # A sentinel must never collide with a real row, in any language.
     for code in S._PANEL:
@@ -157,26 +158,32 @@ def test_counted_assist_ukrainian_translated():
 def test_progress_bar_group_is_the_tail_of_col1():
     # The progress-bar control briefly had a column 3 of its own; that column never rendered
     # in-client, so it is back in column 1 -- as the "Battle Progress" CATEGORY: a bare header row,
-    # the Progress Bar master with its three VISIBILITY children, an Empty spacer (this bump,
-    # ahead of "Mode"), the standalone Mode and Scale radios, a SECOND Empty spacer, then the
-    # Transitions master with its two children (a THIRD group under the SAME header, so it adds no
-    # cat* row). The TABLE KEY `progressBar` never changed through any of those moves, so no
-    # translation was ever orphaned.
+    # the Progress Bar master with its three VISIBILITY children, an Empty spacer (ahead of "Mode")
+    # and the standalone Mode and Scale radios. A SECOND Empty spacer then closes it and the
+    # "Transitions" CATEGORY takes the tail: its own bare header, the Transitions master, its two
+    # switches and (v17) the hold-duration slider. The TABLE KEY `progressBar` never changed
+    # through any of those moves, so no translation was ever orphaned.
     #
-    # "Battle Progress" is NO LONGER the contiguous tail of COL1_KEYS as a plain key list: TWO
-    # `None` sentinels now sit INSIDE it -- one ahead of the Mode radio, one ahead of the
-    # Transitions master. So pin the tail as the literal last TWELVE slots (ten real keys + the two
-    # Nones), rather than filtering the sentinels out and asserting contiguity on what remains --
-    # that would silently accept either spacer landing anywhere in the group instead of exactly
-    # where it belongs.
+    # Pinned as a literal FIFTEEN-slot RUN (twelve real keys + the three `None` sentinels that sit
+    # inside it -- v19 added a fifth Empty spacer ahead of "progressHoldSeconds"), rather than
+    # filtering the sentinels out and asserting contiguity on what remains -- that would silently
+    # accept a spacer landing anywhere in the run instead of exactly where it belongs. It was the
+    # column TAIL until v18 appended a fourth category ("Bar Position"), so the run is now anchored
+    # to where "Battle Progress" starts; the four slots after it are pinned separately below.
     assert u"progressBar" in S._PANEL[u"en"]
-    tail = S.COL1_KEYS[-12:]
+    start = S.COL1_KEYS.index(u"catBattleProgress")
+    tail = S.COL1_KEYS[start:start + 15]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
-                    None, S.VARIANT_KEY, u"progressSize", None,
-                    u"progressTransitions", u"progressTransEvents", u"progressTransManual"), (
-        u"the Battle Progress category (incl. both spacers) is no longer the tail of "
-        u"COL1_KEYS: %r" % (S.COL1_KEYS,))
+                    None, S.VARIANT_KEY, u"progressSize",
+                    None, u"catTransitions",
+                    u"progressTransitions", u"progressTransEvents", u"progressTransManual",
+                    None, u"progressHoldSeconds"), (
+        u"the Battle Progress + Transitions categories (incl. all three spacers) are no longer one "
+        u"run in COL1_KEYS: %r" % (S.COL1_KEYS,))
+    # ...and the "Bar Position" category IS the tail, spacer included.
+    assert S.COL1_KEYS[start + 15:] == (None, u"catBarPosition", u"barPosX", u"barPosY"), (
+        u"the Bar Position category is no longer the tail of COL1_KEYS: %r" % (S.COL1_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
     # phantom column to mod_settings._sync_template_text's walk.

@@ -311,7 +311,7 @@ $tpl = @'
      a pointer-events:none overlay, so there is nothing to hit-test or focus behind a 0-alpha box.
      ONE transition declaration on .mp-d, naming ONLY opacity -- explicit ms + easing in the
      emitted CSS (Gameface drops a transition whose property starts from an unresolvable var()). */
-  .mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;font-size:12rem;transform:translateY(2.5rem);line-height:15.5rem;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;font-size:12rem;transform:translateY(1.5rem);line-height:15.5rem;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mp-v.mp-up,.mp-d-num.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mp-v.mp-down,.mp-d-num.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   /* Only the bottom-centre caption animates (it rides proj_avg); pre_avg's stays put. */
@@ -1373,7 +1373,7 @@ $tpl = @'
       "   restore the transition -- the same idiom the fill/tick rewind uses. */\n"+
       ".mp-cap .mp-d {\n  position: absolute;\n  left: 100%;\n  margin-left: 0.35em;\n"+
       "  font-size: 12rem;\n"+
-      "  transform: translateY(2.5rem);\n"+
+      "  transform: translateY(1.5rem);\n"+
       // The delta's own line box, pinned by the same rule as the captions above (lh(12) == 15.5) --
       // spelled as a literal because its font-size is one too (no knob owns it).
       "  line-height: 15.5rem;\n  opacity: 0;\n"+

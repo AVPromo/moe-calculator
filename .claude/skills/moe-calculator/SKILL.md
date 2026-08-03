@@ -78,6 +78,8 @@ Deploy yourself — never ask the user to run these (run the commands directly v
 | Live REPL | `<py3> tools\dev\repl_client.py "<expr>"` — needs `com.14th_ua.moe_calculator_debug.wotmod` on TCP **:2224** |
 
 - WoT install: `D:/Games/World_of_Tanks_EU`. Decompiled client source: `C:\Users\Dmytro Vasylkivskyi\wot-eu\source\res\scripts\client\`.
-- Sibling repo with portable code (Ctrl+drag): `C:\Users\Dmytro Vasylkivskyi\wgmod-research-progress`.
+- Sibling repo with portable code (garage widget's DOM Ctrl+drag, `installDrag`):
+  `C:\Users\Dmytro Vasylkivskyi\wgmod-research-progress`. The in-battle bars' Ctrl+drag is a
+  separate, Python-owned absolute-placement design (no DOM drag, no JS delta) — see `moe-battle`.
 - **Deploy needs `WorldOfTanks.exe` closed** (file locks); the `wgc` launcher may stay open.
 - Backlog + research notes live in `TASKS/` (`TASKS/shipped/` = archived). Planner role: see `wotmod-planner`.

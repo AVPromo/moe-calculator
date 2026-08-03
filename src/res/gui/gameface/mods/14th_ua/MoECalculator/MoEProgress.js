@@ -365,6 +365,16 @@ function render(model) {
     // transient reads an ABSENT field as animated (see applyAnim), which is the fail-soft direction --
     // a `!!` here would turn a missing prop into "instant" instead.
     T.anim(model.transEvents, model.transManual);
+    // The pushed HOLD DURATION (mod_settings.progress_hold_seconds * 1000). Passed RAW for the same
+    // reason as the two switches: the transient reads an absent / non-positive field as the baked
+    // 5000ms (see applyHold), which is the fail-soft direction -- a `|| 0` here would mean no hold.
+    T.hold(model.holdMs);
+    // The pushed CTRL key state (battle_bridge._ctrl_held): the drag-to-reposition gesture, which
+    // opens the input hit rect and holds the bar up for as long as the key is down. Passed RAW like
+    // the three above -- the transient tests it with `=== true`, so an absent field reads as NOT
+    // held, which is the fail-soft direction HERE (an open hit rect would steal HUD input). Ahead
+    // of T.peek() below, which ORs this state in.
+    T.ctrl(model.ctrlHeld);
 
     cur = {
         marks: Number(model.marks) || 0,

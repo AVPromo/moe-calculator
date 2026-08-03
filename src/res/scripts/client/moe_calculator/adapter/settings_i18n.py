@@ -22,10 +22,13 @@ Both radios (``VARIANT_KEY`` = "Mode" and ``progressSize`` = "Scale") are normal
 ``build()`` only bolts their language-dependent OPTION tuples (``_VARIANT_OPTIONS`` /
 ``_SIZE_OPTIONS``) onto the rendered entry, where ``mod_settings._radio`` reads them.
 
-The panel is grouped into three CATEGORIES, each a bare label header row (``catBattleCalc`` /
-``catBattleProgress`` in column 1, ``catGarage`` in column 2) followed by that feature's
-controls, with an ``Empty`` spacer row between them. A category row is text-only: no ``varName``
-and NO tooltip, so its ``_row`` carries a label alone and ``_render`` emits no ``tooltip`` key.
+The panel is grouped into five CATEGORIES, each a label header row (``catBattleCalc`` /
+``catBattleProgress`` / ``catTransitions`` / ``catBarPosition`` in column 1, ``catGarage`` in
+column 2) followed by that feature's controls, with an ``Empty`` spacer row between them. A
+category row carries no ``varName``, and most are text-only (no tooltip -- their ``_row`` is a
+label alone and ``_render`` emits no ``tooltip`` key); ``catBarPosition`` is the exception, and
+carries the Ctrl+drag prose for the two label-only steppers below it, exactly as the column-2
+"Layout" header does for its own pair.
 Because the header names the feature, each feature's master checkbox is simply labelled
 "Enabled" (was "Show"). ``build()`` wraps every category header (plus the "Layout" header --
 see ``HEADER_KEYS``) in ``<b>...</b>``; ``mod_settings._label`` then only adds the matching
@@ -35,8 +38,9 @@ for why that matters). The ``positionSub`` ("Position") row that heads the two s
 deliberately excluded from ``HEADER_KEYS``, so the weight difference reads as hierarchy. An
 ``Empty`` row has no text at all, so ``COL1_KEYS`` / ``COL2_KEYS`` give it a ``None`` sentinel
 slot rather than a key -- see those tuples. A spacer also heads the standalone Mode / Scale
-radios, the "Transitions" group (both column 1) and the "Position" sub-label (column 2), matching
-the existing category-separator spacers.
+radios, the "Transitions" and "Bar Position" categories, the hold-duration Slider itself
+(right after the Transitions group's two switch children -- column 1) and the "Position"
+sub-label (column 2), matching the existing category-separator spacers.
 
 NOTE on terminology: the non-English blocks use each locale's natural wording for
 "widget", "Garage", "battle" and "Marks of Excellence". The official Marks-of-Excellence
@@ -99,14 +103,17 @@ def _row(label, header=None, body=None):
 VARIANT_KEY = u"progressVariant"
 
 # Ordered key list per column -- the wire order of the controls in the MSA template. Used by
-# mod_settings to walk a stored template in lockstep. Column 1 is TWO CATEGORIES separated by an
-# Empty spacer row: "Battle Calculator" (the In-Battle Widget master + its two children), then
+# mod_settings to walk a stored template in lockstep. Column 1 is FOUR CATEGORIES separated by
+# Empty spacer rows: "Battle Calculator" (the In-Battle Widget master + its two children), then
 # "Battle Progress" (the Progress Bar master + its three VISIBILITY children, a SECOND Empty
-# spacer, the standalone Mode and Scale radios, a THIRD Empty spacer, then the Transitions master
-# + its two children -- a THIRD group under the same category header, so it adds no cat* row).
-# Column 2 is the "Garage Widget" category header, the garage master, a spacer, then the "Layout"
-# group (Follow Carousel, a spacer, the "Position" sub-label, the X/Y steppers). Only two columns
-# -- a third does not render in the panel at all.
+# spacer, then the standalone Mode and Scale radios), then a THIRD Empty spacer and "Transitions"
+# -- its own category header since the hold-duration slider joined the group, so the master reads
+# just "Enabled" like every other master under a header, and a FOURTH Empty spacer now heads the
+# UNGROUPED hold-duration Slider itself (right after the group's two switch children) -- and
+# finally a FIFTH Empty spacer and "Bar Position" (its header plus the two standalone X/Y steppers
+# that mirror the bar's Ctrl+drag). Column 2 is the "Garage Widget" category header, the garage
+# master, a spacer, then the "Layout" group (Follow Carousel, a spacer, the "Position" sub-label,
+# the X/Y steppers). Only two columns -- a third does not render in the panel at all.
 #
 # EVERY control gets a slot, including the ones that carry no varName (the cat* headers) -- the zip
 # in _sync_template_text is POSITIONAL, so a missing key here pairs every LATER control with the
@@ -120,7 +127,12 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None,
              VARIANT_KEY, u"progressSize",
              None,
-             u"progressTransitions", u"progressTransEvents", u"progressTransManual")
+             u"catTransitions", u"progressTransitions",
+             u"progressTransEvents", u"progressTransManual",
+             None,
+             u"progressHoldSeconds",
+             None,
+             u"catBarPosition", u"barPosX", u"barPosY")
 # Column 2: the category header, the standalone In-Garage Widget master, a spacer, then the
 # "Layout" group -- its bold header, Follow Carousel, a spacer, a non-bold "Position" sub-label,
 # then the X/Y numeric steppers (in that exact control order, so _sync_template_text walks it in
@@ -129,10 +141,12 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
 COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarousel",
              None, u"positionSub", u"posX", u"posY")
 
-# The four CATEGORY/GROUP header keys that render BOLD (see build()). "positionSub"
+# The six CATEGORY/GROUP header keys that render BOLD (see build()). "positionSub"
 # ("Position") is deliberately EXCLUDED -- it is the non-bold sub-label under "Layout", and
-# the weight difference is what makes the hierarchy read.
-HEADER_KEYS = frozenset((u"catBattleCalc", u"catBattleProgress", u"catGarage", u"positioning"))
+# the weight difference is what makes the hierarchy read. "catBarPosition" IS bold: it is a
+# column-1 CATEGORY in its own right, not a sub-level of the one above it.
+HEADER_KEYS = frozenset((u"catBattleCalc", u"catBattleProgress", u"catTransitions",
+                         u"catBarPosition", u"catGarage", u"positioning"))
 
 # The variant radio's OPTION LABELS, in wire (index) order: 0 = Damage Efficiency (the default
 # since v13), 1 = Moving Average (the original next-mark bar). THE ORDER FLIPPED in v13 and the
@@ -244,17 +258,24 @@ _PANEL = {
             u"Scale", u"Bar scale",
             u"Default: the bar's normal size. Large: draws it bigger, for easier reading from "
             u"a distance."),
-        # The Transitions master + its two children. Only the MASTER carries a tooltip: the two
-        # children are one-word switches whose meaning the master's prose spells out, so they are
-        # label-only rows (no tt* -> _render emits no tooltip key).
+        # The Transitions CATEGORY header (its own category since the hold-duration slider joined
+        # the group) + the master, its two children and the slider. The two children stay
+        # label-only rows whose meaning the master's prose spells out (no tt* -> _render emits no
+        # tooltip key); the master now reads "Enabled" like every other master under a header.
+        u"catTransitions": _row(u"Transitions"),
         u"progressTransitions": _row(
-            u"Transitions", u"Bar transitions",
-            u"The bar fades and slides when it appears and disappears. Turn a switch off to make "
-            u"it appear and disappear instantly instead. Events covers the bar reacting to what "
-            u"happens in battle; Alt Press covers bringing it up with the Alt key, matching the "
-            u"game's own interface, which does not animate on Alt."),
+            u"Enabled", u"Bar transitions",
+            u"The bar fades and slides as it appears and disappears. Uncheck this to make every "
+            u"appearance instant instead, or turn off just one switch below. Events covers the "
+            u"bar reacting to what happens in battle; Alt Press covers bringing it up with the "
+            u"Alt key, matching the game's own interface, which does not animate on Alt."),
         u"progressTransEvents": _row(u"Events"),
         u"progressTransManual": _row(u"Alt Press"),
+        u"progressHoldSeconds": _row(
+            u"Hold Duration (s)", u"Hold duration",
+            u"How long the bar stays on screen, in seconds, after an event raises it. Holding "
+            u"Alt keeps it up for as long as the key is held, whatever this is set to. The fade "
+            u"in and the fade out are not counted."),
         # --- drag-to-reposition group (translated across every shipped language; see COL2_KEYS). ---
         u"positioning": _row(
             u"Layout", u"Widget position",
@@ -274,6 +295,18 @@ _PANEL = {
             u"Vertical (top Y)", u"Vertical position",
             u"The pinned widget's distance from the top screen edge, in pixels. 0 restores "
             u"the automatic bottom-right position."),
+        # --- the IN-BATTLE bar's Ctrl+drag position (column 1's fourth category). The two
+        # steppers are LABEL-ONLY rows -- their axis hint says it all and the header's
+        # tooltip above carries the whole feature's prose, exactly like the Transitions
+        # group's two switches. Labels deliberately mirror posX/posY's: the same two axes,
+        # the same top-left reference corner, just a different widget. ---
+        u"catBarPosition": _row(
+            u"Bar Position", u"In-battle bar position",
+            u"Hold Ctrl in battle and drag the bar to move it. The steppers below show where "
+            u"it is pinned, in pixels from the top-left corner of the screen; 0 / 0 means the "
+            u"default centred position. Use the per-mod Reset to return to default."),
+        u"barPosX": _row(u"Horizontal (left X)"),
+        u"barPosY": _row(u"Vertical (top Y)"),
         u"followCarousel": _row(
             u"Follow Carousel", u"Follow Carousel Mode",
             u"When on, a dragged widget keeps shifting vertically with the vehicle carousel "
@@ -332,15 +365,21 @@ _PANEL = {
             u"Anforderungen der Marken 65 / 85 / 95 / 100 %. Gleitender Durchschnitt: zeigt, wo "
             u"dein voraussichtlicher Durchschnittsschaden zwischen der Marke, die du hast, und "
             u"der Anforderung der nächsten Marke liegt."),
+        u"catTransitions": _row(u"Übergänge"),
         u"progressTransitions": _row(
-            u"Übergänge", u"Übergänge der Leiste",
+            u"Aktiviert", u"Übergänge der Leiste",
             u"Die Leiste blendet ein und gleitet, wenn sie erscheint und verschwindet. Deaktiviere "
-            u"einen Schalter, damit sie stattdessen sofort erscheint und verschwindet. Ereignisse "
-            u"betrifft die Reaktion der Leiste auf das Geschehen im Gefecht; Alt drücken betrifft "
-            u"das Einblenden mit der Alt-Taste, wie in der Spieloberfläche selbst, die bei Alt "
-            u"nichts animiert."),
+            u"dies, damit jedes Erscheinen sofort erfolgt, oder schalte unten nur einen Schalter "
+            u"ab. Ereignisse betrifft die Reaktion der Leiste auf das Geschehen im Gefecht; Alt "
+            u"drücken betrifft das Einblenden mit der Alt-Taste, wie in der Spieloberfläche "
+            u"selbst, die bei Alt nichts animiert."),
         u"progressTransEvents": _row(u"Ereignisse"),
         u"progressTransManual": _row(u"Alt drücken"),
+        u"progressHoldSeconds": _row(
+            u"Haltedauer (s)", u"Haltedauer",
+            u"Wie lange die Leiste nach einem Ereignis auf dem Bildschirm bleibt, in Sekunden. "
+            u"Solange Alt gehalten wird, bleibt sie unabhängig davon eingeblendet. Ein- und "
+            u"Ausblenden werden nicht mitgezählt."),
         u"positioning": _row(
             u"Layout", u"Widget-Position",
             u"Ziehe das Garage-Widget mit Strg+Ziehen, um es zu verschieben (halte "
@@ -359,6 +398,14 @@ _PANEL = {
             u"Vertikal (oben Y)", u"Vertikale Position",
             u"Abstand des fixierten Widgets vom oberen Bildschirmrand in Pixeln. 0 stellt "
             u"die automatische Position unten rechts wieder her."),
+        u"catBarPosition": _row(
+            u"Leistenposition", u"Position der Leiste im Gefecht",
+            u"Halte im Gefecht Strg gedrückt und ziehe die Leiste, um sie zu verschieben. Die "
+            u"Felder unten zeigen ihre fixierte Position in Pixeln von der oberen linken "
+            u"Bildschirmecke; 0 / 0 bedeutet die zentrierte Standardposition. Nutze das "
+            u"Zurücksetzen des Mods, um zum Standard zurückzukehren."),
+        u"barPosX": _row(u"Horizontal (links X)"),
+        u"barPosY": _row(u"Vertikal (oben Y)"),
         u"followCarousel": _row(
             u"Karussell folgen", u"Karussell folgen",
             u"Wenn aktiviert, verschiebt sich ein gezogenes Widget weiterhin vertikal mit "
@@ -419,15 +466,21 @@ _PANEL = {
             u"exigences des marques 65 / 85 / 95 / 100 %. Moyenne glissante : indique où se "
             u"situent vos dégâts moyens prévus entre la marque que vous possédez et l'exigence "
             u"de la marque suivante."),
+        u"catTransitions": _row(u"Transitions"),
         u"progressTransitions": _row(
-            u"Transitions", u"Transitions de la barre",
-            u"La barre s'estompe et glisse lorsqu'elle apparaît et disparaît. Désactivez un "
-            u"interrupteur pour qu'elle apparaisse et disparaisse instantanément. Événements "
-            u"concerne la réaction de la barre à ce qui se passe en bataille ; Appui sur Alt "
-            u"concerne son affichage avec la touche Alt, comme l'interface du jeu elle-même, qui "
-            u"n'anime rien avec Alt."),
+            u"Activé", u"Transitions de la barre",
+            u"La barre s'estompe et glisse lorsqu'elle apparaît et disparaît. Décochez ceci pour "
+            u"que chaque apparition soit instantanée, ou désactivez un seul interrupteur "
+            u"ci-dessous. Événements concerne la réaction de la barre à ce qui se passe en "
+            u"bataille ; Appui sur Alt concerne son affichage avec la touche Alt, comme "
+            u"l'interface du jeu elle-même, qui n'anime rien avec Alt."),
         u"progressTransEvents": _row(u"Événements"),
         u"progressTransManual": _row(u"Appui sur Alt"),
+        u"progressHoldSeconds": _row(
+            u"Durée d'affichage (s)", u"Durée d'affichage",
+            u"Combien de temps la barre reste à l'écran, en secondes, après qu'un événement l'a "
+            u"fait apparaître. Tant que la touche Alt est maintenue, elle reste affichée quelle "
+            u"que soit cette valeur. Les fondus d'entrée et de sortie ne sont pas comptés."),
         u"positioning": _row(
             u"Disposition", u"Position du widget",
             u"Ctrl+glisser pour déplacer le widget du garage (maintenez Maj pour le "
@@ -447,6 +500,14 @@ _PANEL = {
             u"Vertical (Y haut)", u"Position verticale",
             u"Distance du widget épinglé par rapport au bord supérieur de l'écran, en "
             u"pixels. 0 rétablit la position automatique en bas à droite."),
+        u"catBarPosition": _row(
+            u"Position de la barre", u"Position de la barre en bataille",
+            u"En bataille, maintenez Ctrl et faites glisser la barre pour la déplacer. Les "
+            u"compteurs ci-dessous indiquent sa position épinglée, en pixels depuis le coin "
+            u"supérieur gauche de l'écran ; 0 / 0 correspond à la position centrée par défaut. "
+            u"Utilisez la réinitialisation du mod pour revenir à la valeur par défaut."),
+        u"barPosX": _row(u"Horizontal (X gauche)"),
+        u"barPosY": _row(u"Vertical (Y haut)"),
         u"followCarousel": _row(
             u"Suivre le carrousel", u"Suivre le carrousel",
             u"Activé, un widget déplacé continue de se décaler verticalement avec le "
@@ -505,14 +566,21 @@ _PANEL = {
             u"Eficiencia de daño: sitúa tu daño de esta batalla frente a los requisitos de las "
             u"marcas del 65 / 85 / 95 / 100 %. Media móvil: indica dónde se sitúa tu daño medio "
             u"previsto entre la marca que tienes y el requisito de la siguiente marca."),
+        u"catTransitions": _row(u"Transiciones"),
         u"progressTransitions": _row(
-            u"Transiciones", u"Transiciones de la barra",
-            u"La barra se atenúa y desliza al aparecer y desaparecer. Desactiva un interruptor "
-            u"para que aparezca y desaparezca al instante. Eventos se refiere a la barra "
-            u"reaccionando a lo que ocurre en la batalla; Pulsar Alt se refiere a mostrarla con "
-            u"la tecla Alt, igual que la interfaz del propio juego, que no anima nada con Alt."),
+            u"Activado", u"Transiciones de la barra",
+            u"La barra se atenúa y desliza al aparecer y desaparecer. Desmarca esto para que cada "
+            u"aparición sea instantánea, o desactiva solo uno de los interruptores de abajo. "
+            u"Eventos se refiere a la barra reaccionando a lo que ocurre en la batalla; Pulsar "
+            u"Alt se refiere a mostrarla con la tecla Alt, igual que la interfaz del propio "
+            u"juego, que no anima nada con Alt."),
         u"progressTransEvents": _row(u"Eventos"),
         u"progressTransManual": _row(u"Pulsar Alt"),
+        u"progressHoldSeconds": _row(
+            u"Duración en pantalla (s)", u"Duración en pantalla",
+            u"Cuánto tiempo permanece la barra en pantalla, en segundos, después de que un evento "
+            u"la muestre. Mientras mantengas Alt seguirá visible, sea cual sea este valor. Las "
+            u"transiciones de entrada y salida no se cuentan."),
         u"positioning": _row(
             u"Disposición", u"Posición del widget",
             u"Ctrl+arrastrar para mover el widget del garaje (mantén Mayús para "
@@ -532,6 +600,14 @@ _PANEL = {
             u"Vertical (Y superior)", u"Posición vertical",
             u"Distancia del widget fijado al borde superior de la pantalla, en píxeles. 0 "
             u"restaura la posición automática en la esquina inferior derecha."),
+        u"catBarPosition": _row(
+            u"Posición de la barra", u"Posición de la barra en combate",
+            u"En combate, mantén pulsado Ctrl y arrastra la barra para moverla. Los contadores "
+            u"de abajo muestran su posición fijada, en píxeles desde la esquina superior "
+            u"izquierda de la pantalla; 0 / 0 es la posición centrada predeterminada. Usa el "
+            u"restablecimiento del mod para volver al valor predeterminado."),
+        u"barPosX": _row(u"Horizontal (X izquierda)"),
+        u"barPosY": _row(u"Vertical (Y superior)"),
         u"followCarousel": _row(
             u"Seguir el carrusel", u"Seguir el carrusel",
             u"Cuando está activado, un widget arrastrado sigue desplazándose "
@@ -592,14 +668,21 @@ _PANEL = {
             u"requisiti dei marchi 65 / 85 / 95 / 100 %. Media mobile: indica dove si collocano "
             u"i tuoi danni medi previsti tra il marchio che possiedi e il requisito del marchio "
             u"successivo."),
+        u"catTransitions": _row(u"Transizioni"),
         u"progressTransitions": _row(
-            u"Transizioni", u"Transizioni della barra",
-            u"La barra sfuma e scorre quando appare e scompare. Disattiva un interruttore perché "
-            u"appaia e scompaia istantaneamente. Eventi riguarda la barra che reagisce a ciò che "
-            u"accade in battaglia; Premi Alt riguarda il richiamarla con il tasto Alt, come "
-            u"l'interfaccia del gioco stesso, che con Alt non anima nulla."),
+            u"Abilitato", u"Transizioni della barra",
+            u"La barra sfuma e scorre quando appare e scompare. Deseleziona questa voce perché "
+            u"ogni comparsa sia istantanea, oppure disattiva un solo interruttore qui sotto. "
+            u"Eventi riguarda la barra che reagisce a ciò che accade in battaglia; Premi Alt "
+            u"riguarda il richiamarla con il tasto Alt, come l'interfaccia del gioco stesso, che "
+            u"con Alt non anima nulla."),
         u"progressTransEvents": _row(u"Eventi"),
         u"progressTransManual": _row(u"Premi Alt"),
+        u"progressHoldSeconds": _row(
+            u"Durata di permanenza (s)", u"Durata di permanenza",
+            u"Per quanto tempo la barra resta sullo schermo, in secondi, dopo che un evento l'ha "
+            u"richiamata. Tenendo premuto Alt resta visibile a prescindere da questo valore. Le "
+            u"dissolvenze di entrata e di uscita non sono conteggiate."),
         u"positioning": _row(
             u"Disposizione", u"Posizione del widget",
             u"Ctrl+trascina per spostare il widget del garage (tieni premuto Maiusc per "
@@ -619,6 +702,14 @@ _PANEL = {
             u"Verticale (Y alto)", u"Posizione verticale",
             u"Distanza del widget fissato dal bordo superiore dello schermo, in pixel. 0 "
             u"ripristina la posizione automatica in basso a destra."),
+        u"catBarPosition": _row(
+            u"Posizione della barra", u"Posizione della barra in battaglia",
+            u"In battaglia, tieni premuto Ctrl e trascina la barra per spostarla. I contatori "
+            u"sotto mostrano la sua posizione fissata, in pixel dall'angolo in alto a sinistra "
+            u"dello schermo; 0 / 0 indica la posizione centrata predefinita. Usa il ripristino "
+            u"del mod per tornare al valore predefinito."),
+        u"barPosX": _row(u"Orizzontale (X sinistra)"),
+        u"barPosY": _row(u"Verticale (Y alto)"),
         u"followCarousel": _row(
             u"Segui il carosello", u"Segui il carosello",
             u"Quando è attivo, un widget trascinato continua a spostarsi verticalmente "
@@ -678,14 +769,21 @@ _PANEL = {
             u"65 / 85 / 95 / 100 %. Średnia krocząca: wskazuje, gdzie twoje przewidywane średnie "
             u"obrażenia wypadają między znakiem, który posiadasz, a wymaganiem następnego "
             u"znaku."),
+        u"catTransitions": _row(u"Przejścia"),
         u"progressTransitions": _row(
-            u"Przejścia", u"Przejścia paska",
-            u"Pasek pojawia się i znika z przygaszeniem oraz przesunięciem. Wyłącz przełącznik, "
-            u"aby pojawiał się i znikał natychmiast. Zdarzenia dotyczą reakcji paska na to, co "
-            u"dzieje się w bitwie; Naciśnij Alt dotyczy wywołania go klawiszem Alt, tak jak w "
-            u"interfejsie samej gry, który przy Alt nic nie animuje."),
+            u"Włączone", u"Przejścia paska",
+            u"Pasek pojawia się i znika z przygaszeniem oraz przesunięciem. Odznacz tę opcję, aby "
+            u"każde pojawienie było natychmiastowe, albo wyłącz tylko jeden z przełączników "
+            u"poniżej. Zdarzenia dotyczą reakcji paska na to, co dzieje się w bitwie; Naciśnij "
+            u"Alt dotyczy wywołania go klawiszem Alt, tak jak w interfejsie samej gry, który "
+            u"przy Alt nic nie animuje."),
         u"progressTransEvents": _row(u"Zdarzenia"),
         u"progressTransManual": _row(u"Naciśnij Alt"),
+        u"progressHoldSeconds": _row(
+            u"Czas wyświetlania (s)", u"Czas wyświetlania",
+            u"Jak długo pasek pozostaje na ekranie, w sekundach, po tym jak wywoła go zdarzenie. "
+            u"Przy przytrzymanym Alt pozostaje widoczny niezależnie od tej wartości. Przygaszenie "
+            u"przy pojawianiu się i zniknięciu nie jest liczone."),
         u"positioning": _row(
             u"Układ", u"Pozycja widżetu",
             u"Ctrl+przeciągnij, aby przesunąć widżet garażu (przytrzymaj Shift, aby "
@@ -704,6 +802,14 @@ _PANEL = {
             u"Pionowo (górny Y)", u"Pozycja pionowa",
             u"Odległość przypiętego widżetu od górnej krawędzi ekranu, w pikselach. 0 "
             u"przywraca automatyczną pozycję w prawym dolnym rogu."),
+        u"catBarPosition": _row(
+            u"Pozycja paska", u"Pozycja paska w bitwie",
+            u"W bitwie przytrzymaj Ctrl i przeciągnij pasek, aby go przesunąć. Liczniki "
+            u"poniżej pokazują jego przypiętą pozycję w pikselach od lewego górnego rogu "
+            u"ekranu; 0 / 0 oznacza domyślną pozycję na środku. Użyj resetu moda, aby wrócić "
+            u"do wartości domyślnej."),
+        u"barPosX": _row(u"Poziomo (lewy X)"),
+        u"barPosY": _row(u"Pionowo (górny Y)"),
         u"followCarousel": _row(
             u"Podążaj za karuzelą", u"Podążaj za karuzelą",
             u"Gdy włączone, przeciągnięty widżet nadal przesuwa się w pionie wraz z "
@@ -759,14 +865,20 @@ _PANEL = {
             u"Efektivita poškození: ukazuje tvé poškození v této bitvě vůči požadavkům znaků "
             u"65 / 85 / 95 / 100 %. Klouzavý průměr: ukazuje, kde se tvé předpokládané průměrné "
             u"poškození nachází mezi znakem, který máš, a požadavkem dalšího znaku."),
+        u"catTransitions": _row(u"Přechody"),
         u"progressTransitions": _row(
-            u"Přechody", u"Přechody lišty",
-            u"Lišta se při zobrazení a zmizení prolíná a posouvá. Vypnutím přepínače se bude "
-            u"zobrazovat a mizet okamžitě. Události se týkají reakce lišty na to, co se děje v "
-            u"bitvě; Stisk Alt se týká jejího vyvolání klávesou Alt, stejně jako v rozhraní "
-            u"samotné hry, které při Altu nic neanimuje."),
+            u"Povoleno", u"Přechody lišty",
+            u"Lišta se při zobrazení a zmizení prolíná a posouvá. Zrušením zaškrtnutí bude každé "
+            u"zobrazení okamžité, nebo vypni jen jeden z přepínačů níže. Události se týkají reakce "
+            u"lišty na to, co se děje v bitvě; Stisk Alt se týká jejího vyvolání klávesou Alt, "
+            u"stejně jako v rozhraní samotné hry, které při Altu nic neanimuje."),
         u"progressTransEvents": _row(u"Události"),
         u"progressTransManual": _row(u"Stisk Alt"),
+        u"progressHoldSeconds": _row(
+            u"Doba zobrazení (s)", u"Doba zobrazení",
+            u"Jak dlouho lišta zůstane na obrazovce, ve sekundách, poté co ji vyvolá událost. "
+            u"Při podržení Altu zůstává zobrazená bez ohledu na tuto hodnotu. Prolnutí na začátku "
+            u"a na konci se nepočítá."),
         u"positioning": _row(
             u"Rozvržení", u"Pozice widgetu",
             u"Ctrl+táhnutím přesuneš widget garáže (podržením Shift jej uzamkneš na jednu "
@@ -784,6 +896,13 @@ _PANEL = {
             u"Svisle (horní Y)", u"Svislá pozice",
             u"Vzdálenost ukotveného widgetu od horního okraje obrazovky v pixelech. 0 "
             u"obnoví automatickou pozici vpravo dole."),
+        u"catBarPosition": _row(
+            u"Pozice lišty", u"Pozice lišty v bitvě",
+            u"V bitvě podrž Ctrl a tažením lištu přesuneš. Čítače níže ukazují její ukotvenou "
+            u"pozici v pixelech od levého horního rohu obrazovky; 0 / 0 znamená výchozí pozici "
+            u"uprostřed. Pro návrat na výchozí hodnotu použij reset modu."),
+        u"barPosX": _row(u"Vodorovně (levé X)"),
+        u"barPosY": _row(u"Svisle (horní Y)"),
         u"followCarousel": _row(
             u"Sledovat kolotoč", u"Sledovat kolotoč",
             u"Když je zapnuto, tažený widget se dál posouvá svisle spolu s kolotočem "
@@ -841,14 +960,21 @@ _PANEL = {
             u"Эффективность урона: показывает ваш урон в этом бою относительно требований "
             u"отметок 65 / 85 / 95 / 100 %. Скользящее среднее: показывает, где находится ваш "
             u"прогнозируемый средний урон между имеющейся отметкой и требованием следующей."),
+        u"catTransitions": _row(u"Переходы"),
         u"progressTransitions": _row(
-            u"Переходы", u"Переходы полосы",
-            u"Полоса появляется и исчезает с плавным затуханием и сдвигом. Отключите "
-            u"переключатель, чтобы она появлялась и исчезала мгновенно. События отвечают за "
-            u"реакцию полосы на то, что происходит в бою; Нажатие Alt отвечает за её вызов "
-            u"клавишей Alt, как в самом интерфейсе игры, который при Alt ничего не анимирует."),
+            u"Включено", u"Переходы полосы",
+            u"Полоса появляется и исчезает с плавным затуханием и сдвигом. Снимите эту галочку, "
+            u"чтобы любое появление было мгновенным, либо отключите только один переключатель "
+            u"ниже. События отвечают за реакцию полосы на то, что происходит в бою; Нажатие Alt "
+            u"отвечает за её вызов клавишей Alt, как в самом интерфейсе игры, который при Alt "
+            u"ничего не анимирует."),
         u"progressTransEvents": _row(u"События"),
         u"progressTransManual": _row(u"Нажатие Alt"),
+        u"progressHoldSeconds": _row(
+            u"Длительность показа (с)", u"Длительность показа",
+            u"Сколько секунд полоса остаётся на экране после того, как её вызвало событие. Пока "
+            u"удерживается Alt, она остаётся на экране независимо от этого значения. Появление и "
+            u"исчезновение не учитываются."),
         u"positioning": _row(
             u"Расположение", u"Позиция виджета",
             u"Ctrl+перетаскивание перемещает виджет ангара (удерживайте Shift, чтобы "
@@ -868,6 +994,14 @@ _PANEL = {
             u"Вертикаль (верхний Y)", u"Позиция по вертикали",
             u"Расстояние закреплённого виджета от верхнего края экрана в пикселях. 0 "
             u"восстанавливает автоматическую позицию в правом нижнем углу."),
+        u"catBarPosition": _row(
+            u"Позиция полосы", u"Позиция полосы в бою",
+            u"В бою удерживайте Ctrl и перетащите полосу, чтобы переместить её. Счётчики ниже "
+            u"показывают её закреплённую позицию в пикселях от верхнего левого угла экрана; 0 "
+            u"/ 0 означает стандартную позицию по центру. Используйте сброс мода, чтобы "
+            u"вернуть значение по умолчанию."),
+        u"barPosX": _row(u"Горизонталь (левый X)"),
+        u"barPosY": _row(u"Вертикаль (верхний Y)"),
         u"followCarousel": _row(
             u"Следовать за каруселью", u"Следовать за каруселью",
             u"Когда включено, перетащенный виджет продолжает смещаться по вертикали "
@@ -924,14 +1058,21 @@ _PANEL = {
             u"Ефективність шкоди: показує вашу шкоду в цьому бою відносно вимог позначок "
             u"65 / 85 / 95 / 100 %. Ковзне середнє: показує, де перебуває ваша прогнозована "
             u"середня шкода між наявною позначкою та вимогою наступної."),
+        u"catTransitions": _row(u"Переходи"),
         u"progressTransitions": _row(
-            u"Переходи", u"Переходи смуги",
-            u"Смуга з'являється та зникає з плавним затуханням і зсувом. Вимкніть перемикач, щоб "
-            u"вона з'являлася та зникала миттєво. Події відповідають за реакцію смуги на те, що "
-            u"відбувається в бою; Натискання Alt відповідає за її виклик клавішею Alt, як в "
-            u"інтерфейсі самої гри, який при Alt нічого не анімує."),
+            u"Увімкнено", u"Переходи смуги",
+            u"Смуга з'являється та зникає з плавним затуханням і зсувом. Зніміть цю позначку, щоб "
+            u"будь-яка поява була миттєвою, або вимкніть лише один перемикач нижче. Події "
+            u"відповідають за реакцію смуги на те, що відбувається в бою; Натискання Alt "
+            u"відповідає за її виклик клавішею Alt, як в інтерфейсі самої гри, який при Alt "
+            u"нічого не анімує."),
         u"progressTransEvents": _row(u"Події"),
         u"progressTransManual": _row(u"Натискання Alt"),
+        u"progressHoldSeconds": _row(
+            u"Тривалість показу (с)", u"Тривалість показу",
+            u"Скільки секунд смуга залишається на екрані після того, як її викликала подія. Поки "
+            u"утримується Alt, вона залишається на екрані незалежно від цього значення. Поява та "
+            u"зникнення не враховуються."),
         u"positioning": _row(
             u"Розташування", u"Позиція віджета",
             u"Ctrl+перетягування переміщує віджет ангара (утримуйте Shift, щоб "
@@ -951,6 +1092,14 @@ _PANEL = {
             u"Вертикаль (верхній Y)", u"Позиція по вертикалі",
             u"Відстань закріпленого віджета від верхнього краю екрана в пікселях. 0 "
             u"відновлює автоматичну позицію в правому нижньому куті."),
+        u"catBarPosition": _row(
+            u"Позиція смуги", u"Позиція смуги в бою",
+            u"У бою утримуйте Ctrl і перетягніть смугу, щоб перемістити її. Лічильники нижче "
+            u"показують її закріплену позицію в пікселях від верхнього лівого кута екрана; 0 / "
+            u"0 означає стандартну позицію по центру. Використайте скидання мода, щоб "
+            u"повернути значення за замовчуванням."),
+        u"barPosX": _row(u"Горизонталь (лівий X)"),
+        u"barPosY": _row(u"Вертикаль (верхній Y)"),
         u"followCarousel": _row(
             u"Слідувати за каруселлю", u"Слідувати за каруселлю",
             u"Коли увімкнено, перетягнутий віджет продовжує зміщуватися по вертикалі "
@@ -1007,14 +1156,21 @@ _PANEL = {
             u"Sebzéshatékonyság: a mostani csatában elért sebzésedet a 65 / 85 / 95 / 100 %-os "
             u"jelek követelményeihez méri. Mozgóátlag: megmutatja, hol áll a várható "
             u"átlagsebzésed a birtokolt jel és a következő jel követelménye között."),
+        u"catTransitions": _row(u"Átmenetek"),
         u"progressTransitions": _row(
-            u"Átmenetek", u"A sáv átmenetei",
-            u"A sáv elhalványulva és elcsúszva jelenik meg és tűnik el. Kapcsolj ki egy váltót, "
-            u"hogy azonnal jelenjen meg és tűnjön el. Az Események a sávnak a csatában "
-            u"történtekre adott reakciójára vonatkozik; az Alt lenyomása az Alt billentyűvel való "
-            u"előhívásra, ahogy a játék saját felülete is teszi, amely Altra nem animál semmit."),
+            u"Engedélyezve", u"A sáv átmenetei",
+            u"A sáv elhalványulva és elcsúszva jelenik meg és tűnik el. Vedd ki innen a pipát, "
+            u"hogy minden megjelenés azonnali legyen, vagy kapcsold ki csak az egyik alábbi "
+            u"váltót. Az Események a sávnak a csatában történtekre adott reakciójára vonatkozik; "
+            u"az Alt lenyomása az Alt billentyűvel való előhívásra, ahogy a játék saját felülete "
+            u"is teszi, amely Altra nem animál semmit."),
         u"progressTransEvents": _row(u"Események"),
         u"progressTransManual": _row(u"Alt lenyomása"),
+        u"progressHoldSeconds": _row(
+            u"Megjelenítés hossza (s)", u"Megjelenítés hossza",
+            u"Meddig marad a sáv a képernyőn, másodpercben, miután egy esemény előhívta. Az Alt "
+            u"nyomva tartása közben ettől függetlenül látható marad. A be- és kihalványodás nincs "
+            u"beszámítva."),
         u"positioning": _row(
             u"Elrendezés", u"Widget pozíciója",
             u"Ctrl+húzással mozgathatod a garázs-widgetet (tartsd nyomva a Shiftet az egy "
@@ -1032,6 +1188,14 @@ _PANEL = {
             u"Függőleges (felső Y)", u"Függőleges pozíció",
             u"A rögzített widget távolsága a képernyő felső szélétől, pixelben. A 0 "
             u"visszaállítja az automatikus jobb alsó pozíciót."),
+        u"catBarPosition": _row(
+            u"Sáv pozíciója", u"Csatasáv pozíciója",
+            u"Csatában tartsd nyomva a Ctrlt, és húzd a sávot a mozgatáshoz. Az alábbi "
+            u"számlálók a rögzített pozíciót mutatják pixelben a képernyő bal felső sarkától; "
+            u"a 0 / 0 az alapértelmezett középső pozíciót jelenti. Az alapértelmezéshez való "
+            u"visszatéréshez használd a mod visszaállítását."),
+        u"barPosX": _row(u"Vízszintes (bal X)"),
+        u"barPosY": _row(u"Függőleges (felső Y)"),
         u"followCarousel": _row(
             u"Körhinta követése", u"Körhinta követése",
             u"Bekapcsolva egy elhúzott widget továbbra is függőlegesen mozog a "
@@ -1088,14 +1252,21 @@ _PANEL = {
             u"gereksinimlerine göre konumlandırır. Hareketli ortalama: beklenen ortalama "
             u"hasarının, sahip olduğun işaret ile sonraki işaretin gereksinimi arasında nerede "
             u"olduğunu gösterir."),
+        u"catTransitions": _row(u"Geçişler"),
         u"progressTransitions": _row(
-            u"Geçişler", u"Çubuğun geçişleri",
-            u"Çubuk göründüğünde ve kaybolduğunda soluklaşarak kayar. Anında görünüp kaybolması "
-            u"için bir anahtarı kapat. Olaylar, çubuğun savaşta olanlara verdiği tepkiyi kapsar; "
-            u"Alt basımı ise Alt tuşuyla çağırmayı kapsar, tıpkı Alt ile hiçbir şeyi "
-            u"canlandırmayan oyunun kendi arayüzü gibi."),
+            u"Etkin", u"Çubuğun geçişleri",
+            u"Çubuk göründüğünde ve kaybolduğunda soluklaşarak kayar. Her görünüşün anında olması "
+            u"için bunun işaretini kaldır, ya da aşağıdaki anahtarlardan yalnızca birini kapat. "
+            u"Olaylar, çubuğun savaşta olanlara verdiği tepkiyi kapsar; Alt basımı ise Alt tuşuyla "
+            u"çağırmayı kapsar, tıpkı Alt ile hiçbir şeyi canlandırmayan oyunun kendi arayüzü "
+            u"gibi."),
         u"progressTransEvents": _row(u"Olaylar"),
         u"progressTransManual": _row(u"Alt basımı"),
+        u"progressHoldSeconds": _row(
+            u"Ekranda kalma süresi (s)", u"Ekranda kalma süresi",
+            u"Bir olay çubuğu çağırdıktan sonra çubuğun ekranda kaç saniye kaldığı. Alt tuşu "
+            u"basılı tutulduğu sürece, bu değer ne olursa olsun ekranda kalır. Giriş ve çıkış "
+            u"solmaları sayılmaz."),
         u"positioning": _row(
             u"Yerleşim", u"Widget konumu",
             u"Garaj widget'ını taşımak için Ctrl+sürükle (bir eksene kilitlemek için "
@@ -1114,6 +1285,14 @@ _PANEL = {
             u"Dikey (üst Y)", u"Dikey konum",
             u"Sabitlenmiş widget'ın ekranın üst kenarına uzaklığı, piksel cinsinden. 0, "
             u"otomatik sağ alt konumu geri yükler."),
+        u"catBarPosition": _row(
+            u"Çubuk konumu", u"Savaştaki çubuk konumu",
+            u"Savaşta Ctrl'yi basılı tut ve çubuğu taşımak için sürükle. Aşağıdaki sayaçlar "
+            u"sabitlenmiş konumu ekranın sol üst köşesinden piksel cinsinden gösterir; 0 / 0 "
+            u"varsayılan ortalanmış konumu ifade eder. Varsayılana dönmek için modun "
+            u"sıfırlamasını kullan."),
+        u"barPosX": _row(u"Yatay (sol X)"),
+        u"barPosY": _row(u"Dikey (üst Y)"),
         u"followCarousel": _row(
             u"Karuseli takip et", u"Karuseli takip et",
             u"Açıkken, sürüklenen bir widget araç karuseliyle (tek / çift sıra) birlikte "
@@ -1170,7 +1349,7 @@ def build(lang):
     A key the language didn't translate is rendered from English and marked (when
     ``i18n.MARK_UNTRANSLATED`` is on) so English leaks are spottable in-client.
 
-    The four ``HEADER_KEYS`` come out wrapped in ``<b>...</b>`` (MSA Labels render HTML).
+    The five ``HEADER_KEYS`` come out wrapped in ``<b>...</b>`` (MSA Labels render HTML).
     The wrap happens HERE and ONLY here -- never in the ``_PANEL`` tables (translation data
     stays markup-free) and never in ``mod_settings._template()`` -- and AFTER the fallback
     mark, so a marked fallback stays visible inside it. Both consumers of this function must

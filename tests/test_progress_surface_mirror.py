@@ -187,33 +187,40 @@ def _sole_rule_decls(css, selector, what):
     return hits[0]
 
 
-def test_the_delta_carries_the_efficiency_bars_size_and_nudge():
-    # A live pass settled the recent-delta's look on the Damage Efficiency bar; the maintainer asked
-    # for the SAME size and nudge here. The values are MoEEfficiency.css's `.mp-cap .mp-d` --
-    # font-size 12rem and the Y half of its translate(4.2rem, 2.5rem). Only the Y half: the X gap
-    # is already margin-left: 0.35em == the same 4.2rem at 12rem (see the centring test below, which
-    # pins that gap and the anchor it hangs off). Adding an X term here would DOUBLE the gap.
+def test_the_delta_carries_the_efficiency_bars_size_but_not_its_nudge_anymore():
+    # A live pass once settled the recent-delta's look on the Damage Efficiency bar and the maintainer
+    # asked for the SAME size AND nudge here -- but the "MA delta mirrors the Efficiency bar's delta
+    # nudge" invariant is now RETIRED (maintainer decision): the two bars' deltas are independent. Only
+    # the SIZE half of the mirror still holds -- font-size 12rem, MoEEfficiency.css's own value -- so
+    # only that is asserted against the sibling. The Y is this bar's OWN tuned value
+    # (translateY(1.5rem), scoped-pinned below) and must NOT be compared to the Efficiency bar's
+    # 2.5rem.
     # The tuner is asserted alongside because MoEProgress.css is a -EmitCss output: pinning only the
     # stylesheet lets the next re-emit revert this silently, which is how it was lost once already.
     decls = _sole_rule_decls(_read("MoEProgress.css"), ".mp-cap .mp-d", "MoEProgress.css")
     assert re.search(r"\bfont-size:\s*12rem\s*;", decls), "delta font-size is not 12rem"
-    assert re.search(r"\btransform:\s*translateY\(2\.5rem\)\s*;", decls), \
-        "delta Y nudge is not 2.5rem"
+    # THE OWN NUDGE, PINNED HERE (not a bare substring grep -- scoped to the rule that owns it via
+    # _sole_rule_decls above): the base anchor is 1.5rem, fractional again, which is why this bar's
+    # four interface-scale correction rules for the delta are BACK (see
+    # test_caption_anchor_quantisation.py's _MA_CORRECTED) -- a whole-rem anchor would have resolved
+    # to the same device pixel at every factor and needed no correction, but 1.5rem does not.
+    assert re.search(r"\btransform:\s*translateY\(1\.5rem\)\s*;", decls), \
+        "delta Y nudge is not 1.5rem"
     tuner = _read_tuner()
     assert tuner.count("font-size: 12rem;\\n") == 1 and \
-        tuner.count("transform: translateY(2.5rem);\\n") == 1, \
+        tuner.count("transform: translateY(1.5rem);\\n") == 1, \
         "gen_bar_tuner.ps1 -EmitCss no longer emits the delta size/nudge -- a re-emit would revert it"
     # ...AND THE TUNER'S OTHER HALF. Its live-preview <style> carries its OWN hardcoded copy of both
     # (no knob: see the -EmitCss comment), and that preview is the surface the look is APPROVED on
     # -- so a drift there sends the next live pass back to re-tuning a value that already shipped.
-    # Anchored on the rule's OWN opening, not on a bare `translateY(2.5rem)`: the stylesheet and both
+    # Anchored on the rule's OWN opening, not on a bare `translateY(1.5rem)`: the stylesheet and both
     # tuner halves each carry a translateY of their own for the SIDE captions' numerals (the numY
     # knob), so an unanchored search is satisfied the moment those two happen to agree -- which is a
     # single retune away. The assertion above is scoped by _sole_rule_decls for the same reason; this
     # file's whole anti-vacuity rule is that a value only counts when read out of the rule that owns
     # it.
     assert tuner.count(".mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;"
-                       "font-size:12rem;transform:translateY(2.5rem);") == 1, \
+                       "font-size:12rem;transform:translateY(1.5rem);") == 1, \
         "the tuner's LIVE PREVIEW no longer previews the delta's tuned size/nudge"
 
 

@@ -1,6 +1,6 @@
 ---
 name: moe-settings
-description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its three category headers, Empty spacers, the three column-1 grouped masters (In-Battle Widget, Progress Bar + its three visibility children, Transitions) and the two standalone inline int-valued radios, the column-2 garage widget + layout group, the flag getters the feature bridges read (including the master-folded transition getters and the "Always"-folded visibility getters), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod-msa-settings; for the panel prose translation see wotmod-i18n-settings; for feature internals see moe-garage / moe-battle.
+description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its six bold category/group headers, Empty spacers, the four column-1 grouped/standalone categories (In-Battle Widget, Progress Bar + its three visibility children, Transitions + its Events/Alt Press/Hold Duration slider children, Bar Position + its two shared X/Y steppers for the Ctrl+drag reposition) and the two standalone inline int-valued radios, the column-2 garage widget + layout group, the flag getters the feature bridges read (including the master-folded transition getters, the "Always"-folded visibility getters, and the position getters/setter), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod-msa-settings; for the panel prose translation see wotmod-i18n-settings; for feature internals see moe-garage / moe-battle.
 ---
 
 # MoE Calculator — settings panel (feature)
@@ -15,9 +15,9 @@ This skill is only the mod's concretes. All paths under `src/res/scripts/client/
 
 Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `adapter/settings_i18n.py`.
 
-## The controls (two-column panel, three categories, three grouped masters + two standalone radios in column 1)
+## The controls (two-column panel, four categories, three grouped masters + two standalone radios + one standalone stepper pair in column 1)
 
-`SETTINGS_VERSION = 14`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
+`SETTINGS_VERSION = 18`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
 migration branch carries the user's values across) — localizing plain label/tooltip text is
@@ -48,8 +48,19 @@ Built in `_template()`:
      **VISIBILITY** children ("Events", "Alt Press", "Always") — the first two then **trade** the
      group binding for an **AND gate** via `_gate_and()` (see below);
   3. the two **standalone `inline` radios** ("Mode", "Scale") — deliberately ungated;
-  4. …and, in the SAME category (no header of its own), the `progress_transitions_enabled`
-     master + two **label-only** children ("Events", "Alt Press").
+  4. `_empty()`, `Label` **"Transitions"**, then the `progress_transitions_enabled` master + THREE
+     children: two label-only checkboxes ("Events", "Alt Press") and, as of v17, a `Slider`
+     ("Hold Duration (s)") — `progress_hold_seconds`, 1-30s, `snapInterval: 1`, `format:
+     "{{value}} s"`, default 5. Its master's own label reads **"Enabled"** now, same as the
+     other three masters (was "Transitions" before v17), but the `varName` is deliberately
+     unchanged;
+  5. `_empty()`, `Label` **"Bar Position"** (v18), then two **standalone** `NumericStepper`s —
+     `progress_bar_pos_x` / `progress_bar_pos_y` — mirroring the in-battle bar's Ctrl+drag
+     reposition (see `moe-battle`). Standalone like the Mode/Scale radios above (no master, no
+     condition): a coordinate should stay readable/editable while the feature is off. **One
+     shared pair serves BOTH bar variants** (they're mutually exclusive at runtime); stored in
+     LOGICAL GUI px (interface-scale invariant, no `posW`/`posH` viewport pinning like the
+     garage pair below), **0/0 == auto** and falls back to the shipped `*_ANCHOR_*` constants.
 - **column2 = `Label` "Garage Widget", the standalone `garage_widget_enabled` master, an
   `_empty()`, then the "Layout" group** — a `Label` header, the posX / posY `NumericStepper`s, and
   the "Follow Carousel Mode" checkbox.
@@ -73,9 +84,12 @@ it does. Don't conflate them.
 | ↳ Always | `progress_show_always` | column1 group-2 child | OFF | *(none — folded into BOTH getters)* | — |
 | Mode — Damage Efficiency / Moving Average | `progress_bar_variant` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` = Damage Efficiency | `progress_bar_variant()` | `battle_bridge` — picks which centre-screen window opens |
 | Scale — Default / Large | `progress_bar_size` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` | `progress_bar_size()` | both bars' `barSize` → `MoEBarTransient.applySize` (root-font 1.5× + `.mp-lg`) |
-| Transitions | `progress_transitions_enabled` | column1 group-3 **master** | ON | *(none — folded in below)* | never pushed to JS |
+| Enabled (Transitions master) | `progress_transitions_enabled` | column1 group-3 **master** | ON | *(none — folded in below)* | never pushed to JS |
 | ↳ Events | `progress_transitions_events` | column1 group-3 child | ON | `progress_transitions_events()` | `ProgressVM.transEvents` / `EfficiencyVM.transEvents` → `applyAnim` |
 | ↳ Alt Press | `progress_transitions_manual` | column1 group-3 child | ON | `progress_transitions_manual()` | `…VM.transManual` → `applyAnim` (the Alt peek) |
+| ↳ Hold Duration (s) | `progress_hold_seconds` | column1 group-3 child, `Slider` (1-30, int) | `5` | `progress_hold_seconds()` — **NOT** master-folded (a duration, not a flag) | both bars' `MoEBarTransient` hold timer |
+| *Bar Position* (header, **bold**, v18) | — | column1 `Label` | — | — | — |
+| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 **standalone** `NumericStepper`s | 0 = auto | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
 | *Layout* (header, **bold**) | — | column2 `Label` | — | — | — |
 | Follow Carousel Mode | `followCarousel` | column2 (sits ABOVE the steppers as of v14) | ON | `follow_carousel()` | garage widget carousel nudge |
 | *Position* (sub-label, **not bold** — deliberately excluded from `HEADER_KEYS`) | — | column2 `Label` | — | — | — |
@@ -86,22 +100,40 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None,                                    # Empty spacer
              u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
+             None,                                    # Empty spacer
              VARIANT_KEY, u"progressSize",
-             u"progressTransitions", u"progressTransEvents", u"progressTransManual")  # 15 slots
+             None,                                    # Empty spacer
+             u"catTransitions", u"progressTransitions",
+             u"progressTransEvents", u"progressTransManual", u"progressHoldSeconds",
+             None,                                    # Empty spacer
+             u"catBarPosition", u"barPosX", u"barPosY")               # 23 slots (v18)
 COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarousel",
-             u"positionSub", u"posX", u"posY")                                          # 8 slots (v14)
+             None, u"positionSub", u"posX", u"posY")                                    # 9 slots
 ```
 
 **v14 grew `COL2_KEYS` 7 → 8**: Follow Carousel moved to sit right under the (now bold) "Layout"
 header, and a new varName-less `"positionSub"` (**"Position"**) sub-label was inserted ahead of the
 two steppers — deliberately **excluded** from `HEADER_KEYS` (below) so its lighter weight reads as a
-sub-level under "Layout" rather than a third header.
+sub-level under "Layout" rather than a third header. **`COL2_KEYS` has since grown 8 → 9** (a second
+`Empty` spacer now heads "Position" the same way the first one heads "Battle Progress").
+
+**v17 added a `catTransitions` `Label` header** ahead of the Transitions master (previously the
+group rode inside the "Battle Progress" category with no header of its own) plus the
+`progress_hold_seconds` `Slider` as a fourth Transitions child — growing `COL1_KEYS` 17 → 19
+(two more `None` spacers plus `catTransitions` and `progressHoldSeconds`) and `HEADER_KEYS`
+four entries → five.
+
+**v18 added a FOURTH column-1 category, `catBarPosition`** — an `Empty` spacer + its own bold
+`Label` header, then the two standalone `progress_bar_pos_x` / `progress_bar_pos_y`
+`NumericStepper`s (`barPosX` / `barPosY`) mirroring the in-battle bar's Ctrl+drag reposition.
+Appended at the very end (safe: shifts nothing before it) — `COL1_KEYS` grows 19 → 23 and
+`HEADER_KEYS` five entries → six.
 
 ### `HEADER_KEYS` — the bold category/group headers, and the double-wrap self-revert bug (v14, RESOLVED)
 
-`settings_i18n.HEADER_KEYS = frozenset((u"catBattleCalc", u"catBattleProgress", u"catGarage",
-u"positioning"))` — the four header rows that render **bold**; `"positionSub"` is deliberately
-excluded (the non-bold sub-label under "Layout").
+`settings_i18n.HEADER_KEYS = frozenset((u"catBattleCalc", u"catBattleProgress", u"catTransitions",
+u"catBarPosition", u"catGarage", u"positioning"))` — the **six** header rows that render **bold**
+(as of v18); `"positionSub"` is deliberately excluded (the non-bold sub-label under "Layout").
 
 **The wrap lives in exactly ONE place: `settings_i18n.build()`**, applied to each `HEADER_KEYS`
 entry **after** the untranslated-fallback mark (so a marked English leak stays visible inside the
@@ -165,7 +197,8 @@ below), so three shapes are available:
 3. **standalone** — no master, no condition. Both radios: Mode and Scale describe the bar itself
    rather than when it shows, they cost one row each because they are `inline`, and leaving them
    ungated keeps them readable while the feature is off (the same call already made for the
-   column-2 steppers).
+   column-2 steppers). The v18 "Bar Position" `barPosX` / `barPosY` steppers are standalone for
+   the identical reason — a saved coordinate should stay readable/editable even with the bar off.
 
 "Transitions under Progress Bar" is still a **third `_grouped_column1(...)` splice inside the same
 category** — visually part of the Battle Progress block, with the accepted cost that **the
@@ -215,17 +248,52 @@ One place ANDs the group, so the JS can never honour a child while the master is
 of the same discipline reads the pushed bools as `!== false` (absent ⇒ animated, the shipped
 behaviour) — see `wotmod-gameface-widget` and the memory note on new VM bools.
 
+### `bar_pos_x()` / `bar_pos_y()` and `set_bar_position()` — the Ctrl+drag position pair
+
+`progress_bar_pos_x` / `progress_bar_pos_y` (`BAR_POS_X_KEY` / `BAR_POS_Y_KEY`, both frozen
+`varName`s forever) store the in-battle bar's dragged top-left in **logical GUI px**, shared by
+**both** bar variants — they're mutually exclusive at runtime, so one pair is one fewer settings
+row rather than a duplicated pair per variant. `bar_pos_x()` / `bar_pos_y()` re-clamp on read
+(`clamp_pos`, same `_POS_KEYS` branch of `_coerce` as the garage `posX`/`posY`), and **0/0 means
+auto** — falls back to the shipped `*_ANCHOR_*` constants in `domain/positioning.anchor_pinned`
+exactly like the garage pair.
+
+`set_bar_position(x, y, persist=True)` is the write path, called from `bar_window.BarHost.drag`
+on gesture end (`phase == "end"`). **The gesture itself has no JS and no wire protocol at
+all** — Python owns it end to end: `adapter/battle_input.py` samples Ctrl + the left mouse
+button off WG's own input dispatchers and `gui.g_mouseEventHandlers`, and `BarHost.drag` places
+the window ABSOLUTELY from the live cursor position (`domain/positioning.cursor_top_left`) plus
+a grab offset recorded at gesture start — never a delta. The previous design (a JS `setPosition`
+command reporting a mouse delta for Python to add) is gone: both bar VMs are `commands=0`
+again. See `moe-battle`'s Ctrl+drag notes and the memory
+`[[absolute-cursor-placement-replaces-js-delta-drag-protocol]]` for why the delta protocol
+could not work structurally. `set_bar_position` deliberately does **NOT** call `_notify()`,
+unlike `set_position` (the garage twin): the bar host re-places its own window directly in the
+same handler, so a fan-out would only cost every *other* feature a needless `apply_settings` +
+re-push, at pointer rate during a live drag. `persist=False` (every mousemove) only updates the
+in-memory value; `persist=True` (mouseup) additionally writes it through MSA so the panel
+steppers track the drag and it survives the session.
+
+Because a stepper edit or a panel Reset changes the stored value **without** going through
+`set_bar_position`, `battle_bridge.apply_settings()` calls `progress_view.apply_position()` /
+`efficiency_view.apply_position()` (thin aliases for `bar_window.BarHost.apply_position`) on
+every settings change, so either path — drag or panel — moves the live bar.
+
 ### `_checkbox` / `_radio` / `_label` all omit a FALSY tooltip
 
 All three descriptor helpers end with `tooltip = rendered.get("tooltip"); if tooltip: …`.
 `_checkbox` used to hard-index `rendered["tooltip"]` and raised **`KeyError` inside `_template()`**
 — i.e. inside `register()`'s guarded `try`, so the live symptom was **a client with no settings
 panel at all** plus one logged traceback. The trigger is the **first label-only control of a given
-TYPE**, which the Transitions children are. Emitting `u""` is not a fix: `_sync_template_text` only
-overwrites, never deletes. The tripwire is the exact `tipless == 10` counter in
-`tests/test_mod_settings.py::test_sync_template_text_walks_built_template_in_lockstep` (three
-category headers + both radios + the three visibility children + the two Transitions children),
-alongside `spacers == 2` for the two `None`-sentinel `Empty` rows.
+TYPE**, which the Transitions children are, and (as of v18) the "Bar Position" steppers are the
+first tipless `NumericStepper`s. Emitting `u""` is not a fix: `_sync_template_text` only
+overwrites, never deletes. The tripwire is the exact `tipless == 8` counter in
+`tests/test_mod_settings.py::test_sync_template_text_walks_built_template_in_lockstep` — the four
+bare category headers (Battle Calculator / Battle Progress / Transitions / Garage Widget), the
+Transitions group's two children (Events / Alt Press), and the two "Bar Position" steppers
+(`barPosX` / `barPosY` — the header above them carries the Ctrl+drag tooltip instead, so the
+header itself is NOT in this count) — alongside `spacers == 6` for the `None`-sentinel `Empty`
+rows.
 
 The getters import NOTHING from the sibling bridges, so `gameface_bridge` / `battle_bridge` read
 them without a cycle. Live state seeds from MSA in `register()`; defaults until then / if MSA absent.
@@ -307,7 +375,7 @@ the gating section above for why (they describe the bar, not when it shows).
   children of the Progress Bar checkbox; v13 made them standalone `inline` controls, so each needs
   its own name back. `build()` no longer synthesises a blank entry for `VARIANT_KEY` — it only
   bolts the option tuple onto the rendered row. Both rows are still **tipless** (their option
-  labels say it all), which is why they count toward `tipless == 10`.
+  labels say it all), which is why they count toward `tipless == 6`.
 - **Blanking that label cost the 9 → 10 bump, and un-blanking it rode the 12 → 13 one.** Text is
   *not* part of Aslain's `_settingsStructure` (and varName-less rows aren't collected at all), so
   strictly the empty label would have travelled text-only — but `_sync_template_text` can only
@@ -388,8 +456,8 @@ term is never reached.
 
 Every visible label/tooltip comes from `adapter/settings_i18n.panel_text()` at the client's active
 language (English master + per-key fallback; `COL1_KEYS` / `COL2_KEYS` are the wire order MSA and
-`_sync_template_text` walk in lockstep — **15** and **8** slots (v14), two of which are `None`
-sentinels for the `Empty` spacers). 11 language blocks. The four `HEADER_KEYS` entries come out of
+`_sync_template_text` walk in lockstep — **23** and **9** slots (v18), several of which are `None`
+sentinels for the `Empty` spacers. 11 language blocks. The six `HEADER_KEYS` entries come out of
 `build()` pre-wrapped in `<b>...</b>` — see the `HEADER_KEYS` section above for why that wrap must
 live nowhere else.
 `modDisplayName` stays the literal English brand. THE gotcha — MSA caches a COPY of the template
@@ -412,7 +480,7 @@ Engine-free pytest (Python 3.13) — run the suite per `moe-build-release`:
 
 - `tests/test_mod_settings.py` — `_coerce` / `clamp_variant` / `merge_settings` / `_apply`, the
   built template's per-column type + `varName` order, the label-only-tooltip regressions, and the
-  `tipless == 10` / `spacers == 2` lockstep walk (the spacer branch also asserts the `None`-sentinel
+  `tipless == 8` / `spacers == 6` lockstep walk (the spacer branch also asserts the `None`-sentinel
   rows were left untouched).
 - `tests/test_settings_i18n.py` — the `COL1_KEYS` / `COL2_KEYS` ↔ `_PANEL` partition and the
   untranslated-leak diagnostic.

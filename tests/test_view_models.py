@@ -57,6 +57,27 @@ def test_every_view_model_registers_exactly_its_declared_property_count():
             "the extra slot(s) are never addressable" % (name, declared, registered))
 
 
+def test_every_view_model_registers_exactly_its_declared_command_count():
+    # The same append trap as properties, on the OTHER Wulf slot allocation: `commands=N` is
+    # separately allocated, so a model that appends a reverse-channel command without bumping
+    # `commands` under-allocates the command table -- invisible to the recording fake VM, which
+    # accepts any attribute assignment and never checks either declared count.
+    #
+    # THE COUNTS THIS PINS TODAY: MoEVM=1 (the garage widget's setPosition -- its drag/stepper is
+    # still a JS reverse channel), and BOTH battle bars=0. ProgressVM and EfficiencyVM each carried a
+    # setPosition until the Ctrl+drag reposition moved wholly into Python (adapter/battle_input +
+    # bridge/bar_window.drag); removing it had to take `commands=1` -> 0 with it, and this test is
+    # the ONLY thing that would have noticed, because the miscount fails solely in the live client.
+    # Derived from the source rather than hand-listed, so the pin follows the models.
+    for name, cls in sorted(_models().items()):
+        declared = inspect.signature(cls.__init__).parameters["commands"].default
+        registered = len(re.findall(r"self\.\w+\s*=\s*self\._addCommand\(",
+                                    inspect.getsource(cls._initialize)))
+        assert registered == declared, (
+            "%s declares commands=%r but registers %d _addCommand(...) calls" %
+            (name, declared, registered))
+
+
 def test_no_accessor_addresses_a_slot_outside_the_declared_range():
     # THE renumbering trap's blast radius: every `_setBool/_setNumber/_setReal/_getArray` index must
     # land inside [0, properties). An out-of-range literal is a live-client write past the allocated
