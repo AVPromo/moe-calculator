@@ -14,8 +14,8 @@
 ;         .wotmod already built into ..\dist by build\build_wotmod.py).
 
 #define ModId         "com.14th_ua.moe_calculator"
-#define ModVersion    "1.7.0"
-#define ModWotmod     "com.14th_ua.moe_calculator_1.7.0.wotmod"
+#define ModVersion    "1.8.0"
+#define ModWotmod     "com.14th_ua.moe_calculator_1.8.0.wotmod"
 #define OpenWgWotmod   "net.openwg.gameface_1.1.6.wotmod"
 #define MsaWotmod      "aslain.modssettingsapi_1.6.4.wotmod"
 #define ModsListWotmod "me.poliroid.modslistapi_1.7.8.wotmod"

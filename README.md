@@ -41,12 +41,14 @@ assistance — see Settings):
 ### In-battle progress bar *(off by default)*
 
 A wide bar in the **centre of the screen**, separate from the corner overlay. By default it
-fades in when there is something new to show, holds for about five seconds, then fades out on
-its own, and **holding Alt** also brings it up — independent of the overlay's own Alt-press
-setting; settings below let you turn either trigger off, or pin the bar up permanently. The
-bar never takes mouse input, and it stays hidden while the **Tab** scoreboard is open, while
-you are spectating, and before you have a vehicle. Settings let you draw it **Large** and
-switch the fades off so it appears and disappears instantly.
+fades in when there is something new to show, holds for a few seconds (five by default,
+adjustable in Settings), then fades out on its own, and **holding Alt** also brings it up —
+independent of the overlay's own Alt-press setting; settings below let you turn either trigger
+off, or pin the bar up permanently. The bar never takes mouse input, and it stays hidden while
+the **Tab** scoreboard is open, while you are spectating, and before you have a vehicle.
+Settings let you draw it **Large** and switch the fades off so it appears and disappears
+instantly. **Ctrl+drag** the bar to reposition it anywhere on screen — the position is shared
+by both variants and remembered; the panel also has numeric X/Y fields for it — see Settings.
 
 Turn it on in Settings and pick **one** of two bars — they are mutually exclusive:
 
@@ -56,18 +58,19 @@ Turn it on in Settings and pick **one** of two bars — they are mutually exclus
   each time your damage this battle reaches a new high.
 - **Moving Average** — where your career projected average combined damage sits between the
   mark you already hold and the next mark's requirement, with this battle's signed contribution
-  beside it. It comes up whenever that projection moves. It needs a career baseline, so it
-  shows nothing in replays, or after a relogin until you have visited the Garage.
+  beside it. The next-mark caption also carries an **ETA**: how many more battles you need at
+  your current pace to reach it. It comes up whenever that projection moves. It needs a career
+  baseline, so it shows nothing in replays, or after a relogin until you have visited the Garage.
 
 Three switches decide **when** it comes up: **Events** (a tracked battle event raises it, on by
 default), **Alt Press** (holding Alt shows it, on by default) and **Always** (pins it on screen
 permanently and greys out the other two, off by default). A separate **Transitions** switch
 decides **how** it moves once it does — fading and sliding by default, or instant if you turn
-it off.
+it off — and how long it holds before fading away.
 
-The bar's position is **not** configurable: the **Widget position (px)** fields and **Follow
-Carousel Mode** apply to the Garage widget only. On a vehicle whose mark thresholds could not
-be fetched, neither bar draws — the Garage bar still does.
+The corner overlay's position is fixed; the centre-screen bar's position is not — see *Bar
+Position* under Settings. On a vehicle whose mark thresholds could not be fetched, neither bar
+draws — the Garage bar still does.
 
 ## Compatibility
 
@@ -113,24 +116,30 @@ holds the two in-battle features, column 2 the Garage one:
 | ↳ **Alt Press** | On | Shows the bar only while **Alt** is held. Ignored while **Always** is on. |
 | ↳ **Always** | Off | Keeps the bar on screen permanently; it never fades. Overrides both switches above, which grey out while this is on. |
 | **Mode** | Damage Efficiency | The two mutually exclusive bars, **Damage Efficiency** *(default)* and **Moving Average** — an inline, unlabelled pair of radio buttons. |
-| **Scale** | Default | **Default** or **Large**. Large redraws the whole bar half again as tall and twice as wide — same layout, just bigger. |
-| **Transitions** | On | The bar fades and slides as it appears and disappears. Turn a switch below off to make it appear and disappear **instantly** instead; the bar still shows and still hides, only the motion is skipped. |
+| **Scale** | Default | **Default** or **Large**. Large draws a noticeably bigger bar — same layout, just larger. |
+| *Transitions* | — | Category header for how the centre-screen bar animates and how long it stays up. |
+| **Enabled** | On | The bar fades and slides as it appears and disappears. Turn off to make it appear and disappear **instantly** instead; the bar still shows and still hides, only the motion is skipped. |
 | ↳ **Events** | On | Animates the bar when a battle event brings it up (a damage tick) and lets it go again. |
 | ↳ **Alt Press** | On | Animates the **Alt** peek. Off matches the game's own interface, which does not animate on Alt. |
+| ↳ **Hold Duration (s)** | 5 | How many seconds the bar stays up before it starts fading away (or disappearing, if Transitions is off). Range 1–30. |
+| *Bar Position* | — | Category header for the centre-screen progress bar's position. |
+| **Horizontal (left X)** / **Vertical (top Y)** | 0 = auto | The centre-screen bar's distance from the left / top screen edge, in pixels — shared by both bar modes. **Ctrl+drag** the bar to set it. |
 | *Garage Widget* | — | Category header for the Garage bar. |
 | **Enabled** | On | Shows the MoE percentile bar in the Garage, on the selected vehicle. |
 | *Layout* | — | Sub-category for the Garage widget's position. |
 | **Follow Carousel Mode** | On | A pinned widget keeps shifting vertically with the vehicle carousel (single / double rows) so it never overlaps it. |
 | **Horizontal (left X)** / **Vertical (top Y)** | 0 = auto | The pinned widget's distance from the left / top screen edge, in pixels. **Ctrl+drag** the widget to pin it (hold **Shift** to lock to one axis). |
 
-Unchecking a master checkbox (**Battle Calculator**'s and **Battle Progress**'s own **Enabled**,
-and **Transitions**) greys its indented children out; the Garage settings have no such master.
-**Always**, in turn, greys out **Events** and **Alt Press** right above it once it's on. **Mode**,
-**Scale**, **Transitions** and the **Layout** controls all sit alongside their category's master
-rather than under it, so they stay clickable while the feature itself is off — they simply have
-nothing to affect until you switch it on. **0 / 0** is the default bottom-right position, which is
-also what the panel's per-mod **Reset** restores. The position settings apply to the Garage widget
-only — the in-battle overlay and the centre-screen progress bar are not movable. What each
+Unchecking a master checkbox (**Battle Calculator**'s, **Battle Progress**'s, and
+**Transitions**'s own **Enabled**) greys its indented children out; the Garage settings and
+**Bar Position** have no such master. **Always**, in turn, greys out **Events** and **Alt Press**
+right above it once it's on. **Mode**, **Scale**, **Bar Position** and the **Layout** controls
+all sit alongside their category's master rather than under it, so they stay clickable while the
+feature itself is off — they simply have nothing to affect until you switch it on. **0 / 0** is
+the default bottom-right position for the Garage widget, and also the default (auto) position for
+the centre-screen progress bar — both restored by the panel's per-mod **Reset**. The Garage
+position settings apply to the Garage widget only; **Bar Position** applies to the centre-screen
+progress bar (shared by both modes) — the corner overlay's position is fixed. What each
 progress-bar mode shows, and the career baseline **Moving Average** needs, is described under
 *In-battle progress bar* above.
 
@@ -203,11 +212,15 @@ Building, deploying, testing, and the repo layout are documented in
 ### Смуга прогресу в бою *(вимкнено за замовчуванням)*
 
 Широка смуга в **центрі екрана**, окрема від кутового оверлея. За замовчуванням вона з'являється,
-коли є що показати, тримається близько п'яти секунд і зникає сама, а **утримання Alt** також
-показує її — незалежно від власного параметра оверлея з натисканням Alt; налаштування нижче
-дозволяють вимкнути будь-який із цих тригерів або закріпити смугу на екрані назавжди. Смуга
-ніколи не перехоплює керування мишею й залишається схованою, поки відкрита таблиця результатів
-(**Tab**), під час спостереження за іншим гравцем і доки у вас немає техніки.
+коли є що показати, тримається кілька секунд (п'ять за замовчуванням, налаштовується в
+Налаштуваннях) і зникає сама, а **утримання Alt** також показує її — незалежно від власного
+параметра оверлея з натисканням Alt; налаштування нижче дозволяють вимкнути будь-який із цих
+тригерів або закріпити смугу на екрані назавжди. Смуга ніколи не перехоплює керування мишею й
+залишається схованою, поки відкрита таблиця результатів (**Tab**), під час спостереження за іншим
+гравцем і доки у вас немає техніки. Налаштування дозволяють намалювати її **Великою** та вимкнути
+плавні переходи, щоб вона з'являлася й зникала миттєво. **Ctrl+перетягування** переміщує смугу в
+будь-яке місце екрана — позиція спільна для обох режимів і запам'ятовується; у панелі також є
+числові поля X/Y для неї — див. Налаштування.
 
 Увімкніть її в Налаштуваннях і виберіть **одну** з двох смуг — вони взаємовиключні:
 
@@ -216,20 +229,21 @@ Building, deploying, testing, and the repo layout are documented in
   ви вже пройшли. Не потребує базового значення й з'являється сама щоразу, коли ваша шкода в
   цьому бою досягає нового максимуму.
 - **Ковзне середнє** — де перебуває ваша прогнозована середня комбінована шкода за кар'єру між
-  наявною позначкою та вимогою наступної, з підписаним внеском цього бою поруч. З'являється
-  щоразу, коли цей прогноз змінюється. Потребує базового значення кар'єри, тож у реплеях, а
-  також після повторного входу, доки ви не зайшли в Ангар, вона нічого не показує.
+  наявною позначкою та вимогою наступної, з підписаним внеском цього бою поруч. Підпис наступної
+  позначки також показує **прогноз**: скільки ще боїв потрібно у вашому поточному темпі, щоб її
+  досягти. З'являється щоразу, коли цей прогноз змінюється. Потребує базового значення кар'єри,
+  тож у реплеях, а також після повторного входу, доки ви не зайшли в Ангар, вона нічого не показує.
 
 Три перемикачі вирішують, **коли** вона з'являється: **Події** (відстежувана подія в бою показує
 її, увімкнено за замовчуванням), **Натискання Alt** (утримання Alt показує її, увімкнено за
 замовчуванням) і **Завжди** (закріплює її на екрані назавжди й робить два інші перемикачі
 неактивними, вимкнено за замовчуванням). Окремий перемикач **Переходи** вирішує, **як** вона
 рухається, коли з'являється, — з плавним затуханням і зсувом за замовчуванням, або миттєво, якщо
-його вимкнути.
+його вимкнути, — а також як довго вона тримається, перш ніж почати зникати.
 
-Позиція смуги **не** налаштовується: поля **Позиція віджета (px)** та **Слідувати за каруселлю**
-стосуються лише віджета в Ангарі. На техніці, для якої не вдалося отримати пороги знаків, жодна
-зі смуг не малюється — смуга в Ангарі все одно працює.
+Позиція кутового оверлея незмінна; позиція смуги в центрі екрана — **налаштовується**, див.
+розділ *Позиція смуги* в Налаштуваннях. На техніці, для якої не вдалося отримати пороги знаків,
+жодна зі смуг не малюється — смуга в Ангарі все одно працює.
 
 ## Сумісність
 
@@ -276,27 +290,32 @@ Building, deploying, testing, and the repo layout are documented in
 | ↳ **Натискання Alt** | Увімк. | Показує смугу, лише поки утримується **Alt**. Ігнорується, поки увімкнено **Завжди**. |
 | ↳ **Завжди** | Вимк. | Залишає смугу на екрані назавжди; вона ніколи не зникає. Має пріоритет над обома перемикачами вище, які стають неактивними, поки цей увімкнено. |
 | **Режим** | Ефективність шкоди | Вибір між двома взаємовиключними режимами — **Ефективність шкоди** *(за замовчуванням)* та **Ковзне середнє** — пара радіокнопок в один рядок без підпису. |
-| **Масштаб** | Стандартний | **Стандартний** або **Великий**. Великий малює смугу вдвічі ширшою і в півтора раза вищою — той самий вигляд, просто більший. |
-| **Переходи** | Увімк. | Смуга з'являється та зникає з плавним затуханням і зсувом. Вимкніть перемикач нижче, щоб вона з'являлася й зникала **миттєво**; смуга все одно показується й ховається, лише без анімації. |
+| **Масштаб** | Стандартний | **Стандартний** або **Великий**. Великий малює помітно більшу смугу — той самий вигляд, просто більша. |
+| *Переходи* | — | Заголовок категорії для того, як анімується смуга в центрі екрана і як довго вона тримається на екрані. |
+| **Увімкнено** | Увімк. | Смуга з'являється та зникає з плавним затуханням і зсувом. Вимкніть, щоб вона з'являлася й зникала **миттєво**; смуга все одно показується й ховається, лише без анімації. |
 | ↳ **Події** | Увімк. | Анімує смугу, коли її показує подія в бою (тик шкоди), і коли вона знову ховається. |
 | ↳ **Натискання Alt** | Увімк. | Анімує показ по **Alt**. Вимкнено — як у власному інтерфейсі гри, який не анімує по Alt. |
+| ↳ **Тривалість показу (с)** | 5 | Скільки секунд смуга тримається на екрані, перш ніж почати зникати (або зникнути одразу, якщо Переходи вимкнено). Діапазон 1–30. |
+| *Позиція смуги* | — | Заголовок категорії для позиції смуги прогресу в центрі екрана. |
+| **Горизонталь (лівий X)** / **Вертикаль (верхній Y)** | 0 = авто | Відстань смуги в центрі екрана від лівого / верхнього краю екрана в пікселях — спільна для обох режимів смуги. **Ctrl+перетягування** смуги встановлює її. |
 | *Віджет в ангарі* | — | Заголовок категорії для смуги в Ангарі. |
 | **Увімкнено** | Увімк. | Показує смугу процентиля класності в Ангарі на вибраній машині. |
 | *Розташування* | — | Підкатегорія для позиції віджета в Ангарі. |
 | **Слідувати за каруселлю** | Увімк. | Закріплений віджет продовжує зміщуватися по вертикалі разом із каруселлю техніки (один / два ряди), щоб ніколи її не перекривати. |
 | **Горизонталь (лівий X)** / **Вертикаль (верхній Y)** | 0 = авто | Відстань закріпленого віджета від лівого / верхнього краю екрана в пікселях. **Ctrl+перетягування** закріплює віджет (**Shift** фіксує за однією віссю). |
 
-Зняття позначки з головного перемикача (власне **Увімкнено** у **Бойовому калькуляторі** й у
-**Прогресі в бою**, та **Переходи**) робить його вкладені рядки неактивними; параметри Ангара
-головного не мають. **Завжди**, своєю чергою, робить неактивними **Події** та **Натискання Alt**
-одразу над ним, щойно він увімкнений. **Режим**, **Масштаб**, **Переходи** та параметри
-**Розташування** розташовані поряд із головним перемикачем своєї категорії, а не під ним, тож
-лишаються активними, навіть коли сама функція вимкнена, — просто їм нічого впливати, доки її не
-увімкнено. **0 / 0** — стандартна позиція в правому нижньому куті, яку також повертає кнопка
-**скидання** мода в панелі. Параметри позиції стосуються лише віджета в Ангарі — накладання в бою
-та смугу прогресу в центрі екрана переміщувати не можна. Що показує кожен режим смуги прогресу і
-яке базове значення кар'єри потрібне для **Ковзного середнього** — описано вище в розділі *Смуга
-прогресу в бою*.
+Зняття позначки з головного перемикача (власне **Увімкнено** у **Бойовому калькуляторі**, у
+**Прогресі в бою** й у **Переходах**) робить його вкладені рядки неактивними; параметри Ангара та
+**Позиція смуги** головного не мають. **Завжди**, своєю чергою, робить неактивними **Події** та
+**Натискання Alt** одразу над ним, щойно він увімкнений. **Режим**, **Масштаб**, **Позиція смуги**
+та параметри **Розташування** розташовані поряд із головним перемикачем своєї категорії, а не під
+ним, тож лишаються активними, навіть коли сама функція вимкнена, — просто їм нічого впливати, доки
+її не увімкнено. **0 / 0** — стандартна позиція в правому нижньому куті для віджета в Ангарі, а для
+смуги прогресу в центрі екрана — стандартна (авто) позиція; обидві повертає кнопка **скидання**
+мода в панелі. Параметри позиції Ангара стосуються лише його віджета; **Позиція смуги** стосується
+смуги прогресу в центрі екрана (спільна для обох режимів) — позиція кутового оверлея незмінна. Що
+показує кожен режим смуги прогресу і яке базове значення кар'єри потрібне для **Ковзного
+середнього** — описано вище в розділі *Смуга прогресу в бою*.
 
 ## Примітки
 

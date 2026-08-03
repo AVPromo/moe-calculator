@@ -30,14 +30,15 @@ WHAT IT DOES
 
     It can also show a transient bar in the centre of the screen
     during battle (OFF by default, turn it on in the settings panel).
-    It fades in, holds for about five seconds and fades out on its
-    own; hold Alt to bring it up at any time (or turn on "Always" in
-    settings to keep it up permanently). Pick one of two bars:
-    Damage Efficiency (the default; this battle's damage against the
-    65 / 85 / 95 / 100 % requirements) or Moving Average (your
-    projected average between the mark you hold and the next mark's
-    requirement, plus this battle's contribution). Its position is
-    fixed.
+    It fades in, holds for a few seconds (five by default, adjustable)
+    and fades out on its own; hold Alt to bring it up at any time (or
+    turn on "Always" in settings to keep it up permanently). Pick one
+    of two bars: Damage Efficiency (the default; this battle's damage
+    against the 65 / 85 / 95 / 100 % requirements) or Moving Average
+    (your projected average between the mark you hold and the next
+    mark's requirement, plus this battle's contribution and an ETA in
+    battles to the next mark). Ctrl+drag it to reposition it anywhere
+    on screen (shared by both bars).
 
 INSTALL  (2 steps)
     1) Extract this archive into your World of Tanks folder, so the
@@ -85,13 +86,15 @@ UNINSTALL
 
     Також може показувати тимчасову смугу в центрі екрана під час бою
     (ВИМКНЕНО за замовчуванням, увімкніть у панелі налаштувань). Вона
-    з'являється, тримається близько п'яти секунд і зникає сама;
-    утримуйте Alt, щоб показати її будь-коли (або увімкніть "Завжди"
-    в налаштуваннях, щоб тримати її сталою). Виберіть одну з двох
-    смуг: Ефективність шкоди (за замовчуванням; шкода цього бою
-    відносно вимог 65 / 85 / 95 / 100 %) або Ковзне середнє (ваша
-    прогнозована середня між наявною позначкою та вимогою наступної,
-    плюс внесок цього бою). Її позиція незмінна.
+    з'являється, тримається кілька секунд (п'ять за замовчуванням,
+    налаштовується) і зникає сама; утримуйте Alt, щоб показати її
+    будь-коли (або увімкніть "Завжди" в налаштуваннях, щоб тримати її
+    сталою). Виберіть одну з двох смуг: Ефективність шкоди (за
+    замовчуванням; шкода цього бою відносно вимог 65 / 85 / 95 / 100 %)
+    або Ковзне середнє (ваша прогнозована середня між наявною
+    позначкою та вимогою наступної, плюс внесок цього бою та прогноз
+    у боях до наступної позначки). Ctrl+перетягування переміщує її в
+    будь-яке місце екрана (спільно для обох смуг).
 
 ВСТАНОВЛЕННЯ  (2 кроки)
     1) Розпакуйте архів у теку World of Tanks так, щоб файли
