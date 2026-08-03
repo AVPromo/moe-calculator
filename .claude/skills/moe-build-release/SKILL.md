@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.7.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.8.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +95,8 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.7.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.7.0 (2026-08-01) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
+**v0.1.0 through v1.8.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.8.0 (2026-08-03) is the current Latest** (v1.7.0 was the prior Latest, 2026-08-01). The **1.0.0** release retargeted the mod to WoT
 client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
@@ -181,6 +181,32 @@ from izeberg 1.7.0 in v1.3.0) alongside OpenWG GameFace, plus **Mods List API**
 settings in the in-game "Modification list" window. The installer self-update reads the GitHub Atom
 feed, so keep the `vX.Y.Z` tag + `MoECalculator-Setup-<ver>.exe` asset-name convention. Follow
 `wotmod-release` for the bump→tag→build→publish flow.
+**1.8.0 (2026-08-03)** is a minor bump carrying three feature commits (`d80a739`, `ec614e3`,
+`0d5496d`). It adds **Ctrl+drag reposition for the two centre-screen in-battle progress bars** —
+a new column-1 **"Bar Position"** MSA category with two `NumericStepper`s `progress_bar_pos_x` /
+`progress_bar_pos_y` (default **0** = auto), **one** shared position for both bar variants —
+contrast the Garage widget's own drag, which has a Shift axis-lock; the battle bars have **no**
+Shift lock. **`Large` scale mode was shrunk**: `SIZE_F` **1.5 → 1.25**, so the total x factor is
+now **5/3** (was 2×1.5). A new **"Hold Duration (s)" slider** `progress_hold_seconds` (range
+1–30, default **5**) was added under the Transitions category — a configurable hold has to
+correct the baked fade/hold/fade keyframe's deadline (a no-op at the shipped 5s default). On the
+**Moving Average bar**, the axis floor moved **off** the held mark's requirement onto a
+`preAvg`-extrapolated floor, and the next-mark caption now also renders an **ETA in battles** (a
+`quest_type` battles glyph + count); new constants `PROGRESS_AXIS_MIN_WINDOW` /
+`PROGRESS_ETA_MARGIN` / `PROGRESS_ETA_CAP`, the ProgressVM went **14 → 15** properties for
+`etaBattles`, and `.mp-capL` was removed entirely. The **MSA panel** gained five new `Empty`
+spacer rows, real tooltips (11 languages) for **Mode**, **Scale**, and the Garage **Position**
+sub-label, and the Transitions master's row label was renamed to **"Enabled"** (varName
+unchanged, deliberately). `SETTINGS_VERSION` went **14 → 19** (15/16 = the Empty spacers in
+`d80a739`; 17 = the Transitions category promotion + the hold slider; 18 = the Bar Position
+category + its two steppers; 19 = one more Empty spacer) — every layout-affecting change got its
+required forward bump; `0d5496d` touched no MSA structure so it correctly owes none. Saved values
+migrate across each bump; no `varName` was renamed. Player docs were reconciled this release
+(`README.md`, `INSTALL.md`, `installer/readme.moe.txt`, both EN and UA halves) — struck the now-
+false "the bar's position is not configurable / is fixed" claims, corrected the stale Large-mode
+ratio prose, and documented the Bar Position / Hold Duration controls and the ETA readout.
+`INSTALL.md` is English-only (it has no genuine UA half), unlike `README.md` and
+`readme.moe.txt`.
 
 **Every release cut MUST reconcile the player docs** — `README.md`, `INSTALL.md` and
 `installer/readme.moe.txt` — against the user-facing surface shipped since the last tag: new or
