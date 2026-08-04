@@ -17,7 +17,7 @@ Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `
 
 ## The controls (two-column panel, four categories, three grouped masters + two standalone radios + one standalone stepper pair in column 1)
 
-`SETTINGS_VERSION = 18`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
+`SETTINGS_VERSION = 20`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
 migration branch carries the user's values across) — localizing plain label/tooltip text is
@@ -61,6 +61,10 @@ Built in `_template()`:
      shared pair serves BOTH bar variants** (they're mutually exclusive at runtime); stored in
      LOGICAL GUI px (interface-scale invariant, no `posW`/`posH` viewport pinning like the
      garage pair below), **0/0 == auto** and falls back to the shipped `*_ANCHOR_*` constants.
+     Both this pair's steppers and the garage `posX`/`posY` pair below run **`-POS_MAX ..
+     POS_MAX`** (was `0 .. POS_MAX` before v20) — the on-screen edge clamp was removed so a bar
+     may be dragged past any screen edge; see the memory
+     `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]`.
 - **column2 = `Label` "Garage Widget", the standalone `garage_widget_enabled` master, an
   `_empty()`, then the "Layout" group** — a `Label` header, the posX / posY `NumericStepper`s, and
   the "Follow Carousel Mode" checkbox.
@@ -89,11 +93,11 @@ it does. Don't conflate them.
 | ↳ Alt Press | `progress_transitions_manual` | column1 group-3 child | ON | `progress_transitions_manual()` | `…VM.transManual` → `applyAnim` (the Alt peek) |
 | ↳ Hold Duration (s) | `progress_hold_seconds` | column1 group-3 child, `Slider` (1-30, int) | `5` | `progress_hold_seconds()` — **NOT** master-folded (a duration, not a flag) | both bars' `MoEBarTransient` hold timer |
 | *Bar Position* (header, **bold**, v18) | — | column1 `Label` | — | — | — |
-| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 **standalone** `NumericStepper`s | 0 = auto | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
+| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 **standalone** `NumericStepper`s, range `-POS_MAX..POS_MAX` (v20) | 0 = auto | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
 | *Layout* (header, **bold**) | — | column2 `Label` | — | — | — |
 | Follow Carousel Mode | `followCarousel` | column2 (sits ABOVE the steppers as of v14) | ON | `follow_carousel()` | garage widget carousel nudge |
 | *Position* (sub-label, **not bold** — deliberately excluded from `HEADER_KEYS`) | — | column2 `Label` | — | — | — |
-| Horizontal (left X) / Vertical (top Y) | `posX`, `posY` (+ non-user `posW`, `posH`) | column2 | 0 = auto | `pos_x()` … `pos_h()` | garage widget placement / rescale |
+| Horizontal (left X) / Vertical (top Y) | `posX`, `posY` (+ non-user `posW`, `posH`) | column2, range `-POS_MAX..POS_MAX` (v20) | 0 = auto | `pos_x()` … `pos_h()` | garage widget placement / rescale |
 
 ```python
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
