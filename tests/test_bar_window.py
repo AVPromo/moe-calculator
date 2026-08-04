@@ -315,6 +315,23 @@ def test_a_gesture_that_began_off_the_bar_is_not_claimed(monkeypatch):
     assert [m for m in window.moves if m != (bar_window._FAR, bar_window._FAR)] == []
 
 
+def test_the_ownership_rect_is_read_against_the_real_position_not_a_cold_far_sentinel(monkeypatch):
+    # LOAD-BEARING READ ORDER: window.position must be read BEFORE _extent() is called, because a
+    # COLD extent cache measures by teleporting the window to the far sentinel (bar_window._FAR) --
+    # reading .position AFTER that would test the ownership rect against the sentinel corner instead
+    # of wherever the bar actually is. Reachable in practice: open_window() publishes `_active` BEFORE
+    # window.load() resolves, so a drag can arrive before _onReady's first _place() has ever warmed
+    # the memo -- i.e. exactly the cold-cache case, with the window still sitting at its untouched
+    # native position.
+    host = bar_window.BarHost("test.item", lambda: object(), 0.865, 0, 36, 36, "[test]")
+    window = _FakeWindow(1664, 824)             # UNPLACED: position stays (0, 0), cache cold
+    host._active = (window, object())
+    _at(monkeypatch, (-1.0, 1.0))               # clip-space top-left -> logical (0, 0), on the window
+    host.drag("start")
+    assert host._grab is not None and host._declined is False, (
+        "declined a gesture that started on the window's real (unplaced) position")
+
+
 def test_a_declined_gesture_is_never_reconsidered_mid_flight(monkeypatch):
     # ...and the refusal LATCHES for the whole gesture: a foreign drag that happens to sweep the
     # cursor across our bar must not hijack it halfway (which would snap the bar to the cursor).
