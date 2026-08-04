@@ -167,7 +167,18 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # is structural regardless; register()'s saved-truthy path never calls setModTemplate on an
 # existing install, so only a forward bump reaches it. The migration branch carries every saved
 # value across unchanged.
-SETTINGS_VERSION = 19
+# Bumped 19 -> 20 because BOTH position stepper pairs (the in-battle barPosX/barPosY and the garage
+# posX/posY) drop their `minimum: 0` for `minimum: -POS_MAX`. The on-screen clamp is gone -- a bar
+# may now be dragged past any edge, storing a NEGATIVE coordinate (see clamp_pos and
+# domain/positioning) -- and MSA echoes a stepper's value back through onSettingsChanged, so a
+# stored descriptor still bounded at 0 would snap a negative dragged position back to 0 as soon as
+# the user merely OPENED the panel. No varName was added, removed or renamed and no row moved, but a
+# descriptor edit alone reaches nobody: register()'s saved-truthy path never calls setModTemplate on
+# an existing install (Aslain also folds minimum/maximum/snapInterval into its _settingsStructure
+# signature), so only a forward bump replaces the stored control. The migration branch carries every
+# saved value across unchanged -- and _apply/_coerce now clamp through the widened clamp_pos, so a
+# negative position captured before the bump survives it.
+SETTINGS_VERSION = 20
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -289,8 +300,10 @@ BAR_POS_Y_KEY = "progress_bar_pos_y"
 # The nudge is live-measured JS-side -- no extra persisted coordinate.
 FOLLOW_CAROUSEL_KEY = "followCarousel"
 
-# Sanity ceiling for a stored pixel coordinate (well past any real screen size); a
-# typed / echoed value is clamped into [0, POS_MAX], with 0 meaning "auto / unseeded".
+# Sanity MAGNITUDE limit for a stored pixel coordinate (well past any real screen size); a
+# typed / echoed value is clamped into [-POS_MAX, POS_MAX], with 0/0 meaning "auto / unseeded".
+# NEGATIVES ARE LEGAL: an in-battle bar may be Ctrl+dragged past the left/top screen edge (there is
+# no on-screen safezone -- see domain/positioning), so this is a corruption guard, not a viewport.
 POS_MAX = 20000
 
 _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, BAR_POS_X_KEY, BAR_POS_Y_KEY)
@@ -317,14 +330,18 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
 
 
 def clamp_pos(v):
-    """Coerce a position coordinate to an int in [0, POS_MAX]. 0 = auto/unseeded.
-    Pure + engine-free (unit-tested); non-numeric / negative -> 0."""
+    """Coerce a position coordinate to an int in [-POS_MAX, POS_MAX]. 0/0 = auto/unseeded.
+    Pure + engine-free (unit-tested); non-numeric -> 0.
+
+    A NEGATIVE COORDINATE IS A REAL POSITION, not garbage: a bar dragged off the left/top edge
+    stores one, and clamping it to 0 would both teleport the bar and (at 0/0) silently un-pin it.
+    Only the magnitude is guarded, symmetrically."""
     try:
         v = int(v)
     except (TypeError, ValueError):
         return 0
-    if v < 0:
-        return 0
+    if v < -POS_MAX:
+        return -POS_MAX
     if v > POS_MAX:
         return POS_MAX
     return v
@@ -633,7 +650,14 @@ def _checkbox(key, rendered):
 def _stepper(key, rendered):
     """One MSA NumericStepper descriptor for a position coordinate (px). `varName` matches a
     DEFAULTS key so the returned int maps straight through merge_settings; the range is
-    [0, POS_MAX] with manual entry allowed. Shows 0 (auto) until a drag / edit pins a value.
+    [-POS_MAX, POS_MAX] with manual entry allowed. Shows 0 (auto) until a drag / edit pins a value.
+
+    THE MINIMUM IS NEGATIVE, and it has to be: a bar dragged off the left/top screen edge stores a
+    negative coordinate (there is no on-screen safezone -- see domain/positioning), and MSA echoes a
+    stepper's value back through onSettingsChanged, so a `minimum: 0` would snap that position back
+    to 0 the moment the user merely OPENED the panel. The stored descriptor is what the panel
+    renders, and register()'s saved-truthy path never calls setModTemplate, so this bound only
+    reaches an existing install through a forward SETTINGS_VERSION bump (18 -> 19 -> 20).
 
     The tooltip is OMITTED rather than hard-indexed when the rendered row has none, matching
     _checkbox / _radio / _label. Both steppers do carry one today, so this never fires -- it is
@@ -643,7 +667,7 @@ def _stepper(key, rendered):
         "type": "NumericStepper",
         "text": rendered["text"],
         "value": DEFAULTS[key],
-        "minimum": 0,
+        "minimum": -POS_MAX,
         "maximum": POS_MAX,
         "snapInterval": 1,
         "canManualInput": True,

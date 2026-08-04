@@ -104,20 +104,22 @@ def anchor_pinned(max_x, max_y, pos_x, pos_y, y_frac, x_offset=0, y_offset=0):
     the garage widget's posW/posH pair, because that space is already interface-scale invariant
     (see the module header), so there is nothing to rescale.
 
-    0 MEANS AUTO, on both axes: an untouched install falls straight through to anchor_centred,
-    so the shipped *_ANCHOR_* placement stays byte-identical for every user who never drags.
-    BOTH coordinates must be > 0 to count as a pin -- a lone axis is a half-written pair, not a
-    half-placement -- and 0 is also where a drag into the top/left screen edge would land, which
-    is why the writer clamps a drag to 1 rather than 0 (cursor_top_left below).
+    0/0 MEANS AUTO, and ONLY the exact pair: an untouched install falls straight through to
+    anchor_centred, so the shipped *_ANCHOR_* placement stays byte-identical for every user who
+    never drags. Anything else -- including a lone axis, a negative coordinate and a coordinate
+    past the movable extent -- is an explicit pin, honoured VERBATIM.
 
-    A pin is clamped into the movable extent (= logical space - surface), exactly as
-    anchor_centred clamps its own result, so a position stored at one resolution can never leave
-    the bar off-screen at another."""
+    NOT CLAMPED ON SCREEN, deliberately: the user is allowed to park a bar half (or wholly) off
+    any edge, so there is no "safezone" here and none in the writer either (cursor_top_left
+    below). A corrupt / non-numeric store still degrades to 0 via _int, i.e. to auto.
+
+    `max_x` / `max_y` are unused by the pinned branch and kept only for anchor_centred's
+    fallback -- the far-sentinel extent measurement is still what centres an unpinned bar."""
     x = _int(pos_x)
     y = _int(pos_y)
-    if x > 0 and y > 0:
-        return min(max(0, x), _int(max_x)), min(max(0, y), _int(max_y))
-    return anchor_centred(max_x, max_y, y_frac, x_offset, y_offset)
+    if x == 0 and y == 0:
+        return anchor_centred(max_x, max_y, y_frac, x_offset, y_offset)
+    return x, y
 
 
 def cursor_logical(cursor, screen, space_x, space_y):
@@ -158,7 +160,7 @@ def cursor_logical(cursor, screen, space_x, space_y):
     return fx * _int(space_x), fy * _int(space_y)
 
 
-def cursor_top_left(cursor, screen, space_x, space_y, max_x, max_y, grab_x=0, grab_y=0):
+def cursor_top_left(cursor, screen, space_x, space_y, grab_x=0, grab_y=0):
     """Top-left (x, y) for a bar being Ctrl+DRAGGED, mapped ABSOLUTELY from the mouse cursor.
 
     THE WHOLE POINT IS THAT NOTHING HERE IS A DELTA. The superseded protocol had the bar's own JS
@@ -168,32 +170,55 @@ def cursor_top_left(cursor, screen, space_x, space_y, max_x, max_y, grab_x=0, gr
     events stopped and resumed, and the bar lurched. An absolute mapping has no factor to get wrong
     and no dependence on any hit rect.
 
-    THE GAIN IS EXACTLY 1, AND THAT IS WHY `space_*` AND `max_*` ARE BOTH ARGUMENTS. The window's
-    position IS the cursor's position in logical space, less the offset it was grabbed by:
+    THE GAIN IS EXACTLY 1, AND THAT IS WHY `space_*` IS THE ARGUMENT. The window's position IS the
+    cursor's position in logical space, less the offset it was grabbed by:
 
         window_pos = cursor_logical(...) + grab            (grab = window_pos - cursor, at start)
 
-    so N logical units of cursor travel move the window N logical units, until it clamps. Mapping
-    the cursor's SCREEN FRACTION onto the movable extent instead (`max_*` alone -- the extent is
-    space - surface, which is all a far-sentinel clamp can recover) silently bakes in a gain of
-    (space - surface) / space: measured ~0.74 on x, i.e. "the bar moves slower than the cursor",
-    which is the exact live symptom this whole absolute mapping replaces. `max_*` is therefore only
-    the CLAMP, never the scale.
+    so N logical units of cursor travel move the window N logical units. Mapping the cursor's SCREEN
+    FRACTION onto the MOVABLE EXTENT instead (space - surface, which is all a far-sentinel clamp can
+    recover) silently bakes in a gain of (space - surface) / space: measured ~0.74 on x, i.e. "the
+    bar moves slower than the cursor", which is the exact live symptom this whole absolute mapping
+    replaces. Hence `space_*`, never the extent.
 
     `grab_x` / `grab_y` is the offset recorded between the window's top-left and cursor_logical at
     gesture START, carried for the whole gesture so the bar keeps the point it was grabbed by
     instead of teleporting its corner under the cursor on the first event.
 
-    CLAMPED TO [1, max], not [0, max]: 0 is anchor_pinned's "auto" sentinel, so a drag into the
-    top/left screen edge must never store it. Returns None whenever cursor_logical does."""
+    NOT CLAMPED AT ALL -- there is no on-screen safezone. The user may drag a bar past any edge,
+    including off the left/top into negative coordinates, and anchor_pinned honours whatever lands
+    here verbatim. The ONE forbidden result is the exact pair (0, 0), which is anchor_pinned's AUTO
+    sentinel: a drag that happens to land there is nudged one px on x so it can never be misread as
+    "never dragged". Returns None whenever cursor_logical does."""
     point = cursor_logical(cursor, screen, space_x, space_y)
     if point is None:
         return None
-    max_x = _int(max_x)
-    max_y = _int(max_y)
-    x = min(max(1, int(point[0] + _float(grab_x))), max_x)
-    y = min(max(1, int(point[1] + _float(grab_y))), max_y)
+    x = int(point[0] + _float(grab_x))
+    y = int(point[1] + _float(grab_y))
+    if x == 0 and y == 0:
+        x = 1
     return x, y
+
+
+def cursor_in_rect(point, top_left, size):
+    """True when `point` lies inside the rect at `top_left` of `size` (all three in the SAME
+    logical GUI space -- see cursor_logical).
+
+    THE DRAG'S OWNERSHIP GATE. Ctrl+left-button is sampled globally off WG's input dispatchers, so
+    without this every open bar claimed every gesture anywhere on screen -- dragging another mod's
+    UI dragged ours too. A host claims a gesture only when it STARTED inside that host's own window
+    rect; once claimed it keeps the gesture wherever the cursor goes (so re-testing on a move would
+    drop the bar mid-drag -- see bar_window.BarHost.drag).
+
+    Bounds are INCLUSIVE on both edges: the rect is the window's surface, and its far edge is a
+    legitimate place to grab. Fail-soft to FALSE -- an unreadable point / position / size means "do
+    not claim", which loses the gesture rather than stealing one."""
+    p = _xy(point)
+    tl = _xy(top_left)
+    wh = _xy(size)
+    if p is None or tl is None or wh is None:
+        return False
+    return (tl[0] <= p[0] <= tl[0] + wh[0]) and (tl[1] <= p[1] <= tl[1] + wh[1])
 
 
 def _xy(value):

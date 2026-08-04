@@ -740,7 +740,14 @@ def test_template_settings_version_pins_the_current_layout():
     # Bumped 18 -> 19 for a FIFTH Empty spacer in column 1, immediately ahead of the hold-duration
     # Slider (COL1_KEYS 23 -> 24) -- no varName touched, but the new None-sentinel slot still
     # shifts the Slider's and every later control's positional pairing.
-    assert SETTINGS_VERSION == 19
+    # Bumped 19 -> 20 for the position steppers' `minimum: 0` -> `minimum: -POS_MAX` (both pairs).
+    # The on-screen clamp is gone -- a bar may be dragged off any edge, storing a NEGATIVE
+    # coordinate -- and MSA echoes a stepper's value back on change, so a stored descriptor still
+    # bounded at 0 would snap that position to 0 the moment the panel was OPENED. No varName or row
+    # moved, but a descriptor edit reaches an existing install ONLY through a forward bump
+    # (register()'s saved-truthy path never calls setModTemplate), and Aslain folds
+    # minimum/maximum/snapInterval into its _settingsStructure signature besides.
+    assert SETTINGS_VERSION == 20
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1019,13 +1026,19 @@ def test_template_column2_is_the_garage_category_then_the_layout_group():
 
 
 def test_template_steppers_are_bounded_manual_entry():
-    # Each position stepper spans [0, POS_MAX], allows manual input and steps by 1 px so a
-    # typed 0 returns the widget to auto and a nudge isn't rounded away.
-    col2 = mod_settings._template()["column2"]
-    steppers = [c for c in col2 if c["type"] == "NumericStepper"]
+    # Each position stepper spans [-POS_MAX, POS_MAX], allows manual input and steps by 1 px so a
+    # typed 0/0 returns the widget to auto and a nudge isn't rounded away.
+    #
+    # THE MINIMUM MUST BE NEGATIVE, on BOTH pairs: there is no on-screen safezone any more, so a bar
+    # dragged off the left/top edge stores a negative coordinate -- and MSA echoes a stepper's value
+    # back through onSettingsChanged, so a `minimum: 0` would snap that position to 0 as soon as the
+    # user merely OPENED the panel. This is what the 19 -> 20 SETTINGS_VERSION bump exists to deliver.
+    tmpl = mod_settings._template()
+    steppers = [c for c in tmpl["column2"] if c["type"] == "NumericStepper"]
     assert [c["varName"] for c in steppers] == [POS_X_KEY, POS_Y_KEY]
+    steppers += [c for c in tmpl["column1"] if c["type"] == "NumericStepper"]
     for s in steppers:
-        assert s["minimum"] == 0
+        assert s["minimum"] == -POS_MAX
         assert s["maximum"] == POS_MAX
         assert s["canManualInput"] is True
         assert s["snapInterval"] == 1
@@ -1312,14 +1325,19 @@ def test_build_then_sync_preserves_header_bold():
 # --- drag-to-reposition: clamp_pos, accessors, set_position, follow_carousel, reset --------
 
 def test_clamp_pos_bounds():
-    # 0 = auto/unseeded; negatives and non-numeric collapse to 0; over-ceiling clamps down.
+    # 0/0 = auto/unseeded; non-numeric collapses to 0; either MAGNITUDE bound clamps.
     assert clamp_pos(0) == 0
-    assert clamp_pos(-1) == 0
-    assert clamp_pos(-9999) == 0
     assert clamp_pos(123) == 123
     assert clamp_pos(POS_MAX) == POS_MAX
     assert clamp_pos(POS_MAX + 1) == POS_MAX
     assert clamp_pos(10 ** 9) == POS_MAX
+    # A NEGATIVE IS A REAL POSITION, not garbage: a bar dragged off the left/top edge stores one, and
+    # collapsing it to 0 would both teleport the bar and (at 0/0) silently un-pin it.
+    assert clamp_pos(-1) == -1
+    assert clamp_pos(-9999) == -9999
+    assert clamp_pos(-POS_MAX) == -POS_MAX
+    assert clamp_pos(-POS_MAX - 1) == -POS_MAX
+    assert clamp_pos(-10 ** 9) == -POS_MAX
     # Non-numeric / None -> 0 (a bad measurement never pins).
     assert clamp_pos(None) == 0
     assert clamp_pos("abc") == 0
@@ -1341,12 +1359,17 @@ def test_position_accessors_round_trip():
 
 
 def test_position_accessors_clamp_a_bad_stored_value():
-    # A getter re-clamps whatever is cached, so a corrupt store never leaks a bad px out.
+    # A getter re-clamps whatever is cached, so a corrupt store never leaks a bad px out -- but only
+    # the MAGNITUDE is corrupt-able now: a negative is a legal off-screen position.
     mod_settings._seed(dict(DEFAULTS))
     mod_settings._settings[POS_X_KEY] = -50
     mod_settings._settings[POS_Y_KEY] = POS_MAX + 500
-    assert pos_x() == 0
+    assert pos_x() == -50
     assert pos_y() == POS_MAX
+    mod_settings._settings[POS_X_KEY] = -POS_MAX - 500
+    mod_settings._settings[POS_Y_KEY] = "nope"
+    assert pos_x() == -POS_MAX
+    assert pos_y() == 0
 
 
 def test_follow_carousel_default_true_and_getter():
@@ -1419,8 +1442,8 @@ def test_set_position_clamps_and_survives_absent_msa(monkeypatch):
     mod_settings._seed(dict(DEFAULTS))
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: None)
     set_position(-5, POS_MAX + 100, w=1920, h=1080)
-    assert pos_x() == 0                 # clamped
-    assert pos_y() == POS_MAX           # clamped
+    assert pos_x() == -5                # a negative is a legal off-screen position, not garbage
+    assert pos_y() == POS_MAX           # clamped (magnitude ceiling)
     assert pos_w() == 1920
     assert pos_h() == 1080
 
@@ -1453,10 +1476,11 @@ def test_bar_position_accessors_round_trip_and_clamp():
     mod_settings._apply({BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640})
     assert bar_pos_x() == 810
     assert bar_pos_y() == 640
-    # A getter re-clamps whatever is cached, same as pos_x/pos_y.
+    # A getter re-clamps whatever is cached, same as pos_x/pos_y -- and a NEGATIVE survives, because
+    # a bar dragged off the left/top edge stores one (there is no on-screen safezone).
     mod_settings._settings[BAR_POS_X_KEY] = -50
     mod_settings._settings[BAR_POS_Y_KEY] = POS_MAX + 500
-    assert bar_pos_x() == 0
+    assert bar_pos_x() == -50
     assert bar_pos_y() == POS_MAX
 
 
@@ -1496,8 +1520,8 @@ def test_set_bar_position_clamps_and_survives_absent_msa(monkeypatch):
     mod_settings._seed(dict(DEFAULTS))
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: None)
     set_bar_position(-5, POS_MAX + 100, persist=True)
-    assert bar_pos_x() == 0
-    assert bar_pos_y() == POS_MAX
+    assert bar_pos_x() == -5             # off the left edge: kept, not snapped back on screen
+    assert bar_pos_y() == POS_MAX        # clamped (magnitude ceiling)
 
 
 def test_coerce_types_per_key():
@@ -1506,7 +1530,8 @@ def test_coerce_types_per_key():
     # every other key to bool. Both radios are named here so a key that loses its branch fails on
     # THIS test too, not only on its own.
     assert mod_settings._coerce(POS_X_KEY, "640") == 640
-    assert mod_settings._coerce(POS_Y_KEY, -3) == 0
+    assert mod_settings._coerce(POS_Y_KEY, -3) == -3          # negatives are legal positions now
+    assert mod_settings._coerce(POS_Y_KEY, "nope") == 0
     assert mod_settings._coerce(GARAGE_KEY, 0) is False
     assert mod_settings._coerce(FOLLOW_CAROUSEL_KEY, 1) is True
     assert mod_settings._coerce(PROGRESS_VARIANT_KEY, 1) is not True

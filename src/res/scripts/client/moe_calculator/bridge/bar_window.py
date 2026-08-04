@@ -67,7 +67,8 @@ from gui.impl.pub import ViewImpl, WindowImpl
 from openwg_gameface import ModDynAccessor
 
 from moe_calculator.bridge import mod_settings
-from moe_calculator.domain.positioning import anchor_pinned, cursor_logical, cursor_top_left
+from moe_calculator.domain.positioning import (anchor_pinned, cursor_in_rect, cursor_logical,
+                                               cursor_top_left)
 
 # A large sentinel offset used to clamp the window to the far corner (LEFT/TOP anchor) so we can
 # read back the movable extent (= logical space - windowSize) and place proportionally.
@@ -194,8 +195,11 @@ class BarHost(object):
         # gesture start, carried for the whole gesture so the bar keeps the point it was grabbed by;
         # `_drag_pos` is the last position actually applied, i.e. what the mouse-up persists -- and
         # None means the gesture NEVER MOVED, which must persist nothing (see drag).
+        # `_declined` latches a gesture this host does NOT own (it began outside our window rect),
+        # so a foreign drag that later sweeps the cursor across us cannot be claimed mid-flight.
         self._grab = None
         self._drag_pos = None
+        self._declined = False
 
     def _resolve(self, max_x, max_y):
         """This bar's top-left in logical GUI space, given the movable extent: the user's
@@ -275,7 +279,8 @@ class BarHost(object):
         in which case we read GUI.mcursor() ourselves. Both go through the same unit-agnostic mapping.
 
         EVERY MOVE IS AN ABSOLUTE PLACEMENT. The live cursor is mapped into this window's logical GUI
-        space (domain.cursor_top_left, which also owns the [1, max] clamp and the unit-agnostic
+        space (domain.cursor_top_left, which is UNCLAMPED -- a bar may be parked past any screen
+        edge -- and also owns the (0, 0) auto-sentinel nudge and the unit-agnostic
         read), then offset by the grab recorded at "start" so the bar keeps the point it was grabbed
         by instead of teleporting its corner under the cursor. Nothing accumulates, so nothing can
         drift, no gain factor exists to get wrong, and the gain is exactly 1 (see _space).
@@ -283,6 +288,16 @@ class BarHost(object):
         A "move" ARRIVING FIRST IS TREATED AS THE START. battle_input's mouse wrap can latch the
         gesture on the first movement (with the cursor raised, the button press may never reach the
         key dispatcher), so the grab is recorded by whichever event gets here first.
+
+        THE GESTURE IS OWNED PER HOST, decided ONCE. Ctrl+left-button is sampled globally off WG's
+        input dispatchers and battle_bridge hands the event to BOTH bars unconditionally, so without
+        a spatial gate a Ctrl+drag anywhere on screen dragged whichever bar was open -- including
+        while the user was dragging another mod's UI. This host claims the gesture only if it BEGAN
+        inside its own window rect (domain.cursor_in_rect against window.position + the surface size,
+        which _space already recovers as space - extent -- no extra engine call). The decision is
+        latched: a claimed gesture is never re-tested (that would drop the bar the moment the cursor
+        left the rect) and a DECLINED one is never reconsidered (`_declined`, cleared on the next
+        "start"/"end"), so a foreign drag sweeping the cursor over us cannot hijack the bar halfway.
 
         ONLY THE END PERSISTS, and only if the gesture actually MOVED. A live move writes the
         in-memory value alone -- that is all _resolve reads -- because a settings write per movement
@@ -300,10 +315,18 @@ class BarHost(object):
                 pos = self._drag_pos
                 self._grab = None
                 self._drag_pos = None
+                self._declined = False
                 if pos is not None:
                     mod_settings.set_bar_position(pos[0], pos[1], persist=True)
                 return
+            if phase == "start":
+                self._declined = False
+            elif self._declined:
+                return                          # not our gesture; decided at its start
             window = self._active[0]
+            # READ BEFORE _extent: a cold extent cache measures by MOVING the window to the far
+            # sentinel, which would make this read the sentinel corner instead of where the bar is.
+            origin = window.position
             # ONE extent measurement PER GESTURE: _extent's read is a real window MOVE (the far
             # sentinel), so an un-memoized read here would teleport the window per pointer event --
             # which is what made the bar visibly jump around the cursor. Only _place invalidates it.
@@ -320,11 +343,16 @@ class BarHost(object):
                 spot = cursor_logical(cursor, screen, space_x, space_y)
                 if spot is None:
                     return                      # unreadable cursor -> no grab, no move
+                # OWNERSHIP GATE (start only -- see the docstring): the surface size is
+                # space - extent, so the rect needs nothing this handler has not already read.
+                if not cursor_in_rect(spot, origin, (space_x - max_x, space_y - max_y)):
+                    self._declined = True
+                    return                      # the gesture began on somebody else's box
                 bx, by = self._resolve(max_x, max_y)
                 self._grab = (bx - spot[0], by - spot[1])
                 self._drag_pos = None
                 return                          # the bar is already where it was grabbed
-            pos = cursor_top_left(cursor, screen, space_x, space_y, max_x, max_y,
+            pos = cursor_top_left(cursor, screen, space_x, space_y,
                                   self._grab[0], self._grab[1])
             if pos is None:
                 return

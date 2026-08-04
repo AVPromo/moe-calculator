@@ -4,8 +4,8 @@ domain.positioning imports zero game symbols. The extents below are the REAL far
 readouts measured in-client at 4K (probe_scale.py): 1x -> space 3840x2160, 2x -> 1920x1080,
 surface fixed 256x256, so movable extent = space - 256."""
 from moe_calculator.domain.positioning import (
-    anchor_centred, anchor_pinned, anchor_top_left, cursor_logical, cursor_top_left,
-    damage_log_summary_hidden, efficiency_panel_wide)
+    anchor_centred, anchor_pinned, anchor_top_left, cursor_in_rect, cursor_logical,
+    cursor_top_left, damage_log_summary_hidden, efficiency_panel_wide)
 from moe_calculator.domain.constants import (
     BATTLE_ANCHOR_X, BATTLE_ANCHOR_Y, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED,
     BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD)
@@ -186,16 +186,15 @@ _FRAC, _XOFF, _YOFF = 0.865, 0, 36      # the Moving Average bar's shipped ancho
 
 
 def test_pinned_zero_is_auto_and_falls_back_to_the_shipped_anchor():
-    # 0/0 == "never dragged". The result must be anchor_centred's, IDENTICALLY -- not merely
-    # close: this is the path every user who never touches the feature takes.
+    # 0/0 == "never dragged", and it is the ONLY auto pair. The result must be anchor_centred's,
+    # IDENTICALLY -- not merely close: this is the path every user who never touches the feature takes.
     auto = anchor_centred(3584, 1904, _FRAC, _XOFF, _YOFF)
     assert anchor_pinned(3584, 1904, 0, 0, _FRAC, _XOFF, _YOFF) == auto
-    # A HALF-written pair is not a placement either -- both axes must be > 0 to count as a pin,
-    # so a lone coordinate falls back too rather than pinning one axis at the screen edge.
-    assert anchor_pinned(3584, 1904, 900, 0, _FRAC, _XOFF, _YOFF) == auto
-    assert anchor_pinned(3584, 1904, 0, 900, _FRAC, _XOFF, _YOFF) == auto
-    # ...as does anything unusable (a negative / non-numeric / None from a corrupt store).
-    assert anchor_pinned(3584, 1904, -5, -5, _FRAC, _XOFF, _YOFF) == auto
+    # A lone axis IS a pin now: a bar parked flush against the top or left edge legitimately stores
+    # 0 on one axis, so only the exact (0, 0) pair may fall back.
+    assert anchor_pinned(3584, 1904, 900, 0, _FRAC, _XOFF, _YOFF) == (900, 0)
+    assert anchor_pinned(3584, 1904, 0, 900, _FRAC, _XOFF, _YOFF) == (0, 900)
+    # A corrupt store still degrades to auto, because _int maps anything unusable to 0 on BOTH axes.
     assert anchor_pinned(3584, 1904, None, None, _FRAC, _XOFF, _YOFF) == auto
     assert anchor_pinned(3584, 1904, "x", "y", _FRAC, _XOFF, _YOFF) == auto
 
@@ -206,13 +205,13 @@ def test_a_stored_position_overrides_the_anchor_on_both_axes():
     assert anchor_pinned(3584, 1904, 900, 640, 0.1, 999, -999) == (900, 640)
 
 
-def test_a_stored_position_is_clamped_into_the_movable_extent():
-    # A position stored at 4K must not leave the bar off-screen at 1080p: the pin clamps into
-    # [0, max] on both axes, exactly as anchor_centred clamps its own result.
-    assert anchor_pinned(1664, 824, 3000, 1800, _FRAC, _XOFF, _YOFF) == (1664, 824)
-    # ...and each axis clamps independently (a wide pin at a tall-enough extent keeps its y).
-    assert anchor_pinned(1664, 824, 3000, 500, _FRAC, _XOFF, _YOFF) == (1664, 500)
-    # A pin exactly AT the extent is legal (bottom-right corner), not clamped away.
+def test_a_stored_position_is_never_clamped_on_screen():
+    # THERE IS NO SAFEZONE. The user may park a bar past any screen edge, so a pin is honoured
+    # verbatim -- beyond the movable extent...
+    assert anchor_pinned(1664, 824, 3000, 1800, _FRAC, _XOFF, _YOFF) == (3000, 1800)
+    # ...and NEGATIVE, off the left/top edge, which the old [0, max] clamp used to teleport back.
+    assert anchor_pinned(1664, 824, -400, -120, _FRAC, _XOFF, _YOFF) == (-400, -120)
+    # A pin exactly AT the extent stays put too (nothing here reads max_x/max_y for a pin at all).
     assert anchor_pinned(1664, 824, 1664, 824, _FRAC, _XOFF, _YOFF) == (1664, 824)
 
 
@@ -233,13 +232,13 @@ def test_wide_does_not_truncate_on_short_values_tuple():
 # disagree about the units (armor/utils.py's ray cast is clip space [-1, 1]; radial_menu.py pairs a
 # cursor pair with GUI.screenResolution()).
 #
-# THE MAPPING TAKES BOTH THE SPACE AND THE EXTENT, and they are NOT interchangeable: the cursor
-# fraction scales onto the logical SPACE (1920x1080 below) and only the CLAMP uses the movable extent
-# (1664x824 = space - the 256x256 surface). Scaling onto the extent instead -- all a far-sentinel
-# clamp can recover on its own -- bakes in a gain of (space - surface) / space, measured ~0.74 on x.
+# THE MAPPING TAKES THE LOGICAL SPACE, NEVER THE MOVABLE EXTENT: the cursor fraction scales onto the
+# space (1920x1080 below). Scaling onto the extent instead (space - surface, all a far-sentinel clamp
+# can recover on its own) bakes in a gain of (space - surface) / space, measured ~0.74 on x. The
+# extent used to be the CLAMP argument; there is no clamp any more (no on-screen safezone), so the
+# mapping does not see it at all.
 _SPACE = (1920, 1080)
-_EXT = (1664, 824)
-_ARGS = _SPACE + _EXT               # (space_x, space_y, max_x, max_y)
+_ARGS = _SPACE                      # (space_x, space_y)
 
 
 def test_the_cursor_mapping_gain_is_exactly_one_in_pixel_space():
@@ -267,15 +266,17 @@ def test_the_cursor_maps_to_its_own_logical_position_not_a_share_of_the_extent()
     assert cursor_top_left((960, 540), _SPACE, *_ARGS) == (960, 540)
 
 
-def test_cursor_maps_clip_space_corners_to_the_clamped_extent_corners():
-    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (1, 1)          # top-left
-    assert cursor_top_left((1.0, -1.0), _SPACE, *_ARGS) == (1664, 824)     # bottom-right, clamped
+def test_cursor_maps_clip_space_corners_to_the_space_corners_unclamped():
+    # The screen corners map to the SPACE corners, not to the movable extent: nothing clamps.
+    # The top-left lands on the forbidden (0, 0) AUTO sentinel, so x -- and only x -- is nudged to 1.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (1, 0)          # top-left, nudged off 0/0
+    assert cursor_top_left((1.0, -1.0), _SPACE, *_ARGS) == (1920, 1080)    # bottom-right, un-clamped
 
 
 def test_cursor_maps_pixel_space_against_the_screen_resolution():
     # The OTHER convention: components larger than 1 are device px and normalise against
     # GUI.screenResolution(). Screen y is DOWN from the top, so no flip here.
-    assert cursor_top_left((1920, 1080), _SPACE, *_ARGS) == (1664, 824)
+    assert cursor_top_left((1920, 1080), _SPACE, *_ARGS) == (1920, 1080)
 
 
 def test_cursor_reads_a_vector2_as_well_as_a_plain_pair():
@@ -310,14 +311,59 @@ def test_the_grab_offset_is_measured_UNCLAMPED():
     assert cursor_top_left((1620, 1080), _SPACE, *(_ARGS + grab)) == (1100, 700)
 
 
-def test_cursor_clamps_to_one_at_the_top_left_edge_even_with_a_grab_offset():
-    # CLAMPED TO [1, max], never [0, max]: 0 is anchor_pinned's "auto" sentinel, so a drag into the
-    # top/left screen edge must never store it (that would silently un-pin the bar).
-    assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (-500, -500))) == (1, 1)
+def test_cursor_drags_past_the_top_left_edge_into_negative_coordinates():
+    # NO SAFEZONE: dragging off the left/top edge is allowed, so the grab offset carries the result
+    # straight into negative logical px instead of being clamped back on screen.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (-500, -500))) == (-500, -500)
 
 
-def test_cursor_clamps_to_max_at_the_bottom_right_edge_even_with_a_grab_offset():
-    assert cursor_top_left((1.0, -1.0), _SPACE, *(_ARGS + (500, 500))) == (1664, 824)
+def test_cursor_drags_past_the_bottom_right_edge():
+    assert cursor_top_left((1.0, -1.0), _SPACE, *(_ARGS + (500, 500))) == (2420, 1580)
+
+
+def test_cursor_never_emits_the_auto_sentinel_pair():
+    # (0, 0) is anchor_pinned's "never dragged" sentinel, so a drag that lands exactly there must be
+    # nudged off it -- otherwise releasing the mouse at the screen's top-left silently un-pins the bar
+    # and the next placement jumps back to the shipped anchor. One px on x is the whole fix.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (1, 0)
+    # ...and it must be the ONLY nudge: either coordinate alone at 0 is a legal pin, untouched.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (0, 300))) == (0, 300)
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (300, 0))) == (300, 0)
+
+
+# --- THE DRAG'S OWNERSHIP GATE (which host owns the gesture) ------------------------------------
+# Ctrl+left-button is sampled GLOBALLY off WG's input dispatchers and handed to every open bar, so
+# without a rect test a Ctrl+drag anywhere on screen dragged whichever bar was open -- including while
+# the user was dragging another mod's window. A host claims a gesture only if it began on its own box.
+_BAR = (832, 748)                   # a centred 256x256 bar's top-left, from anchor_centred above
+_SIZE = (256, 256)
+
+
+def test_cursor_in_rect_claims_only_inside_the_hosts_own_box():
+    assert cursor_in_rect((900, 800), _BAR, _SIZE) is True
+    # Both EDGES are inside: the rect is the window's surface and its far edge is a real place to grab.
+    assert cursor_in_rect(_BAR, _BAR, _SIZE) is True
+    assert cursor_in_rect((1088, 1004), _BAR, _SIZE) is True
+    # One axis outside is outside -- the screen centre sits ABOVE this bar, which is exactly the
+    # "grabbed some other mod's UI" case.
+    assert cursor_in_rect((960, 540), _BAR, _SIZE) is False
+    assert cursor_in_rect((100, 800), _BAR, _SIZE) is False
+    assert cursor_in_rect((1089, 800), _BAR, _SIZE) is False
+    assert cursor_in_rect((900, 1005), _BAR, _SIZE) is False
+
+
+def test_cursor_in_rect_reads_a_vector2_and_fails_soft_to_not_claiming():
+    class _V(object):
+        x = 900.0
+        y = 800.0
+
+    assert cursor_in_rect(_V(), _BAR, _SIZE) is True
+    # FAIL SOFT TO FALSE: an unreadable point / origin / size means "do not claim", which loses a
+    # gesture rather than stealing one.
+    assert cursor_in_rect(None, _BAR, _SIZE) is False
+    assert cursor_in_rect((900, 800), None, _SIZE) is False
+    assert cursor_in_rect((900, 800), _BAR, None) is False
+    assert cursor_in_rect((float("nan"), 800), _BAR, _SIZE) is False
 
 
 def test_cursor_fails_soft_on_an_unreadable_cursor():
