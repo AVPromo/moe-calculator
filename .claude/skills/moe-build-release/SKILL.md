@@ -22,11 +22,11 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 1.7.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 2.0.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
-- The **client** version `2.3.1.0` is deliberately excluded from the check (a `(?!\.\d)` lookahead skips the 4-part client version).
+- The **client** version `2.3.1.1` is deliberately excluded from the check (a `(?!\.\d)` lookahead skips the 4-part client version).
 
 ## Release must stay silent (no unconditional logging)
 
@@ -60,7 +60,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   `--clean-overlay` removes the hot-reload overlay. **Needs `WorldOfTanks.exe` closed** (`wgc` ok).
 - **`build_moe_zip.py`** — any Python. Builds `dist/MoECalculator_<version>.zip` = bilingual
   `readme.txt` (from `installer/readme.moe.txt`, `{VERSION}` substituted, CRLF) + the mod `.wotmod`
-  + all `installer/vendor/*.wotmod` under `mods/2.3.1.0/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.3.1.0"`.
+  + all `installer/vendor/*.wotmod` under `mods/2.3.1.1/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.3.1.1"`.
   Packages whatever `.wotmod` is in `dist/` — the same single build the GitHub installer uses.
 - **`check_version.py`** — the version gate above. **`clean_dist.py`** — prunes non-current release artifacts from `dist/` (`--dry-run`).
 
@@ -75,7 +75,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Hot-reload (the split that bites)
 
-- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.3.1.0`
+- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.3.1.1`
   copies only the Gameface JS/CSS/assets into `res_mods`, then toggle Tech-Tree↔Garage to re-inject. No relaunch.
 - **The in-battle registered WINDOW does NOT hot-reload** — its resources pin at client launch;
   reopen and `Window.reload()` both serve the launch-time cached document. **Every CSS/JS tweak to
@@ -95,9 +95,20 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v1.7.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v1.7.0 (2026-08-01) is the current Latest**. The **1.0.0** release retargeted the mod to WoT
-client **2.3.1.0** (major bump) and added the Alt-key peek mode + Counted Assistance row; **1.1.0**
+**v0.1.0 through v1.8.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v1.8.0 (2026-08-03) was the prior Latest**, carrying the in-battle progress bar's Ctrl+drag
+reposition + Bar Position X/Y fields, a configurable Hold Duration, the Moving Average bar's
+ETA-in-battles readout, the relabelled Transitions master, and the shrunk Large mode.
+
+**2.0.0 is a game-upgrade release (staged, not yet published)**: retargets the mod to WoT
+client **EU 2.3.1.1** (#910, up from 2.3.1.0 #903) — major bump per convention, **zero
+divergences found and no functional/code changes**. The `upgrade-analyzer` pass resolved all
+198 gathered seams (monkey-patch targets, subscribed Events, Wulf ViewModel API, `img://` art
+paths) present and unchanged in the new client's packed `.pyc`; vendor deps (OpenWG GameFace
+1.1.6, Aslain ModsSettingsAPI 1.6.4, Mods List API 1.7.8) kept unchanged, pending a live
+CONFIRM before publishing that none terminates the client at init on 2.3.1.1. The **1.0.0**
+release retargeted the mod to WoT client **2.3.1.0** (major bump) and added the Alt-key peek
+mode + Counted Assistance row; **1.1.0**
 is a patch-level polish of the in-battle overlay row/backdrop alignment (shipped as a minor bump by
 choice); **1.2.0** is a minor bump carrying the in-battle MoE-projection accuracy work (smooth
 probit curve + self-calibrating EWMA `k`) plus the R3 row-backdrop fix — all committed after the
