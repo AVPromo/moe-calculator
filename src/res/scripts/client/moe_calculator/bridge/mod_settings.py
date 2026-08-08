@@ -201,7 +201,35 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # (still 0/0, the shipped placement). Nobody's bar moves. Every OTHER saved value carries across
 # unchanged and the two new keys take their fresh Horizontal/Damage Log defaults where the
 # migration doesn't apply (a fresh install).
-SETTINGS_VERSION = 21
+# Bumped 21 -> 22 for Free's stored frame (TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3
+# Fix B / DECISION 2): under Free, the stepper pair is now read as an ANCHOR POINT
+# (bottom-centre horizontal / bottom-right vertical -- domain.positioning.free_top_left), not a
+# top-left, so a size change re-anchors the bar instead of growing it off to one side. That is a
+# BEHAVIOUR change, not a template one -- no varName/control/option changed shape -- but the
+# maintainer chose to migrate it with a NEW varName rather than accept the one-time visible shift
+# of every existing Free pin, and a new varName is structural on its own (a bump is the only hook
+# register() gives to migrate a stored VALUE, and the absence-of-a-key trick below needs a key to
+# key on). progress_bar_pos_frame ("legacy" | "anchor") marks which frame the CURRENT
+# progress_bar_pos_x/_y pair is in; fresh installs default straight to "anchor" (there is no
+# legacy pair to carry). CONVERSION ROUTE TAKEN: option (a) from the decision, NOT (b) -- the
+# surface size needed to convert a legacy top-left into an anchor point does not exist at
+# migration time either (the same wall Free's initial materialisation hits, see
+# bar_window.BarHost._materialise), so _migrate_pre_v22_pos_frame only SEEDS the marker
+# ("legacy" for a pre-v22 store with Alignment=Free and a non-(0, 0) pair, "anchor" for every
+# other case -- there is no legacy pair to convert). The actual conversion is deferred onto the
+# SAME materialise-on-mount path DECISION 1 already owes: the first _place with a real,
+# post-onSizeChanged surface converts whichever pair is currently stored (as a literal top-left,
+# per _resolve's legacy branch) into the anchor-point frame and flips the marker, reusing
+# free_anchor_point / set_bar_position -- no surface constant baked into Python, and the two
+# DECISION-1/DECISION-2 triggers collapse into ONE _materialise call because both end in the exact
+# same action ("re-express the just-resolved top-left as an anchor point and persist it").
+# progress_bar_pos_x/_y are NOT renamed (there is no rename/alias map -- see
+# mod-settings-has-no-key-rename-map) and stay readable forever; only their FREE-alignment
+# interpretation changes, gated by the new key. register()'s saved-truthy path never calls
+# setModTemplate on an existing install, so only this forward bump reaches one; the migration
+# branch carries every saved value across (enumerated from DEFAULTS, not hand-listed) and the new
+# key takes its fresh "anchor" default where the migration doesn't apply (a fresh install).
+SETTINGS_VERSION = 22
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -322,6 +350,22 @@ POS_H_KEY = "posH"
 BAR_POS_X_KEY = "progress_bar_pos_x"
 BAR_POS_Y_KEY = "progress_bar_pos_y"
 
+# Which FRAME the BAR_POS pair is currently expressed in under Alignment=Free -- v22 (see
+# SETTINGS_VERSION 21->22). NOT a UI control -- no varName-to-row mapping is needed for MSA to
+# persist it, same precedent as POS_W_KEY/POS_H_KEY above. Two values only:
+#   "anchor"  the pair is the ANCHOR POINT Fix B stores (bottom-centre horizontal / bottom-right
+#             vertical -- domain.positioning.free_top_left) -- fresh installs start here, since
+#             there is no legacy pair to carry.
+#   "legacy"  the pair is still a PRE-v22 literal top-left, pending conversion at this bar's next
+#             battle mount (bar_window.BarHost._materialise) -- only a pre-v22 store with
+#             Alignment=Free and a non-(0, 0) pair is seeded here (_migrate_pre_v22_pos_frame).
+# set_bar_position() always writes "anchor" (every path that calls it -- a drag end, or
+# _materialise's own conversion write -- produces a pair that IS already in the new frame), so
+# "legacy" can only be read, never re-written by anything other than the migration.
+PROGRESS_POS_FRAME_KEY = "progress_bar_pos_frame"
+POS_FRAME_ANCHOR = "anchor"
+POS_FRAME_LEGACY = "legacy"
+
 # Which axis the bar draws on -- a STANDALONE inline radio (v21), shared by BOTH bars like the
 # position pair above it (Moving Average / Damage Efficiency are alternatives, not simultaneous).
 # One of the mod's non-bool settings, so _coerce needs its own clamp_variant branch (falling
@@ -333,11 +377,12 @@ PROGRESS_ORIENT_VERTICAL = 1     # ... and the highest legal index (see clamp_va
 
 # Which anchor the position steppers offset FROM (v21) -- also standalone/inline, also non-bool.
 # Damage Log is the shipped centred anchor (offset 0/0 reproduces today's placement byte-for-byte);
-# Minimap is the new minimap-relative anchor; Free is the screen origin (today's absolute
-# top-left, i.e. what every pre-v21 non-zero stored position already was -- see
-# _migrate_pre_v21_layout). ALL THREE OPTIONS STAY ALWAYS-SELECTABLE regardless of orientation --
-# MSA gates whole controls (masterVarName/conditions), not individual radio options, so a
-# per-orientation restriction would cost a second stored key for no behavioural gain.
+# Minimap is the new minimap-relative anchor; Free is the pair read as an ANCHOR POINT as of v22
+# (domain.positioning.free_top_left -- PROGRESS_POS_FRAME_KEY marks whether a pre-v22 pair still
+# needs converting into that frame). ALL THREE OPTIONS STAY ALWAYS-SELECTABLE regardless of
+# orientation -- MSA gates whole controls (masterVarName/conditions), not individual radio
+# options, so a per-orientation restriction would cost a second stored key for no behavioural
+# gain.
 PROGRESS_ALIGNMENT_KEY = "progress_bar_alignment"
 PROGRESS_ALIGN_DAMAGE_LOG = 0   # the shipped centred anchor -- every existing user keeps it
 PROGRESS_ALIGN_MINIMAP = 1
@@ -375,6 +420,7 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
+            PROGRESS_POS_FRAME_KEY: POS_FRAME_ANCHOR,
             PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
             PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_DAMAGE_LOG,
             FOLLOW_CAROUSEL_KEY: True}
@@ -452,15 +498,23 @@ _listeners = []
 # leaves this False, so a later register() (first hangar mount) retries until it sticks.
 _registered = False
 
+# True only WHILE _on_changed's write-back (updateModSettings/saveState) is in flight. Guards
+# against a re-entrant onSettingsChanged -- including a SYNCHRONOUS one fired from inside
+# updateModSettings itself -- landing on a stale pre-derivation snapshot and deriving against it.
+# While set, _on_changed still _apply()s + _notify()s (so the fan-out isn't lost) but skips
+# _derive_layout entirely. See TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 1(c).
+_deriving = False
+
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
     the progress-bar variant/size/orientation/alignment are clamped radio INDEXes, the hold
-    duration a clamped second count, everything else is a bool. Pure + engine-free.
+    duration a clamped second count, the pos-frame marker one of two known strings, everything
+    else is a bool. Pure + engine-free.
 
     Every non-bool branch is load-bearing: falling through to bool() would turn a radio's
-    index 1 into True and index 0 into False (and the hold's 5 into True), which then
-    round-trips back to MSA as a bool and destroys the setting."""
+    index 1 into True and index 0 into False (and the hold's 5 into True, or a "legacy" string
+    into True too), which then round-trips back to MSA as a bool and destroys the setting."""
     if key in _POS_KEYS:
         return clamp_pos(value)
     if key == PROGRESS_VARIANT_KEY:
@@ -473,6 +527,8 @@ def _coerce(key, value):
         return clamp_variant(value, PROGRESS_ALIGN_FREE)
     if key == PROGRESS_HOLD_SECONDS_KEY:
         return clamp_hold_seconds(value)
+    if key == PROGRESS_POS_FRAME_KEY:
+        return value if value == POS_FRAME_LEGACY else POS_FRAME_ANCHOR
     return bool(value)
 
 
@@ -627,14 +683,31 @@ def pos_h():
 
 
 def bar_pos_x():
-    """The in-battle bar's dragged top-left x in LOGICAL GUI px, or 0 for auto (the shipped
-    centre anchor). Shared by both bars -- see BAR_POS_X_KEY."""
+    """The in-battle bar's stored X in LOGICAL GUI px: an anchor-relative OFFSET under Damage
+    Log/Minimap, or (as of v22, see PROGRESS_POS_FRAME_KEY) the ANCHOR POINT under Free. 0 means
+    auto (the shipped centre anchor / "not yet materialised", see bar_window's AUTO branch).
+    Shared by both bars -- see BAR_POS_X_KEY."""
     return clamp_pos(_settings.get(BAR_POS_X_KEY, 0))
 
 
 def bar_pos_y():
-    """The in-battle bar's dragged top-left y in LOGICAL GUI px, or 0 for auto."""
+    """The in-battle bar's stored Y -- see bar_pos_x()."""
     return clamp_pos(_settings.get(BAR_POS_Y_KEY, 0))
+
+
+def progress_bar_pos_frame():
+    """Which frame bar_pos_x()/bar_pos_y() are currently expressed in under Alignment=Free:
+    POS_FRAME_ANCHOR (the default -- the pair IS the anchor point, domain.positioning.
+    free_top_left) or POS_FRAME_LEGACY (a pre-v22 pair that is still a literal top-left, pending
+    conversion at this bar's next battle mount -- see bar_window.BarHost._materialise and the
+    SETTINGS_VERSION 21->22 comment). Meaningless under any other alignment.
+
+    Re-coerced on read, like the radio getters -- a corrupt store falls back to POS_FRAME_ANCHOR,
+    the safe choice (treating a legacy pair as an anchor point misplaces the bar once; treating an
+    anchor point as legacy would misplace it on EVERY size change, which is the whole bug this
+    frame exists to prevent)."""
+    return _coerce(PROGRESS_POS_FRAME_KEY,
+                   _settings.get(PROGRESS_POS_FRAME_KEY, POS_FRAME_ANCHOR))
 
 
 def progress_bar_orientation():
@@ -654,9 +727,11 @@ def progress_bar_alignment():
     PROGRESS_ALIGN_FREE (2).
 
     An int, NOT a bool -- re-clamp on read (like the other radio getters). Kept in sync by
-    set_bar_position() (-> Free, the drag-end seam) and _on_changed's auto-set rules (an
-    Orientation switch re-anchors it UNLESS it is already Free -- Free is STICKY -- and a
-    stepper edit forces it to Free); see those for the state machine."""
+    set_bar_position() (-> Free, the drag-end seam) and _on_changed's _derive_layout auto-set
+    rules: Orientation and Alignment are two views of ONE choice, fully mutually derived (an
+    Orientation switch re-anchors Alignment EVEN FROM FREE -- Free is no longer sticky -- and an
+    Alignment switch re-anchors Orientation the same way); a position edit (stepper or drag) beats
+    both and forces Free. See _derive_layout's table for the state machine."""
     return clamp_variant(_settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG),
                          PROGRESS_ALIGN_FREE)
 
@@ -1172,6 +1247,38 @@ def _migrate_pre_v21_layout(old_raw):
                                        else PROGRESS_ALIGN_DAMAGE_LOG)
 
 
+def _migrate_pre_v22_pos_frame(old_raw):
+    """Seed PRE-v22 stores with the new BAR_POS frame marker in place (see the SETTINGS_VERSION
+    21->22 comment / DECISION 2). A store already at v22+ is left untouched.
+
+    A LOOKUP, not a conversion -- there is no stored settingsVersion int to compare against
+    directly, so "pre-v22" is inferred from the ABSENCE of PROGRESS_POS_FRAME_KEY, same trick as
+    _migrate_pre_v13_variant / _migrate_pre_v21_layout. ONLY a pre-v22 store that is ALREADY
+    Alignment=Free with a non-(0, 0) pair has anything to convert -- its pair is a LITERAL
+    top-left under the old semantics, so it is marked "legacy"; every other case (any other
+    alignment, or a Free pair still at the (0, 0) "not yet materialised" marker) has no legacy
+    pair at all, so it is marked "anchor" straight away. THE ACTUAL CONVERSION IS NOT DONE HERE --
+    no surface size exists at migration time either (the same wall Free's own materialisation
+    hits), so this only seeds the marker; bar_window.BarHost._materialise performs the real
+    conversion the first time this bar next mounts with a real surface (option (a) of the
+    decision).
+
+    Fail-soft, and local to this one key: a non-numeric / out-of-range stored position is treated
+    as zero for this decision (clamp_pos re-clamps it properly when read elsewhere), and the
+    alignment falls back to Damage Log the same way clamp_variant would."""
+    if PROGRESS_POS_FRAME_KEY in old_raw:
+        return
+    alignment = old_raw.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG)
+    if isinstance(alignment, bool) or not isinstance(alignment, int):
+        alignment = PROGRESS_ALIGN_DAMAGE_LOG
+    x = clamp_pos(old_raw.get(BAR_POS_X_KEY, 0))
+    y = clamp_pos(old_raw.get(BAR_POS_Y_KEY, 0))
+    if alignment == PROGRESS_ALIGN_FREE and (x, y) != (0, 0):
+        old_raw[PROGRESS_POS_FRAME_KEY] = POS_FRAME_LEGACY
+    else:
+        old_raw[PROGRESS_POS_FRAME_KEY] = POS_FRAME_ANCHOR
+
+
 def register():
     """Register (or re-load) the settings panel with MSA and seed the flag state.
 
@@ -1222,6 +1329,7 @@ def register():
                 try:
                     _migrate_pre_v13_variant(old_raw)
                     _migrate_pre_v21_layout(old_raw)
+                    _migrate_pre_v22_pos_frame(old_raw)
                     _apply(old_raw)
                     g_modsSettingsApi.updateModSettings(
                         LINKAGE, _full_settings_for_write(g_modsSettingsApi))
@@ -1246,79 +1354,112 @@ def register():
         LOG_CURRENT_EXCEPTION()
 
 
+def _derive_layout(pre, post):
+    """(orientation, alignment, (x, y)) the layout settles at, from a (pre, post) diff of the
+    three stored layout values. Pure, engine-free, TOTAL -- one call, no recursion, no reads of
+    module state (`pre`/`post` carry everything it needs). See
+    TASKS/in-battle-bar-layout-auto-set-redesign.md for the full transition table (rows 1-13)
+    this implements; the summary:
+
+      * a position change (stepper edit or Ctrl+drag) wins outright -> Alignment := Free,
+        Orientation untouched (rows 6-7; precedence 1);
+      * else an alignment change to Damage Log / Minimap forces the matching Orientation and
+        zeroes the position, because the two orientations have different surface geometries and
+        carrying one's absolute pair across lands the bar somewhere it was never tuned for (rows
+        3-4; precedence 2 -- alignment beats orientation, DECISION 4);
+      * else an alignment change to Free leaves Orientation and the position untouched -- the
+        real coordinates are only computable once a bar surface exists, so materialising them is
+        a separate, later concern (row 5; the `(0, 0)` case is exactly Free's own
+        "not yet materialised" marker, see bar_window._resolve);
+      * else an orientation change forces the matching Alignment and zeroes the position -- FIRES
+        EVEN FROM FREE, "Free is sticky" is SUPERSEDED (rows 1-2);
+      * else (no relevant diff -- a foreign key, an unrelated flag, Size/Variant, or the echo of
+        our own write-back) settles on `post` unchanged (rows 8-11, 13).
+
+    Every settled output is a FIXED POINT: _derive_layout(s, s) == s for each of the four resting
+    states (H, DL), (V, MM), (H, FREE) and (V, FREE) -- that termination proof is why `_on_changed`
+    below needs no recursion and only ever writes back once per user action."""
+    pre_o, pre_a, pre_p = pre
+    post_o, post_a, post_p = post
+    orientation_changed = post_o != pre_o
+    alignment_changed = post_a != pre_a
+    position_changed = post_p != pre_p
+
+    if position_changed:
+        return post_o, PROGRESS_ALIGN_FREE, post_p
+
+    if alignment_changed:
+        if post_a == PROGRESS_ALIGN_DAMAGE_LOG:
+            return PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)
+        if post_a == PROGRESS_ALIGN_MINIMAP:
+            return PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)
+        return post_o, PROGRESS_ALIGN_FREE, post_p   # -> Free: orientation/position untouched
+
+    if orientation_changed:
+        if post_o == PROGRESS_ORIENT_HORIZONTAL:
+            return PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)
+        return PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)
+
+    return post_o, post_a, post_p
+
+
 def _on_changed(linkage, new_settings):
-    """MSA onSettingsChanged callback: overlay our keys and fan out to the feature bridges so a
-    checkbox change applies live.
+    """MSA onSettingsChanged callback: overlay our keys, settle Orientation/Alignment/Position
+    via _derive_layout, and fan out to the feature bridges so a checkbox change applies live.
 
     Linkage-scoped: MSA broadcasts this callback GLOBALLY (it fires for every mod's change, not
     just ours), so ignore events for other mods -- mirrors _on_reset. Even without the guard the
     _apply overlay would no-op a foreign payload, but skipping early also avoids a spurious
     _notify()/re-push and any chance of a foreign key colliding with one of ours.
 
-    ALSO AUTO-SETS THE ALIGNMENT, by comparing the live cache BEFORE vs AFTER the overlay -- the
-    only way to tell "the user flipped Orientation" apart from "the user typed a coordinate", since
-    MSA hands us the FULL settings snapshot every time, never a diff:
-      * Orientation changed AND the (post-overlay) alignment isn't already Free -> re-anchor it to
-        match (Horizontal -> Damage Log, Vertical -> Minimap). FREE IS STICKY: this branch never
-        fires once alignment is Free, by explicit design -- an Orientation switch must never
-        silently un-pin a bar the user (or a drag) positioned freely.
-      * Orientation changed (ANY alignment, Free included) -> the stored position pair is ZEROED,
-        which bar_window._resolve reads as "this orientation's default anchor". That is the whole
-        point of doing it as a coordinate reset rather than an alignment change: it works under
-        Free without violating Free's stickiness. See the branch's own comment below.
-      * The bar-position pair changed -> Free (a user typed a coordinate into a stepper). Checked
-        AFTER the orientation branch, so the rare simultaneous case lands on the more explicit Free.
-      * set_bar_position() (the Ctrl+drag path) already writes BOTH the position and Free directly
-        into the live cache before its own MSA write goes out, so by the time that write's echo
-        reaches this handler the "before" and "after" position already agree here -- no double-set,
-        no special-case flag needed to recognise "our own drag write".
+    THE DERIVATION: snapshot the three stored layout values BEFORE the overlay (the only way to
+    tell "the user flipped Orientation" apart from "the user typed a coordinate", since MSA hands
+    us the FULL settings snapshot every time, never a diff), overlay, then hand (pre, post) to
+    _derive_layout ONCE. Whatever differs from `post` gets written into the live cache and the
+    pass is marked dirty; nothing derived is ever re-fed back into _derive_layout in the same
+    pass -- see _derive_layout's docstring for why that single call always reaches a fixed point.
 
-    LOOP GUARD: the write-back below (alignment and/or the zeroed pair) fires another
-    onSettingsChanged of its own. No re-entrancy flag is needed -- each write only happens when the
-    value actually CHANGES, so the echoed second pass finds them already equal and no-ops."""
+    RE-ENTRANCY LATCH (_deriving): guards the belt-and-braces case where MSA's write-back
+    (below) triggers a SYNCHRONOUS re-entrant onSettingsChanged carrying a stale (pre-derivation)
+    snapshot. While `_deriving` is set, skip derivation entirely -- still _apply + _notify, so the
+    fan-out isn't lost -- rather than deriving against stale data and undoing the settle in
+    progress.
+
+    LOOP GUARD (the normal, non-re-entrant case): the write-back below fires another
+    onSettingsChanged of its own. No extra flag is needed for THAT pass -- the echo carries
+    exactly what we just wrote, `_derive_layout` on a fixed point returns its input unchanged, so
+    the echoed pass finds nothing dirty and no-ops."""
+    global _deriving
     try:
         if linkage != LINKAGE:
             return
-        pre_orientation = _settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL)
-        pre_x = _settings.get(BAR_POS_X_KEY, 0)
-        pre_y = _settings.get(BAR_POS_Y_KEY, 0)
+        if _deriving:
+            _apply(new_settings)
+            LOG_DEBUG("[moe] settings changed (re-entrant, no derivation) -> %r" % (_settings,))
+            _notify()
+            return
+        pre = (_settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL),
+               _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG),
+               (_settings.get(BAR_POS_X_KEY, 0), _settings.get(BAR_POS_Y_KEY, 0)))
         _apply(new_settings)
-        post_orientation = _settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL)
-        post_alignment = _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG)
-        post_x = _settings.get(BAR_POS_X_KEY, 0)
-        post_y = _settings.get(BAR_POS_Y_KEY, 0)
-        orientation_changed = post_orientation != pre_orientation
-        position_changed = (post_x, post_y) != (pre_x, pre_y)
-        new_alignment = None
-        if orientation_changed and post_alignment != PROGRESS_ALIGN_FREE:
-            new_alignment = (PROGRESS_ALIGN_DAMAGE_LOG if post_orientation == PROGRESS_ORIENT_HORIZONTAL
-                             else PROGRESS_ALIGN_MINIMAP)
-        if position_changed:
-            new_alignment = PROGRESS_ALIGN_FREE
-        dirty = new_alignment is not None and new_alignment != post_alignment
-        if dirty:
-            _settings[PROGRESS_ALIGNMENT_KEY] = new_alignment
-        # ... AND DROPS THE STORED COORDINATES, on an orientation change ONLY. The two orientations
-        # have different surface geometries, so the other one's absolute pair lands the new bar
-        # somewhere it was never tuned for (observed live: the horizontal bar inheriting the
-        # vertical one's placement landed over the minimap). Zeroed rather than re-anchored,
-        # because (0, 0) is what bar_window._resolve reads as "use this orientation's default
-        # anchor" -- under Free too, which is how this stays compatible with Free being sticky:
-        # the ALIGNMENT is untouched by this branch, only the coordinates reset.
-        # THREE GUARDS, all load-bearing. `orientation_changed` alone confines it to an EXPLICIT
-        # flip -- a mount, a battle start, a stepper edit or any unrelated key's change all leave
-        # the orientation equal and never reach it, so a user's placement is never silently
-        # discarded. `not position_changed` yields to a coordinate typed in the SAME payload (the
-        # rare simultaneous case), matching the precedence the alignment branches above already
-        # give the more explicit edit. The non-zero test keeps the write-back -- and its echo --
-        # terminating.
-        if orientation_changed and not position_changed and (post_x, post_y) != (0, 0):
-            _settings[BAR_POS_X_KEY] = 0
-            _settings[BAR_POS_Y_KEY] = 0
+        post = (_settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL),
+                _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG),
+                (_settings.get(BAR_POS_X_KEY, 0), _settings.get(BAR_POS_Y_KEY, 0)))
+        settled_o, settled_a, settled_p = _derive_layout(pre, post)
+        dirty = False
+        if settled_o != post[0]:
+            _settings[PROGRESS_ORIENTATION_KEY] = settled_o
+            dirty = True
+        if settled_a != post[1]:
+            _settings[PROGRESS_ALIGNMENT_KEY] = settled_a
+            dirty = True
+        if settled_p != post[2]:
+            _settings[BAR_POS_X_KEY], _settings[BAR_POS_Y_KEY] = settled_p
             dirty = True
         if dirty:
             g = _primary_api()
             if g is not None:
+                _deriving = True
                 try:
                     g.updateModSettings(LINKAGE, _full_settings_for_write(g))
                     try:
@@ -1327,6 +1468,8 @@ def _on_changed(linkage, new_settings):
                         LOG_CURRENT_EXCEPTION()
                 except Exception:
                     LOG_CURRENT_EXCEPTION()
+                finally:
+                    _deriving = False
         LOG_DEBUG("[moe] settings changed -> %r" % (_settings,))
         _notify()
     except Exception:
@@ -1350,6 +1493,7 @@ def _on_reset(linkage, defaults):
         _settings[POS_H_KEY] = 0
         _settings[BAR_POS_X_KEY] = 0
         _settings[BAR_POS_Y_KEY] = 0
+        _settings[PROGRESS_POS_FRAME_KEY] = POS_FRAME_ANCHOR
         _settings[PROGRESS_ORIENTATION_KEY] = PROGRESS_ORIENT_HORIZONTAL
         _settings[PROGRESS_ALIGNMENT_KEY] = PROGRESS_ALIGN_DAMAGE_LOG
         _settings[FOLLOW_CAROUSEL_KEY] = True
@@ -1375,7 +1519,9 @@ def _full_settings_for_write(api):
     except Exception:
         LOG_CURRENT_EXCEPTION()
     data.setdefault("enabled", True)   # host-managed per-mod toggle; never drop it
-    data.update(_settings)             # our varNames (flags + posX/posY/posW/posH + followCarousel)
+    data.update(_settings)             # our varNames -- every DEFAULTS key, e.g. flags +
+                                        # posX/posY/posW/posH + followCarousel + the bar-pos pair
+                                        # and its frame marker
     return data
 
 
@@ -1412,18 +1558,24 @@ def set_position(x, y, w=0, h=0):
 
 
 def set_bar_position(x, y, persist=True):
-    """Store the in-battle bar's dragged top-left (LOGICAL GUI px; 0 == auto). Called from the bars'
-    Ctrl+drag gesture, which is driven entirely from Python -- see bar_window.BarHost.drag.
+    """Store the in-battle bar's Free ANCHOR POINT (LOGICAL GUI px; 0/0 == "not yet
+    materialised", see bar_window's AUTO branch) -- domain.positioning.free_top_left, NOT a
+    top-left. Called from the bars' Ctrl+drag gesture (bar_window.BarHost.drag, which converts
+    its own top-left grab into this frame before calling here) and from BarHost._materialise (the
+    deferred conversion for a freshly-picked Free or a pre-v22 legacy pin).
 
     `persist` FALSE is the live drag: the in-memory value is all a re-place reads, so every mouse
-    movement updates that and nothing else. TRUE (the gesture end) additionally writes it through MSA
-    so the panel's steppers track the drag and the position survives the session.
+    movement updates that and nothing else. TRUE (the gesture end, or a materialisation) additionally
+    writes it through MSA so the panel's steppers track it and the position survives the session.
 
-    ALSO sets Alignment to Free -- THE DRAG-END SEAM: a Ctrl+drag is by definition a free pin, and
-    setting it here (rather than inferring it in _on_changed from the position change alone) is
-    what lets _on_changed's pre/post comparison recognise "this echo is our own drag write" for
-    free -- by the time MSA echoes this write back, the live cache already holds these exact values,
-    so that handler sees no change and no-ops (see its LOOP GUARD note).
+    ALSO sets Alignment to Free and the frame marker to POS_FRAME_ANCHOR -- every caller hands
+    this an ANCHOR POINT (never a legacy top-left), so the frame marker is unconditionally
+    "anchor" the instant this runs; this is also what flips a pre-v22 "legacy" store the first
+    time _materialise converts it. Setting Alignment here (rather than inferring it in
+    _on_changed from the position change alone) is what lets _on_changed's pre/post comparison
+    recognise "this echo is our own write" for free -- by the time MSA echoes this write back, the
+    live cache already holds these exact values, so that handler sees no change and no-ops (see
+    its LOOP GUARD note).
 
     NO _notify(), unlike set_position: the bar's own host re-places the window directly in the same
     handler, so a fan-out would only cost every OTHER feature a needless apply_settings + re-push
@@ -1431,6 +1583,7 @@ def set_bar_position(x, y, persist=True):
     _settings[BAR_POS_X_KEY] = clamp_pos(x)
     _settings[BAR_POS_Y_KEY] = clamp_pos(y)
     _settings[PROGRESS_ALIGNMENT_KEY] = PROGRESS_ALIGN_FREE
+    _settings[PROGRESS_POS_FRAME_KEY] = POS_FRAME_ANCHOR
     if not persist:
         return
     g = _primary_api()

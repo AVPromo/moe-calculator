@@ -10,12 +10,13 @@ battle_bridge (and its tests) treat this module AS the window handle.
 
 PC-only (needs the live client); not imported under pytest without stubs. Python 2.7 runtime.
 """
+from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import ProgressVM
 from moe_calculator.domain.constants import (
-    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_SHIFT,
-    PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_GAP_BOTTOM, PROGRESS_MM_TRACK_X,
-    PROGRESS_MM_TRACK_X_LARGE)
+    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_X_SHIFT_LARGE, PROGRESS_ANCHOR_Y_FRAC,
+    PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_GAP_BOTTOM,
+    PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
 
 # itemID registered in mods/configs/res_map/MoEProgressView.json -- keep in lockstep. It MUST
 # differ from every other entry's: OpenWG assigns the numeric resId positionally when it rebuilds
@@ -25,7 +26,9 @@ RES_MAP_ITEM_ID = "MoEProgressView"
 _host = BarHost(RES_MAP_ITEM_ID, ProgressVM,
                 PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT,
                 PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
-                PROGRESS_MM_GAP_BOTTOM, "[moe-bar]")
+                PROGRESS_MM_GAP_BOTTOM, "[moe-bar]",
+                variant=mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE,
+                x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
 
 open_window = _host.open_window
 close_window = _host.close_window

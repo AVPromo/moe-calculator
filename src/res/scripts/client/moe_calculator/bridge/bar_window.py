@@ -27,12 +27,15 @@ WINDOW_FULLSCREEN -- a full-screen Coherent surface steals the whole-screen mous
 the cursor is raised, and pointer-events:none does NOT make the window rectangle click-through).
 Read that first. The difference here is placement: a bar is placed off whichever ANCHOR the
 Alignment setting selects -- centred horizontally and proportionally down the screen (Damage Log,
-the shipped default), to the left of the minimap (Minimap), or at the screen origin (Free, i.e. the
-stored pair read as an absolute top-left) -- with the stored X/Y stepper pair composed on top of it
-in every case (domain.anchor_offset). A Ctrl+DRAG writes that same pair and flips Alignment to
-Free, which is why the drag has no special placement path of its own: offset (0, 0) under Damage
-Log IS the shipped placement byte-for-byte, so there is no "auto" sentinel any more (see the
-deleted domain.anchor_pinned).
+the shipped default), to the left of the minimap (Minimap), with the stored X/Y stepper pair
+composed on top of either as an anchor-relative offset (domain.anchor_offset) -- or, under Free,
+AT the stored pair itself, read as an ANCHOR POINT (bottom-centre horizontal / bottom-right
+vertical, domain.free_top_left) rather than a top-left, so a Default<->Large size flip re-anchors
+the bar instead of growing it off to one side (TASKS/in-battle-bar-layout-auto-set-redesign.md
+Trap 3 Fix B). A Ctrl+DRAG writes that same pair (converted into the anchor-point frame -- see
+BarHost.drag) and flips Alignment to Free; the exact pair (0, 0) under Free is its own AUTO
+sentinel meaning "not yet materialised" (BarHost._materialise), not the screen origin -- see
+_resolve.
 
 THE DRAG IS ENTIRELY PYTHON'S NOW, AND ABSOLUTE. adapter/battle_input samples Ctrl + the left mouse
 button off WG's own input dispatchers plus its g_mouseEventHandlers registry, and reports the gesture
@@ -78,7 +81,7 @@ from moe_calculator.domain.constants import (MINIMAP_SIZES, MM_GAP,
                                              VERTICAL_ANCHOR_Y_SHIFT_LARGE)
 from moe_calculator.domain.positioning import (anchor_centred_reduced, anchor_minimap,
                                                anchor_offset, cursor_in_rect, cursor_logical,
-                                               cursor_top_left)
+                                               cursor_top_left, free_anchor_point, free_top_left)
 
 # A large sentinel offset used to clamp the window to the far corner (LEFT/TOP anchor) so we can
 # read back the movable extent (= logical space - windowSize) and place proportionally.
@@ -164,10 +167,11 @@ class _BarWindow(WindowImpl):
     full-screen -- the Ctrl+click hit-test steal), layer WINDOW (7) so the modal in-battle menu at
     TOP_WINDOW (10) keeps its input, shown without focus."""
 
-    def __init__(self, content, place):
+    def __init__(self, content, place, host):
         super(_BarWindow, self).__init__(
             WindowFlags.WINDOW, content=content, layer=WindowLayer.WINDOW)
         self._place = place
+        self._host = host
 
     def _onReady(self):
         self.show(focus=False)
@@ -180,7 +184,13 @@ class _BarWindow(WindowImpl):
         self._place(self)
 
     def _on_size_changed(self, _unique_id, _width, _height):
-        """The JS resized our surface -> the movable extent changed -> re-place."""
+        """The JS resized our surface -> the movable extent changed -> re-place.
+
+        ALSO flips the host's `_sized` latch: THIS is the first point a real (post-256x256
+        fallback) surface size exists, which is exactly what BarHost._materialise gates on --
+        materialising against the fallback size would bake a wrong Free anchor point FOREVER (see
+        TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 2)."""
+        self._host._sized = True
         self._place(self)
 
     def detach(self):
@@ -215,10 +225,22 @@ class BarHost(object):
     logical px of unreachable slack; the front-end change that shortened both vertical surfaces to
     their own tuned gap is what made the two numbers differ ON SCREEN and so worth threading. It has
     no Large twin, on purpose -- see the constants' note.
+    ``variant`` is this bar's own mod_settings.PROGRESS_VARIANT_* index (progress_view passes
+    MOVING_AVERAGE, efficiency_view EFFICIENCY) -- BarHost._materialise's own-variant gate against
+    it, since both hosts share ONE stored Free pair and a live variant flip mid-battle can briefly
+    have both open (see the module docstring). Defaults to None, which never equals a real variant
+    index, so a host built without one (e.g. a test fixture) simply never materialises.
+    ``x_shift_large`` is the VERTICAL + Damage Log alignment's own rule-5 right-pin term
+    (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE -- TASKS/in-battle-bar-layout-auto-set-
+    redesign.md Trap 3 Fix A / DECISION 3), read by _resolve's `elif vertical:` branch ONLY, and
+    only under the Large size mode (Default needs none -- see the constants' note). Defaults to 0,
+    a no-op, so a caller that omits it (every existing test fixture, and the horizontal branch,
+    which never reads this attribute at all) is byte-identical to before this argument existed.
     """
 
     def __init__(self, item_id, vm_factory, y_frac, x_off, y_shift, y_shift_large,
-                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag):
+                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag, variant=None,
+                 x_shift_large=0):
         self.item_id = item_id
         self._vm_factory = vm_factory
         self._y_frac = y_frac
@@ -229,14 +251,21 @@ class BarHost(object):
         self._mm_track_x_large = mm_track_x_large
         self._mm_gap_bottom = mm_gap_bottom
         self._tag = tag
+        self._variant = variant
+        self._x_shift_large = x_shift_large
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
         self._active = None                         # (window, view) while open
         self._extent_cache = None                   # memoized movable extent; see _extent
+        # True once THIS window's surface has been resized past the engine's 256x256 size-timeout
+        # fallback at least once (see _BarWindow._on_size_changed) -- the materialise-on-mount
+        # gate _materialise needs, reset back to False by open_window on every fresh window.
+        self._sized = False
         # THE LIVE GESTURE's only two pieces of state (both None while none is in flight):
         # `_grab` is the offset between the window's top-left and the cursor's mapped position at
         # gesture start, carried for the whole gesture so the bar keeps the point it was grabbed by;
-        # `_drag_pos` is the last position actually applied, i.e. what the mouse-up persists -- and
-        # None means the gesture NEVER MOVED, which must persist nothing (see drag).
+        # `_drag_pos` is the Free ANCHOR POINT (not a top-left, see free_anchor_point) equivalent
+        # to the last position actually applied, i.e. what the mouse-up persists -- and None means
+        # the gesture NEVER MOVED, which must persist nothing (see drag).
         # `_declined` latches a gesture this host does NOT own (it began outside our window rect),
         # so a foreign drag that later sweeps the cursor across us cannot be claimed mid-flight.
         self._grab = None
@@ -260,7 +289,13 @@ class BarHost(object):
             (anchor_centred_reduced). Its `y_shift` cancels the composition's intra-surface top
             offset (the JS shifts the whole bar into positive document coordinates); the fraction's
             extent-to-viewport conversion is computed by passing `space_y`, not baked into the
-            constant -- see the constants' derivations and anchor_centred_reduced's docstring.
+            constant -- see the constants' derivations and anchor_centred_reduced's docstring. A
+            VERTICAL bar additionally passes `x_shift_large` under Large (0 at Default, needing no
+            term) -- rule 5's right-pin (Trap 3 Fix A / DECISION 3): `max_x // 2` alone would move
+            BOTH edges outward on a size-up, so this cancels the outward half and holds the right
+            edge. Unreachable through the UI under rules 2/3 (a vertical bar's natural alignment is
+            Minimap, already compliant) but a stored (V, DL) stays placeable (DECISION 5), so this
+            must still be correct with nobody able to select it.
           * Minimap -- to the LEFT of the minimap, whose measured logical width comes from the live
             settingsCore size INDEX (_minimap_size_index). The tick overhang term applies only to a
             VERTICAL bar: it is a CROSS-axis length, and only a vertical bar's cross axis is the x
@@ -272,16 +307,26 @@ class BarHost(object):
             A HORIZONTAL bar keeps passing the SURFACE's own edges (space - extent, the shipped
             behaviour): neither horizontal tuner has a minimap placement at all, so there is no
             tuned reference to convert into and nothing to reproduce -- see the constants' note.
-          * Free -- the stored pair as an ABSOLUTE top-left, i.e. composed onto the origin, which is
-            exactly what a Ctrl+drag produces (the drag end also flips Alignment to Free) -- EXCEPT
-            at the pair (0, 0), which under Free means AUTO and defers to whichever anchor this
-            ORIENTATION defaults to (Horizontal -> Damage Log, Vertical -> Minimap, the same mapping
-            _on_changed's re-anchor uses). That is what makes an explicit Orientation change safe:
-            it zeroes the stored pair (mod_settings._on_changed) rather than carrying coordinates
-            tuned for the other orientation's surface across, and it must do so WITHOUT touching
-            the Alignment value, because Free is sticky. The stored alignment stays Free; only the
-            resolved base moves. The one capability lost is placing a bar at exactly logical
-            (0, 0) -- accepted.
+          * Free -- the stored pair as an ANCHOR POINT (bottom-centre horizontal / bottom-right
+            vertical -- domain.positioning.free_top_left, Trap 3 Fix B), converted into a top-left
+            using THIS placement's own live surface size, which is what makes a Default<->Large
+            size flip re-anchor the bar instead of growing it off to one side or the other --
+            EXCEPT at the pair (0, 0), which under Free means AUTO and defers to whichever anchor
+            this ORIENTATION defaults to (Horizontal -> Damage Log, Vertical -> Minimap, the same
+            mapping mod_settings._derive_layout's rows 1-2 use). NOTE: this branch is NOT here to
+            protect a "Free is sticky" rule -- that rule is SUPERSEDED (an explicit
+            Orientation/Alignment change now re-anchors Alignment away from Free unconditionally,
+            see _derive_layout). It survives for two other, still-live reasons: (1) picking
+            Alignment = Free leaves the pair at (0, 0) until the bar's next battle mount computes
+            the real on-screen point (no surface exists in the settings panel to compute it from --
+            the bar must not jump), so (0, 0) is Free's "not yet materialised" marker
+            (BarHost._materialise), and (2) a user who types 0 / 0 into the steppers gets AUTO
+            rather than the screen origin, a deliberately accepted lost capability (DECISION 6).
+            Both routes need this exact fallback; neither is about Orientation-change safety
+            anymore. A NON-zero pair still carrying the PRE-v22 frame (mod_settings.
+            progress_bar_pos_frame() == POS_FRAME_LEGACY -- see the SETTINGS_VERSION 21->22
+            comment) is honoured as the literal top-left it always was instead, until
+            _materialise converts it the first time this bar mounts with a real surface.
 
         EVERY SETTING IS READ HERE, PER PLACEMENT, none in __init__ (which binds at module import):
         size, orientation and alignment can all change after load. Size in particular has to be
@@ -296,7 +341,12 @@ class BarHost(object):
             alignment = (mod_settings.PROGRESS_ALIGN_MINIMAP if vertical
                          else mod_settings.PROGRESS_ALIGN_DAMAGE_LOG)
         if alignment == mod_settings.PROGRESS_ALIGN_FREE:
-            base = (0, 0)
+            if mod_settings.progress_bar_pos_frame() == mod_settings.POS_FRAME_LEGACY:
+                # A pre-v22 pair is still a literal top-left (Fix B has not converted it yet, see
+                # BarHost._materialise) -- honour it verbatim, exactly as pre-v22 did.
+                return anchor_offset((0, 0), off_x + self._x_off, off_y)
+            surface = (space_x - max_x, space_y - max_y)
+            return free_top_left((off_x, off_y), surface, vertical)
         elif alignment == mod_settings.PROGRESS_ALIGN_MINIMAP:
             if vertical:
                 overhang = MM_TICK_OVERHANG_LARGE if large else MM_TICK_OVERHANG
@@ -311,7 +361,8 @@ class BarHost(object):
         elif vertical:
             base = anchor_centred_reduced(
                 max_x, max_y, space_y, self._y_frac,
-                VERTICAL_ANCHOR_Y_SHIFT_LARGE if large else VERTICAL_ANCHOR_Y_SHIFT)
+                VERTICAL_ANCHOR_Y_SHIFT_LARGE if large else VERTICAL_ANCHOR_Y_SHIFT,
+                self._x_shift_large if large else 0)
         else:
             base = anchor_centred_reduced(max_x, max_y, space_y, self._y_frac,
                                           self._y_shift_large if large else self._y_shift)
@@ -370,8 +421,51 @@ class BarHost(object):
             space_x, space_y = self._space(window)
             x, y = self._resolve(max_x, max_y, space_x, space_y)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
+            self._materialise(x, y, space_x - max_x, space_y - max_y)
         except Exception:
             LOG_CURRENT_EXCEPTION()
+
+    def _materialise(self, x, y, surface_w, surface_h):
+        """Write the just-resolved on-screen point back as Free's stored ANCHOR POINT, ONCE --
+        the deferred half of two DIFFERENT stories that happen to end in the exact same action
+        (see TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 2 / Trap 3 Fix B / DECISION 1 /
+        DECISION 2):
+
+          * Free freshly picked, pair still (0, 0) -- `x, y` is this orientation's default anchor
+            (_resolve's AUTO branch); convert it into the anchor-point frame and persist it, so the
+            panel's steppers stop reading 0/0 the next time the user looks.
+          * a pre-v22 store's Free pin is still a literal top-left (mod_settings.
+            progress_bar_pos_frame() == POS_FRAME_LEGACY) -- `x, y` IS that pair, verbatim
+            (_resolve's legacy branch); convert it into the SAME anchor-point frame and persist it,
+            which is also what flips the marker to POS_FRAME_ANCHOR (see set_bar_position).
+
+        Both cases reduce to "re-express the resolved top-left as an anchor point, using THIS
+        placement's surface size, and persist it" -- domain.positioning.free_anchor_point is the
+        exact inverse of the free_top_left conversion _resolve just applied (or would have, absent
+        the legacy branch), so the bar's on-screen position never moves.
+
+        THREE GATES, all load-bearing:
+          * `_sized` -- the FIRST _place runs at _onReady against the engine's 256x256 size-timeout
+            fallback; materialising against that bakes a wrong anchor point FOREVER (once the pair
+            != (0, 0) and the frame is "anchor", neither branch above fires again).
+          * the alignment/pair/frame are re-read FRESH here rather than reusing _resolve's locals,
+            which were overwritten in place by the AUTO rewrite.
+          * own-VARIANT only -- both hosts share ONE stored pair, and a live variant flip mid-battle
+            can briefly have both open (see the class docstring)."""
+        if not self._sized:
+            return
+        if mod_settings.progress_bar_variant() != self._variant:
+            return
+        if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
+            return
+        pos = (mod_settings.bar_pos_x(), mod_settings.bar_pos_y())
+        legacy = mod_settings.progress_bar_pos_frame() == mod_settings.POS_FRAME_LEGACY
+        if pos != (0, 0) and not legacy:
+            return   # already materialised, in the current frame -- nothing to do
+        vertical = (mod_settings.progress_bar_orientation()
+                    == mod_settings.PROGRESS_ORIENT_VERTICAL)
+        ax, ay = free_anchor_point((x, y), (surface_w, surface_h), vertical)
+        mod_settings.set_bar_position(ax, ay, persist=True)
 
     def drag(self, phase, cursor=None):
         """The Ctrl+left-button reposition gesture. `phase` is "start", "move" or "end", reported by
@@ -408,6 +502,14 @@ class BarHost(object):
         matters MORE now than under the retired 0/0 sentinel, because that call also flips Alignment
         to Free. A stray Ctrl+click on the bar must not silently opt the user out of the anchored
         alignment (and of every future change to that anchor) without moving anything.
+
+        EVERY MOVE ALSO CONVERTS INTO THE STORED FRAME (Trap 3 Fix B): `window.move()` still takes
+        the TOP-LEFT `pos` computed above, but what gets handed to set_bar_position (both the live,
+        unpersisted update and the eventual gesture-end persist) is that top-left re-expressed as
+        the Free ANCHOR POINT (domain.positioning.free_anchor_point, the exact inverse of the
+        free_top_left conversion _resolve applies on read) -- so a dragged bar keeps rule 5's
+        size-invariance the same way a materialised or panel-set Free pin does. The GRAB offset
+        above stays in top-left space throughout; only the value actually persisted is converted.
 
         Fail-soft throughout: an unreadable cursor leaves the window exactly where it is, and nothing
         raises into the engine's input path."""
@@ -460,8 +562,15 @@ class BarHost(object):
             if pos is None:
                 return
             window.move(pos[0], pos[1], xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
-            self._drag_pos = pos
-            mod_settings.set_bar_position(pos[0], pos[1], persist=False)
+            # Convert the just-applied TOP-LEFT into the stored ANCHOR POINT frame (Trap 3 Fix
+            # B) -- window.move() above already ran in top-left space; only what gets persisted
+            # changes frame. `self._drag_pos` carries the ANCHOR POINT from here on, so "end"
+            # (above) needs no conversion of its own.
+            vertical = (mod_settings.progress_bar_orientation()
+                        == mod_settings.PROGRESS_ORIENT_VERTICAL)
+            apos = free_anchor_point(pos, (space_x - max_x, space_y - max_y), vertical)
+            self._drag_pos = apos
+            mod_settings.set_bar_position(apos[0], apos[1], persist=False)
         except Exception:
             LOG_CURRENT_EXCEPTION()
 
@@ -486,8 +595,13 @@ class BarHost(object):
                 LOG_DEBUG("%s res_map layout '%s' unresolved -- a one-time client restart is "
                           "needed for OpenWG to register it." % (self._tag, self.item_id))
                 return None
+            # A FRESH window starts at the engine's 256x256 fallback again, same as the very
+            # first one -- so the materialise-on-mount latch must reset here too, not just at
+            # __init__, or a stale True from a PREVIOUS battle would let _materialise fire
+            # against this window's own first (fallback-sized) _place call.
+            self._sized = False
             view = _BarView(layout, self._vm_factory())
-            window = _BarWindow(view, self._place)
+            window = _BarWindow(view, self._place, self)
             # Publish the singleton BEFORE load() so the view's _onLoading initial push (which calls
             # back through battle_bridge.refresh() -> active_view()) sees us.
             self._active = (window, view)

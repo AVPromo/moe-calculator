@@ -510,12 +510,18 @@ def test_python_y_shift_cancels_the_js_intra_surface_shift():
     assert EFFICIENCY_ANCHOR_Y_SHIFT == -_shift_y(js)
 
 
-def test_python_large_y_shift_is_the_same_pure_term_scaled_by_size_f():
-    # The LARGE twin (mod_settings.progress_bar_size == 1), derived the SAME way from the SAME
-    # shipped JS -- only in logical px now, so it carries SIZE_F and NOT SIZE_XF (this is the Y
-    # axis). No literal here: a retune of the pad or the box propagates, and so does SIZE_F itself.
+def test_python_large_y_shift_pins_the_bottom_ink_not_the_naive_scale():
+    # Rule 5 (DECISION 3): re-derived to pin the composition's BOTTOM ink -- `.mp-backdrop`'s
+    # bottom edge, VIEW_H_REM - PAD_REM below the window's top-left -- rather than the naive
+    # `-(SHIFT_Y_REM * SIZE_F)` scale-up this test used to assert (that pins the pre-shift
+    # coordinate, not either ink edge; see domain/constants.PROGRESS_ANCHOR_Y_SHIFT_LARGE's header
+    # for the full derivation). No literal here: a retune of the pad or the box propagates.
     js = _js()
-    assert EFFICIENCY_ANCHOR_Y_SHIFT_LARGE == -_large_shift_y(js)
+    surface_w, surface_h = _surface_wh(js)
+    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    shift = -_shift_y(js)
+    computed = Decimal(shift) - Decimal("0.25") * bottom_ink_default
+    assert EFFICIENCY_ANCHOR_Y_SHIFT_LARGE == iround_half_away(computed) == -77
 
 
 def _v_surface_wh(js):
@@ -579,12 +585,21 @@ def test_the_vertical_shift_matches_progresss_and_is_pinned():
     assert VERTICAL_ANCHOR_Y_SHIFT == -_v_shift_y(js) == -90
 
 
-def test_the_vertical_large_shift_is_the_same_pure_term_scaled_by_size_f():
-    # The LARGE twin -- half-away rounding, the same convention every other *_SHIFT_LARGE uses
-    # (-112.5 -> -113).
+def test_the_vertical_large_shift_pins_the_bottom_ink_within_a_pixel():
+    # Rule 5 (DECISION 3): the LARGE twin no longer scales the pure intra-surface shift by SIZE_F
+    # (that pinned the pre-shift coordinate, not either ink edge -- see
+    # domain/constants.PROGRESS_ANCHOR_Y_SHIFT_LARGE's header). It pins THIS bar's own clipped
+    # vertical surface height (318, _v_surface_wh's height half) as the BOTTOM ink instead:
+    # shift_large == shift_default - 0.25 * bottom_ink_default. ASSERT A BOUND, NOT EQUALITY: the
+    # sibling Moving Average bar's own clipped height (320) rounds to the SAME shared -170 only by
+    # luck of the two numbers (see test_positioning.test_vertical_anchor_shift_is_identical_for_
+    # both_bars) -- a future retune of either clipped height must not silently pass here.
     js = _js()
-    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == \
-        -iround_half_away(Decimal(_v_shift_y(js)) * _size_factor("SIZE_F")) == -113
+    shift = -_v_shift_y(js)
+    bottom_ink_default = _v_surface_wh(js)[1]
+    computed = Decimal(shift) - Decimal("0.25") * bottom_ink_default
+    assert abs(VERTICAL_ANCHOR_Y_SHIFT_LARGE - float(computed)) <= 1
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -170
 
 
 def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
@@ -673,20 +688,13 @@ def test_the_large_size_block_never_re_adds_the_deleted_vertical_dash_grid_rule(
 
 @pytest.mark.parametrize("space_h", [1080, 1440])
 def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(space_h):
-    # THE invariant the pure shift term exists for: the track's top edge lands at
-    # EFFICIENCY_ANCHOR_Y_FRAC of the VIEWPORT height, resolution-invariantly -- hence both
-    # heights. Composed exactly as bar_window.BarHost._resolve does it now: the far-sentinel clamp
-    # hands anchor_centred_reduced the movable extent AND the full space_y (the fraction applies to
-    # space_y directly -- no extent-to-viewport conversion needed, see anchor_centred_reduced's
-    # docstring), then the stored X/Y stepper offset (0 here) composes on top via anchor_offset,
-    # and the track sits SHIFT_Y_REM below the window's top edge. Slack is 1.5px for the int()
-    # floor.
-    #
-    # ...AND THE SAME UNDER THE LARGE SIZE MODE, which is that mode's whole point: it is a pure
-    # scale-up, so the bar must not MOVE. Every length on the large side is bigger -- the surface,
-    # the intra-surface shift, hence the Y compensation -- and the track's top edge still has to
-    # come out at the SAME fraction of the same viewport, asserted both against the fraction and
-    # directly against the 1x placement.
+    # THE invariant the pure shift term exists for AT DEFAULT SIZE: the track's top edge lands at
+    # EFFICIENCY_ANCHOR_Y_FRAC of the VIEWPORT height, resolution-invariantly. Composed exactly as
+    # bar_window.BarHost._resolve does it: the far-sentinel clamp hands anchor_centred_reduced the
+    # movable extent AND the full space_y (the fraction applies to space_y directly -- no
+    # extent-to-viewport conversion needed, see anchor_centred_reduced's docstring), then the
+    # stored X/Y stepper offset (0 here) composes on top via anchor_offset, and the track sits
+    # SHIFT_Y_REM below the window's top edge. Slack is 1.5px for the int() floor.
     js = _js()
     surface_w, surface_h = _surface_wh(js)
     max_x, max_y = 1920 - surface_w, space_h - surface_h
@@ -695,17 +703,25 @@ def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(sp
     _x, y = anchor_offset(base, EFFICIENCY_ANCHOR_X_OFFSET, 0)
     top = y + _shift_y(js)
     assert abs(top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5
+
+    # ...BUT UNDER LARGE, RULE 5 (DECISION 3) MOVES THE INVARIANT, NOT JUST THE NUMBER: the track
+    # top is no longer pinned (that was the pre-rule-5 behaviour -- a naive SIZE_F scale-up of the
+    # shift pins the pre-shift coordinate, roughly mid-composition, see
+    # domain/constants.PROGRESS_ANCHOR_Y_SHIFT_LARGE's header). What must not move on screen is the
+    # composition's BOTTOM ink -- `.mp-backdrop`'s bottom edge, VIEW_H_REM - PAD_REM below the
+    # window's own top-left -- so the bar visibly grows UP off a fixed bottom, not off a fixed
+    # middle.
+    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    bottom_ink = y + bottom_ink_default
     lw, lh = _large_surface_wh(js)
     lmax_x, lmax_y = 1920 - lw, space_h - lh
     lbase = anchor_centred_reduced(lmax_x, lmax_y, space_h, EFFICIENCY_ANCHOR_Y_FRAC,
                                    EFFICIENCY_ANCHOR_Y_SHIFT_LARGE)
     _lx, ly = anchor_offset(lbase, EFFICIENCY_ANCHOR_X_OFFSET, 0)
-    large_top = ly + _large_shift_y(js)
-    assert abs(large_top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5, \
-        "the LARGE bar's track lands at %s of the viewport, not %s" % (
-            large_top / float(space_h), EFFICIENCY_ANCHOR_Y_FRAC)
-    assert abs(large_top - top) <= 2, \
-        "the size mode MOVED the bar: 1x track top %s vs large %s" % (top, large_top)
+    bottom_ink_large = ly + float(bottom_ink_default) * float(_size_factor("SIZE_F"))
+    assert abs(bottom_ink_large - bottom_ink) <= 2, \
+        "rule 5: the size mode moved the composition's bottom ink: default %s vs large %s" % (
+            bottom_ink, bottom_ink_large)
 
 
 # --- the tuner's meta block: the third leg of every timing -------------------

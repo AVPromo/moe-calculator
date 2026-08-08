@@ -135,18 +135,33 @@ PROGRESS_ANCHOR_X_OFFSET = 0
 # self-calibrates (and needs no unit conversion either). Do not fight it.
 PROGRESS_ANCHOR_Y_SHIFT = -44
 
-# ...and the SAME shift for the LARGE size mode (mod_settings.progress_bar_size == 1), which is a
-# pure scale-up of the composition and must NOT move the bar on screen:
-#   -(SHIFT_Y_REM * SIZE_F) == -(44 * 1.25) == -55.
-# SIZE_F = 1.25 lives in MoEBarTransient.js and is delivered by the ROOT FONT SIZE, so every rem
-# length renders 1.25x with no CSS edit: SHIFT_Y_REM is UNCHANGED at 44 (it is a rem length in the
-# CSS, root.style.top), and THIS constant is logical px, which is what the extra * 1.25 converts.
-# SIZE_XF (4/3, the EXTRA factor an x-length carries in the stylesheets' .mp-lg block) never
-# appears here -- this is the Y axis (memory `mp-lg-x-lengths-are-pure-sizexf-not-sizef`).
-# WAS PROGRESS_ANCHOR_Y_OFFSET_LARGE == 44 == (-55) + 99, term 2 being
-# +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 115) == +99 -- retired
-# for the reason the 1x constant above documents.
-PROGRESS_ANCHOR_Y_SHIFT_LARGE = -55
+# ...and the LARGE size mode's twin (mod_settings.progress_bar_size == 1) -- NOT a pure scale-up
+# of the 1x constant. `PROGRESS_ANCHOR_Y_SHIFT_LARGE = SHIFT_Y_REM * SIZE_F` (== -55) is an
+# ALGEBRAIC IDENTITY that leaves `int(space_y * frac) + shift` -- the window's own pre-shift
+# coordinate, roughly mid-composition -- at the SAME screen row at every size. That pins neither
+# the composition's top ink nor its bottom ink (a stale comment here once claimed the former; it
+# was wrong -- do not re-derive from it). Rule 5 (TASKS/in-battle-bar-layout-auto-set-redesign.md,
+# DECISION 3) instead requires the BOTTOM ink -- the lowest ink pixel below the window's top-left --
+# to land on the SAME screen row at Default and Large, so the bar visibly grows UP off a fixed
+# bottom, not up-and-down off a fixed middle.
+#
+# `.mp-backdrop` IS the ink extreme on every side (its text-/box-shadow bleed reaches the box edge
+# exactly, MoEProgress.js:65-70), and the backdrop sits with a symmetric PAD_REM slack to the
+# surface edge, so the BOTTOM ink, measured from the window's top-left, is
+#   bottom_ink_default == VIEW_H_REM - PAD_REM == 92 - 10 == 82.
+# Both `frac` and `space_y` in anchor_centred_reduced's `y = int(space_y*frac) + shift` are
+# size-independent, so `shift` is the ONLY size-dependent term, and every rem length (both the
+# surface and the ink inside it) scales by the SAME SIZE_F == 1.25 via the root font:
+#   bottom_ink_large == bottom_ink_default * SIZE_F
+# Pinning bottom_ink means `shift_large + bottom_ink_large == shift_default + bottom_ink_default`,
+# i.e.
+#   shift_large == shift_default - bottom_ink_default * (SIZE_F - 1)
+#              == shift_default - 0.25 * bottom_ink_default
+#              == -44 - 0.25*82 == -64.5 -> -65 (half-away rounding, i.e. away from zero: the
+#              shift is negative, so it rounds DOWN to -65, moving the window UP by 1 more px than
+#              the naive -55 did -- see TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3
+#              Fix A / DECISION 3 for the re-derivation and its arithmetic).
+PROGRESS_ANCHOR_Y_SHIFT_LARGE = -65
 
 # The damage-efficiency bar's window anchor -- its OWN three constants, not the progress bar's.
 # Only one of the two centre-screen bars is ever open (they are radio alternatives), but the
@@ -171,14 +186,17 @@ EFFICIENCY_ANCHOR_Y_FRAC = 0.865
 EFFICIENCY_ANCHOR_X_OFFSET = 0
 EFFICIENCY_ANCHOR_Y_SHIFT = -50
 
-# ...and its LARGE-mode twin, derived exactly as PROGRESS_ANCHOR_Y_SHIFT_LARGE documents (read that
-# first -- it explains why only SIZE_F appears here and never SIZE_XF):
-#   -(SHIFT_Y_REM * SIZE_F) == -(50 * 1.25) == -62.5 -> -63 (half-away rounding, i.e. away from
-#   zero: the shift is negative, so it rounds DOWN to -63 and the window moves UP by the full 63).
-# WAS EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == 62 == (-63) + 125, term 2 being
-# +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 145) == +125 (145 is the
-# logical-px height MoEEfficiency's transient pushes) -- retired with its sibling above.
-EFFICIENCY_ANCHOR_Y_SHIFT_LARGE = -63
+# ...and its LARGE-mode twin, re-derived exactly as PROGRESS_ANCHOR_Y_SHIFT_LARGE documents at
+# length (read that first) to pin the composition's BOTTOM ink instead of the naive
+# `-(SHIFT_Y_REM * SIZE_F)` identity's pre-shift coordinate (rule 5, DECISION 3):
+#   bottom_ink_default == VIEW_H_REM - PAD_REM == 116 - 10 == 106
+#   shift_large == shift_default - 0.25 * bottom_ink_default == -50 - 0.25*106
+#              == -76.5 -> -77 (half-away rounding, away from zero).
+# WAS EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == 62 == (-63) + 125 under the RETIRED naive derivation
+# (-63); that two-term composite's own retirement (the extent-to-viewport conversion cancelled by
+# anchor_centred_reduced) is unaffected by this further correction -- only the ONE remaining pure
+# term changes, from -63 to -77.
+EFFICIENCY_ANCHOR_Y_SHIFT_LARGE = -77
 
 # --- Phase 2 (in-battle vertical bar): minimap-anchored placement geometry -------------------
 # Feeds domain.positioning.anchor_minimap, which places a vertical bar to the LEFT of the
@@ -249,17 +267,62 @@ MM_TICK_OVERHANG_LARGE = 5
 # from PAD_REM - BOX_TOP_REM above):
 #   SHIFT_Y_REM == PAD_REM - BOX_TOP_REM == 10 - (-80) == 90.
 #   1x:    -SHIFT_Y_REM == -90.
-#   LARGE: -(SHIFT_Y_REM * SIZE_F) == -(90 * 1.25) == -112.5 -> -113 (half-away rounding, the
-#          same convention EFFICIENCY_ANCHOR_Y_SHIFT_LARGE's -62.5 -> -63 term already uses).
 # Do NOT re-add a term 2 here -- see anchor_centred_reduced's docstring for why none is needed.
 # The horizontal composites are collapsed the same way now (PROGRESS_/EFFICIENCY_ANCHOR_Y_SHIFT
 # (_LARGE) above), so every orientation carries exactly one shift per size and nothing else.
-# STILL SHARED EVEN THOUGH THE TWO VERTICAL SURFACES NO LONGER MATCH (320 rem tall on the Moving
-# Average bar, 318 on the Damage Efficiency one -- see the *_MM_GAP_BOTTOM split above and the JS's
-# V_CLIP_B_REM): this constant is a function of BOX_TOP_REM and PAD_REM alone, and those two ARE
-# identical on both. Nothing here is derived from the surface's HEIGHT any more.
+#
+# THE LARGE TWIN IS RE-DERIVED FOR RULE 5 (TASKS/in-battle-bar-layout-auto-set-redesign.md,
+# DECISION 3), exactly as PROGRESS_ANCHOR_Y_SHIFT_LARGE's header explains at length: the naive
+# `-(SHIFT_Y_REM * SIZE_F) == -112.5 -> -113` is an algebraic identity that pins the pre-shift
+# coordinate origin (mid-composition), not the BOTTOM ink -- read that constant's comment first,
+# this one only carries the vertical numbers. This constant is used ONLY by the vertical +
+# Damage Log placement (bar_window._resolve's `elif vertical:` branch, anchor_centred_reduced) --
+# the Minimap alignment (both bars' natural home under rules 2/3) never reads it; see
+# anchor_minimap's own MM_TRACK_Y(_LARGE), already bottom-right-invariant by construction.
+#
+# UNLIKE the horizontal pair, the two vertical surfaces this bar's SHARED shift feeds are NOT
+# identical any more (320 rem clipped on the Moving Average bar, 318 on Damage Efficiency -- see
+# the *_MM_GAP_BOTTOM split above and each JS's V_CLIP_B_REM), so treating the CLIPPED surface
+# height itself as "the bottom ink" (the surface was deliberately clipped down to just past the
+# caption ink plus a few rem of tuned slack, unlike the horizontal bars' full untouched PAD_REM)
+# gives two slightly different bottom_ink_default readings that must land on the SAME shared
+# constant -- and they do, up to the same +/-1 int-floor discretization anchor_centred_reduced's
+# own docstring already accepts (do not chase a fix for it):
+#   Moving Average (320):    -90 - 0.25*320 == -90 - 80   == -170.0 -> -170
+#   Damage Efficiency (318): -90 - 0.25*318 == -90 - 79.5 == -169.5 -> -170 (half-away rounding)
+# Both round to the SAME -170, which is why one shared constant still works -- but a future retune
+# of either bar's OWN clipped height could round to -169 or -171 instead, so any test pinning this
+# constant against ONE bar's derivation must assert a BOUND (+/-1), never equality against both.
 VERTICAL_ANCHOR_Y_SHIFT = -90
-VERTICAL_ANCHOR_Y_SHIFT_LARGE = -113
+VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
+
+# THE VERTICAL + DAMAGE LOG X SHIFT -- did not exist before rule 5 (DECISION 3), because
+# anchor_centred_reduced's X term is pure `max_x // 2` with NO offset (see its docstring): that
+# self-calibrates for a HORIZONTAL bar (the composition is symmetric about its own centre, so
+# centring the surface centres the bar with no Python term at all), but a VERTICAL bar's natural
+# resting alignment is bottom-RIGHT, and right-pinning a centred anchor is not free -- a size-up
+# widens the surface and `max_x // 2` moves BOTH edges outward by half the width delta, so the
+# right edge drifts right unless something pulls it back.
+#
+# ONE PER BAR (unlike the shared Y shift above): each vertical surface's own width differs
+# (V_VIEW_W_REM == V_BOX_W_REM + 2*V_PAD_X_REM), and LARGE scales the two terms by DIFFERENT
+# factors -- V_BOX_W_REM is the composition's own physical width, an x-length, so it carries
+# SIZE_F * SIZE_XF == 1.25 * 4/3 == 5/3 (memory `mp-lg-x-lengths-are-pure-sizexf-not-sizef`);
+# V_PAD_X_REM (like PAD_REM) is NOT an x-length -- the ink it covers is rem-sized and rides SIZE_F
+# alone. So the width delta, and hence the shift that cancels it, is per-bar:
+#   Moving Average:    width 72 + 2*63 == 198  -> large 72*5/3 + 2*63*1.25 == 120 + 157.5 == 277.5
+#                       Dw/2 == (277.5 - 198) / 2 == 39.75 -> -40 (half-away rounding)
+#   Damage Efficiency: width 96 + 2*10 == 116  -> large 96*5/3 + 2*10*1.25 == 160 + 25 == 185
+#                       Dw/2 == (185 - 116) / 2 == 34.5 -> -35 (half-away rounding)
+# WIRED via domain.positioning.anchor_centred_reduced's `x_shift` argument (default 0, a no-op for
+# every other alignment/orientation) and bar_window.BarHost's `x_shift_large` constructor argument,
+# read by _resolve's `elif vertical:` branch only, under Large only (Default needs no term -- see
+# above). progress_view.py / efficiency_view.py thread each bar's own constant through at
+# construction. Still unreachable through the UI under rules 2/3 (a vertical bar's natural
+# alignment is Minimap, already compliant) but a stored (V, DL) stays placeable (DECISION 5), so
+# this had to be correct even with nobody able to select it.
+PROGRESS_ANCHOR_X_SHIFT_LARGE = -40
+EFFICIENCY_ANCHOR_X_SHIFT_LARGE = -35
 
 # WHERE THE VERTICAL COMPOSITION'S TRACK SITS INSIDE ITS OWN SURFACE -- positioning.anchor_minimap's
 # `edge_x` / `edge_y`, i.e. the offset from the surface's top-LEFT corner to the two edges the

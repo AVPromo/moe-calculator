@@ -6,7 +6,8 @@ surface fixed 256x256, so movable extent = space - 256."""
 from moe_calculator.domain.positioning import (
     anchor_centred, anchor_centred_reduced, anchor_minimap, anchor_offset,
     anchor_top_left, cursor_in_rect, cursor_logical,
-    cursor_top_left, damage_log_summary_hidden, efficiency_panel_wide)
+    cursor_top_left, damage_log_summary_hidden, efficiency_panel_wide,
+    free_anchor_point, free_top_left)
 from moe_calculator.domain.constants import (
     BATTLE_ANCHOR_X, BATTLE_ANCHOR_Y, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED,
     BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD,
@@ -448,6 +449,72 @@ def test_offset_degrades_unusable_offsets_to_zero():
     assert anchor_offset((10, 20), off_x=None, off_y="bad") == (10, 20)
 
 
+# --- Trap 3 Fix B: free_top_left / free_anchor_point --------------------------------------------
+# The stored Free pair as an ANCHOR POINT (bottom-centre horizontal / bottom-right vertical),
+# converted into a top-left using the LIVE surface size (free_top_left) or the reverse
+# (free_anchor_point, used only to materialise/convert a pair -- see bar_window.BarHost).
+# Default AND Large sizes below stand in for "both sizes" (Rule 5): the whole point of the anchor
+# frame is that neither of these two functions needs to know which size it is -- only the surface.
+
+_SURFACE_DEFAULT = (256, 92)     # a real Moving Average default surface
+_SURFACE_LARGE = (356, 132)      # its Large-mode stand-in (arbitrary but bigger on both axes)
+
+
+def test_free_top_left_horizontal_is_bottom_centre():
+    # pair (100, 500), surface 256x92: bottom-centre means (pair_x - surface_w // 2, pair_y - surface_h).
+    assert free_top_left((100, 500), _SURFACE_DEFAULT, False) == (100 - 128, 500 - 92)
+
+
+def test_free_top_left_vertical_is_bottom_right():
+    assert free_top_left((100, 500), _SURFACE_DEFAULT, True) == (100 - 256, 500 - 92)
+
+
+def test_free_top_left_reanchors_across_both_sizes_without_moving_the_anchor():
+    # RULE 5, stated directly: the SAME anchor point, converted at two different surface sizes,
+    # must keep the anchor's own point fixed -- i.e. the bottom-centre (horizontal) / bottom-right
+    # (vertical) corner of the two resulting rects must be identical, even though the top-lefts
+    # differ because the surfaces differ.
+    pair = (700, 900)
+    for vertical in (False, True):
+        tl_default = free_top_left(pair, _SURFACE_DEFAULT, vertical)
+        tl_large = free_top_left(pair, _SURFACE_LARGE, vertical)
+        if vertical:
+            anchor_default = (tl_default[0] + _SURFACE_DEFAULT[0], tl_default[1] + _SURFACE_DEFAULT[1])
+            anchor_large = (tl_large[0] + _SURFACE_LARGE[0], tl_large[1] + _SURFACE_LARGE[1])
+        else:
+            anchor_default = (tl_default[0] + _SURFACE_DEFAULT[0] // 2, tl_default[1] + _SURFACE_DEFAULT[1])
+            anchor_large = (tl_large[0] + _SURFACE_LARGE[0] // 2, tl_large[1] + _SURFACE_LARGE[1])
+        assert anchor_default == anchor_large == pair, \
+            "vertical=%r: the anchor point moved across a size change" % vertical
+
+
+def test_free_top_left_degrades_unusable_pair_or_surface_to_origin():
+    assert free_top_left(None, _SURFACE_DEFAULT, False) == (-128, -92)
+    assert free_top_left((100, 500), None, False) == (100, 500)
+    assert free_top_left((float("nan"), 0), _SURFACE_DEFAULT, False) == (-128, -92)
+
+
+def test_free_anchor_point_is_the_exact_inverse_of_free_top_left():
+    # Exact, not approximate: both directions are plain int arithmetic on the SAME surface-derived
+    # term, so the round trip must be bit-exact -- no bound needed here (contrast
+    # anchor_centred_reduced vs anchor_centred, which DO admit a +/-1px int-floor divergence).
+    for surface in (_SURFACE_DEFAULT, _SURFACE_LARGE):
+        for vertical in (False, True):
+            for pair in ((0, 0), (100, 500), (-40, 900), (12345, -6789)):
+                top_left = free_top_left(pair, surface, vertical)
+                assert free_anchor_point(top_left, surface, vertical) == pair
+
+
+def test_free_anchor_point_horizontal_and_vertical():
+    assert free_anchor_point((-28, 408), _SURFACE_DEFAULT, False) == (-28 + 128, 408 + 92)
+    assert free_anchor_point((-156, 408), _SURFACE_DEFAULT, True) == (-156 + 256, 408 + 92)
+
+
+def test_free_anchor_point_degrades_unusable_top_left_or_surface_to_origin():
+    assert free_anchor_point(None, _SURFACE_DEFAULT, False) == (128, 92)
+    assert free_anchor_point((100, 500), None, False) == (100, 500)
+
+
 # --- Phase 2: anchor_centred_reduced -----------------------------------------------------------
 # The computed successor to anchor_centred: same X (`max_x // 2`, ignoring space_* entirely) and
 # the same [0, max_y] Y clamp, but Y is `int(space_y * y_frac) + y_shift` instead of
@@ -522,6 +589,33 @@ def test_reduced_matches_the_shipped_horizontal_placement_within_one_px():
         assert y_new - y_old == expected_at_1080[name]
 
 
+def test_reduced_x_shift_defaults_to_zero_and_is_pure_centring():
+    # x_shift's default (0) must be a true no-op: byte-identical to calling the function with the
+    # argument omitted entirely -- every horizontal/Minimap call site predates this argument and
+    # must see no change (TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix A).
+    for max_x in (0, 1, 100, 1664, 3584):
+        for max_y, space_y, frac, shift in ((824, 1904, 0.865, -90), (500, 1080, 0.5, 0)):
+            without = anchor_centred_reduced(max_x, max_y, space_y, frac, shift)
+            explicit_zero = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, 0)
+            explicit_kw = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, x_shift=0)
+            assert without == explicit_zero == explicit_kw
+
+
+def test_reduced_x_shift_moves_x_left_and_clamps_into_the_extent():
+    # A negative x_shift (the vertical + Damage Log right-pin, rule 5 / DECISION 3) pulls x LEFT
+    # of pure centring by exactly the shift, same as the Y shift's own clamp behaviour.
+    max_x, max_y, space_y, frac, shift = 1664, 824, 1904, 0.865, -90
+    centred_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift)
+    shifted_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, -40)
+    assert shifted_x == centred_x - 40
+    # A huge negative shift clamps to 0 (never off the left edge), and a huge positive shift
+    # clamps to max_x (never off the right edge) -- the same [0, max_x] clamp x already had.
+    lo_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, -999999)
+    assert lo_x == 0
+    hi_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, 999999)
+    assert hi_x == max_x
+
+
 # --- Phase 2: new constants mirror the vertical CSS tuner's live defaults -----------------------
 
 def test_minimap_size_table_matches_the_measured_geometry():
@@ -578,11 +672,16 @@ def test_vertical_anchor_shift_is_identical_for_both_bars():
     # Unlike the horizontal siblings' 44-vs-50 split, both vertical compositions share the same
     # backdrop geometry, so ONE constant covers both bars.
     assert VERTICAL_ANCHOR_Y_SHIFT == -90
-    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -113
-    # LARGE is the SIZE_F (1.25) scale-up of the 1x shift, HALF-AWAY-FROM-ZERO rounded
-    # (-90*1.25 == -112.5 -> -113) -- NOT Python's own round(), which is banker's rounding and
-    # would give -112 here (round-half-to-even), the same convention
-    # EFFICIENCY_ANCHOR_Y_OFFSET_LARGE's -62.5 -> -63 term already uses.
-    magnitude = abs(VERTICAL_ANCHOR_Y_SHIFT * 1.25)
-    assert int(magnitude + 0.5) == 113
-    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -113
+    # LARGE pins the composition's BOTTOM ink (rule 5, DECISION 3), not a naive SIZE_F scale-up of
+    # the 1x shift (that pins the pre-shift coordinate instead -- see
+    # domain/constants.PROGRESS_ANCHOR_Y_SHIFT_LARGE's header for the full derivation this mirrors):
+    #   shift_large == shift_default - 0.25 * bottom_ink_default
+    # The two vertical bars' own clipped surface heights differ (320 Moving Average / 318 Damage
+    # Efficiency), so treating EITHER as bottom_ink_default gives a slightly different exact value
+    # (-170.0 / -169.5) that both happen to round to the SAME shared -170 today. ASSERT A BOUND, NOT
+    # EQUALITY against one bar's derivation alone -- a future retune of either bar's clipped height
+    # must not silently pass here (memory `anchor-y-reduction-is-not-bit-exact`).
+    for bottom_ink_default in (320, 318):
+        computed = VERTICAL_ANCHOR_Y_SHIFT - 0.25 * bottom_ink_default
+        assert abs(VERTICAL_ANCHOR_Y_SHIFT_LARGE - computed) <= 1
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -170

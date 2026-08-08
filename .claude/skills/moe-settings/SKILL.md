@@ -17,7 +17,7 @@ Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `
 
 ## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair in column 1)
 
-`SETTINGS_VERSION = 21`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
+`SETTINGS_VERSION = 22`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
 migration branch carries the user's values across) — localizing plain label/tooltip text is
@@ -130,6 +130,11 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
 COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarousel",
              None, u"positionSub", u"posX", u"posY")                                    # 9 slots
 ```
+
+**Both counts are UNCHANGED at v22** (still 26 / 9, `tipless == 8`, `spacers == 7`): the v22 bump's
+only new key, `progress_bar_pos_frame`, is a hidden marker with no MSA control and so no
+`COL1_KEYS`/`COL2_KEYS` slot at all — see the "Placement model" section below for why the bump is
+still owed despite the layout not moving.
 
 **v14 grew `COL2_KEYS` 7 → 8**: Follow Carousel moved to sit right under the (now bold) "Layout"
 header, and a new varName-less `"positionSub"` (**"Position"**) sub-label was inserted ahead of the
@@ -292,38 +297,63 @@ behaviour) — see `wotmod-gameface-widget` and the memory note on new VM bools.
 row rather than a duplicated pair per variant. `bar_pos_x()` / `bar_pos_y()` re-clamp on read
 (`clamp_pos`, same `_POS_KEYS` branch of `_coerce` as the garage `posX`/`posY`).
 
-**Placement model as of v21 (Orientation + Alignment) — `anchor_pinned` and its blanket
-`0/0 == auto` sentinel are GONE.** Placement is now `anchor_offset(base, off_x, off_y)`, where
-`base` is whichever of three alignment branches `progress_bar_alignment()` selects —
-`anchor_centred_reduced` (Damage Log), `anchor_minimap` (Minimap), or the screen origin (Free) —
-and `off_x`/`off_y` are these same two steppers, now **anchor-relative offsets** rather than an
-absolute top-left. **CORRECTED 2026-08-08: Free still has a sentinel of its own.** Before the Free
-branch runs, `_resolve` (`bar_window.py:295-297`) rewrites the exact pair `(0, 0)` under Free to
-this orientation's default alignment (Horizontal → Damage Log, Vertical → Minimap), so Free+0/0 is
-AUTO, **not** the screen corner. This is load-bearing: it is what lets an Orientation flip zero the
-stored pair without carrying the other orientation's coordinates across. (Earlier revisions of this
-file and of `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]` claimed the
-opposite; the claim has flipped several times — read `_resolve`.) `anchor_centred` itself is
-retained byte-for-byte in `domain/positioning.py`
-as the pre-reduction oracle `anchor_centred_reduced`'s `abs(delta) <= 1` bound is tested against,
-though nothing in `src/` calls it anymore.
+**Placement model as of v22 (Orientation + Alignment + the Free anchor-point frame) —
+`anchor_pinned` and its blanket `0/0 == auto` sentinel are GONE.** Placement is now
+`anchor_offset(base, off_x, off_y)` for the Damage Log / Minimap branches, where `base` is
+whichever of those two `progress_bar_alignment()` selects — `anchor_centred_reduced` (Damage
+Log) or `anchor_minimap` (Minimap) — and `off_x`/`off_y` are these same two steppers, **anchor-relative
+offsets**, not an absolute top-left. Free is its own third branch and does **not** go through
+`anchor_offset` at all: as of the v22 bump the stored pair is an **ANCHOR POINT**, not a top-left
+(bottom-centre for horizontal, bottom-right for vertical — `domain/positioning.py`'s
+`free_top_left(pair, surface, vertical)`, converted at placement time only, never written back —
+see `moe-progress` for the full math and why a Default↔Large size flip must not move the anchor).
+Before the Free branch runs, `_resolve` (`bar_window.py:326-335`) still rewrites the exact pair
+`(0, 0)` under Free to this orientation's default alignment (Horizontal → Damage Log, Vertical →
+Minimap), so Free+0/0 is AUTO, **not** the screen corner — this is now the "not yet materialised"
+marker too (see `progress_bar_pos_frame` below). This is load-bearing: it is what lets an
+Orientation/Alignment change zero the stored pair without carrying the other orientation's
+coordinates across, and what lets Free be picked in the garage panel (no bar surface exists there
+to compute a real anchor point from) without jumping the bar. (Earlier revisions of this file and
+of `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]` claimed the opposite; the
+claim has flipped several times — read `_resolve`.) `anchor_centred` itself is retained
+byte-for-byte in `domain/positioning.py` as the pre-reduction oracle `anchor_centred_reduced`'s
+`abs(delta) <= 1` bound is tested against, though nothing in `src/` calls it anymore.
 
-**`_migrate_pre_v21_layout` and the sticky-Free auto-set rule** run in `mod_settings`, both keyed
-on the same `_on_changed` machinery: a pre-v21 store is migrated by **lookup, not arithmetic** —
-keyed on the absence of `progress_bar_orientation` (same trick `_flip_pre_v13_variant` already
-uses) — a non-zero pre-bump `(pos_x, pos_y)` implies the old absolute placement, so it becomes
-Alignment = Free with the coordinates carried verbatim; a zero pair implies the shipped centred
-placement, so it becomes Alignment = Damage Log, still `(0, 0)`. Nobody's bar moves on upgrade.
-At runtime, `_on_changed` compares the live cache before vs. after every settings-panel change to
-auto-set Alignment: an Orientation flip re-anchors Alignment to (Horizontal → Damage Log, Vertical
-→ Minimap) **unless Alignment is already Free**; a `set_bar_position()` call (drag end) or a
-stepper edit sets Alignment to Free unconditionally. **Free is sticky — an Orientation switch must
-never overwrite it** (`mod_settings.py:1293`'s `!= PROGRESS_ALIGN_FREE` gate). **The maintainer
-REVERSED this on 2026-08-08** — the rule still describes the shipped code, but it is scheduled for
-deletion; see `TASKS/in-battle-bar-layout-auto-set-redesign.md` before relying on it. The write-back inside
-`_on_changed` fires one more `onSettingsChanged` of its own; it terminates because the second pass
-finds the values already equal, the same self-terminating pattern the pre-v13 migration already
-relies on — no re-entrancy flag needed (see the memory
+**The v21→22 bump exists ONLY for the Free anchor-point frame migration**, not for any new panel
+row: it adds a single hidden marker key, `PROGRESS_POS_FRAME_KEY = "progress_bar_pos_frame"`
+(values `POS_FRAME_ANCHOR` / `POS_FRAME_LEGACY`, `mod_settings.py:365-367`), whose sole job is to
+be absent on a pre-v22 store so `_migrate_pre_v22_pos_frame` can key on that absence (the same
+lookup-not-arithmetic trick `_migrate_pre_v21_layout` already uses). It never becomes an MSA
+control — no `COL1_KEYS`/`COL2_KEYS` slot, no template row — because a `DEFAULTS` key needs
+neither to persist through `merge_settings`/`_apply`; a bump is still owed because the key itself
+is structural (a new varName), not because the layout changed. A pre-v22 Free pin is left as a
+literal top-left (`POS_FRAME_LEGACY`) and converted into the anchor-point frame lazily, the first
+time that bar mounts with a real surface (`bar_window.BarHost._materialise`) — not at migration
+time, for the same reason Free's materialise-on-mount exists at all: no surface size is readable
+in the settings panel.
+
+**`_migrate_pre_v21_layout`** runs in `mod_settings`, keyed on the same `_on_changed` machinery: a
+pre-v21 store is migrated by **lookup, not arithmetic** — keyed on the absence of
+`progress_bar_orientation` (same trick `_flip_pre_v13_variant` already uses) — a non-zero
+pre-bump `(pos_x, pos_y)` implies the old absolute placement, so it becomes Alignment = Free with
+the coordinates carried verbatim; a zero pair implies the shipped centred placement, so it
+becomes Alignment = Damage Log, still `(0, 0)`. Nobody's bar moves on upgrade.
+
+**"Free is sticky" is SUPERSEDED (2026-08-08) — do not re-derive it.** Orientation and Alignment
+are now two views of ONE choice, fully mutually derived by a pure module-level
+`_derive_layout(pre, post)` (`mod_settings.py`, next to `_on_changed`): an Orientation flip
+re-anchors Alignment **even from Free**, and an Alignment change to Damage Log / Minimap
+re-anchors Orientation the same way — neither direction is sticky anymore. Precedence when one
+payload carries several changes: **position > alignment > orientation** — a position edit
+(stepper or drag) always wins outright and forces Alignment = Free, Orientation untouched; failing
+that, alignment beats orientation. `_on_changed` shrank to snapshot → `_apply` overlay → one
+`_derive_layout` call → write-if-changed. A **`_deriving` re-entrancy latch** (module-level bool,
+true only while the write-back is in flight) guards a synchronous re-entrant `onSettingsChanged`
+carrying a stale pre-derivation snapshot — while set, `_on_changed` still `_apply`s + `_notify`s
+but skips derivation. See `TASKS/in-battle-bar-layout-auto-set-redesign.md` for the full
+transition table and why every settled state is a fixed point (`_derive_layout(s, s) == s`), which
+is what makes the write-back's own echo terminate in one pass — no ping-pong, no recursion — the
+same self-terminating shape the pre-v13 migration already relies on (see the memory
 `[[a-noop-mutation-and-a-fail-soft-branch-can-look-identical]]` for why a test of this guard must
 assert the **call count**, not just the resulting value).
 

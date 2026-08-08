@@ -226,6 +226,11 @@ def test_a_live_move_updates_the_position_without_persisting(monkeypatch):
 
 
 def test_the_gesture_end_persists_the_last_applied_position(monkeypatch):
+    # v22 (Trap 3 Fix B): what gets PERSISTED is the ANCHOR POINT, not the top-left window.move()
+    # actually applied -- window.moves stays in top-left space (see the drag() docstring); only the
+    # value handed to set_bar_position converts.
+    from moe_calculator.domain.positioning import free_anchor_point
+
     host, window = _host(1664, 824)
     calls = []
     monkeypatch.setattr(mod_settings, "set_bar_position",
@@ -235,7 +240,8 @@ def test_the_gesture_end_persists_the_last_applied_position(monkeypatch):
     _at(monkeypatch, (0.4, -0.4))
     host.drag("move")
     host.drag("end")
-    assert calls[-1] == (window.moves[-1][0], window.moves[-1][1], True)
+    expected = free_anchor_point(window.moves[-1], _SURFACE, False)
+    assert calls[-1] == (expected[0], expected[1], True)
 
 
 def test_a_gesture_that_never_moved_persists_nothing(monkeypatch):
@@ -524,22 +530,43 @@ def test_resolve_damage_log_alignment_uses_the_centred_reduced_anchor():
     assert _resolved(host, window) == _centred(1664, 824)
 
 
-def test_resolve_free_alignment_uses_the_stored_pair_verbatim():
+def test_resolve_free_alignment_converts_the_stored_pair_as_an_anchor_point():
+    # v22 (Trap 3 Fix B): a NON-ZERO pair under Free is the ANCHOR POINT (bottom-centre,
+    # horizontal), converted into a top-left using THIS placement's own surface size --
+    # domain.positioning.free_top_left, never a literal top-left any more. (The pair (0, 0) is
+    # the one exception; see the AUTO tests below.)
+    from moe_calculator.domain.positioning import free_top_left
+
     mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
                         mod_settings.BAR_POS_X_KEY: 111, mod_settings.BAR_POS_Y_KEY: 222})
     host, window = _host(1664, 824)
-    # A NON-ZERO pair under Free composes onto the ORIGIN, not onto any anchor -- the stored pair
-    # IS the top-left. (The pair (0, 0) is the one exception; see the AUTO tests below.)
+    assert _resolved(host, window) == free_top_left((111, 222), _SURFACE, False)
+    # Sanity: this is NOT the pre-v22 literal top-left any more.
+    assert _resolved(host, window) != (111, 222)
+
+
+def test_resolve_free_alignment_with_the_legacy_frame_still_uses_the_pair_verbatim():
+    # A pre-v22 store that has not yet been through BarHost._materialise still honours its pair
+    # as the literal top-left it always was -- see the SETTINGS_VERSION 21->22 comment.
+    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+                        mod_settings.BAR_POS_X_KEY: 111, mod_settings.BAR_POS_Y_KEY: 222,
+                        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY})
+    host, window = _host(1664, 824)
     assert _resolved(host, window) == (111, 222)
 
 
 # --- FREE + (0, 0) IS AUTO: the orientation's own default anchor --------------------------------
-# An explicit Orientation change zeroes the stored pair (mod_settings._on_changed) instead of
-# re-anchoring the alignment, because Free is sticky and must survive the flip. That only lands the
-# bar somewhere sane if (0, 0) under Free resolves through the SAME default anchor the alignment
-# auto-set would have picked: Horizontal -> Damage Log, Vertical -> Minimap. Composed through the
-# real _resolve here (never a reimplementation of the anchor math), and each case additionally
-# asserted NOT to be the literal screen origin, which is what the old semantics returned.
+# The branch survives the "Free is sticky" redesign (that rule is SUPERSEDED -- an Orientation or
+# Alignment change now re-anchors Alignment away from Free unconditionally, see
+# mod_settings._derive_layout), but it is still load-bearing for two OTHER reasons: picking
+# Alignment = Free leaves the pair at (0, 0) until the bar's next battle mount computes the real
+# on-screen point (no surface exists in the settings panel to compute it from), so (0, 0) is Free's
+# "not yet materialised" marker; and a user who types 0 / 0 into the steppers gets AUTO rather than
+# the screen origin, a deliberately accepted lost capability. Either way, (0, 0) under Free must
+# resolve through the SAME default anchor the orientation/alignment auto-set would have picked:
+# Horizontal -> Damage Log, Vertical -> Minimap. Composed through the real _resolve here (never a
+# reimplementation of the anchor math), and each case additionally asserted NOT to be the literal
+# screen origin, which is what the old semantics returned.
 
 def _free_auto(monkeypatch, orientation):
     monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 0)
@@ -587,10 +614,14 @@ def test_resolve_free_auto_matches_the_two_stored_alignments_it_stands_in_for(mo
                                    mod_settings.PROGRESS_SIZE_DEFAULT)
 
 
-def test_resolve_free_with_a_nonzero_pair_is_absolute_on_both_orientations(monkeypatch):
+def test_resolve_free_with_a_nonzero_pair_converts_as_an_anchor_point_on_both_orientations(
+        monkeypatch):
     # The other half of the contract, and the regression guard on the drag: only the EXACT pair
-    # (0, 0) is auto. One px off it on either axis is an ordinary absolute placement, on either
-    # orientation -- no anchor, no partial composition.
+    # (0, 0) is auto. One px off it on either axis skips the AUTO branch entirely and goes through
+    # free_top_left (v22, Trap 3 Fix B) instead -- no anchor, no partial composition, but also no
+    # longer a literal top-left.
+    from moe_calculator.domain.positioning import free_top_left
+
     for orientation in (mod_settings.PROGRESS_ORIENT_HORIZONTAL,
                         mod_settings.PROGRESS_ORIENT_VERTICAL):
         for pair in ((1, 0), (0, 1), (-40, 900)):
@@ -599,8 +630,160 @@ def test_resolve_free_with_a_nonzero_pair_is_absolute_on_both_orientations(monke
                 mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
                 mod_settings.BAR_POS_X_KEY: pair[0], mod_settings.BAR_POS_Y_KEY: pair[1]})
             host, window = _host(1664, 824)
+            vertical = orientation == mod_settings.PROGRESS_ORIENT_VERTICAL
+            expected = free_top_left(pair, _SURFACE, vertical)
+            assert _resolved(host, window) == expected, \
+                "Free %r at orientation %r did not convert as an anchor point" % (pair, orientation)
+
+
+def test_resolve_free_with_a_nonzero_pair_and_the_legacy_frame_is_absolute_on_both_orientations(
+        monkeypatch):
+    # The PRE-v22 behaviour, still reachable via the frame marker: a "legacy" pair is honoured as
+    # the literal top-left it always was, on either orientation, until BarHost._materialise
+    # converts it.
+    for orientation in (mod_settings.PROGRESS_ORIENT_HORIZONTAL,
+                        mod_settings.PROGRESS_ORIENT_VERTICAL):
+        for pair in ((1, 0), (0, 1), (-40, 900)):
+            mod_settings._seed({
+                mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+                mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
+                mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
+                mod_settings.BAR_POS_X_KEY: pair[0], mod_settings.BAR_POS_Y_KEY: pair[1]})
+            host, window = _host(1664, 824)
             assert _resolved(host, window) == pair, \
-                "Free %r at orientation %r is not absolute" % (pair, orientation)
+                "legacy Free %r at orientation %r is not absolute" % (pair, orientation)
+
+
+# --- BarHost._materialise -- Trap 2 / Trap 3 Fix B / DECISION 1&2 ----------------------------
+# Deliberately built on `_cold_host`, never `_host`: `_host` warms `_extent_cache` AND runs one
+# `_place()` during setup (memory `bar-window-warm-fixture-hides-cold-path-drag-bug` -- it has
+# hidden two real bugs behind a degenerate fixture already). Materialisation's whole point is
+# ORDER: nothing may write back until `_sized` flips true, so the fixture must not pre-empt that
+# by placing before the test gets to control it.
+
+
+def test_materialise_never_fires_before_onsizechanged_even_at_a_real_surface_size(monkeypatch):
+    # `_sized` starts False -- exactly the state at _onReady's first _place, before any
+    # onSizeChanged has ever fired -- and this fixture's surface (256x92) is a REAL,
+    # non-degenerate size, not the engine's 256x256 fallback, so a bug that materialised off "is
+    # the surface plausible" rather than "did onSizeChanged actually fire" would slip through a
+    # weaker test.
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE})
+    host, window = _cold_host(1664, 824)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda x, y, persist=True: calls.append((x, y, persist)))
+    host._place(window)
+    assert calls == []
+
+
+def test_materialise_never_fires_against_the_engines_256x256_fallback_surface(monkeypatch):
+    # The literal fallback size, for good measure: `_sized` is the real gate, but this pins the
+    # scenario the gate exists FOR, by name.
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE})
+    host, window = _cold_host(1664, 824)
+    window.size = (256, 256)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda x, y, persist=True: calls.append((x, y, persist)))
+    host._place(window)
+    assert calls == []
+
+
+def test_materialise_writes_exactly_once_after_onsizechanged_for_its_own_variant(monkeypatch):
+    from moe_calculator.domain.positioning import free_anchor_point
+
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE})
+    host, window = _cold_host(1664, 824)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE
+    calls = []
+    orig = mod_settings.set_bar_position
+
+    def _spy(x, y, persist=True):
+        calls.append((x, y, persist))
+        orig(x, y, persist=persist)
+    monkeypatch.setattr(mod_settings, "set_bar_position", _spy)
+
+    # Fallback-sized first placement (see the tests above) -- must not fire.
+    host._place(window)
+    assert calls == []
+
+    # onSizeChanged fires -> _sized flips True (mirroring _BarWindow._on_size_changed) -> the
+    # NEXT _place materialises exactly once, PERSISTED (not the live-drag persist=False path).
+    host._sized = True
+    host._place(window)
+    assert len(calls) == 1
+    assert calls[0][2] is True
+    expected = free_anchor_point(window.moves[-1], _SURFACE, False)
+    assert (calls[0][0], calls[0][1]) == expected
+    # ...and the pair really did land in memory (the spy delegates to the real function).
+    assert (mod_settings.bar_pos_x(), mod_settings.bar_pos_y()) == expected
+
+    # A THIRD _place (e.g. another resize, or Default<->Large) must NOT re-materialise: the pair
+    # is no longer (0, 0) and the frame is already "anchor".
+    host._place(window)
+    assert len(calls) == 1
+
+
+def test_materialise_only_fires_for_its_own_variant(monkeypatch):
+    # Both hosts share ONE stored pair; a live variant flip mid-battle can briefly have both open
+    # (see BarHost's own docstring), so a materialisation triggered by ONE bar's mount must never
+    # fire for the OTHER bar's host.
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_EFFICIENCY})
+    host, window = _cold_host(1664, 824)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE   # the OTHER bar is selected
+    host._sized = True
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda x, y, persist=True: calls.append((x, y, persist)))
+    host._place(window)
+    assert calls == []
+
+
+def test_materialise_converts_a_legacy_pre_v22_pin_exactly_once(monkeypatch):
+    # DECISION 2's deferred conversion: a pre-v22 legacy pair is honoured verbatim as a top-left
+    # (see the _resolve test above) until this bar's next real mount, which converts it into the
+    # anchor-point frame and flips the marker -- the SAME action DECISION 1's fresh pin uses.
+    from moe_calculator.domain.positioning import free_anchor_point
+
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 111, mod_settings.BAR_POS_Y_KEY: 222,
+        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
+        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE})
+    host, window = _cold_host(1664, 824)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE
+    host._sized = True
+    calls = []
+    orig = mod_settings.set_bar_position
+
+    def _spy(x, y, persist=True):
+        calls.append((x, y, persist))
+        orig(x, y, persist=persist)
+    monkeypatch.setattr(mod_settings, "set_bar_position", _spy)
+
+    host._place(window)
+    assert len(calls) == 1
+    expected = free_anchor_point((111, 222), _SURFACE, False)
+    assert (calls[0][0], calls[0][1]) == expected
+    assert mod_settings.progress_bar_pos_frame() == mod_settings.POS_FRAME_ANCHOR
+
+    host._place(window)
+    assert len(calls) == 1   # not converted a second time
 
 
 def test_resolve_minimap_alignment_uses_the_minimap_anchor(monkeypatch):
@@ -722,18 +905,24 @@ _EFF_SURFACE = (116, 318)
 _EFF_MAX = (_EFF_SPACE[0] - _EFF_SURFACE[0], _EFF_SPACE[1] - _EFF_SURFACE[1])
 
 
-def _efficiency_host():
-    """The REAL Damage Efficiency host's constants against a real-sized fake surface."""
+def _efficiency_host(max_xy=_EFF_MAX, surface=_EFF_SURFACE):
+    """The REAL Damage Efficiency host's constants against a real-sized fake surface.
+
+    `max_xy` / `surface` default to the Default-size fixture but accept the Large-size pair too
+    (see the rule-5 right-edge invariance test below), which is why `x_shift_large` (the bar's own
+    EFFICIENCY_ANCHOR_X_SHIFT_LARGE) is threaded through exactly as efficiency_view.py's real
+    BarHost construction does -- omitting it would silently test a host that ISN'T the shipped one."""
     from moe_calculator.domain.constants import (
-        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_SHIFT,
-        EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM, EFFICIENCY_MM_TRACK_X,
-        EFFICIENCY_MM_TRACK_X_LARGE)
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_X_SHIFT_LARGE, EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
 
     host = bar_window.BarHost(
         "MoEEfficiencyView", lambda: object(), EFFICIENCY_ANCHOR_Y_FRAC,
         EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE,
-        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-eff]")
-    window = _FakeWindow(_EFF_MAX[0], _EFF_MAX[1], size=_EFF_SURFACE)
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-eff]",
+        x_shift_large=EFFICIENCY_ANCHOR_X_SHIFT_LARGE)
+    window = _FakeWindow(max_xy[0], max_xy[1], size=surface)
     host._active = (window, object())
     return host, window
 
@@ -771,18 +960,22 @@ _PROG_V_SURFACE = (198, 320)   # MoEProgress.js's vertical surface -- see test_p
 _PROG_V_MAX = (_PROG_V_SPACE[0] - _PROG_V_SURFACE[0], _PROG_V_SPACE[1] - _PROG_V_SURFACE[1])
 
 
-def _progress_vertical_host():
+def _progress_vertical_host(max_xy=_PROG_V_MAX, surface=_PROG_V_SURFACE):
     """The REAL Moving Average host's constants against its real vertical surface, sized to share
-    _efficiency_host's SAME logical screen (1920x1080) -- see the invariant test below."""
+    _efficiency_host's SAME logical screen (1920x1080) -- see the invariant test below.
+
+    `max_xy` / `surface` default to the Default-size fixture but accept the Large-size pair too;
+    `x_shift_large` is threaded exactly as progress_view.py's real BarHost construction does."""
     from moe_calculator.domain.constants import (
-        PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_SHIFT,
-        PROGRESS_ANCHOR_Y_SHIFT_LARGE)
+        PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_X_SHIFT_LARGE, PROGRESS_ANCHOR_Y_FRAC,
+        PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE)
 
     host = bar_window.BarHost(
         "MoEProgressView", lambda: object(), PROGRESS_ANCHOR_Y_FRAC,
         PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[test-prog]")
-    window = _FakeWindow(_PROG_V_MAX[0], _PROG_V_MAX[1], size=_PROG_V_SURFACE)
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[test-prog]",
+        x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
+    window = _FakeWindow(max_xy[0], max_xy[1], size=surface)
     host._active = (window, object())
     return host, window
 
@@ -810,3 +1003,116 @@ def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monk
         "the Moving Average bar's track must sit 2px RIGHT of Damage Efficiency's -- a recorded "
         "in-game measurement (two independent Ctrl+drags, two geometries), not a bug to fix back "
         "to equality")
+
+
+# --- RULE 5, vertical + Damage Log: the composition's RIGHT EDGE must not walk on a size flip ---
+# TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix A / DECISION 3: `x_shift_large`
+# (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE) exists solely to hold this edge still.
+# The maintainer's own arithmetic (constants.py's header comment) MEASURES the residual drift as
+# 0px for the Moving Average bar and 1px for Damage Efficiency (independently-rounded half-away
+# terms landing a half-pixel apart) -- so this asserts a BOUND, never a fixed delta, per memory
+# `anchor-y-reduction-is-not-bit-exact` / the note's own Task 1 instruction. Real surface sizes
+# throughout (198x320 / 278x400 progress vertical, 116x318 / 185x398 efficiency vertical -- see
+# test_progress_surface_mirror.py / test_efficiency_surface_mirror.py), never the fixture's
+# unrealistic default, because the drift is a function of the REAL width delta.
+
+_PROG_V_SURFACE_LARGE = (278, 400)
+_EFF_V_SURFACE_LARGE = (185, 398)
+
+
+def _right_edge(host, window):
+    x, _ = _resolved(host, window)
+    return x + window.size[0]
+
+
+def _dl_vertical(seed_size):
+    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_DAMAGE_LOG,
+                        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+                        mod_settings.PROGRESS_SIZE_KEY: seed_size})
+
+
+def test_vertical_damage_log_right_edge_is_size_invariant_within_one_px_progress():
+    space = _PROG_V_SPACE
+    default_max = (space[0] - _PROG_V_SURFACE[0], space[1] - _PROG_V_SURFACE[1])
+    large_max = (space[0] - _PROG_V_SURFACE_LARGE[0], space[1] - _PROG_V_SURFACE_LARGE[1])
+
+    _dl_vertical(mod_settings.PROGRESS_SIZE_DEFAULT)
+    right_default = _right_edge(*_progress_vertical_host(default_max, _PROG_V_SURFACE))
+    _dl_vertical(mod_settings.PROGRESS_SIZE_LARGE)
+    right_large = _right_edge(*_progress_vertical_host(large_max, _PROG_V_SURFACE_LARGE))
+
+    drift = right_large - right_default
+    assert abs(drift) <= 1, (
+        "Moving Average vertical bar's right edge walked by %d px on Default->Large" % drift)
+
+
+def test_vertical_damage_log_right_edge_is_size_invariant_within_one_px_efficiency():
+    space = _EFF_SPACE
+    default_max = (space[0] - _EFF_SURFACE[0], space[1] - _EFF_SURFACE[1])
+    large_max = (space[0] - _EFF_V_SURFACE_LARGE[0], space[1] - _EFF_V_SURFACE_LARGE[1])
+
+    _dl_vertical(mod_settings.PROGRESS_SIZE_DEFAULT)
+    right_default = _right_edge(*_efficiency_host(default_max, _EFF_SURFACE))
+    _dl_vertical(mod_settings.PROGRESS_SIZE_LARGE)
+    right_large = _right_edge(*_efficiency_host(large_max, _EFF_V_SURFACE_LARGE))
+
+    drift = right_large - right_default
+    assert abs(drift) <= 1, (
+        "Damage Efficiency vertical bar's right edge walked by %d px on Default->Large" % drift)
+    # The measured, not-assumed residual (constants.py's own derivation): 34.5 rounds to -35, a
+    # half-pixel OVER-correction, which pulls the Large right edge 1px LEFT of Default -- so a
+    # passing run here that saw drift == 0 would actually be UNDER-testing (the bound would never
+    # have caught a widened drift). Fail loud if the sweep environment ever stops reproducing that
+    # reported 1px residual.
+    assert drift == -1, (
+        "expected the recorded 1px residual on the efficiency bar; got %d -- re-derive "
+        "EFFICIENCY_ANCHOR_X_SHIFT_LARGE if the surface sizes changed" % drift)
+
+
+def test_x_shift_large_default_is_a_pure_no_op_for_horizontal_and_minimap(monkeypatch):
+    # Task 1's regression guard: the defaulted `x_shift_large=0` (BarHost.__init__) and the
+    # defaulted `x_shift=0` (anchor_centred_reduced) must make every OTHER branch -- horizontal,
+    # and Minimap on either orientation -- byte-identical whether or not x_shift_large is passed.
+    # This must fail if either default is ever changed to something non-zero.
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 2)
+    from moe_calculator.domain.constants import PROGRESS_ANCHOR_X_SHIFT_LARGE
+
+    host_default_arg = bar_window.BarHost(
+        "t1", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t1]")
+    host_explicit_zero = bar_window.BarHost(
+        "t2", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t2]",
+        x_shift_large=0)
+    host_nonzero = bar_window.BarHost(
+        "t3", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t3]",
+        x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
+
+    for orientation in (mod_settings.PROGRESS_ORIENT_HORIZONTAL, mod_settings.PROGRESS_ORIENT_VERTICAL):
+        for alignment in (mod_settings.PROGRESS_ALIGN_DAMAGE_LOG, mod_settings.PROGRESS_ALIGN_MINIMAP):
+            for size in (mod_settings.PROGRESS_SIZE_DEFAULT, mod_settings.PROGRESS_SIZE_LARGE):
+                mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: alignment,
+                                    mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
+                                    mod_settings.PROGRESS_SIZE_KEY: size})
+                window_a = _FakeWindow(*_MAX)
+                window_b = _FakeWindow(*_MAX)
+                window_c = _FakeWindow(*_MAX)
+                host_default_arg._active = (window_a, object())
+                host_explicit_zero._active = (window_b, object())
+                host_nonzero._active = (window_c, object())
+                r_a = _resolved(host_default_arg, window_a)
+                r_b = _resolved(host_explicit_zero, window_b)
+                r_c = _resolved(host_nonzero, window_c)
+                is_vertical_dl = (orientation == mod_settings.PROGRESS_ORIENT_VERTICAL and
+                                  alignment == mod_settings.PROGRESS_ALIGN_DAMAGE_LOG and
+                                  size == mod_settings.PROGRESS_SIZE_LARGE)
+                if is_vertical_dl:
+                    # The ONE branch where a non-zero x_shift_large is even read: confirm it
+                    # actually diverges here, so the "no-op everywhere else" claim isn't vacuous.
+                    assert r_a == r_b
+                    assert r_c != r_a
+                else:
+                    assert r_a == r_b == r_c, (
+                        "x_shift_large leaked into orientation=%r alignment=%r size=%r" %
+                        (orientation, alignment, size))

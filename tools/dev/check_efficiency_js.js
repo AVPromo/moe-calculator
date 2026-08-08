@@ -90,7 +90,7 @@ const MUTATIONS = {
         '        root.style.animationDelay = seekMs ? "-" + seekMs + "ms" : "0ms";',
         '        root.style.animationDelay = "0ms";'],
     "no-animationend-identity-guard": ["T",
-        "        if (e.animationName !== RUN_NAMES[armIdx]) return;\n", ""],
+        "        if (e.animationName !== runNames[armIdx]) return;\n", ""],
     // RE-HOMED when the timer grew its un-animated branch: the statement is three lines now, and the
     // old one-line anchor silently stopped applying (which probeAll reports as STALE, not caught).
     "no-end-timer": ["T",
@@ -216,8 +216,8 @@ const MUTATIONS = {
 
     // ===== THIS BAR: band / met / pulse, all off the PUSHED index ==============================
     "no-band-class": ["B",
-        "BAND_CLASSES.forEach(function (c, i) { root.classList.toggle(c, i === cur.band); });",
-        "BAND_CLASSES.forEach(function (c) { root.classList.toggle(c, true); });"],
+        "BAND_CLASSES.forEach(function (c, i) { root.classList.toggle(ns(c), i === cur.band); });",
+        "BAND_CLASSES.forEach(function (c) { root.classList.toggle(ns(c), true); });"],
     "met-off-by-one": ["B",
         'reqTicks[i].classList.toggle("met", i + 1 <= cur.band);',
         'reqTicks[i].classList.toggle("met", i <= cur.band);'],
@@ -227,15 +227,15 @@ const MUTATIONS = {
         'reqTicks[i].classList.toggle("met", i + 1 <= cur.band);',
         'reqTicks[i].classList.toggle("met", cur.damage >= cur.r[i]);'],
     "no-pulse-gate": ["B",
-        'root.classList.toggle("mp-pulse", cur.band === 4);',
-        'root.classList.toggle("mp-pulse", false);'],
+        'root.classList.toggle(ns("mp-pulse"), cur.band === 4);',
+        'root.classList.toggle(ns("mp-pulse"), false);'],
     // ...and neither may barX be re-derived here: the axis arithmetic is domain/battle_builder's.
     "barx-recomputed": ["B",
         "        barX: Number(model.barX) || 0,",
         "        barX: Number(model.damage) / Number(model.r100) * 100 || 0,"],
     // setPos moves three things off the ONE pushed barX; each had an assertion and no probe.
-    "no-fill-width": ["B", "    fill.style.width = p;", "    void 0;"],
-    "no-cur-tick-move": ["B", "    tCur.style.left = p;", "    void 0;"],
+    "no-fill-width": ["B", "    fill.style[GROW] = p;", "    void 0;"],
+    "no-cur-tick-move": ["B", "    tCur.style[AX] = p;", "    void 0;"],
 
     // ===== THIS BAR: THE DELTA LATCH (moved out of Python this pass) ===========================
     // `peak` is the battle's HIGH-WATER mark, not the previous push: combined damage SUBTRACTS team

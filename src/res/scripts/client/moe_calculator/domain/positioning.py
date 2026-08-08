@@ -104,7 +104,7 @@ def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
     return x, y
 
 
-def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift):
+def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift, x_shift=0):
     """Top-left (x, y) in logical GUI space for a HORIZONTALLY CENTRED window -- the COMPUTED
     successor to anchor_centred above, and what bridge/bar_window.py._resolve now places the
     Damage-Log-aligned bar with (see TASKS/in-battle-vertical-bar-PLAN.md "Phase 2 approach: the
@@ -112,6 +112,20 @@ def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift):
     `space_y` in place of the
     movable extent `max_y` for the Y fraction, and a single PURE shift term (`y_shift`) in place
     of a baked two-term composite.
+
+    `x_shift` (DEFAULT 0, i.e. pure `max_x // 2` centring, byte-identical to every call site that
+    predates it) is rule 5's vertical + Damage Log right-pin (TASKS/in-battle-bar-layout-auto-set-
+    redesign.md Trap 3 Fix A / DECISION 3): a horizontal bar's composition is symmetric about its
+    own centre, so `max_x // 2` alone already keeps the bottom-CENTRE's x fixed across a size
+    change and must stay a no-op there. A VERTICAL bar's natural anchor is bottom-RIGHT instead,
+    and centring is not a right-pin -- a size-up widens the surface and `max_x // 2` moves BOTH
+    edges outward by half the width delta, so the caller passes a per-size, per-bar NEGATIVE
+    `x_shift` (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE, 0 at Default) that cancels
+    exactly that outward drift and holds the right edge -- see those constants' derivation. This
+    moves the WINDOW's top-left only; the composition inside the surface is untouched, so the
+    vertical bar's surface stays concentric with its own track (memory `vertical-bar-surface-
+    must-stay-concentric-with-track` is about anchor_minimap, not this anchor, but the same
+    window-vs-composition distinction applies here).
 
     WHY THE REDUCTION IS VALID. anchor_centred's `y_offset` sums two terms: -shift (cancelling
     the composition's intra-surface offset) and +round(y_frac * surface_h) (converting the
@@ -150,7 +164,8 @@ def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift):
     space_y = _int(space_y)
     frac = _float(y_frac)
     shift = _int(y_shift)
-    x = min(max(0, max_x // 2), max_x)
+    xshift = _int(x_shift)
+    x = min(max(0, max_x // 2 + xshift), max_x)
     y = min(max(0, int(space_y * frac) + shift), max_y)
     return x, y
 
@@ -242,9 +257,13 @@ def anchor_offset(anchor, off_x=0, off_y=0):
     anchor returned verbatim, no sentinel to fall through), so every alignment composes the same
     way, always -- THIS function has no "auto" case and no branch of any kind. The caller does:
     bar_window._resolve picks the BASE anchor, and a (0, 0) pair under FREE alignment makes it pick
-    the orientation's default anchor instead of the origin (so an Orientation change can reset the
-    coordinates without disturbing the sticky Free alignment). That choice is the caller's alone --
-    do not reintroduce a sentinel here.
+    the orientation's default anchor instead of the origin -- NOT because Free is sticky (that
+    rule is SUPERSEDED, see mod_settings._derive_layout) but because (0, 0) is Free's own "not yet
+    materialised" marker (see bar_window.BarHost._materialise) and the accepted, deliberately lost
+    capability of pinning a bar at literal logical (0, 0) via the steppers. A NON-zero Free pair
+    skips this function entirely -- see free_top_left below, which converts the stored ANCHOR
+    POINT into a top-left using the live surface size instead of composing an offset onto a base.
+    That choice is the caller's alone -- do not reintroduce a sentinel here.
 
     UNCLAMPED, matching the module's no-safezone rule (cursor_top_left below): the base
     anchor may already be clamped (anchor_centred_reduced) or not (anchor_minimap), and a
@@ -257,6 +276,70 @@ def anchor_offset(anchor, off_x=0, off_y=0):
     point = _xy(anchor)
     ax, ay = (0, 0) if point is None else point
     return _int(ax) + _int(off_x), _int(ay) + _int(off_y)
+
+
+def free_top_left(pair, surface, vertical):
+    """Top-left (x, y) for a bar under Alignment = Free, given the stored pair as an ANCHOR
+    POINT (TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix B / DECISION 2) rather than
+    a top-left:
+
+        horizontal: top_left = (pair_x - surface_w // 2, pair_y - surface_h)   # bottom-centre
+        vertical:   top_left = (pair_x - surface_w,      pair_y - surface_h)   # bottom-right
+
+    WHY AN ANCHOR POINT, NOT A TOP-LEFT. Rule 5 (a size change must not move the bar's anchor)
+    needs the anchor re-derived from the CURRENT surface size at every placement -- a
+    Default<->Large flip changes `surface`, and re-deriving from a fixed anchor point keeps that
+    point fixed while the surface grows/shrinks around it, with zero stored-coordinate math.
+    Converting the STORED pair itself at the moment of the size change is impossible: the size
+    radio lives in the garage settings panel, where no bar surface exists to convert against (the
+    same wall bar_window.BarHost._materialise hits when Free is first picked) -- so the
+    conversion has to live HERE, at placement, applied fresh every call.
+
+    UNCLAMPED, matching every other placement function in this module (no on-screen safezone): the
+    engine's own clamp (compiled C++, no opt-out) still applies downstream, and clamping here too
+    would bake a crossed-edge clamp into a value nothing ever re-reads -- see the caller
+    (bar_window._resolve) for why this conversion is PLACEMENT-ONLY and never written back to the
+    store.
+
+    Fail-soft: an unusable `pair` or `surface` degrades to (0, 0) via the same `_xy` the cursor
+    helpers below use."""
+    point = _xy(pair)
+    px, py = (0, 0) if point is None else point
+    surf = _xy(surface)
+    sw, sh = (0, 0) if surf is None else surf
+    sw = _int(sw)
+    sh = _int(sh)
+    if vertical:
+        return _int(px) - sw, _int(py) - sh
+    return _int(px) - sw // 2, _int(py) - sh
+
+
+def free_anchor_point(top_left, surface, vertical):
+    """The exact inverse of free_top_left: the ANCHOR POINT a bar currently sitting at
+    `top_left` (given `surface`) would be stored as under the Fix B frame.
+
+    Used ONLY to MATERIALISE Free's stored pair -- bar_window.BarHost._materialise, the first
+    time a real battle surface exists after (1) picking Free with no coordinates computed yet
+    (DECISION 1) or (2) upgrading past a pre-v22 store whose pair was still a literal top-left
+    (DECISION 2's deferred conversion, option (a)). Every ordinary placement goes through
+    free_top_left instead; this direction is the one-shot write path.
+
+    Exact, not approximate: addition undoes free_top_left's subtraction of the SAME
+    surface-derived term, so free_anchor_point(free_top_left(pair, surface, vertical), surface,
+    vertical) == pair for any integer pair and surface -- no rounding is introduced beyond
+    whatever the caller's own inputs already carry.
+
+    Fail-soft: an unusable `top_left` or `surface` degrades to (0, 0) via the same `_xy` the
+    cursor helpers below use."""
+    point = _xy(top_left)
+    tx, ty = (0, 0) if point is None else point
+    surf = _xy(surface)
+    sw, sh = (0, 0) if surf is None else surf
+    sw = _int(sw)
+    sh = _int(sh)
+    if vertical:
+        return _int(tx) + sw, _int(ty) + sh
+    return _int(tx) + sw // 2, _int(ty) + sh
 
 
 def cursor_logical(cursor, screen, space_x, space_y):

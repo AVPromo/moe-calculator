@@ -90,7 +90,7 @@ const MUTATIONS = {
         "            armRun(SEEK_NONE); //"],
     // A superseded run's animationend must not end the live run.
     "no-identity-guard": ["T",
-        "        if (e.animationName !== RUN_NAMES[armIdx]) return;\n", ""],
+        "        if (e.animationName !== runNames[armIdx]) return;\n", ""],
     // The H2 guard: without the fallback timer a missing animationend wedges `showing` forever.
     // RE-HOMED when the timer grew its un-animated branch: the statement is three lines now, and the
     // old one-line anchor silently stopped applying (which probeAll reports as STALE, not caught).
@@ -246,8 +246,8 @@ const MUTATIONS = {
         "    clearTimeout(swapT);\n    swapped = true;"],
     // The remaining paintStatic writes, each of which had an assertion and no probe.
     "no-mp-full-class": ["B",
-        'root.classList.toggle("mp-full", cur.projAvg >= cur.axisHi);',
-        'root.classList.toggle("mp-full", false);'],
+        'root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);',
+        'root.classList.toggle(ns("mp-full"), false);'],
     "wrong-next-mark-glyph": ["B",
         "setIco(cur.marks >= 3 ? 4 : cur.marks + 1);", "setIco(cur.marks);"],
     // THE MARK PAIR MUST STAY FIRST in .mp-capR's markup: capV() is a first-match querySelector and
@@ -262,12 +262,12 @@ const MUTATIONS = {
         "'  <div class=\"mp-cap side mp-capR\"><i class=\"mp-ico battles\"></i>' +\n" +
         "        '<span class=\"mp-eta\"></span><i class=\"mp-ico none\"></i>' +\n" +
         "        '<span class=\"mp-v\"></span></div>' +"],
-    "pre-tick-not-painted": ["B", "    tPre.style.left = pre;", "    void 0;"],
-    "pre-caption-not-painted": ["B", "    capP.style.left = pre;", "    void 0;"],
+    "pre-tick-not-painted": ["B", "    tPre.style[AX] = pre;", "    void 0;"],
+    "pre-caption-not-painted": ["B", "    capP.style[AX] = pre;", "    void 0;"],
     // ...and setPos's third write, which had no assertion at all until the captions were re-centred
     // on their NUMERAL (MoEProgress.css .mp-capP/.mp-capC .mp-ico + .mp-cap .mp-d): the bottom
     // caption is the one that rides proj_avg, so its painted X is the whole point of that centring.
-    "cur-caption-not-painted": ["B", "    capC.style.left = p;", "    void 0;"],
+    "cur-caption-not-painted": ["B", "capC.style[CAP_C_AX] = p;", "void 0;"],
     // The entry window must CARRY the previous committed sign: put a clear back into the !sw path
     // and a bar that was green blinks neutral for 600ms before re-committing.
     "entry-clears-sign": ["B",
@@ -289,15 +289,15 @@ const MUTATIONS = {
     // member of the array. Flip ONLY capEta's two toggle calls, leaving the other four untouched.
     "eta-polarity-inverted": ["B",
         "[capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {\n" +
-        '        e.classList.toggle("mp-up", glows && d > 0);\n' +
-        '        e.classList.toggle("mp-down", glows && d < 0);\n' +
+        '        e.classList.toggle(ns("mp-up"), glows && d > 0);\n' +
+        '        e.classList.toggle(ns("mp-down"), glows && d < 0);\n' +
         "    });",
         "[capV(capC), capDN, fill, tProj].forEach(function (e) {\n" +
-        '        e.classList.toggle("mp-up", glows && d > 0);\n' +
-        '        e.classList.toggle("mp-down", glows && d < 0);\n' +
+        '        e.classList.toggle(ns("mp-up"), glows && d > 0);\n' +
+        '        e.classList.toggle(ns("mp-down"), glows && d < 0);\n' +
         "    });\n" +
-        '    capEta.classList.toggle("mp-up", glows && d < 0);\n' +
-        '    capEta.classList.toggle("mp-down", glows && d > 0);'],
+        '    capEta.classList.toggle(ns("mp-up"), glows && d < 0);\n' +
+        '    capEta.classList.toggle(ns("mp-down"), glows && d > 0);'],
 
     // ===== THE REMAINING-BATTLES COUNT (VM `etaBattles`) =====================================
     // The gate: >= 1 only (0 means already met, -1 is the no-data sentinel, and NaN -- an absent

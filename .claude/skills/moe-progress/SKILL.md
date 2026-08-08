@@ -176,14 +176,28 @@ flags/layer reasoning as the corner overlay (`moe-battle`'s hosting-model sectio
 `WINDOW_FULLSCREEN`, because a full-screen surface steals the whole-screen mouse hit-test
 whenever the cursor is raised.
 
-`_resolve()` (`bar_window.py:246-307`) picks one of 3 anchors per `progress_bar_alignment()`:
+`_resolve()` (`bar_window.py:267-354`) picks one of 3 anchors per `progress_bar_alignment()`:
 **Damage Log** → `anchor_centred_reduced` (centred horizontally, proportionally down the
 viewport); **Minimap** → `anchor_minimap` (to the left of the minimap, measured to the visible
 TRACK box for a vertical bar, to the SURFACE edges for a horizontal one — no horizontal tuner
-has a minimap placement at all); **Free** → the stored pair as an absolute top-left (exactly
-what a Ctrl+drag produces — the drag end also flips Alignment to Free). Then the stored X/Y
-stepper pair is composed on top via `anchor_offset` in every case; offset (0,0) under Damage Log
-IS the shipped placement byte-for-byte, so those two branches need no sentinel.
+has a minimap placement at all); **Free** → its OWN branch, not composed via `anchor_offset` at
+all. For the Damage Log / Minimap branches the stored X/Y stepper pair is composed on top via
+`anchor_offset`; offset (0,0) under Damage Log IS the shipped placement byte-for-byte, so those
+two branches need no sentinel.
+
+**Free's stored pair is an ANCHOR POINT, not a top-left (v22, `TASKS/in-battle-bar-layout-auto-set-redesign.md`
+Trap 3 Fix B / DECISION 2).** `domain/positioning.py`'s `free_top_left(pair, surface, vertical)`
+converts it at placement time — bottom-**centre** for horizontal (`pair - (surface_w // 2,
+surface_h)`), bottom-**right** for vertical (`pair - (surface_w, surface_h)`) — using THIS
+placement's live surface size, so a Default↔Large size flip re-anchors the bar instead of growing
+it off to one side (rule 5's size-invariance). `free_anchor_point(top_left, surface, vertical)` is
+the exact inverse, used ONLY to write the pair back (`BarHost._materialise`, and `BarHost.drag`'s
+gesture-end persist). **The conversion is placement-only, never written back on a size change** —
+the engine's compiled clamp (memory `[[engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it]]`)
+would bake a crossed-edge clamp in forever if it were. A pre-v22 store's Free pin is still a
+literal top-left until the bar's next mount converts it once (`progress_bar_pos_frame() ==
+POS_FRAME_LEGACY`, `mod_settings.py:698-710`) — no arithmetic migration at bump time, because no
+surface exists to convert against outside a live battle (same wall as materialise-on-mount below).
 
 **Free DOES have an auto sentinel (`bar_window.py:295-297`, corrected 2026-08-08).** Under
 `PROGRESS_ALIGN_FREE` the exact pair `(0, 0)` is rewritten to this ORIENTATION's default alignment
@@ -196,31 +210,62 @@ flipped repeatedly; trust the code, and see
 `TASKS/in-battle-bar-layout-auto-set-redesign.md`, where (0,0) additionally comes to mean
 "Free, not yet materialised".
 
+**Materialise-on-mount** (`bar_window.BarHost._materialise`, called from `_place` after every
+resolve): the FIRST real-surface placement after Free is picked (or a legacy pre-v22 pin is
+upgraded) writes the resolved on-screen point back as the anchor point, so the panel's steppers
+stop reading 0/0 the next time the user looks — no numeric change is possible before then, because
+no surface exists to compute one from in the garage panel where Free is picked. Three gates, all
+load-bearing: `_sized` (the first `_place` at `_onReady` still sees the engine's 256×256
+size-timeout fallback surface — materialising against that bakes a wrong anchor point forever),
+own-variant only (both bar hosts share ONE stored pair, and a live variant flip mid-battle can
+briefly have both open), and the pair/frame re-read fresh rather than reused from `_resolve`'s
+locals (which were overwritten in place by the AUTO rewrite).
+
 Ctrl+drag: `adapter/battle_input.py` samples Ctrl+LMB → `battle_bridge._on_drag(phase, cursor)`
 (battle_bridge.py:354) → `progress_view.drag(...)` / `efficiency_view.drag(...)` →
-`BarHost.drag()` (`bar_window.py:365-455`). Absolute placement via `cursor_top_left`
+`BarHost.drag()` (`bar_window.py:455-560`). Absolute placement via `cursor_top_left`
 (`positioning.py`), gain exactly 1 (see `_space()`'s derivation), ownership gated by
-`cursor_in_rect` against the gesture's own window rect, persisted by
-`mod_settings.set_bar_position(x, y, persist=True)` only on phase `"end"` and only if the
-gesture actually moved. Both bar VMs are `commands=0` — no `setPosition` reverse command; the
+`cursor_in_rect` against the gesture's own window rect. **`window.move()` still takes the
+computed top-left, but what gets persisted (both the live per-move update and the gesture-end
+write) is that top-left re-expressed as the Free anchor point via `free_anchor_point`** — the grab
+offset stays in top-left space throughout; only the value handed to
+`mod_settings.set_bar_position(x, y, persist=True)` is converted, on every move (unpersisted) and
+on phase `"end"` (persisted, and only if the gesture actually moved). Both bar VMs are
+`commands=0` — no `setPosition` reverse command; the
 drag is entirely Python-owned (see `moe-battle`'s Ctrl+drag section for the full mechanics,
 shared verbatim by both bars).
 
 Constants (`domain/constants.py`): `PROGRESS_ANCHOR_Y_FRAC=0.865`,
-`PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-44` / `_LARGE=-55`,
+`PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-44` / `_LARGE=-65`,
 `PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X=98` / `_LARGE=138` (pure derivation 100/140,
 with a measured -2 hand-placement correction — see the constants' long comment on two
 independent Ctrl+drags landing on the same corrected value across different surface
-geometries); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`, `EFFICIENCY_ANCHOR_Y_SHIFT=-50` / `_LARGE=-63`,
+geometries); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`, `EFFICIENCY_ANCHOR_Y_SHIFT=-50` / `_LARGE=-77`,
 `EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X=53` / `_LARGE=84` (pure derivation, no
 correction — only one, unconfirmed hand-drag exists for this bar). Shared:
 `MM_GAP=8`, `MM_TICK_OVERHANG=3`/`_LARGE=5`, `MM_TRACK_Y=290`/`_LARGE=363`,
-`VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-113` (identical for both bars — both vertical
+`VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-170` (identical for both bars — both vertical
 compositions share the same backdrop geometry).
+
+**The `_LARGE` Y-shifts above were RE-DERIVED (rule 5 / DECISION 3, `-55→-65`, `-63→-77`,
+`-113→-170`)** to pin the composition's BOTTOM ink rather than the naive `shift * SIZE_F`
+algebraic identity, which pins neither ink edge — see memory
+`[[anchor-y-shift-large-pins-neither-ink-edge]]`. **The same rule's X term is WIRED and live**:
+`anchor_centred_reduced` (`domain/positioning.py:107`) gained an `x_shift=0` parameter, applied as
+`max_x // 2 + x_shift` — the default keeps every OTHER call (horizontal, Minimap, and the vertical
+branch under Default) byte-identical, since a vertical bar's natural alignment under rules 2/3 is
+Minimap (already compliant) and Damage Log is only reachable there as a stored-but-unselectable
+value (DECISION 5). `BarHost.__init__` gained `x_shift_large=0`
+(`bridge/bar_window.py:241-243`), and `_resolve`'s `elif vertical:` branch (`:361-365`) is the ONLY
+caller that passes a non-zero value: `self._x_shift_large if large else 0`. `progress_view.py` /
+`efficiency_view.py` thread `PROGRESS_ANCHOR_X_SHIFT_LARGE=-40` / `EFFICIENCY_ANCHOR_X_SHIFT_LARGE=-35`
+into their own `BarHost(...)` construction. Measured result: the vertical + Damage Log right edge
+holds across Default→Large — 0px drift on Progress, 1px on Efficiency, inside the module's
+accepted ±1 int-floor bound (memory `[[anchor-y-reduction-is-not-bit-exact]]`).
 
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
-`SETTINGS_VERSION=21`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
+`SETTINGS_VERSION=22`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
 `progress_bar_enabled()` (`mod_settings.py:516`). Variant `PROGRESS_VARIANT_KEY=
 "progress_bar_variant"` (:548, 0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
 "progress_bar_size"` (:559, 0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=

@@ -93,10 +93,12 @@ let large = false;
 // .mp-backdrop -- left -80rem / top -40rem / 460 wide / 96 tall (MoEEfficiency.css; the emitted
 // value, asserted by tools/dev/check_eff_css.js). Everything else fits inside it with
 // room to spare, measured against the emit rather than guessed:
-//   * TOP: the .mp-cap.up numeral's box bottom sits at -11rem (bottom:100% of the 3rem track, then
-//     translateY(-11rem)), so at a 16rem font its top is ~-30 and its 6rem band glow reaches ~-36.
-//     Its out-of-flow glyph and the current tick's 6rem glow are shallower still.
-//   * BOTTOM: .mp-cap.dn tops out at 12rem (top:100% + margin-top:9rem) and is 12rem tall -> ~26.
+//   * TOP: the .mp-cap.up numeral's box bottom sits at -12rem (bottom:100% of the 3rem track, then
+//     translateY(-12rem)), so at a 16rem font with its pinned 20.5rem line box its top is ~-32.5
+//     and its 6rem band glow reaches ~-38.5. Its out-of-flow glyph and the current tick's 6rem glow
+//     are shallower still.
+//   * BOTTOM: .mp-cap.dn tops out at 15rem (top:100% + margin-top:12rem) and its pinned 15.5rem
+//     line box reaches ~30.5 -- its .mp-d delta (translate(4.2, 2.5)) hangs deeper still, to ~33.
 //   * SIDES: .mp-cap.r4 sits at 100 % (x == 300) and the current caption's delta hangs off its
 //     right edge, reaching ~375 at four digits -- which is precisely why meta.capClamp's right
 //     bound is 376. The clamp below keeps it there whatever the digits do.
