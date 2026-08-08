@@ -281,7 +281,7 @@ body {
     text-shadow: 0rem 0rem 1rem rgba(0, 0, 0, 0.5);
 }
 
-/* Signed delta rides small next to the projected percent; white by default. */
+/* Signed delta (in parens) rides small next to the projected percent; white by default. */
 .mb-delta {
     font-size: 14rem;
     font-weight: 600;
@@ -292,8 +292,8 @@ body {
 /* Sign is carried by a COLORED GLOW, not a text fill: the numerals stay WHITE and a green/red
    halo (text-shadow) signals the sign, layered OVER the dark legibility drop so the numbers
    still read over bright AND dark map areas. Applies to the live-damage value (row 1, vs
-   projected avg) AND the signed delta NUMBER (row 2, .mb-delta-num) -- but NOT the .mb-delta
-   wrapper itself, which carries no text of its own and stays white. Neutral/at-par has
+   projected avg) AND the signed delta NUMBER (row 2, .mb-delta-num) -- but NOT the delta's
+   surrounding parens, which are static markup on .mb-delta and stay white. Neutral/at-par has
    no .mb-up/.mb-down class -> plain white + dark drop only, no glow. */
 .mb-value.mb-up,
 .mb-delta-num.mb-up {

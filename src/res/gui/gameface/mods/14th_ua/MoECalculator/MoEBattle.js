@@ -60,8 +60,8 @@ function pctText(p) {
 
 // Signed delta NUMBER -> "+0.41%" / "-1.20%"; zero AT DISPLAY PRECISION -> "0%". Two decimals,
 // TRUNCATED (matches pctText) so the delta never overstates a mark gain and a sub-precision
-// value reads "0%" with no sign. The .mb-delta wrapper (see ensureRoot) carries no text of its
-// own and stays white -- only this number carries the sign colour.
+// value reads "0%" with no sign. The surrounding parens are STATIC markup (see ensureRoot) and
+// stay white -- only this number carries the sign colour.
 function signedPct(p) {
     const v = trunc2(p);
     if (v === 0) return "0%";
@@ -99,7 +99,7 @@ function ensureRoot() {
         '<div class="mb-row">' +
         '  <span class="mb-ico pct"></span>' +
         '  <span class="mb-value mb-pct"></span>' +
-        '  <span class="mb-delta"><span class="mb-delta-num"></span></span>' +
+        '  <span class="mb-delta">(<span class="mb-delta-num"></span>)</span>' +
         '</div>' +
         // Row 3 (optional): [assist icon]  <counted assistance>. The icon switches with the
         // leading stream (track/spot/stun); gated by the setting + hidden while the total is 0.
@@ -148,7 +148,7 @@ function render(model) {
         // Truncate to display precision FIRST so the sign, colour and text all agree: a
         // sub-precision delta reads "0%" in white, never a green "+0.00%".
         const delta = trunc2(Number(data.pctDelta) || 0);
-        // Colour only the number; .mb-delta itself carries no ink of its own.
+        // Colour only the number; the parens on .mb-delta stay white.
         deltaNum.textContent = signedPct(delta);
         // Delta vs pre-battle standing: green improves, red drags, white unchanged.
         colourBySign(deltaNum, delta);
