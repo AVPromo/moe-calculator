@@ -370,7 +370,7 @@ def test_the_wider_vertical_surface_does_not_move_the_centred_track(space_w):
     Default, 33 at Large, at every resolution, with every other assertion in this file still green.
     Applying V_PAD_X_REM to BOTH sides is what buys the exact equality below, and paying ~53rem of
     surface on a side nobody looks at is free (the rect is never drawn and the hit rect is collapsed
-    unconditionally -- see the hitPad assertion at the end).
+    per axis -- see the hitPadX/hitPadY assertion at the end).
 
     COMPOSED THROUGH THE REAL FUNCTIONS, not re-derived arithmetic: the same
     anchor_centred_reduced -> anchor_offset chain bar_window.BarHost._resolve runs, so the `// 2`
@@ -410,14 +410,13 @@ def test_the_wider_vertical_surface_does_not_move_the_centred_track(space_w):
         "the centred vertical track moved %s logical px under Large -- that is a real move, not "
         "the sub-pixel `// 2` parity jitter" % drift)
 
-    # THE INPUT RECT IS UNMOVED TOO, and that is why the extra surface is free rather than a
-    # trade-off: hitPad is ceil(max(w, h) / 2) and the vertical composition is height-dominated at
-    # BOTH sizes, so widening the surface does not change it by a single rem. (It would not matter
-    # even if it did -- pushHitArea collapses the rect unconditionally -- but a grown hit rect would
-    # still be worth knowing about, and this is the cheapest place to notice.)
-    _, surface_h = _v_surface_wh(js)
-    assert max(surface_w, surface_h) == max(old_w, surface_h), \
-        "the vertical surface is no longer height-dominated -- hitPad now tracks its WIDTH"
+    # THE INPUT RECT IS STILL FULLY COLLAPSED, and that is why the extra surface is free rather
+    # than a trade-off: MoEBarTransient.js pads the X axis by `Math.ceil(viewW / 2)` and the Y
+    # axis by `Math.ceil(viewH / 2)` independently (see its header note and the shared-formula pin
+    # in test_efficiency_surface_mirror.py::test_the_hit_rect_is_collapsed_on_all_four_sides), so
+    # widening V_PAD_X_REM only grows the X pad by exactly what it grows viewW by -- the X axis
+    # still collapses to (near-)zero either way, and the Y axis (untouched by V_PAD_X_REM) does
+    # not move at all.
 
 
 def test_the_reachable_minimap_gap_equals_surface_h_minus_track_y():

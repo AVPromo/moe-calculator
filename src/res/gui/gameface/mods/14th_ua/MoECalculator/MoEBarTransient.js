@@ -91,16 +91,26 @@ const END_MARGIN_MS = 250;
 // THE SURFACE RECT IS THE MOUSE HIT RECT -- exactly why WindowFlags.WINDOW_FULLSCREEN was rejected
 // for these windows (bridge/battle_view.py). A ~480rem-wide surface across screen centre would be an
 // input-stealing strip, and these bars are purely decorative and must never take input. So collapse
-// the input rect with an EQUAL padding on all four sides, PERMANENTLY -- this document needs no
-// mouse input at ALL any more: the Ctrl+drag reposition is driven entirely from Python
-// (adapter/battle_input samples the keys, bridge/bar_window re-places the window from the live
-// cursor), so the rect that used to be OPENED for the gesture never opens again. Confirmed against
-// WG's own JS wrapper (gui-part3.pkg battle/battle_notifier/BattleNotifierView/BattleNotifierView.js):
-// the order is (top, right, bottom, left, 15) -- but our four values are equal anyway, so the order
-// is moot. Do NOT "clean this up" into asymmetric per-side values. Negative values are rejected, so a
-// padding can only shrink the rect inward; half the LARGER dimension therefore collapses both axes to
-// nothing. HIT_MAGIC mirrors WG's constant; its meaning is unknown, so the call is retried without
-// it if the 5-argument form is rejected.
+// the input rect to nothing, PERMANENTLY -- this document needs no mouse input at ALL any more: the
+// Ctrl+drag reposition is driven entirely from Python (adapter/battle_input samples the keys,
+// bridge/bar_window re-places the window from the live cursor), so the rect that used to be OPENED
+// for the gesture never opens again. Confirmed against WG's own JS wrapper (gui-part3.pkg
+// battle/battle_notifier/BattleNotifierView/BattleNotifierView.js): the order is
+// (top, right, bottom, left, 15) -- our per-axis pair below is symmetric within each axis, so within
+// an axis the order is moot, but TOP/BOTTOM and LEFT/RIGHT are NOT interchangeable with each other.
+// HIT_MAGIC mirrors WG's constant (its own wrapper always passes this literal 15 too); its meaning
+// is unknown, so the call is retried without it if the 5-argument form is rejected.
+//
+// PER-AXIS, NOT ONE SHARED VALUE ACROSS ALL FOUR SIDES. An earlier build padded all four sides by
+// `Math.ceil(Math.max(viewW, viewH) / 2)` -- half the LARGER dimension -- on the theory that it
+// "collapses both axes to nothing". It does not: half the larger dimension only zeroes the axis IT
+// belongs to (380/2 == 190, and 190+190 == the 380-wide Progress bar's own width) and OVER-pads the
+// other axis into a negative extent (92 - 2*190 == -288 for that same bar's height) instead of the
+// exact zero a real collapse needs. Whether the engine's C++ clamps a negative extent to zero, to the
+// full surface, or does something stranger is NOT something JS can observe or prove -- but there is
+// no reason to ship an admittedly-wrong number when the right one is exactly as cheap: pad the X axis
+// by half the SURFACE WIDTH and the Y axis by half the SURFACE HEIGHT, so each axis collapses to
+// EXACTLY zero on its own terms and neither is left negative.
 const HIT_MAGIC = 15;
 
 // --- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size, pushed as the VM's `barSize`) -----
@@ -174,8 +184,8 @@ function fmt(n) {
 //                                 every centred placement by half the asymmetry; this shape cannot
 //                                 express that. Pay the unused slack on the other side instead --
 //                                 the surface rect is invisible (the hit rect is collapsed
-//                                 unconditionally, and hitPad is height-dominated on both vertical
-//                                 bars at both sizes), so a wider surface costs literally nothing.
+//                                 per-axis, unconditionally, regardless of which axis padX widens),
+//                                 so a wider surface costs literally nothing.
 //                                 It is an X length like `pad` and, like `pad`, it does NOT carry
 //                                 SIZE_XF: it is a rem-space allowance for rem-sized caption INK,
 //                                 which the root font already scales by SIZE_F alone.
@@ -246,11 +256,11 @@ export function createTransient(cfg) {
     // the composition stays exactly where it is inside the surface and only the surface's BOTTOM
     // edge moves up, which is what makes the clip a pure clip and leaves every mirrored Python
     // constant alone.
-    // `let`, not `const`, because of the large size mode (applySize re-derives the four that carry
+    // `let`, not `const`, because of the large size mode (applySize re-derives the five that carry
     // a factor -- see it for the arithmetic) AND, for shiftY, because of the VERTICAL orientation:
     // goVertical swaps the whole composition box, and the vertical box is TALLER than it is wide
-    // where the horizontal one is the reverse, so every one of these five moves. Under a single
-    // orientation nothing rewrites them and they ARE the five expressions below.
+    // where the horizontal one is the reverse, so every one of these six moves. Under a single
+    // orientation nothing rewrites them and they ARE the six expressions below.
     // NORMALISED ONCE, HERE, so every later `cfg.clipB` / `cfg.padX` read is a number: the
     // horizontal pair passes neither, and `2 * cfg.pad - undefined` is NaN, which would push a NaN
     // surface size. `padX` falls back to `pad`, which is what keeps `2 * padX` identical to the
@@ -263,7 +273,10 @@ export function createTransient(cfg) {
     let shiftY = cfg.pad - cfg.boxTop;        // MIRRORED (negated) in Python as
                                               // domain/constants.*_ANCHOR_Y_SHIFT, and as
                                               // VERTICAL_ANCHOR_Y_SHIFT under cfg.vert
-    let hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+    // PER-AXIS collapse (see the header note above): half of EACH axis' own surface length, not
+    // half of whichever axis is larger.
+    let hitPadX = Math.ceil(viewW / 2);
+    let hitPadY = Math.ceil(viewH / 2);
 
     // THE LIVE RUN IDENTITY PAIR. Horizontal by default; goVertical repoints both at the vertical
     // composition's own twin (see RUN_CLASSES_V / RUN_NAMES_V), which is what makes armRun's
@@ -369,7 +382,8 @@ export function createTransient(cfg) {
         viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;
         shiftX = cfg.padX - cfg.boxLeft;
         shiftY = cfg.pad - cfg.boxTop;
-        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+        hitPadX = Math.ceil(viewW / 2);
+        hitPadY = Math.ceil(viewH / 2);
         runCls = RUN_CLASSES_V[cfg.vert.cls] || RUN_CLASSES;
         runNames = RUN_NAMES_V[cfg.vert.cls] || RUN_NAMES;
         try {
@@ -698,13 +712,15 @@ export function createTransient(cfg) {
     function pushHitArea() {
         if (typeof viewEnv === "undefined" || !viewEnv) return;
         if (!viewEnv.setHitAreaPaddingsRem) return;
+        // (top, right, bottom, left, magic) -- confirmed order (see the header note). top/bottom
+        // pad the Y axis, so they take hitPadY; left/right pad the X axis, so hitPadX.
         try {
-            viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad, HIT_MAGIC);
+            viewEnv.setHitAreaPaddingsRem(hitPadY, hitPadX, hitPadY, hitPadX, HIT_MAGIC);
         } catch (e) {
             // The 5th argument's meaning is unknown -- if the binding rejects the 5-arg form, the
             // 4-arg one still collapses the rect.
             try {
-                viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad);
+                viewEnv.setHitAreaPaddingsRem(hitPadY, hitPadX, hitPadY, hitPadX);
             } catch (e2) { /* fail-soft */ }
         }
     }
@@ -804,7 +820,8 @@ export function createTransient(cfg) {
         // rem, so it self-scales with the root font -- 3dp to match the stylesheet's own x-lengths,
         // which keeps shiftX + the .mp-lg backdrop's `left` exactly `pad`.
         shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;
-        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+        hitPadX = Math.ceil(viewW / 2);
+        hitPadY = Math.ceil(viewH / 2);
         setRootFont();
         // THE SCALE GATE IS RE-EVALUATED ON EVERY FLIP, in BOTH directions, and is deliberately not
         // latched at mount. The shipped build computed it in ONE branch of the re-assert, so `.mp-s1`

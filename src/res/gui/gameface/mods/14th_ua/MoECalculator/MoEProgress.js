@@ -233,9 +233,11 @@ const PAD_REM = 10;
 // and 33 at Large -- a visible move, for a fix whose whole brief was "nothing on screen may look
 // different except that the caption text is no longer cut off". Symmetric costs 53rem of surface
 // on a side nobody looks at and is FREE: the surface rect is never drawn, the mouse hit rect is
-// collapsed unconditionally (MoEBarTransient's pushHitArea), and hitPad is height-dominated at both
-// sizes -- max(198, 320) and max(278, 400) are the SAME 320/400 the shipped surface gave, so the
-// input rect does not move by a single rem. Do NOT "reclaim" the right side.
+// collapsed PER AXIS (MoEBarTransient's pushHitArea pads X by half the surface WIDTH and Y by half
+// the surface HEIGHT), so widening padX only grows the X pad by exactly the same amount it grows
+// viewW by -- the X axis still collapses to zero width either way, and the Y axis (which this
+// widening never touches) is untouched. The input rect does not move. Do NOT "reclaim" the right
+// side.
 // THE WORST-CASE REACH, re-derived from the shipped CSS and MoEBattle.ttf's own advances (digit
 // 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the same figures the horizontal extremes
 // above use). Each row's ink starts at `-padding-right + translateX` off the track's left edge and

@@ -16,9 +16,10 @@ WHAT IS MIRRORED WHERE -- and the ONE place this differs from the Moving Average
     assertion below reads the `.mp-backdrop` rule -- the composition's true bounding box -- and
     MoEEfficiency.js's BOX_* consts quote it by name.
   * PAD_REM turns that box into the surface size pushed to the engine and into the rigid translate
-    into positive document coordinates -- but those FIVE derivations now live ONE FILE OVER, in
-    the shared MoEBarTransient.js, parameterised over its cfg (viewW/viewH/shiftX/shiftY/hitPad
-    off cfg.box*/cfg.pad). So the mirror chain has an extra link: MoEEfficiency.js must actually
+    into positive document coordinates -- but those SIX derivations now live ONE FILE OVER, in
+    the shared MoEBarTransient.js, parameterised over its cfg
+    (viewW/viewH/shiftX/shiftY/hitPadX/hitPadY off cfg.box*/cfg.pad). So the mirror chain has an
+    extra link: MoEEfficiency.js must actually
     HAND its BOX_*/PAD_REM to createTransient (asserted), and the shared module must derive from
     them (asserted there). Which file owns which scrape is spelled out per test below; the BOX_*
     and PAD_REM consts stay per-bar and stay in the `^const NAME = <int>;` shape both mirror
@@ -218,13 +219,13 @@ def test_this_bar_hands_its_own_box_and_pad_to_the_shared_transient():
 
 
 def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
-    # Pin the FORMULAS, not just the numbers: this bar's five literals plus these five lines are
+    # Pin the FORMULAS, not just the numbers: this bar's five literals plus these six lines are
     # the whole surface contract, so a re-tune of the box or the pad propagates instead of drifting.
     # They live in the SHARED module now, keyed to its cfg (which the test above proves is fed from
-    # this bar's consts); the old VIEW_*/SHIFT_*/HIT_PAD_REM consts are those same five expressions.
+    # this bar's consts); the old VIEW_*/SHIFT_*/HIT_PAD_REM consts are those same six expressions.
     #
-    # ALL FIVE are now `let`, so the DERIVATION is what is pinned, not the keyword --
-    # `(?:const|let)`. FOUR became `let` for the LARGE size mode (applySize re-derives whatever
+    # ALL SIX are now `let`, so the DERIVATION is what is pinned, not the keyword --
+    # `(?:const|let)`. FIVE became `let` for the LARGE size mode (applySize re-derives whatever
     # carries a factor). shiftY joined them in Phase 1 for a DIFFERENT reason, not a size-mode one:
     # goVertical() (the vertical orientation's ONE-TIME mount-time DOM/geometry switch) genuinely
     # swaps the whole composition box -- the vertical box is TALLER than it is wide where the
@@ -237,12 +238,19 @@ def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
     # `padX - boxLeft` are byte-identical to what THIS bar always computed. Only the vertical
     # Moving Average composition supplies its own (MoEProgress.js's V_PAD_X_REM -- its
     # right-anchored captions grow LEFTWARD past the backdrop and PAD_REM clipped them).
+    #
+    # HIT PAD IS PER-AXIS (hitPadX off viewW, hitPadY off viewH), NOT ONE SHARED VALUE: a single
+    # `Math.ceil(Math.max(viewW, viewH) / 2)` on all four sides only zeroes whichever axis owns the
+    # larger dimension and OVER-pads the other into a negative extent instead of an exact zero --
+    # see MoEBarTransient.js's own header note. Splitting it is what makes the collapse exact on
+    # both axes regardless of which is bigger.
     src = _transient()
     for line in ("viewW = cfg.boxW + 2 * cfg.padX;",
                  "viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;",
                  "shiftX = cfg.padX - cfg.boxLeft;",
                  "shiftY = cfg.pad - cfg.boxTop;",
-                 "hitPad = Math.ceil(Math.max(viewW, viewH) / 2);"):
+                 "hitPadX = Math.ceil(viewW / 2);",
+                 "hitPadY = Math.ceil(viewH / 2);"):
         assert re.search(r"(?m)^\s*(?:const|let) " + re.escape(line), src), \
             "MoEBarTransient.js: lost the derivation `%s`" % line
 
@@ -291,18 +299,25 @@ def test_the_composition_is_translated_into_the_surface_by_the_shift():
 
 def test_the_hit_rect_is_collapsed_on_all_four_sides():
     # THE SURFACE RECT IS THE MOUSE HIT RECT: a 480rem-wide strip across screen centre would
-    # steal HUD input. WG's wrapper passes (top, right, bottom, left, 15); ours are all equal.
-    # The call and HIT_MAGIC moved to the shared module; the surface it collapses is still THIS
-    # bar's (BOX_* + PAD_REM), which is what makes the arithmetic below this bar's own.
+    # steal HUD input. WG's wrapper passes (top, right, bottom, left, 15); the call below pads
+    # top/bottom by hitPadY (the Y axis) and left/right by hitPadX (the X axis) -- PER AXIS, not
+    # one shared value, so each axis collapses EXACTLY rather than one axis over-padding into a
+    # negative extent (see MoEBarTransient.js's header note on why a single shared
+    # `Math.ceil(Math.max(viewW, viewH) / 2)` was wrong). The call and HIT_MAGIC moved to the
+    # shared module; the surface it collapses is still THIS bar's (BOX_* + PAD_REM), which is what
+    # makes the arithmetic below this bar's own.
     src = _transient()
     assert re.search(r"viewEnv\.setHitAreaPaddingsRem\("
-                     r"hitPad,\s*hitPad,\s*hitPad,\s*hitPad,\s*HIT_MAGIC\)",
-                     src), "MoEBarTransient.js: the 5-arg equal-padding hit-area call is gone"
+                     r"hitPadY,\s*hitPadX,\s*hitPadY,\s*hitPadX,\s*HIT_MAGIC\)",
+                     src), "MoEBarTransient.js: the 5-arg per-axis hit-area call is gone"
     assert _tconst("HIT_MAGIC") == 15
     surface_w, surface_h = _surface_wh(_js())
-    pad = -(-max(surface_w, surface_h) // 2)          # the JS's Math.ceil(max/2)
-    assert 2 * pad >= surface_w and 2 * pad >= surface_h, \
-        "half the LARGER dimension must collapse BOTH axes to nothing"
+    pad_x = -(-surface_w // 2)          # the JS's Math.ceil(viewW / 2)
+    pad_y = -(-surface_h // 2)          # the JS's Math.ceil(viewH / 2)
+    assert 2 * pad_x >= surface_w and 2 * pad_x - surface_w <= 1, \
+        "hitPadX must collapse the X axis to (near-)exactly zero"
+    assert 2 * pad_y >= surface_h and 2 * pad_y - surface_h <= 1, \
+        "hitPadY must collapse the Y axis to (near-)exactly zero"
 
 
 def test_the_surface_reassert_outlasts_the_engines_size_deadline():
