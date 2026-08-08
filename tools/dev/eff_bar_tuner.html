@@ -216,10 +216,8 @@
      the icon's mirror on the right:100% side). Out of flow is what stops .on toggling from
      moving the number. Both the X gap and the signed Y ride that ONE translate() -- top:0 is the
      anchor and stays 0, because a `top` offset is what would put the delta back in the numeral's
-     way. It FADES on opacity, which interpolates -- never visibility. No parens on this bar (nor
-     on the Moving Average one; only the in-battle corner overlay, MoEBattle.js, still wraps its
-     delta in parens): .mp-d carries the gap, size and fade, and .mp-d-num alone carries the
-     signed digits. */
+     way. It FADES on opacity, which interpolates -- never visibility. No parens on this bar: .mp-d
+     carries the gap, size and fade, and .mp-d-num alone carries the signed digits. */
   .mp-cap .mp-d{position:absolute;left:100%;top:0;transform:var(--dtf);
     font-size:var(--dfs);line-height:var(--dlh);color:#ffffff;font-weight:var(--wt);
     text-shadow:var(--textsh);opacity:0;transition:opacity var(--dfadems) var(--dfadease)}
@@ -1098,9 +1096,8 @@
 "   and drops it after the hold. It is WHITE with NO band glow -- that glow is the current total's\n"+
 "   signal alone, so .mp-d-num appears in no band rule and needs no rule of its own; it inherits\n"+
 "   everything here and JS writes the signed digits into it. The dark text-shadow is legibility\n"+
-"   over a bright HUD, not a glow -- keep it. No parens on this bar (nor on the Moving Average\n"+
-"   one; only the in-battle corner overlay, MoEBattle.js, still wraps its delta in parens):\n"+
-"   .mp-d carries the gap, size and fade, .mp-d-num alone carries the digits. */\n"+
+"   over a bright HUD, not a glow -- keep it. No parens on this bar: .mp-d carries the gap, size\n"+
+"   and fade, .mp-d-num alone carries the digits. */\n"+
 ".mp-cap .mp-d {\n  position: absolute;\n  left: 100%;\n  top: 0;\n"+
 "  transform: "+dTf(REM)+";\n  font-size: "+st.dFS+"rem;\n"+
 "  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n"+

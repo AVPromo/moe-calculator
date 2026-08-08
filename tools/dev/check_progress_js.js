@@ -286,7 +286,7 @@ const MUTATIONS = {
         "if (!sw) return;",
         'if (!sw) { [capV(capC), capDN, fill, tProj].forEach(function (e) {' +
         ' e.classList.remove("mp-up"); e.classList.remove("mp-down"); }); return; }'],
-    // The glow must key off the delta AS ROUNDED, or a +0.4 shows a green "+0".
+    // The glow must key off the delta AS ROUNDED, or a +0.4 shows a green "(+0)".
     "raw-sign-gate": ["B",
         "const glows = Math.round(Math.abs(d)) !== 0;", "const glows = d !== 0;"],
     // capEta MUST ride the SAME toggle as the numeral/delta/fill/tick -- the CSS rule alone
@@ -1032,10 +1032,10 @@ function run(mutation) {
 
     // --- ROUNDED-ZERO CLASSIFICATION --------------------------------------------------------
     // The glow keys off the delta AS THE TEXT ROUNDS IT, so a sub-precision change can never
-    // display "+0" in green. Untestable from tests/: it is a classList side effect on four DOM
+    // display "(+0)" in green. Untestable from tests/: it is a classList side effect on four DOM
     // nodes, reached only through the virtual clock's swap. Both signs, because the gate is
     // Math.round(Math.abs(d)) and NOT Math.round(d) -- the latter is -0 at d == -0.5 while the
-    // text already reads "-1", so a naive round disagrees with the glyph at exactly one value.
+    // text already reads "(-1)", so a naive round disagrees with the glyph at exactly one value.
     section("rounded-zero classification");
     s = mount(srcs);
     s.push(M());                                  // baseline: delta +50, commits an up-glow

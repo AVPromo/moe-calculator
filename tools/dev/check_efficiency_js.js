@@ -749,8 +749,8 @@ function run(mutation) {
     eq("the entry plays from the top (no seek)", s.root.style.animationDelay, "0ms");
     eq("the delta is shown on the hit", s.deltaOn(), true);
     eq("...signed, and thousands-separated", s.capDN.textContent, "+400");
-    // BARE -- this bar renders no parens (neither does the Moving Average bar any more). Asserted
-    // on the SOURCE markup because the shim drops text nodes, so capD.textContent can never see them.
+    // BARE -- this bar renders no parens (the Moving Average bar still does). Asserted on the
+    // SOURCE markup because the shim drops text nodes, so capD.textContent can never see them.
     ok("...and bare: the wrapper adds no parens around .mp-d-num",
        /<span class="mp-d"><span class="mp-d-num"><\/span><\/span>/.test(B_SRC));
     eq("the fill moved to the pushed barX", s.fill.style.width, "45.000%");

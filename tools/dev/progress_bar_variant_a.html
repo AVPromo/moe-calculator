@@ -29,8 +29,7 @@
       lesson, a re-emit of the tuner would NOT reproduce this file -- this is why it was copied
       from disk rather than regenerated.
     * The DOM shape is MoEProgress.js's ensureRoot() innerHTML, verbatim (backdrop, track, 4
-      ticks, 4 captions, delta split into a text-less .mp-d wrapper + a glowing .mp-d-num child --
-      the maintainer's "remove the parens" call already applied here).
+      ticks, 4 captions, delta split into static parens + a glowing .mp-d-num child).
     * The render arithmetic (axisPct, fmt, the sign-glow gate on the ROUNDED delta magnitude,
       paintStatic's icon selection) is a direct, unabridged port of MoEProgress.js's paintStatic /
       showVal -- see PORT NOTES below for exactly what was intentionally left out (the whole
@@ -550,7 +549,7 @@ body{ background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,s
           <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
           <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
           <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
-            <span class="mp-d"><span class="mp-d-num"></span></span></div>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
           <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
         </div>
       </div>
@@ -573,7 +572,7 @@ body{ background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,s
           <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
           <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
           <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
-            <span class="mp-d"><span class="mp-d-num"></span></span></div>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
           <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
         </div>
       </div>
@@ -597,7 +596,7 @@ body{ background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,s
           <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
           <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
           <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
-            <span class="mp-d"><span class="mp-d-num"></span></span></div>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
           <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
         </div>
         <!-- THE VERNIER (addition, not a shipped element): parked below the track, fixed
@@ -703,7 +702,7 @@ body{ background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,s
 // position), paintStatic's icon selection (setIco: 0 marks -> none, 1..3 -> mk<k>, "next mark"
 // at 3 held -> the general MoE glyph), and showVal's SIGN-GLOW GATE -- glow tests
 // Math.round(Math.abs(delta)) !== 0, i.e. the ROUNDED magnitude exactly as fmt() displays it,
-// never the raw float -- so a displayed "+0" can never glow green/red here either.
+// never the raw float -- so a displayed "(+0)" can never glow green/red here either.
 //
 // CUT ON PURPOSE: the whole show/hide/peek TRANSIENT (MoEBarTransient.js's mp-run/mp-life
 // arming, the Alt-peek pause/resume, the surface re-assert, the hold-duration correction). None

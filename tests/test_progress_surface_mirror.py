@@ -233,9 +233,10 @@ def _advances(js):
                     (Decimal(g) for g in match.groups())))
 
 
-def _ink(adv, size, digits=0, commas=0, signs=0):
+def _ink(adv, size, digits=0, commas=0, parens=0, signs=0):
     """One numeral's rendered width in rem, at `size` rem and letter-spacing 0."""
-    return size * (digits * adv["digit"] + commas * adv["comma"] + signs * adv["sign"])
+    return size * (digits * adv["digit"] + commas * adv["comma"]
+                   + parens * adv["paren"] + signs * adv["sign"])
 
 
 def test_the_vertical_captions_fit_inside_the_surface():
@@ -256,7 +257,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
     advance out of MoEProgress.js's own hmtx note, so a retune of a gap, a font-size or an icon box
     moves BOTH sides of the comparison together and only a real overflow fails.
 
-    THE BUDGET IS THE 4-DIGIT DELTA (maintainer's call), not the 3-digit one: "+2,970" needs a
+    THE BUDGET IS THE 4-DIGIT DELTA (maintainer's call), not the 3-digit one: "(+2,970)" needs a
     combined damage around 150,000 but costs nothing to cover, and the margin left over is small.
     """
     css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
@@ -330,7 +331,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
         # (the widest shadow in the file) is what the surface has to clear, not the base drop.
         # dmgc has no margin override (the reference), so this row still reads the shared `ico_gap`.
         ".mpv-capC": (c_size,
-                      [_ink(adv, d_size, digits=4, commas=1, signs=1), d_gap,
+                      [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
                        numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
                       glow, ico_gap + d_gap),
         # [pre numeral][damage-projection glyph]

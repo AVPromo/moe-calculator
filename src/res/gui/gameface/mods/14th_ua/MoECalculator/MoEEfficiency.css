@@ -212,9 +212,8 @@ body { margin: 0; }
    and drops it after the hold. It is WHITE with NO band glow -- that glow is the current total's
    signal alone, so .mp-d-num appears in no band rule and needs no rule of its own; it inherits
    everything here and JS writes the signed digits into it. The dark text-shadow is legibility
-   over a bright HUD, not a glow -- keep it. No parens on this bar (nor on the Moving Average
-   one; only the in-battle corner overlay, MoEBattle.js, still wraps its delta in parens):
-   .mp-d carries the gap, size and fade, .mp-d-num alone carries the digits. */
+   over a bright HUD, not a glow -- keep it. No parens on this bar: .mp-d carries the gap, size
+   and fade, .mp-d-num alone carries the digits. */
 .mp-cap .mp-d {
   position: absolute;
   left: 100%;
