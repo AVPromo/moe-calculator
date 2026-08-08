@@ -5,6 +5,7 @@ imports BigWorld at top (stubbed in conftest); each test monkeypatches the adapt
 read seams so the snapshot-assembly logic is exercisable with the client closed."""
 from moe_calculator.adapter import battle_adapter as ba
 from moe_calculator.adapter import baseline_cache
+from moe_calculator.domain.constants import MINIMAP_SIZES
 
 
 def teardown_function(_):
@@ -164,5 +165,66 @@ def test_the_estimated_table_actually_drives_the_battle_readouts(monkeypatch):
     snap = ba.build_battle_snapshot()          # the REAL estimator, not a stub
     assert set(snap.thresholds) == {65, 85, 95, 100}
     assert build_battle_model(snap).has_data is True
+
+
+# --- read_minimap_size_index -- SOURCE-DERIVED, NOT LIVE-CONFIRMED (see its own docstring) -------
+# The underlying settingsCore getter does NOT clamp its own range, so this is OUR contract, not the
+# game's: mirror WG's own clampMinimapSizeIndex() around the raw read. conftest.py stubs
+# account_helpers.settings_core.settings_constants.GAME so these tests drive the real read path,
+# not its except-branch fallback.
+_TOP = len(MINIMAP_SIZES) - 1
+
+
+class _FakeSettingsCore(object):
+    def __init__(self, value):
+        self._value = value
+
+    def getSetting(self, _name):
+        return self._value
+
+
+def _with_core(monkeypatch, value):
+    monkeypatch.setattr(ba, "_settings_core", lambda: _FakeSettingsCore(value))
+
+
+def test_minimap_size_index_passes_through_an_in_range_value(monkeypatch):
+    _with_core(monkeypatch, 2)
+    assert ba.read_minimap_size_index() == 2
+
+
+def test_minimap_size_index_clamps_an_out_of_range_high_value(monkeypatch):
+    # The getter itself does NOT clamp -- a stray 99 must not index MINIMAP_SIZES out of bounds.
+    _with_core(monkeypatch, 99)
+    assert ba.read_minimap_size_index() == _TOP
+
+
+def test_minimap_size_index_clamps_a_negative_value(monkeypatch):
+    _with_core(monkeypatch, -3)
+    assert ba.read_minimap_size_index() == 0
+
+
+def test_minimap_size_index_fails_soft_to_the_top_on_none(monkeypatch):
+    # _safe_int's int(None) raises -> its own default (top) -> the outer clamp is then a no-op.
+    _with_core(monkeypatch, None)
+    assert ba.read_minimap_size_index() == _TOP
+
+
+def test_minimap_size_index_fails_soft_to_the_top_on_garbage(monkeypatch):
+    _with_core(monkeypatch, "not-a-number")
+    assert ba.read_minimap_size_index() == _TOP
+
+
+def test_minimap_size_index_fails_soft_to_the_top_with_no_settings_core(monkeypatch):
+    monkeypatch.setattr(ba, "_settings_core", lambda: None)
+    assert ba.read_minimap_size_index() == _TOP
+
+
+def test_minimap_size_index_fails_soft_to_the_top_when_the_read_raises(monkeypatch):
+    class _Boom(object):
+        def getSetting(self, _name):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(ba, "_settings_core", lambda: _Boom())
+    assert ba.read_minimap_size_index() == _TOP
 
 

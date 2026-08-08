@@ -1,6 +1,6 @@
 ---
 name: moe-battle
-description: Use when editing the 14th_ua MoE Calculator's IN-BATTLE live-MoE overlay — how it is hosted as a registered Gameface window over the HUD, its arena lifecycle, the Alt-key peek mode, the BattleMoEVM channel, the combined-damage/EWMA math, the Counted Assistance third row, the MoEBattle.js/.css/.html DOM, its colours/font/checker backdrop, or the window placement/anchors. Overlay visibility is settings-gated — see moe-settings. For the hangar bar see moe-garage.
+description: Use when editing the 14th_ua MoE Calculator's IN-BATTLE live-MoE overlay — how it is hosted as a registered Gameface window over the HUD, its arena lifecycle, the Alt-key peek mode, the BattleMoEVM channel, the combined-damage/EWMA math, the Counted Assistance third row, the MoEBattle.js/.css/.html DOM, its colours/font/checker backdrop, or the window placement/anchors. Overlay visibility is settings-gated — see moe-settings. For the hangar bar see moe-garage. For the two OTHER centre-screen transient battle windows — the Progress Bar (Moving Average) and the Damage Efficiency bar, and the shared MoEBarTransient.js/BarHost they ride — see moe-progress.
 ---
 
 # MoE Calculator — in-battle overlay (feature)

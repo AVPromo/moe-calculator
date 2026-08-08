@@ -181,9 +181,13 @@ def test_progress_bar_group_is_the_tail_of_col1():
                     None, u"progressHoldSeconds"), (
         u"the Battle Progress + Transitions categories (incl. all three spacers) are no longer one "
         u"run in COL1_KEYS: %r" % (S.COL1_KEYS,))
-    # ...and the "Bar Position" category IS the tail, spacer included.
-    assert S.COL1_KEYS[start + 15:] == (None, u"catBarPosition", u"barPosX", u"barPosY"), (
-        u"the Bar Position category is no longer the tail of COL1_KEYS: %r" % (S.COL1_KEYS,))
+    # ...and the "Layout" category (key catBarPosition, displayed text "Layout" as of v21) IS the
+    # tail, spacer included -- now with the two v21 Orientation/Alignment radios spliced in BEFORE
+    # the steppers.
+    assert S.COL1_KEYS[start + 15:] == (
+        None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
+        u"barPosX", u"barPosY"), (
+        u"the Layout category is no longer the tail of COL1_KEYS: %r" % (S.COL1_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
     # phantom column to mod_settings._sync_template_text's walk.
@@ -367,17 +371,21 @@ def test_variant_options_unknown_language_falls_back_to_english_marked(monkeypat
     assert not any(o.startswith(u"_") for o in _options(u"de"))
 
 
-def test_build_attaches_options_to_exactly_the_two_radio_controls():
+def test_build_attaches_options_to_exactly_the_four_radio_controls():
     # mod_settings._radio reads the option labels off the rendered entry, so build() must attach
-    # them there -- and NOWHERE else, or a checkbox would grow a phantom options key. There are TWO
-    # option-bearing controls now, and they are named: the label-less variant radio (which has no
-    # _PANEL row at all -- build() synthesises it) and the "Size" radio (a normal _PANEL row that
-    # only needs its options bolted on). Naming them both is the point: a third options key
-    # appearing anywhere, or one of these two losing its own, fails here.
+    # them there -- and NOWHERE else, or a checkbox would grow a phantom options key. There are now
+    # FOUR option-bearing controls (v21 added Orientation/Alignment), and they are named: the
+    # label-less variant radio (which has no _PANEL row at all -- build() synthesises it), the
+    # "Size" radio, and the two new "Orientation"/"Alignment" radios (both normal _PANEL rows that
+    # only need their options bolted on). Naming all four is the point: a fifth options key
+    # appearing anywhere, or one of these four losing its own, fails here.
     b = S.build(u"de")
-    assert {k for k, entry in b.items() if u"options" in entry} == {S.VARIANT_KEY, u"progressSize"}
+    assert {k for k, entry in b.items() if u"options" in entry} == {
+        S.VARIANT_KEY, u"progressSize", u"progressOrientation", u"progressAlignment"}
     assert b[S.VARIANT_KEY][u"options"] == S._VARIANT_OPTIONS[u"de"]
     assert b[u"progressSize"][u"options"] == S._SIZE_OPTIONS[u"de"]
+    assert b[u"progressOrientation"][u"options"] == S._ORIENTATION_OPTIONS[u"de"]
+    assert b[u"progressAlignment"][u"options"] == S._ALIGNMENT_OPTIONS[u"de"]
     # ...and the size radio keeps its own translated LABEL beside them (the variant's is blank).
     assert b[u"progressSize"][u"text"] == S._PANEL[u"de"][u"progressSize"][u"label"]
 

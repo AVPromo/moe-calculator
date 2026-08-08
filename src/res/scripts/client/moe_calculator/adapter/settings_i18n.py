@@ -18,17 +18,26 @@ overlaid onto it PER KEY: a key a language hasn't translated falls back to the E
 text for that key alone (and is underscore-marked when ``i18n.MARK_UNTRANSLATED`` is on,
 matching the widget's diagnostic). An unknown client code degrades to full English.
 
-Both radios (``VARIANT_KEY`` = "Mode" and ``progressSize`` = "Scale") are normal ``_PANEL`` rows;
-``build()`` only bolts their language-dependent OPTION tuples (``_VARIANT_OPTIONS`` /
-``_SIZE_OPTIONS``) onto the rendered entry, where ``mod_settings._radio`` reads them.
+FOUR radios (``VARIANT_KEY`` = "Mode", ``progressSize`` = "Scale", ``progressOrientation`` =
+"Orientation" and ``progressAlignment`` = "Alignment") are normal ``_PANEL`` rows; ``build()``
+only bolts their language-dependent OPTION tuples (``_VARIANT_OPTIONS`` / ``_SIZE_OPTIONS`` /
+``_ORIENTATION_OPTIONS`` / ``_ALIGNMENT_OPTIONS``) onto the rendered entry, where
+``mod_settings._radio`` reads them. Those option-label tuples are STRUCTURAL to MSA -- Aslain
+folds them into its ``_settingsStructure`` signature and ``_sync_template_text`` only ever
+rewrites a stored control's ``text``/``tooltip``, never ``options[].label`` -- so reordering,
+adding, removing or merely re-wording an option reaches an EXISTING install only through a
+``mod_settings.SETTINGS_VERSION`` bump; get the order right the first time.
 
 The panel is grouped into five CATEGORIES, each a label header row (``catBattleCalc`` /
 ``catBattleProgress`` / ``catTransitions`` / ``catBarPosition`` in column 1, ``catGarage`` in
 column 2) followed by that feature's controls, with an ``Empty`` spacer row between them. A
 category row carries no ``varName``, and most are text-only (no tooltip -- their ``_row`` is a
 label alone and ``_render`` emits no ``tooltip`` key); ``catBarPosition`` is the exception, and
-carries the Ctrl+drag prose for the two label-only steppers below it, exactly as the column-2
-"Layout" header does for its own pair.
+carries the Ctrl+drag prose for the label-only controls below it, exactly as the column-2
+"Layout" header does for its own pair. ``catBarPosition``'s own displayed LABEL is "Layout" as of
+v21 (the i18n KEY is unchanged -- a rename buys nothing positionally; see ``mod_settings``'s
+SETTINGS_VERSION 20->21 comment) -- column 1's "Layout" and column 2's "Layout" are two DIFFERENT
+categories with distinct keys that merely share a display name.
 Because the header names the feature, each feature's master checkbox is simply labelled
 "Enabled" (was "Show"). ``build()`` wraps every category header (plus the "Layout" header --
 see ``HEADER_KEYS``) in ``<b>...</b>``; ``mod_settings._label`` then only adds the matching
@@ -38,9 +47,11 @@ for why that matters). The ``positionSub`` ("Position") row that heads the two s
 deliberately excluded from ``HEADER_KEYS``, so the weight difference reads as hierarchy. An
 ``Empty`` row has no text at all, so ``COL1_KEYS`` / ``COL2_KEYS`` give it a ``None`` sentinel
 slot rather than a key -- see those tuples. A spacer also heads the standalone Mode / Scale
-radios, the "Transitions" and "Bar Position" categories, the hold-duration Slider itself
-(right after the Transitions group's two switch children -- column 1) and the "Position"
-sub-label (column 2), matching the existing category-separator spacers.
+radios, the "Transitions" and "Layout" (``catBarPosition``) categories, the hold-duration Slider
+itself (right after the Transitions group's two switch children -- column 1) and the "Position"
+sub-label (column 2), matching the existing category-separator spacers. The "Layout" category's
+own two new standalone radios (Orientation, Alignment) sit ABOVE its two X/Y steppers, both
+STANDALONE like every other control in that category.
 
 NOTE on terminology: the non-English blocks use each locale's natural wording for
 "widget", "Garage", "battle" and "Marks of Excellence". The official Marks-of-Excellence
@@ -110,16 +121,23 @@ VARIANT_KEY = u"progressVariant"
 # -- its own category header since the hold-duration slider joined the group, so the master reads
 # just "Enabled" like every other master under a header, and a FOURTH Empty spacer now heads the
 # UNGROUPED hold-duration Slider itself (right after the group's two switch children) -- and
-# finally a FIFTH Empty spacer and "Bar Position" (its header plus the two standalone X/Y steppers
-# that mirror the bar's Ctrl+drag). Column 2 is the "Garage Widget" category header, the garage
-# master, a spacer, then the "Layout" group (Follow Carousel, a spacer, the "Position" sub-label,
-# the X/Y steppers). Only two columns -- a third does not render in the panel at all.
+# finally a FIFTH Empty spacer and "Layout" (key catBarPosition, displayed text "Layout" as of
+# v21 -- its header, then the standalone Orientation and Alignment radios ABOVE the two standalone
+# X/Y steppers that mirror the bar's Ctrl+drag). Column 2 is the "Garage Widget" category header,
+# the garage master, a spacer, then the "Layout" group (Follow Carousel, a spacer, the "Position"
+# sub-label, the X/Y steppers). Only two columns -- a third does not render in the panel at all.
 #
 # EVERY control gets a slot, including the ones that carry no varName (the cat* headers) -- the zip
 # in _sync_template_text is POSITIONAL, so a missing key here pairs every LATER control with the
 # wrong text. A row with no text AT ALL (the Empty spacers) takes a `None` SENTINEL slot rather
 # than a key: the sync walk's `if not rendered: continue` then skips it for free, with no
 # type-sniffing branch and with the alignment intact.
+#
+# TWENTY-SIX slots (grew from 24 at v21): the two new radios ("progressOrientation",
+# "progressAlignment") were spliced in AFTER "catBarPosition" and BEFORE "barPosX" -- matching
+# mod_settings._template()'s wire order exactly (see that module's SETTINGS_VERSION 20->21
+# comment). Inserting mid-column (rather than appending) is safe here ONLY because a
+# SETTINGS_VERSION bump accompanies it -- see that module.
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
              None,
              u"catBattleProgress", u"progressBar",
@@ -132,7 +150,8 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None,
              u"progressHoldSeconds",
              None,
-             u"catBarPosition", u"barPosX", u"barPosY")
+             u"catBarPosition", u"progressOrientation", u"progressAlignment",
+             u"barPosX", u"barPosY")
 # Column 2: the category header, the standalone In-Garage Widget master, a spacer, then the
 # "Layout" group -- its bold header, Follow Carousel, a spacer, a non-bold "Position" sub-label,
 # then the X/Y numeric steppers (in that exact control order, so _sync_template_text walks it in
@@ -189,6 +208,43 @@ _SIZE_OPTIONS = {
     u"uk": (u"Стандартна", u"Велика"),
     u"hu": (u"Alapértelmezett", u"Nagy"),
     u"tr": (u"Varsayılan", u"Büyük"),
+}
+
+# The orientation radio's OPTION LABELS (v21), in wire (index) order: 0 = Horizontal (the shipped
+# axis, the default), 1 = Vertical. Same table shape, same whole-tuple fallback and the same
+# STRUCTURAL-to-MSA gotcha as _VARIANT_OPTIONS / _SIZE_OPTIONS above -- re-wording, reordering or
+# adding an option here reaches an EXISTING install only through a mod_settings.SETTINGS_VERSION
+# bump. Every language already has a plain "Horizontal"/"Vertical" adjective on hand (see
+# posX/posY/barPosX/barPosY's axis-hint labels below), reused verbatim here.
+_ORIENTATION_OPTIONS = {
+    u"en": (u"Horizontal", u"Vertical"),
+    u"de": (u"Horizontal", u"Vertikal"),
+    u"fr": (u"Horizontal", u"Vertical"),
+    u"es": (u"Horizontal", u"Vertical"),
+    u"it": (u"Orizzontale", u"Verticale"),
+    u"pl": (u"Pozioma", u"Pionowa"),
+    u"cs": (u"Vodorovná", u"Svislá"),
+    u"ru": (u"Горизонтальная", u"Вертикальная"),
+    u"uk": (u"Горизонтальна", u"Вертикальна"),
+    u"hu": (u"Vízszintes", u"Függőleges"),
+    u"tr": (u"Yatay", u"Dikey"),
+}
+
+# The alignment radio's OPTION LABELS (v21), in wire (index) order: 0 = Damage Log (the shipped
+# centred anchor, the default), 1 = Minimap, 2 = Free. Same table shape, same whole-tuple
+# fallback and the same STRUCTURAL-to-MSA gotcha as the three option tables above.
+_ALIGNMENT_OPTIONS = {
+    u"en": (u"Damage Log", u"Minimap", u"Free"),
+    u"de": (u"Schadensprotokoll", u"Minikarte", u"Frei"),
+    u"fr": (u"Journal des dégâts", u"Minicarte", u"Libre"),
+    u"es": (u"Registro de daños", u"Minimapa", u"Libre"),
+    u"it": (u"Registro danni", u"Minimappa", u"Libero"),
+    u"pl": (u"Dziennik obrażeń", u"Minimapa", u"Swobodne"),
+    u"cs": (u"Deník poškození", u"Minimapa", u"Volné"),
+    u"ru": (u"Журнал повреждений", u"Миникарта", u"Свободно"),
+    u"uk": (u"Журнал ушкоджень", u"Мінікарта", u"Вільно"),
+    u"hu": (u"Sérülésnapló", u"Minimap", u"Szabad"),
+    u"tr": (u"Hasar günlüğü", u"Minimap", u"Serbest"),
 }
 
 
@@ -258,6 +314,18 @@ _PANEL = {
             u"Scale", u"Bar scale",
             u"Default: the bar's normal size. Large: draws it bigger, for easier reading from "
             u"a distance."),
+        # The two v21 radios: which axis the bar draws on, and which anchor the position
+        # steppers below offset from. Both carry a tooltip, same reasoning as Mode/Scale above.
+        u"progressOrientation": _row(
+            u"Orientation", u"Bar orientation",
+            u"Horizontal is the bar's original layout. Vertical draws it standing upright, "
+            u"sized to sit beside the minimap. Takes effect the next time the bar comes up."),
+        u"progressAlignment": _row(
+            u"Alignment", u"Bar alignment",
+            u"Which anchor the position steppers below offset from. Damage Log: the bar's "
+            u"default centred spot. Minimap: pinned beside the minimap, matching the chosen "
+            u"orientation. Free: an unanchored position, set automatically once you drag the "
+            u"bar or edit a stepper."),
         # The Transitions CATEGORY header (its own category since the hold-duration slider joined
         # the group) + the master, its two children and the slider. The two children stay
         # label-only rows whose meaning the master's prose spells out (no tt* -> _render emits no
@@ -301,7 +369,7 @@ _PANEL = {
         # group's two switches. Labels deliberately mirror posX/posY's: the same two axes,
         # the same top-left reference corner, just a different widget. ---
         u"catBarPosition": _row(
-            u"Bar Position", u"In-battle bar position",
+            u"Layout", u"In-battle bar position",
             u"Hold Ctrl in battle and drag the bar to move it. The steppers below show where "
             u"it is pinned, in pixels from the top-left corner of the screen; 0 / 0 means the "
             u"default centred position. Use the per-mod Reset to return to default."),
@@ -339,6 +407,17 @@ _PANEL = {
             u"Skalierung", u"Leistengröße",
             u"Standard: die normale Größe der Leiste. Groß: zeigt sie größer an, für bessere "
             u"Lesbarkeit aus der Entfernung."),
+        u"progressOrientation": _row(
+            u"Ausrichtung", u"Leistenausrichtung",
+            u"Horizontal ist das ursprüngliche Layout der Leiste. Vertikal zeigt sie "
+            u"aufrecht stehend, passend zur Platzierung neben der Minikarte. Wird wirksam, "
+            u"sobald die Leiste das nächste Mal erscheint."),
+        u"progressAlignment": _row(
+            u"Verankerung", u"Verankerung der Leiste",
+            u"Von welchem Ankerpunkt aus die Positionsfelder unten wirken. Schadensprotokoll: "
+            u"die zentrierte Standardposition der Leiste. Minikarte: neben der Minikarte "
+            u"fixiert, passend zur gewählten Ausrichtung. Frei: eine unverankerte Position, "
+            u"automatisch gesetzt, sobald du die Leiste ziehst oder ein Feld änderst."),
         u"garageWidget": _row(
             u"Aktiviert", u"Garage-Widget",
             u"Zeigt die Marken-Prozentanzeige in der Garage beim ausgewählten Fahrzeug. "
@@ -399,7 +478,7 @@ _PANEL = {
             u"Abstand des fixierten Widgets vom oberen Bildschirmrand in Pixeln. 0 stellt "
             u"die automatische Position unten rechts wieder her."),
         u"catBarPosition": _row(
-            u"Leistenposition", u"Position der Leiste im Gefecht",
+            u"Layout", u"Position der Leiste im Gefecht",
             u"Halte im Gefecht Strg gedrückt und ziehe die Leiste, um sie zu verschieben. Die "
             u"Felder unten zeigen ihre fixierte Position in Pixeln von der oberen linken "
             u"Bildschirmecke; 0 / 0 bedeutet die zentrierte Standardposition. Nutze das "
@@ -439,6 +518,18 @@ _PANEL = {
             u"Échelle", u"Taille de la barre",
             u"Par défaut : taille normale de la barre. Grande : l'affiche plus grande, pour une "
             u"meilleure lisibilité à distance."),
+        u"progressOrientation": _row(
+            u"Orientation", u"Orientation de la barre",
+            u"Horizontal est la disposition d'origine de la barre. Vertical l'affiche debout, "
+            u"dimensionnée pour se placer à côté de la minicarte. Prend effet la prochaine "
+            u"fois que la barre apparaît."),
+        u"progressAlignment": _row(
+            u"Alignement", u"Alignement de la barre",
+            u"Depuis quel point d'ancrage les compteurs de position ci-dessous se décalent. "
+            u"Journal des dégâts : la position centrée par défaut de la barre. Minicarte : "
+            u"épinglée à côté de la minicarte, selon l'orientation choisie. Libre : une "
+            u"position non ancrée, définie automatiquement dès que vous faites glisser la "
+            u"barre ou modifiez un compteur."),
         u"garageWidget": _row(
             u"Activé", u"Widget du garage",
             u"Affiche la barre de centile des marques d'excellence dans le garage, sur le "
@@ -501,7 +592,7 @@ _PANEL = {
             u"Distance du widget épinglé par rapport au bord supérieur de l'écran, en "
             u"pixels. 0 rétablit la position automatique en bas à droite."),
         u"catBarPosition": _row(
-            u"Position de la barre", u"Position de la barre en bataille",
+            u"Disposition", u"Position de la barre en bataille",
             u"En bataille, maintenez Ctrl et faites glisser la barre pour la déplacer. Les "
             u"compteurs ci-dessous indiquent sa position épinglée, en pixels depuis le coin "
             u"supérieur gauche de l'écran ; 0 / 0 correspond à la position centrée par défaut. "
@@ -540,6 +631,17 @@ _PANEL = {
             u"Escala", u"Tamaño de la barra",
             u"Predeterminada: el tamaño normal de la barra. Grande: la muestra más grande, para "
             u"facilitar la lectura a distancia."),
+        u"progressOrientation": _row(
+            u"Orientación", u"Orientación de la barra",
+            u"Horizontal es la disposición original de la barra. Vertical la muestra de pie, "
+            u"dimensionada para colocarse junto al minimapa. Se aplica la próxima vez que "
+            u"aparezca la barra."),
+        u"progressAlignment": _row(
+            u"Alineación", u"Alineación de la barra",
+            u"Desde qué punto de anclaje se desplazan los contadores de posición de abajo. "
+            u"Registro de daños: la posición centrada predeterminada de la barra. Minimapa: "
+            u"fijada junto al minimapa, según la orientación elegida. Libre: una posición sin "
+            u"anclar, establecida automáticamente al arrastrar la barra o editar un contador."),
         u"garageWidget": _row(
             u"Activado", u"Widget del garaje",
             u"Muestra la barra de percentil de las marcas de excelencia en el garaje, en "
@@ -601,7 +703,7 @@ _PANEL = {
             u"Distancia del widget fijado al borde superior de la pantalla, en píxeles. 0 "
             u"restaura la posición automática en la esquina inferior derecha."),
         u"catBarPosition": _row(
-            u"Posición de la barra", u"Posición de la barra en combate",
+            u"Disposición", u"Posición de la barra en combate",
             u"En combate, mantén pulsado Ctrl y arrastra la barra para moverla. Los contadores "
             u"de abajo muestran su posición fijada, en píxeles desde la esquina superior "
             u"izquierda de la pantalla; 0 / 0 es la posición centrada predeterminada. Usa el "
@@ -641,6 +743,18 @@ _PANEL = {
             u"Scala", u"Dimensione della barra",
             u"Predefinita: la dimensione normale della barra. Grande: la mostra più grande, per "
             u"una lettura più facile a distanza."),
+        u"progressOrientation": _row(
+            u"Orientamento", u"Orientamento della barra",
+            u"Orizzontale è la disposizione originale della barra. Verticale la mostra in "
+            u"piedi, dimensionata per stare accanto alla minimappa. Ha effetto la prossima "
+            u"volta che la barra appare."),
+        u"progressAlignment": _row(
+            u"Allineamento", u"Allineamento della barra",
+            u"Da quale punto di ancoraggio partono i contatori di posizione sotto. Registro "
+            u"danni: la posizione centrata predefinita della barra. Minimappa: fissata accanto "
+            u"alla minimappa, secondo l'orientamento scelto. Libero: una posizione non "
+            u"ancorata, impostata automaticamente trascinando la barra o modificando un "
+            u"contatore."),
         u"garageWidget": _row(
             u"Abilitato", u"Widget del garage",
             u"Mostra la barra di percentile dei marchi di merito nel garage, sul veicolo "
@@ -703,7 +817,7 @@ _PANEL = {
             u"Distanza del widget fissato dal bordo superiore dello schermo, in pixel. 0 "
             u"ripristina la posizione automatica in basso a destra."),
         u"catBarPosition": _row(
-            u"Posizione della barra", u"Posizione della barra in battaglia",
+            u"Disposizione", u"Posizione della barra in battaglia",
             u"In battaglia, tieni premuto Ctrl e trascina la barra per spostarla. I contatori "
             u"sotto mostrano la sua posizione fissata, in pixel dall'angolo in alto a sinistra "
             u"dello schermo; 0 / 0 indica la posizione centrata predefinita. Usa il ripristino "
@@ -743,6 +857,18 @@ _PANEL = {
             u"Skala", u"Rozmiar paska",
             u"Domyślny: normalny rozmiar paska. Duży: pokazuje go większym, dla łatwiejszego "
             u"odczytu z odległości."),
+        u"progressOrientation": _row(
+            u"Orientacja", u"Orientacja paska",
+            u"Pozioma to pierwotny układ paska. Pionowa pokazuje go w pozycji stojącej, "
+            u"dopasowanego rozmiarem do miejsca obok minimapy. Zaczyna działać przy "
+            u"następnym pojawieniu się paska."),
+        u"progressAlignment": _row(
+            u"Zakotwiczenie", u"Zakotwiczenie paska",
+            u"Od którego punktu odniesienia liczą się liczniki pozycji poniżej. Dziennik "
+            u"obrażeń: domyślna wyśrodkowana pozycja paska. Minimapa: przypięty obok "
+            u"minimapy, zgodnie z wybraną orientacją. Swobodne: pozycja bez punktu "
+            u"odniesienia, ustawiana automatycznie po przeciągnięciu paska lub edycji "
+            u"licznika."),
         u"garageWidget": _row(
             u"Włączone", u"Widżet w garażu",
             u"Pokazuje pasek percentyla znaków doskonałości w garażu, na wybranym "
@@ -803,7 +929,7 @@ _PANEL = {
             u"Odległość przypiętego widżetu od górnej krawędzi ekranu, w pikselach. 0 "
             u"przywraca automatyczną pozycję w prawym dolnym rogu."),
         u"catBarPosition": _row(
-            u"Pozycja paska", u"Pozycja paska w bitwie",
+            u"Układ", u"Pozycja paska w bitwie",
             u"W bitwie przytrzymaj Ctrl i przeciągnij pasek, aby go przesunąć. Liczniki "
             u"poniżej pokazują jego przypiętą pozycję w pikselach od lewego górnego rogu "
             u"ekranu; 0 / 0 oznacza domyślną pozycję na środku. Użyj resetu moda, aby wrócić "
@@ -841,6 +967,16 @@ _PANEL = {
             u"Měřítko", u"Velikost lišty",
             u"Výchozí: běžná velikost lišty. Velká: zobrazí ji větší, pro snazší čtení z "
             u"dálky."),
+        u"progressOrientation": _row(
+            u"Orientace", u"Orientace lišty",
+            u"Vodorovná je původní rozvržení lišty. Svislá ji zobrazí na výšku, s rozměry "
+            u"pro umístění vedle minimapy. Projeví se při příštím zobrazení lišty."),
+        u"progressAlignment": _row(
+            u"Ukotvení", u"Ukotvení lišty",
+            u"Od kterého ukotvení se počítají čítače pozice níže. Deník poškození: výchozí "
+            u"vystředěná pozice lišty. Minimapa: ukotvena vedle minimapy, podle zvolené "
+            u"orientace. Volné: neukotvená pozice, nastavená automaticky po přetažení lišty "
+            u"nebo úpravě čítače."),
         u"garageWidget": _row(
             u"Povoleno", u"Widget v garáži",
             u"Zobrazuje percentilovou lištu znaků cti v garáži u vybraného vozidla. "
@@ -897,7 +1033,7 @@ _PANEL = {
             u"Vzdálenost ukotveného widgetu od horního okraje obrazovky v pixelech. 0 "
             u"obnoví automatickou pozici vpravo dole."),
         u"catBarPosition": _row(
-            u"Pozice lišty", u"Pozice lišty v bitvě",
+            u"Rozvržení", u"Pozice lišty v bitvě",
             u"V bitvě podrž Ctrl a tažením lištu přesuneš. Čítače níže ukazují její ukotvenou "
             u"pozici v pixelech od levého horního rohu obrazovky; 0 / 0 znamená výchozí pozici "
             u"uprostřed. Pro návrat na výchozí hodnotu použij reset modu."),
@@ -936,6 +1072,18 @@ _PANEL = {
             u"Масштаб", u"Масштаб полосы",
             u"Стандартная: обычный размер полосы. Большая: показывает её крупнее, для удобного "
             u"чтения на расстоянии."),
+        u"progressOrientation": _row(
+            u"Ориентация", u"Ориентация полосы",
+            u"Горизонтальная -- исходное расположение полосы. Вертикальная показывает её "
+            u"стоящей, с размерами для размещения рядом с миникартой. Вступает в силу при "
+            u"следующем появлении полосы."),
+        u"progressAlignment": _row(
+            u"Привязка", u"Привязка полосы",
+            u"От какой точки отсчитываются счётчики позиции ниже. Журнал повреждений: "
+            u"стандартная позиция полосы по центру. Миникарта: закреплена рядом с "
+            u"миникартой, в соответствии с выбранной ориентацией. Свободно: позиция без "
+            u"привязки, задаётся автоматически при перетаскивании полосы или изменении "
+            u"счётчика."),
         u"garageWidget": _row(
             u"Включено", u"Виджет в ангаре",
             u"Показывает полосу процентиля отметок классности в ангаре на выбранной "
@@ -995,7 +1143,7 @@ _PANEL = {
             u"Расстояние закреплённого виджета от верхнего края экрана в пикселях. 0 "
             u"восстанавливает автоматическую позицию в правом нижнем углу."),
         u"catBarPosition": _row(
-            u"Позиция полосы", u"Позиция полосы в бою",
+            u"Расположение", u"Позиция полосы в бою",
             u"В бою удерживайте Ctrl и перетащите полосу, чтобы переместить её. Счётчики ниже "
             u"показывают её закреплённую позицию в пикселях от верхнего левого угла экрана; 0 "
             u"/ 0 означает стандартную позицию по центру. Используйте сброс мода, чтобы "
@@ -1034,6 +1182,17 @@ _PANEL = {
             u"Масштаб", u"Масштаб смуги",
             u"Стандартна: звичайний розмір смуги. Велика: показує її більшою, для зручного "
             u"читання на відстані."),
+        u"progressOrientation": _row(
+            u"Орієнтація", u"Орієнтація смуги",
+            u"Горизонтальна -- початкове розташування смуги. Вертикальна показує її "
+            u"вертикально, з розміром для розміщення поруч із мінікартою. Набуває чинності "
+            u"під час наступної появи смуги."),
+        u"progressAlignment": _row(
+            u"Прив'язка", u"Прив'язка смуги",
+            u"Від якої точки відраховуються лічильники позиції нижче. Журнал ушкоджень: "
+            u"стандартна позиція смуги по центру. Мінікарта: закріплена поруч із мінікартою, "
+            u"відповідно до обраної орієнтації. Вільно: позиція без прив'язки, "
+            u"встановлюється автоматично після перетягування смуги чи зміни лічильника."),
         u"garageWidget": _row(
             u"Увімкнено", u"Віджет в ангарі",
             u"Показує смугу процентиля позначок класності в ангарі на вибраній машині. "
@@ -1093,7 +1252,7 @@ _PANEL = {
             u"Відстань закріпленого віджета від верхнього краю екрана в пікселях. 0 "
             u"відновлює автоматичну позицію в правому нижньому куті."),
         u"catBarPosition": _row(
-            u"Позиція смуги", u"Позиція смуги в бою",
+            u"Розташування", u"Позиція смуги в бою",
             u"У бою утримуйте Ctrl і перетягніть смугу, щоб перемістити її. Лічильники нижче "
             u"показують її закріплену позицію в пікселях від верхнього лівого кута екрана; 0 / "
             u"0 означає стандартну позицію по центру. Використайте скидання мода, щоб "
@@ -1132,6 +1291,17 @@ _PANEL = {
             u"Méretezés", u"Sáv mérete",
             u"Alapértelmezett: a sáv normál mérete. Nagy: nagyobb méretben jeleníti meg, hogy "
             u"távolról is könnyebb legyen olvasni."),
+        u"progressOrientation": _row(
+            u"Tájolás", u"Sáv tájolása",
+            u"A Vízszintes a sáv eredeti elrendezése. A Függőleges állva jeleníti meg, a "
+            u"kistérkép mellé illő mérettel. A sáv következő megjelenésekor lép életbe."),
+        u"progressAlignment": _row(
+            u"Igazítás", u"Sáv igazítása",
+            u"Melyik horgonyponthoz képest tolódnak el az alábbi pozíció-számlálók. "
+            u"Sérülésnapló: a sáv alapértelmezett, középre igazított helye. Minimap: a "
+            u"kistérkép mellé rögzítve, a választott tájolásnak megfelelően. Szabad: nem "
+            u"rögzített pozíció, automatikusan beáll, amint elhúzod a sávot vagy módosítasz "
+            u"egy számlálót."),
         u"garageWidget": _row(
             u"Engedélyezve", u"Garázs-widget",
             u"Megjeleníti a kiválósági jelek percentilis sávját a garázsban, a "
@@ -1189,7 +1359,7 @@ _PANEL = {
             u"A rögzített widget távolsága a képernyő felső szélétől, pixelben. A 0 "
             u"visszaállítja az automatikus jobb alsó pozíciót."),
         u"catBarPosition": _row(
-            u"Sáv pozíciója", u"Csatasáv pozíciója",
+            u"Elrendezés", u"Csatasáv pozíciója",
             u"Csatában tartsd nyomva a Ctrlt, és húzd a sávot a mozgatáshoz. Az alábbi "
             u"számlálók a rögzített pozíciót mutatják pixelben a képernyő bal felső sarkától; "
             u"a 0 / 0 az alapértelmezett középső pozíciót jelenti. Az alapértelmezéshez való "
@@ -1227,6 +1397,16 @@ _PANEL = {
             u"Ölçek", u"Çubuk boyutu",
             u"Varsayılan: çubuğun normal boyutu. Büyük: uzaktan daha kolay okumak için daha "
             u"büyük gösterir."),
+        u"progressOrientation": _row(
+            u"Yönelim", u"Çubuk yönelimi",
+            u"Yatay, çubuğun özgün düzenidir. Dikey, minimap'in yanına oturacak boyutta, "
+            u"onu ayakta gösterir. Çubuğun bir sonraki görünüşünde etkili olur."),
+        u"progressAlignment": _row(
+            u"Hizalama", u"Çubuk hizalaması",
+            u"Aşağıdaki konum sayaçlarının hangi çıpa noktasına göre kaydığı. Hasar günlüğü: "
+            u"çubuğun varsayılan ortalanmış konumu. Minimap: seçilen yönelime uygun şekilde "
+            u"minimap'in yanına sabitlenmiş. Serbest: sürüklendiğinde veya bir sayaç "
+            u"düzenlendiğinde otomatik olarak ayarlanan, çıpasız bir konum."),
         u"garageWidget": _row(
             u"Etkin", u"Garaj widget'ı",
             u"Seçili araçta, garajda üstünlük işaretleri yüzdelik çubuğunu gösterir. "
@@ -1286,7 +1466,7 @@ _PANEL = {
             u"Sabitlenmiş widget'ın ekranın üst kenarına uzaklığı, piksel cinsinden. 0, "
             u"otomatik sağ alt konumu geri yükler."),
         u"catBarPosition": _row(
-            u"Çubuk konumu", u"Savaştaki çubuk konumu",
+            u"Yerleşim", u"Savaştaki çubuk konumu",
             u"Savaşta Ctrl'yi basılı tut ve çubuğu taşımak için sürükle. Aşağıdaki sayaçlar "
             u"sabitlenmiş konumu ekranın sol üst köşesinden piksel cinsinden gösterir; 0 / 0 "
             u"varsayılan ortalanmış konumu ifade eder. Varsayılana dönmek için modun "
@@ -1343,13 +1523,13 @@ def _options(table, code):
 
 def build(lang):
     """The rendered panel text for ``lang``: ``{key: {"text", "tooltip"}}`` (PURE), plus an
-    ``"options"`` tuple on each of the two option-bearing controls (``VARIANT_KEY`` and
-    ``"progressSize"``).
+    ``"options"`` tuple on each of the FOUR option-bearing controls (``VARIANT_KEY``,
+    ``"progressSize"``, ``"progressOrientation"`` and ``"progressAlignment"``).
 
     A key the language didn't translate is rendered from English and marked (when
     ``i18n.MARK_UNTRANSLATED`` is on) so English leaks are spottable in-client.
 
-    The five ``HEADER_KEYS`` come out wrapped in ``<b>...</b>`` (MSA Labels render HTML).
+    The six ``HEADER_KEYS`` come out wrapped in ``<b>...</b>`` (MSA Labels render HTML).
     The wrap happens HERE and ONLY here -- never in the ``_PANEL`` tables (translation data
     stays markup-free) and never in ``mod_settings._template()`` -- and AFTER the fallback
     mark, so a marked fallback stays visible inside it. Both consumers of this function must
@@ -1368,11 +1548,20 @@ def build(lang):
         out[k] = _render(tbl.get(k, en_entry), mark=not translated)
     for k in HEADER_KEYS:
         out[k][u"text"] = u"<b>%s</b>" % out[k][u"text"]
-    # Both radios have a normal _PANEL row (their "Mode" / "Scale" labels), so all build() adds is
-    # the option tuple -- and it rides on the RENDERED entry (where mod_settings._radio reads it)
-    # rather than in _PANEL, so the positional COL*_KEYS partition stays label/tooltip-only.
+    # All four radios have a normal _PANEL row (their "Mode" / "Scale" / "Orientation" /
+    # "Alignment" labels), so all build() adds is the option tuple -- and it rides on the
+    # RENDERED entry (where mod_settings._radio reads it) rather than in _PANEL, so the
+    # positional COL*_KEYS partition stays label/tooltip-only.
+    #
+    # NOTE these option-label tuples are STRUCTURAL to MSA (see the tables' own comments above):
+    # Aslain folds them into its _settingsStructure signature and _sync_template_text never
+    # rewrites options[].label, so reordering one later is a SILENT VALUE MIGRATION that nothing
+    # raises on -- a stored option INDEX suddenly names a different option. Get the order right
+    # once; a SETTINGS_VERSION bump is the only way to fix it after the fact.
     out[VARIANT_KEY][u"options"] = _options(_VARIANT_OPTIONS, code)
     out[u"progressSize"][u"options"] = _options(_SIZE_OPTIONS, code)
+    out[u"progressOrientation"][u"options"] = _options(_ORIENTATION_OPTIONS, code)
+    out[u"progressAlignment"][u"options"] = _options(_ALIGNMENT_OPTIONS, code)
     return out
 
 

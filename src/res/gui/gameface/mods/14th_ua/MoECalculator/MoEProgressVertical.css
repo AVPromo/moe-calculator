@@ -1,0 +1,421 @@
+/* MoEProgressVertical.css -- VERTICAL variant of the in-battle MoE progress bar (class prefix
+   .mpv-, never .mp-). Tuned in the browser (tools/dev/gen_bar_tuner_vertical.ps1 -EmitCss, which
+   writes TASKS/refs/MoEProgressVertical.css) and ported from that emit; the battle window has no
+   hot-reload. Position comes from Python (window.move()), NOT from CSS -- the tuner's own
+   minimap-relative placement preview never reaches this file. Font: the bundled MoEBattle numeric
+   subset, 19 glyphs (digits % ( ) + - , . / space) -- NO LETTERS. It is NOT re-declared here:
+   MoEProgress.css is <link>ed in the SAME document and carries the @font-face.
+   Axis: 0% at the BOTTOM, 100% at the TOP -- the fill grows bottom->top (height, not width), and
+   every marker positions with bottom:<pct> + translateY(+50%), not the horizontal bar's -50%: a
+   bottom-anchored box must shift back DOWN by half its own length to land on its point.
+
+   THIS SHEET IS LOADED ALONGSIDE MoEProgress.css, NOT INSTEAD OF IT (MoEProgressView.html links
+   both; orientation is a MOUNT-TIME branch in MoEProgress.js, not a second res_map layout -- a new
+   itemID would cost every user a one-time client restart). The two sheets are namespace-DISJOINT by
+   construction (.mp-* vs .mpv-*), so nothing below can collide with a horizontal rule except the
+   THREE shared subjects -- `body`, `#moe-bar-box` and `#moe-bar-root` -- and those are the only
+   selectors here that carry the `body.mpv` scope. `mpv` goes on the BODY (MoEBarTransient's
+   goVertical), because #moe-bar-box is a body-level SIBLING of the JS-created root and a class on
+   the root could never reach it; `body.mpv ...` is also (1,1,1) so it out-specifies the horizontal
+   sheet's own `.mp-lg #moe-bar-root` (1,1,0) outright rather than winning on source order.
+
+   THE SHIPPED FILE IS THE EMIT PLUS SIX DELIBERATE HAND-EDITS -- never copy an -EmitCss output
+   over it (the repo lesson `emitcss-is-not-the-whole-shipped-stylesheet`; MoEProgress.css carries
+   the same warning for its own four). Each one is marked HAND-EDIT n/6 at its site:
+     1  the root rule: the tuner stage's `position: relative` becomes the shipped
+        `position: absolute; left: 0; top: 0` + z-index/pointer-events, and the selector is scoped.
+     2  #moe-bar-box, the sizing shim -- not emitted at all (the tuner has no surface).
+     3  the dash grid's GAP STRIPE goes OPAQUE (alpha 1), where the tuner's `gapA` default is 0.5.
+     4  `.mpv-lg` becomes `.mp-lg` -- the body class MoEBarTransient.applySize actually writes.
+     5  the two Large rules whose subject is #moe-bar-root / #moe-bar-box are scoped `body.mpv.mp-lg`.
+     6  .mpv-capR's inter-group gap (the tuner's own `.mpv-eta` margin-left) is retargeted to
+        `.mpv-v` -- a SHIPPED-ONLY reorder, not a tuner retune: MoEProgress.js's V_MARKUP swaps
+        capR's two numeral+icon groups (eta+battles leads, requirement+mark trails), so the same
+        4rem/5.333rem gap now has to sit before the OTHER numeral. The tuner's own capR markup is
+        untouched.
+   Anything else diverging from a fresh emit is drift, not intent. */
+
+/* HAND-EDIT 1/6. Emitted as a bare `#moe-bar-root { position: relative; ... }` -- the tuner stage
+   flows the bar inside an .mpv-anchor wrapper, whereas the shipped bar IS the document: absolute at
+   the origin (MoEBarTransient's mount then writes the rigid left/top shift into the surface),
+   z-index above the HUD, and pointer-events:none because this bar is pure info and must never be an
+   input target. The tuner emits none of those three. width/height/font/text-align/opacity are the
+   emit verbatim: 3rem of track cross-section, 200rem of axis. */
+body.mpv #moe-bar-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3rem;
+  height: 200rem;
+  z-index: 9000;
+  pointer-events: none;
+  font-family: "MoEBattle", "Arial Narrow", sans-serif;
+  text-align: center;
+  opacity: 0;
+}
+/* HAND-EDIT 2/6 -- THE SIZING SHIM, the vertical twin of MoEProgress.css's own. #moe-bar-root is
+   position:absolute and contributes ZERO content size, so #moe-bar-box (declared in
+   MoEProgressView.html, NOT JS-created -- it must exist at the FIRST layout pass) is what gives the
+   document in-flow content. IT DOES NOT STOP THE ENGINE'S SIZE TIMEOUT -- that was re-measured live
+   on the horizontal bar and disproven; MoEBarTransient's post-deadline SURFACE_REASSERT_MS is the
+   only fix. The box is kept because it is the honest description of the document's size, and the
+   horizontal sheet's 380x92 is the WRONG WAY ROUND for this composition.
+   198 x 320 MIRRORS the vertical surface MoEProgress.js pushes -- width V_BOX_W_REM + 2*V_PAD_X_REM
+   == 72+126, height V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM == 360+20-60, the same
+   mirrored-constant contract as the JS's vertical shiftY <-> Python's
+   domain/constants.VERTICAL_ANCHOR_Y_SHIFT: change one, change all three.
+   THE X PAD IS 63rem, NOT PAD_REM's 10, and it applies to BOTH sides (read V_PAD_X_REM's note in
+   MoEProgress.js): the three captions are right-anchored and grow LEFTWARD past .mpv-backdrop by
+   design, so the SURFACE has to reach out to their ink while the backdrop deliberately does not --
+   and it is mirrored onto the unused right side because the centred alignment centres the SURFACE.
+   Do NOT "restore the symmetry" by moving .mpv-backdrop, and do NOT trim the right side.
+   THE HEIGHT IS 60rem SHORT OF THE COMPOSITION ON PURPOSE, and that is the surface's own doing, not
+   this rule's: the surface CLIPS .mpv-backdrop's lower bleed so the engine's screen clamp can bring
+   the bar's track down to the tuner's 30-logical-px gap off the screen bottom (read
+   MoEProgress.js's V_CLIP_B_REM note -- it carries the whole derivation). This rule only keeps
+   describing whatever the surface actually is. It stays a plain rem box either way, so it cannot
+   reflow the composition when the surface shrinks past it. */
+body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
+.mpv-backdrop {
+  position: absolute;
+  left: -34rem;
+  top: -80rem;
+  width: 72rem;
+  height: 360rem;
+  z-index: 0;
+}
+.mpv-backdrop::before {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background: url(checker.png) repeat;
+  background-size: auto;
+  background-position: 0px 0px;
+  image-rendering: pixelated;
+  opacity: 0.1;
+  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+}
+.mpv-backdrop::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: -1;
+  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+.mpv-track {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.45);
+}
+/* Garage dash grid, rotated (0deg == "to top", so the first stop sits at the BOTTOM edge).
+   background-size: 100% <period>rem tiles the gradient from a single period-sized tile instead of
+   rasterizing it once across the whole track length -- without it the dash ink smeared over ~4
+   device px instead of a crisp 2 (the sibling MoEEfficiencyVertical.css carries the identical fix,
+   and used to have the identical defect before today). The period is still a Y-length the root
+   font already scales via SIZE_F, which is why the .mp-lg block below declares no twin for it.
+   HAND-EDIT 3/6: THE GAP STRIPE IS ALPHA 1, where the tuner's `gapA` default is 0.5 (inherited from
+   the horizontal tuner's). The garage look this clones is a MASK over the solid fill
+   (`garage-progress-bar-fill-is-a-mask`): at 0.5 the fill shows through and the grid reads as a
+   tint, so a gap looks lighter on the filled side of the edge than on the empty side. The shipped
+   horizontal bar already carries the identical rewrite (MoEProgress.css:152, `rgb(13,14,16)`).
+   THE RING KEEPS 0.5 -- it is a separate knob (bdrCol/bdrA), it sits OUTSIDE the fill, and it
+   matches the garage's. Do not "fix" it to match. */
+.mpv-track::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: 1;
+  background-image: repeating-linear-gradient(0deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2rem,rgba(13,14,16,1) 2rem,rgba(13,14,16,1) 3rem);
+  background-size: 100% 3rem;
+  box-shadow: 0 0 0 1rem rgba(13,14,16,0.5);
+}
+.mpv-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 0;
+  background: rgba(237,230,217,0.8);
+  transition: height 600ms cubic-bezier(.2,.8,.2,1) 600ms;
+}
+.mpv-fill.mpv-up   { background: rgba(123,236,55,0.8); }
+.mpv-fill.mpv-down { background: rgba(211,68,63,0.8); }
+.mpv-tick {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+}
+.mpv-tick.mpv-end {
+  background: rgba(237,230,217,0.8);
+  width: 9rem;
+  height: 2rem;
+  transform: translate(-50%, 50%) translateX(0rem);
+}
+.mpv-tick.mpv-bottom { bottom: 0; }
+.mpv-tick.mpv-top    { bottom: 100%; }
+.mpv-tick.mpv-pre {
+  background: rgba(237,230,217,0.75);
+  width: 9rem;
+  height: 2rem;
+  transform: translate(-50%, 50%) translateX(0rem);
+}
+.mpv-tick.mpv-proj  {
+  background: rgba(255,255,255,1);
+  box-shadow: 0 0 6rem rgba(255,255,255,0.5),0 0 2rem rgba(255,255,255,0.5);
+  width: 9rem;
+  height: 2rem;
+  transform: translate(-50%, 50%) translateX(0rem);
+  transition: bottom 600ms cubic-bezier(.2,.8,.2,1) 600ms;
+}
+.mpv-tick.mpv-proj.mpv-up   { box-shadow: 0 0 6rem rgba(123,236,55,0.9),0 0 2rem rgba(123,236,55,0.9); }
+.mpv-tick.mpv-proj.mpv-down { box-shadow: 0 0 6rem rgba(211,68,63,0.9),0 0 2rem rgba(211,68,63,0.9); }
+/* FIXED-ANCHOR captions, digit-count-independent (bug fix, mirrors
+   eff_bar_tuner_vertical.html's shipped fix for the same defect): a shrink-wrapped box
+   centred via left:50%+translateX(-50%) never gives any child a truly fixed screen position
+   (both its edges move as content width changes), so all THREE captions now share ONE fixed
+   right edge -- right:100%+left:auto, pinned to the track's own left edge -- clear of the
+   tick's outer-edge overhang via the shared padding-right below. Numeral-then-icon DOM order
+   means each caption's icon is the LAST in-flow child, so it sits flush against that fixed
+   edge and is provably invariant to digit count. Only the numeral (and capC's delta, hanging
+   off ITS left edge) grows/shrinks LEFTWARD, away from the anchor. capP is also the ONLY one
+   that moves, tracking the pre tick's `bottom` -- and like that tick it never animates within
+   one replay, so no transition is declared.
+   DO NOT "OPTICALLY CENTRE" THE ABOVE/BELOW CAPTIONS. Because they are right-anchored and grow
+   leftward, they read right-aligned against that line rather than centred over the track, and
+   their apparent gap from the track's centreline varies with digit count even though the anchor
+   never moves. Centring them needs a WIDTH-SCALED term -- which IS the bug this replaced. A
+   non-zero residual nudge is fine; a nudge whose value is a function of the caption's own content
+   width is the defect. */
+.mpv-cap {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+  z-index: 3;
+  right: 100%;
+  left: auto;
+}
+/* Gameface drops margin on the bottom/right ANCHORED side (gameface-drops-margin-on-the-
+   anchored-side) -- padding on the bottom/right anchored sides; margin works as written on
+   capC's top:100% anchor. padding-right (shared by all three captions) also carries the
+   tick's outer-edge overhang (see the anchor comment above), so it clears the tick, not just
+   the track. */
+.mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;
+            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }
+.mpv-capC { top: 100%; margin-top: 6rem; padding-right: 6rem;
+            transform: translateX(16rem); font-size: 16rem; line-height: 20.5rem; }
+.mpv-capP { padding-right: 6rem; transform: translateY(50%) translateX(0rem);
+            font-size: 14rem; line-height: 18rem; }
+/* Icon follows its numeral (DOM order: numeral, then icon) -- gap on the icon's LEFT. */
+.mpv-cap .mpv-ico { margin-left: 1rem; }
+.mpv-cap .mpv-v,
+.mpv-cap .mpv-eta,
+.mpv-cap .mpv-d {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0em;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5);
+}
+/* Delta is an IN-FLOW flex child, ordered FIRST (delta, numeral, icon) -- an ordinary
+   margin-right gap, not an out-of-flow box hanging off a content-dependent edge (the exact
+   mechanism of the digit-count bug this fixes). */
+.mpv-cap .mpv-d {
+  margin-right: 0.35em;
+  font-size: 12rem;
+  transform: translateY(1.5rem);
+  line-height: 15.5rem;
+  opacity: 0;
+  transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
+}
+.mpv-v.mpv-up,
+.mpv-d-num.mpv-up,
+.mpv-eta.mpv-up {
+  color: #ffffff;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(123,236,55,0.9),
+               0rem 0rem 1rem rgba(123,236,55,0.9);
+}
+.mpv-v.mpv-down,
+.mpv-d-num.mpv-down,
+.mpv-eta.mpv-down {
+  color: #ffffff;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(211,68,63,0.9),
+               0rem 0rem 1rem rgba(211,68,63,0.9);
+}
+.mpv-ico {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 13rem;
+  height: 13rem;
+  transform: translate(0rem, 0rem);
+}
+.mpv-capP .mpv-ico { transform: translate(0rem, 0rem); }
+.mpv-capC .mpv-ico { transform: translate(0rem, 1rem); }
+.mpv-capR .mpv-ico { transform: translate(0rem, 0.5rem); }
+.mpv-capR .mpv-v,
+.mpv-capR .mpv-eta { transform: translateY(-0.5rem); }
+.mpv-capC .mpv-v { transform: translateY(-0.5rem); }
+.mpv-capP .mpv-v { transform: translateY(-0.5rem); }
+.mpv-ico::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 106%;
+  height: 106%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+.mpv-capR .mpv-ico::before {
+  background: radial-gradient(circle at 50% 50%, rgba(26,26,26,0.5) 0%, transparent 73%);
+}
+.mpv-ico::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.mpv-ico.dmgp { width: 14rem; height: 14rem; }
+.mpv-ico.dmgc { width: 16rem; height: 16rem; }
+.mpv-ico.dmgp::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png);
+  background-size: 228.7%;
+  filter: brightness(3);
+}
+.mpv-ico.dmgc::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_damage.png);
+  background-size: 342.5%;
+  filter: brightness(3);
+}
+.mpv-ico.moe { width: 17rem; height: 17rem; }
+.mpv-ico.moe::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_top.png);
+  background-size: 274.7%;
+  filter: brightness(3);
+}
+.mpv-ico.mk { width: 17rem; height: 17rem; }
+.mpv-ico.mk::after { background-size: contain; }
+.mpv-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
+.mpv-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
+.mpv-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
+/* etaGap is the gap BETWEEN the two numeral+icon pairs (battles-icon -> requirement-numeral, DOM
+   order per V_MARKUP: eta-numeral, battles-icon, requirement-numeral, mark-icon); the mark icon
+   itself keeps only the plain uniform icoGap after its own requirement numeral.
+   HAND-EDIT 6/6: the tuner's own emit puts this margin-left on `.mpv-eta` (its capR still has the
+   requirement group first); the shipped file's capR groups are swapped, so the gap moves to
+   `.mpv-v`, the new leading child of the group it sits before.
+   SOURCE ORDER IS LOAD-BEARING for the ::before pair below: `.mpv-capR .mpv-ico::before` (above)
+   and `.mpv-ico.battles::before` are BOTH (0,2,1), so only their order decides which glow the
+   battles glyph gets -- moving either one silently reverts it to capR's dark glow with no test
+   signal (`equal-specificity-before-rules-resolved-by-source-order`). */
+.mpv-capR .mpv-v { margin-left: 4rem; }
+.mpv-ico.battles::before {
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+.mpv-ico.battles::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_battles.png);
+  background-size: 331.0%;
+  filter: brightness(3);
+}
+.mpv-ico.none { display: none; }
+#moe-bar-root.mpv-full .mpv-track,
+#moe-bar-root.mpv-full .mpv-fill,
+#moe-bar-root.mpv-full .mpv-tick {
+  box-shadow: 0 0 8rem rgba(255,205,90,0.5);
+}
+#moe-bar-root.mpv-full .mpv-fill {
+  background: rgba(255,205,90,0.8);
+}
+#moe-bar-root.mpv-full .mpv-v {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0 0 8rem rgba(255,205,90,0.5),
+               0 0 2rem rgba(255,205,90,0.5);
+}
+@keyframes mpv-life {
+    0% { opacity: 0; transform: translateY(20rem); animation-timing-function: ease-in; }
+  9.68% { opacity: 1; transform: translateY(0rem); animation-timing-function: linear; }
+  90.32% { opacity: 1; transform: translateY(0rem); animation-timing-function: ease-in; }
+  100% { opacity: 0; transform: translateY(20rem); }
+}
+#moe-bar-root.mpv-run { animation: mpv-life 6200ms both; }
+/* THE RE-TRIGGER TWIN -- byte-identical to @keyframes mpv-life above apart from the name
+   (emitted from ONE builder, so it cannot drift). A baked fade/hold/fade keyframe cannot be
+   re-triggered in place: JS restarts the transient with remove-class -> force-reflow ->
+   re-add-class, which is UNPROVEN in Coherent/Gameface, and if the engine coalesces the
+   re-add with the run it just cancelled the restart is a NO-OP -- which, because
+   #moe-bar-root rests at opacity 0 under `both` fill, leaves the bar permanently INVISIBLE
+   after its first appearance. So the JS ALTERNATES between .mpv-run and .mpv-run-b
+   (MoEBarTransient.js RUN_CLASSES_V/RUN_NAMES_V): consecutive runs carry DIFFERENT
+   animation-names, which the engine cannot coalesce. Without this pair the vertical bar
+   cannot re-raise for a second battle event at all. */
+@keyframes mpv-life-b {
+    0% { opacity: 0; transform: translateY(20rem); animation-timing-function: ease-in; }
+  9.68% { opacity: 1; transform: translateY(0rem); animation-timing-function: linear; }
+  90.32% { opacity: 1; transform: translateY(0rem); animation-timing-function: ease-in; }
+  100% { opacity: 0; transform: translateY(20rem); }
+}
+#moe-bar-root.mpv-run-b { animation: mpv-life-b 6200ms both; }
+
+/* ===== THE "LARGE" SIZE MODE (mod_settings.progress_bar_size == 1). The mode is delivered
+   by the ROOT FONT SIZE (MoEBarTransient.js SIZE_F == 1.25), which IS the rem->px factor in
+   Gameface, so that one write re-lays the whole composition 1.25x and correctly leaves every
+   %, em, gradient stop and derived background-size ratio alone. What is left is the CROSS-AXIS
+   (screen-x) lengths, which must reach 5/3 total and therefore owe SIZE_XF == 4/3 ALONE on top
+   of it -- so every declaration below is an x-length and nothing else. Do NOT add a font-size,
+   a bar length, a tick thickness, a vertical gap or a keyframe here: the root font already has
+   them and restating one would DOUBLE-APPLY SIZE_F. The dash grid is a y-period on this bar
+   (0deg == "to top"), unlike the horizontal bar's 90deg twin, so it takes no rule either.
+   HAND-EDIT 4/6: the tuner emits this block under `.mpv-lg`; the class MoEBarTransient.applySize
+   actually writes on the body is `.mp-lg`, shared by both orientations (the SIZE flag is
+   orientation-independent), so every selector below is rewritten to it. Do not "restore" .mpv-lg
+   -- nothing would ever match it. */
+/* HAND-EDIT 5/6: these two are the emit's `.mpv-lg #moe-bar-root` plus the shim rule the tuner
+   never emits, both scoped `body.mpv.mp-lg` (1,2,1) so they out-specify the horizontal sheet's
+   own `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is
+   V_BOX_W_REM*SIZE_XF + 2*V_PAD_X_REM == 96 + 126 == 222 (only the BACKDROP half takes SIZE_XF --
+   the pad is rem-space slack for rem-sized ink and rides the root font's SIZE_F alone, which is
+   also why the logical-px surface the JS pushes is 222 * 1.25 == 277.5 -> 278); its HEIGHT is
+   unchanged (the root font carries SIZE_F on a y-length), exactly as the horizontal block's own
+   500rem twin restates width only. THIS SHIM IS DOCUMENT REM, NOT LOGICAL PX -- do not write 278
+   here, the root font supplies the 1.25. */
+body.mpv.mp-lg #moe-bar-root { width: 4rem; }
+body.mpv.mp-lg #moe-bar-box { width: 222rem; }
+.mp-lg .mpv-backdrop { left: -45.333rem; width: 96rem; }
+.mp-lg .mpv-tick.mpv-end { width: 12rem;
+  transform: translate(-50%, 50%) translateX(0rem); }
+.mp-lg .mpv-tick.mpv-pre { width: 12rem;
+  transform: translate(-50%, 50%) translateX(0rem); }
+.mp-lg .mpv-tick.mpv-proj { width: 12rem;
+  transform: translate(-50%, 50%) translateX(0rem); }
+.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }
+.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(21.333rem); }
+.mp-lg .mpv-capP { padding-right: 8rem;
+  transform: translateY(50%) translateX(0rem); }
+.mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }
+.mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }
+.mp-lg .mpv-capR .mpv-v { margin-left: 5.333rem; }   /* HAND-EDIT 6/6, same retarget as Default */
+
+/* Animation timings for the JS (mirrored in MoEBarTransient.js -- the VERTICAL keyframes are
+   identically tuned to the horizontal ones, which is why one set of constants serves both):
+{
+  "fadeInMs": 600,
+  "holdMs": 5000,
+  "fadeOutMs": 600,
+  "totalMs": 6200,
+  "slideRem": 20,
+  "slideEasingIn": "ease-in",
+  "slideEasingOut": "ease-in",
+  "tickDelayMs": 600,
+  "tickDurationMs": 600,
+  "tickEasing": "cubic-bezier(.2,.8,.2,1)",
+  "deltaFadeMs": 600,
+  "deltaFadeEasing": "cubic-bezier(.2,.8,.2,1)",
+  "axisMode": "mark",
+  "windowN": 60,
+  "topGlyph": "barrel_mark",
+  "bottomGlyph": "damage"
+}
+*/

@@ -13,8 +13,9 @@ PC-only (needs the live client); not imported under pytest without stubs. Python
 from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import EfficiencyVM
 from moe_calculator.domain.constants import (
-    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_OFFSET,
-    EFFICIENCY_ANCHOR_Y_OFFSET_LARGE)
+    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_SHIFT,
+    EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM, EFFICIENCY_MM_TRACK_X,
+    EFFICIENCY_MM_TRACK_X_LARGE)
 
 # itemID registered in mods/configs/res_map/MoEEfficiencyView.json -- keep in lockstep. It MUST
 # differ from MoEBattleView's AND MoEProgressView's (the positional resId collision -- see
@@ -22,8 +23,9 @@ from moe_calculator.domain.constants import (
 RES_MAP_ITEM_ID = "MoEEfficiencyView"
 
 _host = BarHost(RES_MAP_ITEM_ID, EfficiencyVM,
-                EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_OFFSET,
-                EFFICIENCY_ANCHOR_Y_OFFSET_LARGE, "[moe-eff]")
+                EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT,
+                EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_TRACK_X,
+                EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[moe-eff]")
 
 open_window = _host.open_window
 close_window = _host.close_window

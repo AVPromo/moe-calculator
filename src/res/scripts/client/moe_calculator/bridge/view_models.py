@@ -221,7 +221,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=15, commands=0):
+    def __init__(self, properties=16, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -251,7 +251,7 @@ class ProgressVM(ViewModel):
                                                      #    into a 1.25x ROOT FONT, the .mp-lg body class and a
                                                      #    re-derived surface push
                                                      #    (MoEBarTransient.applySize); Python's half
-                                                     #    is PROGRESS_ANCHOR_Y_OFFSET_LARGE
+                                                     #    is PROGRESS_ANCHOR_Y_SHIFT_LARGE
         self._addBoolProperty("transEvents", True)    # 9  animate the enter/exit when a BATTLE EVENT
                                                      #    pulls the bar up / lets it go. APPENDED.
                                                      #    The MASTER checkbox is already folded in by
@@ -300,6 +300,28 @@ class ProgressVM(ViewModel):
                                                      #    caption and renders nothing below 1, so
                                                      #    the -1 default is also the safe absent
                                                      #    value
+        self._addBoolProperty("vertical", False)      # 15 draw the VERTICAL composition instead of
+                                                     #    the horizontal one
+                                                     #    (mod_settings.progress_bar_orientation ==
+                                                     #    PROGRESS_ORIENT_VERTICAL). APPENDED, and
+                                                     #    the `properties=` count above is bumped
+                                                     #    WITH it -- the fake VM in tests ignores
+                                                     #    the declared count, so an append without
+                                                     #    the bump is green in pytest and broken
+                                                     #    live. A STATE bool, so the JS reads it
+                                                     #    `=== true` (like ctrlHeld, NOT like the
+                                                     #    transition switches' `!== false`): the
+                                                     #    shipped composition is HORIZONTAL, so an
+                                                     #    absent field must fail soft to it.
+                                                     #    MoEProgress.js branches on it ONCE, at
+                                                     #    mount -- it picks the DOM, the class
+                                                     #    prefix and the surface size, not a style
+                                                     #    -- so a live flip is delivered by Python
+                                                     #    closing and reopening the window
+                                                     #    (battle_bridge.apply_settings). Python's
+                                                     #    placement half is already
+                                                     #    orientation-aware (bar_window._resolve /
+                                                     #    domain.VERTICAL_ANCHOR_Y_SHIFT)
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -346,6 +368,9 @@ class ProgressVM(ViewModel):
     def setEtaBattles(self, v):
         self._setNumber(14, v)
 
+    def setVertical(self, v):
+        self._setBool(15, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -373,7 +398,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=17, commands=0):
+    def __init__(self, properties=18, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -435,6 +460,21 @@ class EfficiencyVM(ViewModel):
                                                     #    hit rect any more). APPENDED. Same wire
                                                     #    meaning as ProgressVM's, including the
                                                     #    `=== true` read on the JS side
+        self._addBoolProperty("vertical", False)    # 17 draw the VERTICAL composition instead of the
+                                                    #    horizontal one
+                                                    #    (mod_settings.progress_bar_orientation ==
+                                                    #    PROGRESS_ORIENT_VERTICAL). APPENDED, and the
+                                                    #    `properties=` count above is bumped WITH it
+                                                    #    -- the fake VM in tests ignores the declared
+                                                    #    count, so an append without the bump is
+                                                    #    green in pytest and broken live. Same wire
+                                                    #    meaning as ProgressVM's, including the
+                                                    #    `=== true` STATE-bool read: the shipped
+                                                    #    composition is HORIZONTAL. Branched on ONCE,
+                                                    #    at mount (it picks the DOM, the class prefix
+                                                    #    and the surface size, not a style), so a
+                                                    #    live flip is delivered by Python closing and
+                                                    #    reopening the window
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -486,3 +526,6 @@ class EfficiencyVM(ViewModel):
 
     def setCtrlHeld(self, v):
         self._setBool(16, v)
+
+    def setVertical(self, v):
+        self._setBool(17, v)

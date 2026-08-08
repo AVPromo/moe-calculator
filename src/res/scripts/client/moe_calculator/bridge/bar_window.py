@@ -25,10 +25,14 @@ Everything WHY-shaped about the hosting model lives in battle_view.py's docstrin
 registered window and not a garage-style inject; why WindowLayer.WINDOW and not OVERLAY; why NOT
 WINDOW_FULLSCREEN -- a full-screen Coherent surface steals the whole-screen mouse hit-test whenever
 the cursor is raised, and pointer-events:none does NOT make the window rectangle click-through).
-Read that first. The difference here is placement: a bar is CENTRED horizontally and placed
-PROPORTIONALLY down the screen (domain.positioning.anchor_centred), not at a fixed logical corner
--- unless the user Ctrl+DRAGGED it somewhere, which stores a top-left in that same logical space
-and takes over (anchor_pinned; 0/0 == auto, so an untouched install is byte-identical).
+Read that first. The difference here is placement: a bar is placed off whichever ANCHOR the
+Alignment setting selects -- centred horizontally and proportionally down the screen (Damage Log,
+the shipped default), to the left of the minimap (Minimap), or at the screen origin (Free, i.e. the
+stored pair read as an absolute top-left) -- with the stored X/Y stepper pair composed on top of it
+in every case (domain.anchor_offset). A Ctrl+DRAG writes that same pair and flips Alignment to
+Free, which is why the drag has no special placement path of its own: offset (0, 0) under Damage
+Log IS the shipped placement byte-for-byte, so there is no "auto" sentinel any more (see the
+deleted domain.anchor_pinned).
 
 THE DRAG IS ENTIRELY PYTHON'S NOW, AND ABSOLUTE. adapter/battle_input samples Ctrl + the left mouse
 button off WG's own input dispatchers plus its g_mouseEventHandlers registry, and reports the gesture
@@ -67,7 +71,13 @@ from gui.impl.pub import ViewImpl, WindowImpl
 from openwg_gameface import ModDynAccessor
 
 from moe_calculator.bridge import mod_settings
-from moe_calculator.domain.positioning import (anchor_pinned, cursor_in_rect, cursor_logical,
+from moe_calculator.domain.constants import (MINIMAP_SIZES, MM_GAP,
+                                             MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
+                                             MM_TRACK_Y, MM_TRACK_Y_LARGE,
+                                             VERTICAL_ANCHOR_Y_SHIFT,
+                                             VERTICAL_ANCHOR_Y_SHIFT_LARGE)
+from moe_calculator.domain.positioning import (anchor_centred_reduced, anchor_minimap,
+                                               anchor_offset, cursor_in_rect, cursor_logical,
                                                cursor_top_left)
 
 # A large sentinel offset used to clamp the window to the far corner (LEFT/TOP anchor) so we can
@@ -95,6 +105,22 @@ def _cursor_position():
         return GUI.mcursor().position
     except Exception:
         return None
+
+
+def _minimap_size_index():
+    """The player's minimap size as an index into constants.MINIMAP_SIZES, already clamped.
+
+    Lazily imported and fail-soft for the same reason _cursor_position is: adapter/battle_adapter
+    imports BigWorld at module scope, and this module has to stay importable with the game closed.
+    The engine read, its clamp and its own fail-soft default all live in the adapter (that is the
+    layer allowed to touch settingsCore) -- this wrapper only keeps the import off the module top,
+    and falls back to the SAME largest-index default when even the import fails (see the adapter
+    for why the largest, not the middle)."""
+    try:
+        from moe_calculator.adapter import battle_adapter
+        return battle_adapter.read_minimap_size_index()
+    except Exception:
+        return len(MINIMAP_SIZES) - 1
 
 
 def _screen_resolution():
@@ -172,20 +198,36 @@ class BarHost(object):
     ``item_id`` is the itemID registered in mods/configs/res_map/<item_id>.json -- keep in lockstep,
     and keep it DISTINCT from every other entry's (the positional resId collision above).
     ``vm_factory`` is called per open to build a fresh root ViewModel. ``y_frac`` / ``x_off`` /
-    ``y_off`` are the bar's anchor constants (domain/constants), and ``tag`` prefixes its log lines.
-    ``y_off_large`` is the same compensation for the LARGE size mode -- a bigger surface needs a
-    different Y term (see the constants' derivations), and it is read LATE, inside _place, NOT frozen
-    here: these arguments are bound at MODULE IMPORT, so a size chosen after that (or changed between
+    ``y_shift`` are the bar's HORIZONTAL-orientation anchor constants (domain/constants), and
+    ``tag`` prefixes its log lines. ``y_shift_large`` is the same intra-surface compensation for the
+    LARGE size mode -- a bigger surface shifts its composition further down inside itself (see the
+    constants' derivations) -- and BOTH shifts are only ONE of the values _resolve picks LATE rather
+    than freezing here: the size, orientation and alignment settings are all read per placement,
+    because these arguments are bound at MODULE IMPORT and a setting changed after that (or between
     battles) would otherwise keep using whichever value was current at first load, forever.
+    ``mm_track_x`` / ``mm_track_x_large`` are the MINIMAP alignment's own per-bar term -- where this
+    bar's VERTICAL track sits inside its own surface on the cross axis (constants
+    .*_MM_TRACK_X(_LARGE)) -- per bar for the same reason the two shifts are, and read just as late.
+    Its Y counterpart is SHARED by both bars (MM_TRACK_Y) and so needs no argument.
+    ``mm_gap_bottom`` is that alignment's OTHER per-bar term: the clearance this bar's VERTICAL track
+    keeps off the screen's bottom edge (constants.*_MM_GAP_BOTTOM, 30 vs 28 -- each tuner's own tuned
+    value). It was a single shared constant while both bars' surfaces buried the tuned gaps under 90
+    logical px of unreachable slack; the front-end change that shortened both vertical surfaces to
+    their own tuned gap is what made the two numbers differ ON SCREEN and so worth threading. It has
+    no Large twin, on purpose -- see the constants' note.
     """
 
-    def __init__(self, item_id, vm_factory, y_frac, x_off, y_off, y_off_large, tag):
+    def __init__(self, item_id, vm_factory, y_frac, x_off, y_shift, y_shift_large,
+                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag):
         self.item_id = item_id
         self._vm_factory = vm_factory
         self._y_frac = y_frac
         self._x_off = x_off
-        self._y_off = y_off
-        self._y_off_large = y_off_large
+        self._y_shift = y_shift
+        self._y_shift_large = y_shift_large
+        self._mm_track_x = mm_track_x
+        self._mm_track_x_large = mm_track_x_large
+        self._mm_gap_bottom = mm_gap_bottom
         self._tag = tag
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
         self._active = None                         # (window, view) while open
@@ -201,21 +243,79 @@ class BarHost(object):
         self._drag_pos = None
         self._declined = False
 
-    def _resolve(self, max_x, max_y):
-        """This bar's top-left in logical GUI space, given the movable extent: the user's
-        Ctrl+DRAGGED position when one is stored, else the shipped proportional anchor
-        (domain.anchor_pinned -- 0/0 means auto, so an untouched install is unchanged).
+    def _resolve(self, max_x, max_y, space_x, space_y):
+        """This bar's top-left in logical GUI space: the base anchor the ALIGNMENT setting selects,
+        with the stored X/Y stepper pair composed on top (domain.anchor_offset -- positive =
+        right/down, uniformly, whichever alignment produced the base).
 
-        The y offset cancels the composition's intra-surface top offset (the JS shifts the whole
-        bar into positive document coordinates) and converts the fraction from "of the movable
-        extent" to "of the viewport" -- see the constant's own comment. It is picked HERE, per
-        placement, off the live size setting: the JS pushes the LARGE surface on its post-deadline
-        re-assert, which round-trips back as onSizeChanged -> _place, so this read is what makes
-        the two agree."""
+        `max_x, max_y` is the movable extent (space - surface) and `space_x, space_y` the FULL
+        logical space; the surface size is their per-axis difference, which is why placing a bar
+        needs no engine call the caller has not already made (see _space, and the drag's ownership
+        gate, which recovers the surface the same way).
+
+        THREE BRANCHES, and offset (0, 0) needs no fourth: under Damage Log alignment the base IS
+        the shipped placement byte-for-byte, and under Free it now falls through to the
+        orientation's own default anchor (see the Free bullet), so no branch has to special-case it.
+          * Damage Log -- centred horizontally, PROPORTIONALLY down the viewport
+            (anchor_centred_reduced). Its `y_shift` cancels the composition's intra-surface top
+            offset (the JS shifts the whole bar into positive document coordinates); the fraction's
+            extent-to-viewport conversion is computed by passing `space_y`, not baked into the
+            constant -- see the constants' derivations and anchor_centred_reduced's docstring.
+          * Minimap -- to the LEFT of the minimap, whose measured logical width comes from the live
+            settingsCore size INDEX (_minimap_size_index). The tick overhang term applies only to a
+            VERTICAL bar: it is a CROSS-axis length, and only a vertical bar's cross axis is the x
+            axis the minimap gap is measured on (a horizontal bar's ticks overhang in y instead).
+            WHAT THE TWO GAPS ARE MEASURED TO IS ALSO ORIENTATION-SPLIT, and getting it wrong was
+            the shipped bug (the bar landed 45-63px too far left and 90 too high). Both tuners
+            measure them to the visible TRACK box, so a VERTICAL bar passes where its track sits
+            inside its surface (*_MM_TRACK_X / MM_TRACK_Y) as anchor_minimap's `edge_x` / `edge_y`.
+            A HORIZONTAL bar keeps passing the SURFACE's own edges (space - extent, the shipped
+            behaviour): neither horizontal tuner has a minimap placement at all, so there is no
+            tuned reference to convert into and nothing to reproduce -- see the constants' note.
+          * Free -- the stored pair as an ABSOLUTE top-left, i.e. composed onto the origin, which is
+            exactly what a Ctrl+drag produces (the drag end also flips Alignment to Free) -- EXCEPT
+            at the pair (0, 0), which under Free means AUTO and defers to whichever anchor this
+            ORIENTATION defaults to (Horizontal -> Damage Log, Vertical -> Minimap, the same mapping
+            _on_changed's re-anchor uses). That is what makes an explicit Orientation change safe:
+            it zeroes the stored pair (mod_settings._on_changed) rather than carrying coordinates
+            tuned for the other orientation's surface across, and it must do so WITHOUT touching
+            the Alignment value, because Free is sticky. The stored alignment stays Free; only the
+            resolved base moves. The one capability lost is placing a bar at exactly logical
+            (0, 0) -- accepted.
+
+        EVERY SETTING IS READ HERE, PER PLACEMENT, none in __init__ (which binds at module import):
+        size, orientation and alignment can all change after load. Size in particular has to be
+        read here because the JS pushes the LARGE surface on its post-deadline re-assert, which
+        round-trips back as onSizeChanged -> _place -- this read is what makes the two agree."""
         large = mod_settings.progress_bar_size() == mod_settings.PROGRESS_SIZE_LARGE
-        y_off = self._y_off_large if large else self._y_off
-        return anchor_pinned(max_x, max_y, mod_settings.bar_pos_x(), mod_settings.bar_pos_y(),
-                             self._y_frac, self._x_off, y_off)
+        vertical = (mod_settings.progress_bar_orientation()
+                    == mod_settings.PROGRESS_ORIENT_VERTICAL)
+        alignment = mod_settings.progress_bar_alignment()
+        off_x, off_y = mod_settings.bar_pos_x(), mod_settings.bar_pos_y()
+        if alignment == mod_settings.PROGRESS_ALIGN_FREE and (off_x, off_y) == (0, 0):
+            alignment = (mod_settings.PROGRESS_ALIGN_MINIMAP if vertical
+                         else mod_settings.PROGRESS_ALIGN_DAMAGE_LOG)
+        if alignment == mod_settings.PROGRESS_ALIGN_FREE:
+            base = (0, 0)
+        elif alignment == mod_settings.PROGRESS_ALIGN_MINIMAP:
+            if vertical:
+                overhang = MM_TICK_OVERHANG_LARGE if large else MM_TICK_OVERHANG
+                edge_x = self._mm_track_x_large if large else self._mm_track_x
+                edge_y = MM_TRACK_Y_LARGE if large else MM_TRACK_Y
+            else:
+                overhang = 0
+                edge_x, edge_y = space_x - max_x, space_y - max_y
+            base = anchor_minimap(space_x, space_y, edge_x, edge_y,
+                                  MINIMAP_SIZES[_minimap_size_index()], MM_GAP,
+                                  self._mm_gap_bottom, overhang)
+        elif vertical:
+            base = anchor_centred_reduced(
+                max_x, max_y, space_y, self._y_frac,
+                VERTICAL_ANCHOR_Y_SHIFT_LARGE if large else VERTICAL_ANCHOR_Y_SHIFT)
+        else:
+            base = anchor_centred_reduced(max_x, max_y, space_y, self._y_frac,
+                                          self._y_shift_large if large else self._y_shift)
+        return anchor_offset(base, off_x + self._x_off, off_y)
 
     def _extent(self, window):
         """The window's movable extent (= logical space - surface), read by clamping it to the far
@@ -257,16 +357,18 @@ class BarHost(object):
             return max_x, max_y
 
     def _place(self, window):
-        """Place the window: centred horizontally and PROPORTIONALLY down the screen, or wherever
-        the user dragged it. Fail-soft: a positioning error must never blank the bar.
+        """Place the window off whichever anchor the Alignment setting selects (see _resolve).
+        Fail-soft: a positioning error must never blank the bar.
 
         THE CACHE INVALIDATION POINT for _extent, and the only one needed: every reason the extent
         can move -- the first placement, the JS's resize (onSizeChanged, i.e. a Default<->Large
-        flip) and an interface-scale change (apply_position) -- already routes through here."""
+        flip), an interface-scale change and a minimap resize (both apply_position) -- already
+        routes through here. _space's own extent read is free, having been warmed one line above."""
         try:
             self._extent_cache = None
             max_x, max_y = self._extent(window)
-            x, y = self._resolve(max_x, max_y)
+            space_x, space_y = self._space(window)
+            x, y = self._resolve(max_x, max_y, space_x, space_y)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
         except Exception:
             LOG_CURRENT_EXCEPTION()
@@ -280,7 +382,7 @@ class BarHost(object):
 
         EVERY MOVE IS AN ABSOLUTE PLACEMENT. The live cursor is mapped into this window's logical GUI
         space (domain.cursor_top_left, which is UNCLAMPED -- a bar may be parked past any screen
-        edge -- and also owns the (0, 0) auto-sentinel nudge and the unit-agnostic
+        edge -- and owns the unit-agnostic
         read), then offset by the grab recorded at "start" so the bar keeps the point it was grabbed
         by instead of teleporting its corner under the cursor. Nothing accumulates, so nothing can
         drift, no gain factor exists to get wrong, and the gain is exactly 1 (see _space).
@@ -302,9 +404,10 @@ class BarHost(object):
         ONLY THE END PERSISTS, and only if the gesture actually MOVED. A live move writes the
         in-memory value alone -- that is all _resolve reads -- because a settings write per movement
         would mean an MSA updateModSettings + saveState at pointer rate. And a gesture that never
-        moved writes nothing at all: `_drag_pos` stays None, so a stray Ctrl+click cannot convert the
-        0/0 AUTO sentinel into an explicit pin at the anchor the bar is already on (which would be a
-        silent opt-out of every future anchor change).
+        moved writes nothing at all: `_drag_pos` stays None, so no set_bar_position runs -- which
+        matters MORE now than under the retired 0/0 sentinel, because that call also flips Alignment
+        to Free. A stray Ctrl+click on the bar must not silently opt the user out of the anchored
+        alignment (and of every future change to that anchor) without moving anything.
 
         Fail-soft throughout: an unreadable cursor leaves the window exactly where it is, and nothing
         raises into the engine's input path."""
@@ -348,7 +451,7 @@ class BarHost(object):
                 if not cursor_in_rect(spot, origin, (space_x - max_x, space_y - max_y)):
                     self._declined = True
                     return                      # the gesture began on somebody else's box
-                bx, by = self._resolve(max_x, max_y)
+                bx, by = self._resolve(max_x, max_y, space_x, space_y)
                 self._grab = (bx - spot[0], by - spot[1])
                 self._drag_pos = None
                 return                          # the bar is already where it was grabbed
@@ -363,9 +466,11 @@ class BarHost(object):
             LOG_CURRENT_EXCEPTION()
 
     def apply_position(self):
-        """Re-place this bar's window if open. Called on interface-scale change (battle_bridge) so
-        the proportional anchor -- or a stored drag position -- follows the resized logical space.
-        No-op when closed."""
+        """Re-place this bar's window if open. Called from battle_bridge on an interface-scale
+        change (the proportional anchor must follow the resized logical space) and on a MINIMAP
+        RESIZE (the minimap alignment's base anchor moves with the minimap's width -- the size
+        index is re-read here, per placement, so no state has to be invalidated). No-op when
+        closed."""
         if self._active is None:
             return
         self._place(self._active[0])

@@ -23,10 +23,13 @@ WHAT IS MIRRORED WHERE -- and the ONE place this differs from the Moving Average
     them (asserted there). Which file owns which scrape is spelled out per test below; the BOX_*
     and PAD_REM consts stay per-bar and stay in the `^const NAME = <int>;` shape both mirror
     tests and both dev harnesses read.
-  * domain/constants.EFFICIENCY_ANCHOR_Y_OFFSET is a function of BOTH -- and is asserted as its
-    DERIVATION, never as the literal 50, so a deliberate re-tune of the fraction or the box still
-    passes while genuine drift fails. NOTE THE TRAP: 50 coincidentally equals SHIFT_Y_REM because
-    round(0.865 * 116) == 2 * 50. It is NOT a mirror of it.
+  * domain/constants.EFFICIENCY_ANCHOR_Y_SHIFT is now the PURE intra-surface shift term alone
+    (just -SHIFT_Y_REM) -- asserted as its DERIVATION off the shipped JS, never as a literal, so a
+    deliberate re-tune of the pad or the box still passes while genuine drift fails. The
+    extent-to-viewport UNIT CONVERSION the retired two-term EFFICIENCY_ANCHOR_Y_OFFSET composite
+    also carried is gone: positioning.anchor_centred_reduced computes it algebraically by applying
+    the fraction to space_y directly (see its docstring), so this constant needs no surface-height
+    term at all.
   * The transient's timings live in THREE places -- MoEBarTransient.js's constants (SHARED with
     the Moving Average bar, whose mp-life is identically tuned), the CSS's @keyframes/animation,
     and the tuner's trailing JSON `meta` block (the round-trip contract for the next tuner
@@ -47,9 +50,10 @@ from decimal import Decimal, ROUND_HALF_UP
 import pytest
 
 from moe_calculator.domain.constants import (
-    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_OFFSET,
-    EFFICIENCY_ANCHOR_Y_OFFSET_LARGE, EFFICIENCY_BAR_STOPS)
-from moe_calculator.domain.positioning import anchor_centred
+    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_Y_SHIFT,
+    EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_BAR_STOPS, VERTICAL_ANCHOR_Y_SHIFT,
+    VERTICAL_ANCHOR_Y_SHIFT_LARGE)
+from moe_calculator.domain.positioning import anchor_centred_reduced, anchor_offset
 from moe_calculator.domain.rounding import iround_half_away
 
 _WIDGET = os.path.join(os.path.dirname(__file__), "..", "src", "res", "gui", "gameface", "mods",
@@ -219,19 +223,28 @@ def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
     # They live in the SHARED module now, keyed to its cfg (which the test above proves is fed from
     # this bar's consts); the old VIEW_*/SHIFT_*/HIT_PAD_REM consts are those same five expressions.
     #
-    # FOUR of the five became `let` for the LARGE size mode (applySize re-derives whatever carries a
-    # factor), so the DERIVATION is what is pinned, not the keyword -- `(?:const|let)`. shiftY is the
-    # exception and stays pinned as a `const`: it is a pure y/uniform rem length that the 1.5x root
-    # font scales for free, so a size mode that starts rewriting it is rewriting the wrong axis.
+    # ALL FIVE are now `let`, so the DERIVATION is what is pinned, not the keyword --
+    # `(?:const|let)`. FOUR became `let` for the LARGE size mode (applySize re-derives whatever
+    # carries a factor). shiftY joined them in Phase 1 for a DIFFERENT reason, not a size-mode one:
+    # goVertical() (the vertical orientation's ONE-TIME mount-time DOM/geometry switch) genuinely
+    # swaps the whole composition box -- the vertical box is TALLER than it is wide where the
+    # horizontal one is the reverse -- so shiftY = cfg.pad - cfg.boxTop is recomputed there too. Do
+    # not "fix" this back to `const`: that would break the vertical bar's surface shift, not
+    # restore an invariant.
+    #
+    # THE X PAIR IS NOW SPELLED `padX`, NOT `pad`, and that is a generalisation rather than a
+    # change: `padX` is normalised to `pad` at the top of createTransient, so `2 * padX` and
+    # `padX - boxLeft` are byte-identical to what THIS bar always computed. Only the vertical
+    # Moving Average composition supplies its own (MoEProgress.js's V_PAD_X_REM -- its
+    # right-anchored captions grow LEFTWARD past the backdrop and PAD_REM clipped them).
     src = _transient()
-    for line in ("viewW = cfg.boxW + 2 * cfg.pad;",
-                 "viewH = cfg.boxH + 2 * cfg.pad;",
-                 "shiftX = cfg.pad - cfg.boxLeft;",
+    for line in ("viewW = cfg.boxW + 2 * cfg.padX;",
+                 "viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;",
+                 "shiftX = cfg.padX - cfg.boxLeft;",
+                 "shiftY = cfg.pad - cfg.boxTop;",
                  "hitPad = Math.ceil(Math.max(viewW, viewH) / 2);"):
         assert re.search(r"(?m)^\s*(?:const|let) " + re.escape(line), src), \
             "MoEBarTransient.js: lost the derivation `%s`" % line
-    assert re.search(r"(?m)^\s*const shiftY = cfg\.pad - cfg\.boxTop;", src), \
-        "MoEBarTransient.js: shiftY must stay a pure-y const -- the root font scales it"
 
 
 def _surface_wh(js):
@@ -459,8 +472,17 @@ def test_the_document_loads_only_its_own_stylesheet():
     # MoEEfficiency.css reuses #moe-bar-root and the whole .mp-* prefix, IDENTICAL to
     # MoEProgress.css. That is harmless only because each registered view is its own document;
     # loading a second one here would collide every selector.
+    #
+    # Phase 1 (vertical port) added a SECOND link, MoEEfficiencyVertical.css, scoped under
+    # `#moe-bar-root.mev` so it stays disjoint from the horizontal `.mp-*`/`.me-*` rules while both
+    # sheets are loaded together. ORDER IS LOAD-BEARING, not incidental: with both sheets present,
+    # source order is the cascade tiebreak for any rule of equal specificity that appears in both
+    # (see memory `equal-specificity-before-rules-resolved-by-source-order`), so the horizontal
+    # sheet must stay first and the vertical sheet second -- reversing them would silently let the
+    # vertical rules win the tiebreak against the horizontal ones instead of the other way round.
     html = _read("MoEEfficiencyView.html")
-    assert re.findall(r'<link rel="stylesheet" href="([^"]+)"', html) == ["MoEEfficiency.css"]
+    assert re.findall(r'<link rel="stylesheet" href="([^"]+)"', html) == \
+        ["MoEEfficiency.css", "MoEEfficiencyVertical.css"]
 
 
 def test_the_hand_added_font_face_survives_a_tuner_re_emit():
@@ -477,42 +499,188 @@ def test_the_hand_added_font_face_survives_a_tuner_re_emit():
 
 # --- the Python anchor: derived from the JS, not copied from it ---------------
 
-def test_python_y_offset_cancels_the_js_shift_and_converts_frac_to_viewport():
-    # EFFICIENCY_ANCHOR_Y_OFFSET is TWO summed terms, both owned by the JS:
-    #   -SHIFT_Y_REM        cancels the composition's intra-surface downward shift, so the bar
-    #                       stays put on screen when the window moves.
-    #   +frac * VIEW_H_REM  UNIT CONVERSION. anchor_centred applies the fraction to the MOVABLE
-    #                       EXTENT (space_h - surface_h), so adding frac*surface_h back turns it
-    #                       into a fraction of the VIEWPORT, which is how the constant is tuned.
-    # Asserted as the DERIVATION so a deliberate re-tune of the fraction, the pad or the box
-    # propagates -- and NOT as the literal 50, which only coincidentally equals SHIFT_Y_REM
-    # (round(0.865 * 116) happens to be 2 * 50). Every term is read from the shipped JS.
+def test_python_y_shift_cancels_the_js_intra_surface_shift():
+    # EFFICIENCY_ANCHOR_Y_SHIFT is now the PURE term -- just -SHIFT_Y_REM, cancelling the
+    # composition's intra-surface downward shift so the bar stays put on screen when the window
+    # moves. Asserted as the DERIVATION so a deliberate re-tune of the pad or the box propagates.
+    # The extent-to-viewport UNIT CONVERSION the retired two-term EFFICIENCY_ANCHOR_Y_OFFSET
+    # composite also carried (round(0.865 * 116), which happened to equal 2 * SHIFT_Y_REM by
+    # coincidence) is gone -- anchor_centred_reduced computes it algebraically now.
     js = _js()
-    surface_h = _surface_wh(js)[1]
-    assert EFFICIENCY_ANCHOR_Y_OFFSET == \
-        -_shift_y(js) + int(round(EFFICIENCY_ANCHOR_Y_FRAC * surface_h))
+    assert EFFICIENCY_ANCHOR_Y_SHIFT == -_shift_y(js)
 
 
-def test_python_large_y_offset_is_the_same_two_terms_scaled_by_size_f():
-    # The LARGE twin (mod_settings.progress_bar_size == 1), derived the SAME two ways from the SAME
-    # shipped JS -- only every length is in logical px now, so both terms carry SIZE_F and NEITHER
-    # carries SIZE_XF (this is the Y axis). No literal 76 here. Unlike the 1x pair there is not even
-    # a coincidence to trip over: -(50*1.5) == -75 and round(0.865*116*1.5) == 151 share nothing.
+def test_python_large_y_shift_is_the_same_pure_term_scaled_by_size_f():
+    # The LARGE twin (mod_settings.progress_bar_size == 1), derived the SAME way from the SAME
+    # shipped JS -- only in logical px now, so it carries SIZE_F and NOT SIZE_XF (this is the Y
+    # axis). No literal here: a retune of the pad or the box propagates, and so does SIZE_F itself.
     js = _js()
-    surface_h = Decimal(_surface_wh(js)[1])
-    assert EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == \
-        -_large_shift_y(js) + iround_half_away(Decimal(str(EFFICIENCY_ANCHOR_Y_FRAC))
-                                               * surface_h * _size_factor("SIZE_F"))
+    assert EFFICIENCY_ANCHOR_Y_SHIFT_LARGE == -_large_shift_y(js)
+
+
+def _v_surface_wh(js):
+    """The vertical surface this bar's JS pushes to the engine -- V_BOX_W_REM + 2*PAD_REM on the
+    width, V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM on the height (MoEBarTransient.js's
+    `viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;`), the same derivation as _surface_wh above but
+    off the `V_` (vertical) box consts and this bar's own clip."""
+    pad = _js_const(js, "PAD_REM")
+    return (_js_const(js, "V_BOX_W_REM") + 2 * pad,
+            _js_const(js, "V_BOX_H_REM") + 2 * pad - _js_const(js, "V_CLIP_B_REM"))
+
+
+def _v_shift_y(js):
+    """MoEEfficiency.js's vertical SHIFT_Y_REM (goVertical's `cfg.pad - cfg.boxTop`, fed from
+    V_BOX_TOP_REM) -- mirrored (negated) in Python as VERTICAL_ANCHOR_Y_SHIFT."""
+    return _js_const(js, "PAD_REM") - _js_const(js, "V_BOX_TOP_REM")
+
+
+def test_the_vertical_box_consts_quote_the_backdrop_rule():
+    # V_BOX_* is .mev-backdrop -- the vertical composition's own bounding box, axis-swapped from
+    # .mp-backdrop/BOX_* above. Mirrors test_the_js_box_consts_quote_the_backdrop_rule's contract
+    # under the vertical prefix -- comment-stripped like the rest of this file.
+    css, js = _no_css_comments(_read("MoEEfficiencyVertical.css")), _js()
+    assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == \
+        (_rem(css, ".mev-backdrop", "left"), _rem(css, ".mev-backdrop", "top"),
+         _rem(css, ".mev-backdrop", "width"), _rem(css, ".mev-backdrop", "height"))
+    assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-40, -80, 96, 360)
+
+
+def test_the_vertical_clip_is_fed_from_its_own_constant():
+    # `viewH`'s `- cfg.clipB` term (MoEBarTransient.js) is only meaningful if the vertical config
+    # actually hands it V_CLIP_B_REM by name -- a literal or a copy of the progress bar's constant
+    # would still satisfy every OTHER derivation test while the clip silently drifted.
+    js = _js()
+    assert re.search(r"clipB:\s*V_CLIP_B_REM\s*[,}]", js), \
+        "MoEEfficiency.js: vert config's clipB is not fed from V_CLIP_B_REM"
+    assert _js_const(js, "V_CLIP_B_REM") == 62
+
+
+def test_the_vertical_css_sizing_box_matches_the_js_surface():
+    # body.mev #moe-bar-box mirrors V_BOX_W_REM + 2*PAD_REM on width, V_BOX_H_REM + 2*PAD_REM -
+    # V_CLIP_B_REM on height, exactly as the horizontal #moe-bar-box mirrors BOX_W/H_REM + 2*PAD_REM
+    # in test_the_js_box_consts_quote_the_backdrop_rule's sibling coverage for this bar's OWN
+    # surface push.
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    match = re.search(r"body\.mev #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*height:\s*(\d+)rem;\s*\}",
+                       css)
+    assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
+    box = (int(match.group(1)), int(match.group(2)))
+    assert box == _v_surface_wh(_js()) == (116, 318)
+
+
+def test_the_vertical_shift_matches_progresss_and_is_pinned():
+    # VERTICAL_ANCHOR_Y_SHIFT is ONE constant for BOTH bars (unlike the horizontal 44-vs-50
+    # split): both vertical compositions share the same backdrop geometry (top: -80rem,
+    # height: 360rem) and the same PAD_REM == 10, so THIS bar's independent derivation must land
+    # on the exact same shared value the progress mirror file derives off ITS OWN JS.
+    js = _js()
+    assert VERTICAL_ANCHOR_Y_SHIFT == -_v_shift_y(js) == -90
+
+
+def test_the_vertical_large_shift_is_the_same_pure_term_scaled_by_size_f():
+    # The LARGE twin -- half-away rounding, the same convention every other *_SHIFT_LARGE uses
+    # (-112.5 -> -113).
+    js = _js()
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == \
+        -iround_half_away(Decimal(_v_shift_y(js)) * _size_factor("SIZE_F")) == -113
+
+
+def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
+    # body.mev.mp-lg #moe-bar-box restates ONLY the width, in rem, at V_BOX_W_REM*SIZE_XF +
+    # 2*PAD_REM (the root font's SIZE_F is layered on top of every rem for free, including this
+    # one and the unrestated height) -- so the LOGICAL PX surface under Large is this rem value
+    # times SIZE_F for width, and the default height times SIZE_F alone. Pinned per the plan:
+    # efficiency vertical Large -> 185 x 398.
+    css, js = _no_css_comments(_read("MoEEfficiencyVertical.css")), _js()
+    match = re.search(r"body\.mev\.mp-lg #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*\}", css)
+    assert match, "MoEEfficiencyVertical.css: body.mev.mp-lg #moe-bar-box rule not found"
+    large_w_rem = int(match.group(1))
+    xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
+    pad = _js_const(js, "PAD_REM")
+    assert large_w_rem == _js_const(js, "V_BOX_W_REM") * xf + 2 * pad
+    _, default_h = _v_surface_wh(js)
+    assert (iround_half_away(Decimal(large_w_rem) * f),
+            iround_half_away(Decimal(default_h) * f)) == (185, 398)
+
+
+def test_the_reachable_minimap_gap_equals_surface_h_minus_track_y():
+    # THE INVARIANT the two placement fixes exist to satisfy, pinned from BOTH sides rather than
+    # just the tuned constant: the engine clamps every window into [0, space - surface] (memory
+    # `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`), so whenever
+    # gap_bottom is smaller than the surface's own below-the-track slack (surface_h - edge_y) the
+    # closest reachable bottom gap IS that slack, not the tuned constant -- and it only equals the
+    # tuned constant because the front-end clip (V_CLIP_B_REM) was sized to make it so. A surface
+    # retune that forgets to also retune the clip would silently detach this bar from its tuned
+    # gap; this test is the tripwire for that.
+    from moe_calculator.domain.constants import (
+        EFFICIENCY_MM_GAP_BOTTOM, MM_TRACK_Y, MM_TRACK_Y_LARGE)
+
+    js = _js()
+    _, surface_h = _v_surface_wh(js)
+    assert surface_h - MM_TRACK_Y == EFFICIENCY_MM_GAP_BOTTOM
+
+    # LARGE is a +/-1 JITTER, not bit-exact (see the sibling progress mirror's copy of this test):
+    # for THIS bar the two independent half-away roundings happen to cancel exactly (398 - 363 ==
+    # 35, round(28 * 1.25) == 35), unlike the progress bar's measured 1-off jitter -- still asserted
+    # as a bounded +/-1 rather than a bit-exact 0 so a future retune of either bar cannot silently
+    # tighten this into a coincidence the code doesn't actually guarantee.
+    f = _size_factor("SIZE_F")
+    surface_h_large = iround_half_away(Decimal(surface_h) * f)
+    tuned_large = iround_half_away(Decimal(EFFICIENCY_MM_GAP_BOTTOM) * f)
+    delta = (surface_h_large - MM_TRACK_Y_LARGE) - tuned_large
+    assert abs(delta) <= 1, (
+        "the Large reachable gap drifted by %d from round(gap * SIZE_F), which must be a bounded "
+        "+/-1 jitter, never more" % delta)
+
+
+def test_the_vertical_dash_grids_gap_stripe_stays_fully_opaque():
+    # This bar's vertical tuner already emitted opaque -- see "Dash-gap alpha -- CLOSED": no
+    # hand-rewrite was owed here (unlike the vertical PROGRESS bar, whose own tuner default was
+    # 0.5 and needed one). SCOPED to .mev-track::after's OWN gradient -- a bare value search for
+    # "1" or "0.5" would either miss this rule entirely or false-hit the box-shadow ring in the
+    # SAME rule, which is legitimately rgba(13,14,16,0.5) (it sits OUTSIDE the fill and is not
+    # what this instruction touches).
+    body = _rule(_no_css_comments(_read("MoEEfficiencyVertical.css")), ".mev-track::after")
+    match = re.search(r"background-image:\s*repeating-linear-gradient\(([^;]*)\);", body)
+    assert match, "MoEEfficiencyVertical.css: .mev-track::after has no repeating-linear-gradient"
+    stops = re.findall(r"rgba?\(([^)]*)\)", match.group(1))
+    assert len(stops) == 4, "expected one dash + one gap stop pair, got %r" % (stops,)
+    for gap in stops[2:]:
+        parts = [p.strip() for p in gap.split(",")]
+        assert len(parts) == 3 or float(parts[3]) == 1.0, \
+            "the vertical dash grid's GAP stripe must be fully opaque, not %r" % (gap,)
+    box_shadow = re.search(r"box-shadow:\s*([^;]+);", body)
+    assert box_shadow and box_shadow.group(1).strip() == "0 0 0 1rem rgba(13,14,16,0.5)"
+
+
+def test_the_large_size_block_never_re_adds_the_deleted_vertical_dash_grid_rule():
+    # Phase 0's "second defect found" fix DELETED (not rescaled) the vertical EFFICIENCY bar's
+    # Large dash-grid rule -- a 0deg grid's period is a y-length the root font already scales, so
+    # a reintroduced twin would double-apply SIZE_F (this file's own HAND-EDIT 4/5 comment, in so
+    # many words). Asserted as a SELECTOR search on COMMENT-STRIPPED source, not a substring:
+    # ".mev-lg" and ".mev-track" BOTH appear legitimately, more than once, in the HAND-EDIT prose
+    # documenting this very deletion -- a bare `grep -c` trips on its own documentation (this is
+    # the exact mistake recorded against this task; probed below by reintroducing the rule, not
+    # by editing one).
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    assert not re.search(r"\.mp-lg\s+\.mev-track::after\s*\{", css), \
+        "MoEEfficiencyVertical.css: the deleted Large dash-grid rule for .mev-track::after is back"
+    assert not re.search(r"(?m)^\.mev-lg\b", css), \
+        "MoEEfficiencyVertical.css: a .mev-lg selector survived the tuner-class rewrite to .mp-lg"
 
 
 @pytest.mark.parametrize("space_h", [1080, 1440])
 def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(space_h):
-    # THE invariant the offset's second term exists for: the track's top edge lands at
+    # THE invariant the pure shift term exists for: the track's top edge lands at
     # EFFICIENCY_ANCHOR_Y_FRAC of the VIEWPORT height, resolution-invariantly -- hence both
-    # heights. Composed exactly as efficiency_view._place does it: the far-sentinel clamp hands
-    # anchor_centred the movable extent, and the track then sits SHIFT_Y_REM below the window's
-    # top edge. Slack is 1.5px: anchor_centred's int() floor loses up to 1, and the offset's own
-    # round() up to 0.5.
+    # heights. Composed exactly as bar_window.BarHost._resolve does it now: the far-sentinel clamp
+    # hands anchor_centred_reduced the movable extent AND the full space_y (the fraction applies to
+    # space_y directly -- no extent-to-viewport conversion needed, see anchor_centred_reduced's
+    # docstring), then the stored X/Y stepper offset (0 here) composes on top via anchor_offset,
+    # and the track sits SHIFT_Y_REM below the window's top edge. Slack is 1.5px for the int()
+    # floor.
     #
     # ...AND THE SAME UNDER THE LARGE SIZE MODE, which is that mode's whole point: it is a pure
     # scale-up, so the bar must not MOVE. Every length on the large side is bigger -- the surface,
@@ -521,13 +689,17 @@ def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(sp
     # directly against the 1x placement.
     js = _js()
     surface_w, surface_h = _surface_wh(js)
-    _x, y = anchor_centred(1920 - surface_w, space_h - surface_h, EFFICIENCY_ANCHOR_Y_FRAC,
-                           EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_OFFSET)
+    max_x, max_y = 1920 - surface_w, space_h - surface_h
+    base = anchor_centred_reduced(max_x, max_y, space_h, EFFICIENCY_ANCHOR_Y_FRAC,
+                                  EFFICIENCY_ANCHOR_Y_SHIFT)
+    _x, y = anchor_offset(base, EFFICIENCY_ANCHOR_X_OFFSET, 0)
     top = y + _shift_y(js)
     assert abs(top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5
     lw, lh = _large_surface_wh(js)
-    _lx, ly = anchor_centred(1920 - lw, space_h - lh, EFFICIENCY_ANCHOR_Y_FRAC,
-                             EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_OFFSET_LARGE)
+    lmax_x, lmax_y = 1920 - lw, space_h - lh
+    lbase = anchor_centred_reduced(lmax_x, lmax_y, space_h, EFFICIENCY_ANCHOR_Y_FRAC,
+                                   EFFICIENCY_ANCHOR_Y_SHIFT_LARGE)
+    _lx, ly = anchor_offset(lbase, EFFICIENCY_ANCHOR_X_OFFSET, 0)
     large_top = ly + _large_shift_y(js)
     assert abs(large_top - EFFICIENCY_ANCHOR_Y_FRAC * space_h) <= 1.5, \
         "the LARGE bar's track lands at %s of the viewport, not %s" % (
@@ -606,6 +778,17 @@ def test_the_twin_keyframe_blocks_stay_identical_modulo_the_name():
     # must animate IDENTICALLY; a tuner re-emission of mp-life alone is what breaks it.
     css = _css()
     assert _keyframes(css, "mp-life") == _keyframes(css, "mp-life-b")
+
+
+def test_the_vertical_twin_keyframe_blocks_stay_identical_modulo_the_name():
+    # mev-life-b is the SAME re-trigger twin for the VERTICAL composition (Phase 0's "built from
+    # ONE builder called TWICE so they are byte-identical by construction rather than by hand" --
+    # MoEBarTransient.js's RUN_CLASSES_V/RUN_NAMES_V alternate .mev-run / .mev-run-b the same way
+    # the horizontal pair above alternates .mp-run/.mp-run-b). Comment-stripped and brace-balanced
+    # so it survives the compact, unspaced emit this stylesheet actually ships
+    # (`@keyframes mev-life{...}}`, no space before the brace).
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    assert _keyframes(css, "mev-life") == _keyframes(css, "mev-life-b")
 
 
 def test_the_slide_distance_matches_the_tuner_meta():

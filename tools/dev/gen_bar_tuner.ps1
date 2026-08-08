@@ -974,6 +974,11 @@ $tpl = @'
       var nx=st.marks>=3?100:st.marks+1;
       set("thrPrev",THR[st.marks]);set("thrNext",THR[nx]);}
     var S=anchor.style;
+    // Pin the page's root font-size to pxrem so a literal `rem` anywhere in the live stylesheet
+    // (e.g. .mp-cap .mp-d, still spelled in raw rem) resolves the SAME way the shipped Gameface
+    // window does (1rem == 1 logical px there) instead of against the browser's 16px default --
+    // re-set every apply() so a live pxrem retune keeps it in sync.
+    document.documentElement.style.fontSize=st.pxrem+"px";
     S.setProperty("--top",(st.offY*PXVH).toFixed(1)+"px");S.setProperty("--offx",rem(st.offX));
     S.setProperty("--barw",rem(st.barW));S.setProperty("--trackh",rem(st.trackH));
     S.setProperty("--tickw",rem(st.tickW));S.setProperty("--tickh",rem(st.tickH));
@@ -1650,7 +1655,18 @@ if ($SelfCheck) {
   else {
     $len = (Get-Item $dest).Length
     if ($len -lt 100KB) { $fail += "too small: $len bytes (expected > 100 KB of inlined assets)" }
-    if ((Get-Content $dest -Raw) -match '__[A-Z_]+__') { $fail += "unsubstituted placeholder: $($Matches[0])" }
+    $raw = Get-Content $dest -Raw
+    if ($raw -match '__[A-Z_]+__') { $fail += "unsubstituted placeholder: $($Matches[0])" }
+    # A literal `rem` in the live <style> block resolves against the browser's 16px default
+    # unless the root font-size is pinned to pxrem from JS -- see .mp-cap .mp-d's history.
+    $hasRootFontPin = $raw -match 'documentElement\.style\.fontSize'
+    $styleMatch = [regex]::Match($raw, '(?s)<style>(.*?)</style>')
+    if ($styleMatch.Success) {
+      $noComments = $styleMatch.Groups[1].Value -replace '(?s)/\*.*?\*/', ''
+      if (-not $hasRootFontPin -and ($noComments -match '[0-9.]+rem[;}]')) {
+        $fail += "literal rem in live style block with no root font-size pin: $($Matches[0])"
+      }
+    }
   }
   if ($fail.Count) { $fail | ForEach-Object { Write-Output "FAIL: $_" }; exit 1 }
   Write-Output ("self-check OK: {0} ({1:N0} bytes, no leftover placeholders)" -f $dest, $len)

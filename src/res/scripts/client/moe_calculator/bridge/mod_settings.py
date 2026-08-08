@@ -7,10 +7,13 @@ grouped with its "Alt Press" + "Counted Assistance Row" children) then "Battle P
 Progress Bar master, also "Enabled", with its three VISIBILITY children "Events" / "Alt Press" /
 "Always", then the standalone inline "Mode" and "Scale" radios) then "Transitions" (that master,
 also "Enabled", with its "Events" + "Alt Press" switches and the "Hold Duration (s)" slider that
-says how long the bar stays up) then "Bar Position" (the X/Y steppers mirroring the bar's
-Ctrl+drag). Column 2 holds "Garage Widget" -- the garage master plus the
+says how long the bar stays up) then "Layout" (column 1's header text; the i18n KEY stays
+"catBarPosition" -- see SETTINGS_VERSION 20->21) with the standalone inline "Orientation" and
+"Alignment" radios ABOVE the X/Y steppers that mirror the bar's Ctrl+drag. Column 2 holds "Garage
+Widget" -- the garage master plus the
 "Layout" group (also BOLD): Follow Carousel, then a non-bold "Position" sub-label heading the X/Y
-steppers.
+steppers. (Column 1's "Layout" and column 2's "Layout" are two DIFFERENT categories that happen to
+share a display name -- distinct i18n keys, distinct controls.)
 
 The two near-identical child pairs are DELIBERATE and are different axes: the visibility trio
 decides WHEN the bar comes up, the Transitions pair only HOW it moves once it does.
@@ -158,7 +161,9 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # saved-truthy path never calls setModTemplate on an existing install, so only a forward bump
 # reaches one. The migration branch carries every saved value across and the two new keys take
 # their fresh 0 (= auto) default, so every existing user's bar stays exactly where it has always
-# been -- 0/0 falls through to the shipped *_ANCHOR_* placement (domain.anchor_pinned).
+# been -- 0/0 composes onto the default Damage Log alignment's base and reproduces the shipped
+# placement byte-for-byte (domain.anchor_offset; the alignment wiring came later and retired the
+# old anchor_pinned sentinel this comment used to name).
 # Bumped 18 -> 19 for a FIFTH "Empty" spacer row in column 1, immediately ahead of the
 # hold-duration Slider (still inside the "Transitions" category, right after the group's "Alt
 # Press" child) -- purely visual breathing room, the same role every other spacer plays. No
@@ -178,7 +183,25 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # signature), so only a forward bump replaces the stored control. The migration branch carries every
 # saved value across unchanged -- and _apply/_coerce now clamp through the widened clamp_pos, so a
 # negative position captured before the bump survives it.
-SETTINGS_VERSION = 20
+# Bumped 20 -> 21 for the vertical-bar Orientation/Alignment radios: TWO new varNames
+# (progress_bar_orientation, progress_bar_alignment), TWO new standalone inline RadioButtonGroup
+# rows spliced ABOVE the existing X/Y steppers in the fourth column-1 category (COL1_KEYS grows
+# 24 -> 26), and that category's header TEXT changes "Bar Position" -> "Layout" (the i18n KEY
+# stays catBarPosition -- a rename buys nothing, see moe-settings skill). All three are structural
+# on their own; together they make three independent reasons for the bump. The radios' OPTION
+# LABELS are structural to MSA too (Aslain folds them into _settingsStructure;
+# _sync_template_text never rewrites options[].label), so get the order right: Orientation is
+# Horizontal (0, default) / Vertical (1); Alignment is Damage Log (0, default) / Minimap (1) /
+# Free (2). register()'s saved-truthy path never calls setModTemplate on an existing install, so
+# only this forward bump reaches one. The migration branch below (_migrate_pre_v21_layout) is a
+# LOOKUP, not arithmetic: keyed on the ABSENCE of progress_bar_orientation (no stored version int
+# to compare against directly, same trick as _migrate_pre_v13_variant), a pre-v21 store's
+# progress_bar_pos_x/_y was an ABSOLUTE top-left, which is exactly what Alignment=Free means --
+# so a non-zero pair maps to Free (coordinates carried verbatim) and a zero pair to Damage Log
+# (still 0/0, the shipped placement). Nobody's bar moves. Every OTHER saved value carries across
+# unchanged and the two new keys take their fresh Horizontal/Damage Log defaults where the
+# migration doesn't apply (a fresh install).
+SETTINGS_VERSION = 21
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -282,8 +305,10 @@ POS_Y_KEY = "posY"
 POS_W_KEY = "posW"
 POS_H_KEY = "posH"
 
-# Draggable IN-BATTLE BAR position -- the same 0 == auto scheme as the garage pair above, and
-# nothing else in common with it:
+# Draggable IN-BATTLE BAR position -- stored the same way (a px pair, 0/0 default) as the garage
+# pair above, but composed differently: this pair is an OFFSET onto whichever anchor the
+# Alignment setting selects (domain.anchor_offset), not a standalone "auto" sentinel, and
+# nothing else in common with the garage pair:
 #   * ONE PAIR FOR BOTH BARS. Moving Average and Damage Efficiency are radio ALTERNATIVES (only
 #     one is ever open), so a second pair would be two more settings rows describing the same
 #     spot on screen.
@@ -291,10 +316,33 @@ POS_H_KEY = "posH"
 #     resolution changes, which is what those record. These two are the window's top-left in the
 #     engine's LOGICAL GUI SPACE -- already interface-scale invariant (see domain/positioning's
 #     header) -- so there is nothing to pin them to and nothing to rescale.
-# 0/0 means auto: the shipped *_ANCHOR_* constants stand, which is where every existing user is.
+# 0/0 is just the default offset: under the default Damage Log alignment it reproduces the
+# shipped placement byte-for-byte, which is where every existing user is.
 # The varNames are FROZEN (there is no rename/alias map -- a rename silently resets every user).
 BAR_POS_X_KEY = "progress_bar_pos_x"
 BAR_POS_Y_KEY = "progress_bar_pos_y"
+
+# Which axis the bar draws on -- a STANDALONE inline radio (v21), shared by BOTH bars like the
+# position pair above it (Moving Average / Damage Efficiency are alternatives, not simultaneous).
+# One of the mod's non-bool settings, so _coerce needs its own clamp_variant branch (falling
+# through to bool() would turn index 1 into True and destroy the setting, exactly like the
+# variant/size radios above).
+PROGRESS_ORIENTATION_KEY = "progress_bar_orientation"
+PROGRESS_ORIENT_HORIZONTAL = 0   # the shipped axis -- every existing user keeps it
+PROGRESS_ORIENT_VERTICAL = 1     # ... and the highest legal index (see clamp_variant)
+
+# Which anchor the position steppers offset FROM (v21) -- also standalone/inline, also non-bool.
+# Damage Log is the shipped centred anchor (offset 0/0 reproduces today's placement byte-for-byte);
+# Minimap is the new minimap-relative anchor; Free is the screen origin (today's absolute
+# top-left, i.e. what every pre-v21 non-zero stored position already was -- see
+# _migrate_pre_v21_layout). ALL THREE OPTIONS STAY ALWAYS-SELECTABLE regardless of orientation --
+# MSA gates whole controls (masterVarName/conditions), not individual radio options, so a
+# per-orientation restriction would cost a second stored key for no behavioural gain.
+PROGRESS_ALIGNMENT_KEY = "progress_bar_alignment"
+PROGRESS_ALIGN_DAMAGE_LOG = 0   # the shipped centred anchor -- every existing user keeps it
+PROGRESS_ALIGN_MINIMAP = 1
+PROGRESS_ALIGN_FREE = 2         # ... and the highest legal index (see clamp_variant)
+
 # Follow Carousel Mode (default ON): keep nudging a pinned widget vertically as the carousel
 # state changes (1<->2 rows, small<->tall), so a dragged widget never overlaps the carousel.
 # The nudge is live-measured JS-side -- no extra persisted coordinate.
@@ -312,9 +360,10 @@ _POS_KEYS = (POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, BAR_POS_X_KEY, BAR_POS_
 # ship OFF (opt-in), with the progress-bar VARIANT on Damage Efficiency (0, the v13 order) and both
 # of its VISIBILITY triggers on but "Always" off, all three TRANSITION switches ON (the animated
 # bar is what shipped) and the hold at 5s (the JS transient's baked HOLD_MS, so the default bar is
-# byte-identical to what shipped). The drag position ships at auto (0/0/0/0), Follow Carousel ON.
-# merge_settings only ever overlays these known keys, so an MSA store from a newer/older template
-# can never introduce or drop a flag we act on.
+# byte-identical to what shipped). The drag position ships at auto (0/0/0/0), orientation
+# Horizontal and alignment Damage Log (v21 -- also byte-identical to what shipped), Follow
+# Carousel ON. merge_settings only ever overlays these known keys, so an MSA store from a
+# newer/older template can never introduce or drop a flag we act on.
 DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: True, PROGRESS_BAR_KEY: False,
             PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_EFFICIENCY,
@@ -326,6 +375,8 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
+            PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+            PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_DAMAGE_LOG,
             FOLLOW_CAROUSEL_KEY: True}
 
 
@@ -404,8 +455,8 @@ _registered = False
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
-    the progress-bar variant and size are clamped radio INDEXes, the hold duration a clamped
-    second count, everything else is a bool. Pure + engine-free.
+    the progress-bar variant/size/orientation/alignment are clamped radio INDEXes, the hold
+    duration a clamped second count, everything else is a bool. Pure + engine-free.
 
     Every non-bool branch is load-bearing: falling through to bool() would turn a radio's
     index 1 into True and index 0 into False (and the hold's 5 into True), which then
@@ -416,6 +467,10 @@ def _coerce(key, value):
         return clamp_variant(value)
     if key == PROGRESS_SIZE_KEY:
         return clamp_variant(value, PROGRESS_SIZE_LARGE)
+    if key == PROGRESS_ORIENTATION_KEY:
+        return clamp_variant(value, PROGRESS_ORIENT_VERTICAL)
+    if key == PROGRESS_ALIGNMENT_KEY:
+        return clamp_variant(value, PROGRESS_ALIGN_FREE)
     if key == PROGRESS_HOLD_SECONDS_KEY:
         return clamp_hold_seconds(value)
     return bool(value)
@@ -580,6 +635,30 @@ def bar_pos_x():
 def bar_pos_y():
     """The in-battle bar's dragged top-left y in LOGICAL GUI px, or 0 for auto."""
     return clamp_pos(_settings.get(BAR_POS_Y_KEY, 0))
+
+
+def progress_bar_orientation():
+    """Which axis the progress/efficiency bars draw on, as the radio's 0-based option INDEX:
+    PROGRESS_ORIENT_HORIZONTAL (0, the default) or PROGRESS_ORIENT_VERTICAL (1). Shared by both
+    bars, like the position pair above.
+
+    An int, NOT a bool -- re-clamp on read (like progress_bar_variant / progress_bar_size) and
+    never let a corrupt store leak a bool or an out-of-range index."""
+    return clamp_variant(_settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL),
+                         PROGRESS_ORIENT_VERTICAL)
+
+
+def progress_bar_alignment():
+    """Which anchor the position steppers offset FROM, as the radio's 0-based option INDEX:
+    PROGRESS_ALIGN_DAMAGE_LOG (0, the default), PROGRESS_ALIGN_MINIMAP (1) or
+    PROGRESS_ALIGN_FREE (2).
+
+    An int, NOT a bool -- re-clamp on read (like the other radio getters). Kept in sync by
+    set_bar_position() (-> Free, the drag-end seam) and _on_changed's auto-set rules (an
+    Orientation switch re-anchors it UNLESS it is already Free -- Free is STICKY -- and a
+    stepper edit forces it to Free); see those for the state machine."""
+    return clamp_variant(_settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG),
+                         PROGRESS_ALIGN_FREE)
 
 
 def follow_carousel():
@@ -840,13 +919,14 @@ def _template():
     VISIBILITY children, an Empty spacer, the standalone Mode and Scale radios), then a SECOND
     Empty spacer and "Transitions" (its own header + the Transitions master with its Events, Alt
     Press children, a spacer, then the UNGROUPED Hold Duration slider), then a THIRD Empty spacer
-    and "Bar Position" (its own header + the two standalone X/Y steppers). Column 2: "Garage
+    and "Layout" (header text; i18n key stays catBarPosition -- its own header + the standalone
+    Orientation and Alignment radios ABOVE the two standalone X/Y steppers). Column 2: "Garage
     Widget" (the garage master), then the "Layout" group -- a header, Follow Carousel, an Empty
     spacer, a "Position" sub-label, then the X/Y numeric steppers. Because the header names the
     feature, each master's
     own label is just "Enabled".
     Every visible label/tooltip comes from settings_i18n at the client's language (English
-    fallback). The five category/group headers render BOLD (see _label); "Position" does not."""
+    fallback). The six category/group headers render BOLD (see _label); "Position" does not."""
     t = settings_i18n.panel_text()
     battle_master = _checkbox(BATTLE_KEY, t["battleWidget"])
     battle_alt = _checkbox(BATTLE_ALT_KEY, t["battleAltKey"])
@@ -857,6 +937,8 @@ def _template():
     show_always = _checkbox(PROGRESS_SHOW_ALWAYS_KEY, t["progressShowAlways"])
     progress_variant = _radio(PROGRESS_VARIANT_KEY, t[settings_i18n.VARIANT_KEY])
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
+    progress_orientation = _radio(PROGRESS_ORIENTATION_KEY, t["progressOrientation"])
+    progress_alignment = _radio(PROGRESS_ALIGNMENT_KEY, t["progressAlignment"])
     trans_master = _checkbox(PROGRESS_TRANSITIONS_KEY, t["progressTransitions"])
     trans_events = _checkbox(PROGRESS_TRANS_EVENTS_KEY, t["progressTransEvents"])
     trans_manual = _checkbox(PROGRESS_TRANS_MANUAL_KEY, t["progressTransManual"])
@@ -913,10 +995,12 @@ def _template():
         # All three category headers render BOLD -- settings_i18n.build() already wrapped their
         # text (see _label); this only adds the matching useHTML key.
         #
-        # ...and a FOURTH category closes the column: "Bar Position", the two steppers that mirror
-        # the Ctrl+drag. STANDALONE like the column-2 pair (no master, no condition) for the same
-        # reason: a coordinate stays readable and editable while the feature is off. They are
-        # APPENDED at the very end, so no earlier control's positional pairing moves.
+        # ...and a FOURTH category closes the column: "Layout" (header text; i18n key stays
+        # catBarPosition -- see SETTINGS_VERSION 20->21), the standalone Orientation and Alignment
+        # radios ABOVE the two steppers that mirror the Ctrl+drag. All four are STANDALONE like the
+        # column-2 pair (no master, no condition) for the same reason: a bar's shape/anchor and a
+        # coordinate all stay readable and editable while the feature is off. They are APPENDED at
+        # the very end, so no earlier control's positional pairing moves.
         "column1": ([_label("catBattleCalc", t["catBattleCalc"])]
                     + _grouped_column1(battle_master, [battle_alt, counted])
                     + [_empty(), _label("catBattleProgress", t["catBattleProgress"])]
@@ -926,6 +1010,7 @@ def _template():
                     + _grouped_column1(trans_master, [trans_events, trans_manual])
                     + [_empty(), trans_hold,
                        _empty(), _label("catBarPosition", t["catBarPosition"]),
+                       progress_orientation, progress_alignment,
                        _stepper(BAR_POS_X_KEY, t["barPosX"]),
                        _stepper(BAR_POS_Y_KEY, t["barPosY"])]),
         # column2: the BOLD category header, the garage master, an Empty spacer, then the "Layout"
@@ -1062,6 +1147,31 @@ def _migrate_pre_v13_variant(old_raw):
         old_raw[PROGRESS_VARIANT_KEY] = PROGRESS_VARIANT_EFFICIENCY
 
 
+def _migrate_pre_v21_layout(old_raw):
+    """Seed PRE-v21 Orientation/Alignment in place, so an upgrading user's bar stays exactly
+    where it has always been (see the SETTINGS_VERSION 20->21 comment). A store already at v21+
+    is left untouched.
+
+    A LOOKUP, not arithmetic: there is no stored settingsVersion int to compare against directly,
+    so "pre-v21" is inferred from the ABSENCE of a key introduced in that SAME bump
+    (PROGRESS_ORIENTATION_KEY), same trick as _migrate_pre_v13_variant. Orientation always seeds
+    Horizontal (the only axis that existed pre-v21). Alignment depends on the stored position:
+    a pre-v21 non-zero (progress_bar_pos_x, progress_bar_pos_y) was an ABSOLUTE top-left, which is
+    exactly what Alignment=Free means, so it seeds Free and the coordinates carry across verbatim
+    (via the normal DEFAULTS overlay, untouched here); a zero pair seeds Damage Log, still 0/0 --
+    the shipped placement. Nobody's bar moves.
+
+    Fail-soft, and local to these two keys: a non-numeric / out-of-range stored position is
+    treated as zero for this decision (clamp_pos re-clamps it properly when read elsewhere)."""
+    if PROGRESS_ORIENTATION_KEY in old_raw:
+        return
+    old_raw[PROGRESS_ORIENTATION_KEY] = PROGRESS_ORIENT_HORIZONTAL
+    x = clamp_pos(old_raw.get(BAR_POS_X_KEY, 0))
+    y = clamp_pos(old_raw.get(BAR_POS_Y_KEY, 0))
+    old_raw[PROGRESS_ALIGNMENT_KEY] = (PROGRESS_ALIGN_FREE if (x, y) != (0, 0)
+                                       else PROGRESS_ALIGN_DAMAGE_LOG)
+
+
 def register():
     """Register (or re-load) the settings panel with MSA and seed the flag state.
 
@@ -1111,6 +1221,7 @@ def register():
             if old_raw:
                 try:
                     _migrate_pre_v13_variant(old_raw)
+                    _migrate_pre_v21_layout(old_raw)
                     _apply(old_raw)
                     g_modsSettingsApi.updateModSettings(
                         LINKAGE, _full_settings_for_write(g_modsSettingsApi))
@@ -1142,11 +1253,80 @@ def _on_changed(linkage, new_settings):
     Linkage-scoped: MSA broadcasts this callback GLOBALLY (it fires for every mod's change, not
     just ours), so ignore events for other mods -- mirrors _on_reset. Even without the guard the
     _apply overlay would no-op a foreign payload, but skipping early also avoids a spurious
-    _notify()/re-push and any chance of a foreign key colliding with one of ours."""
+    _notify()/re-push and any chance of a foreign key colliding with one of ours.
+
+    ALSO AUTO-SETS THE ALIGNMENT, by comparing the live cache BEFORE vs AFTER the overlay -- the
+    only way to tell "the user flipped Orientation" apart from "the user typed a coordinate", since
+    MSA hands us the FULL settings snapshot every time, never a diff:
+      * Orientation changed AND the (post-overlay) alignment isn't already Free -> re-anchor it to
+        match (Horizontal -> Damage Log, Vertical -> Minimap). FREE IS STICKY: this branch never
+        fires once alignment is Free, by explicit design -- an Orientation switch must never
+        silently un-pin a bar the user (or a drag) positioned freely.
+      * Orientation changed (ANY alignment, Free included) -> the stored position pair is ZEROED,
+        which bar_window._resolve reads as "this orientation's default anchor". That is the whole
+        point of doing it as a coordinate reset rather than an alignment change: it works under
+        Free without violating Free's stickiness. See the branch's own comment below.
+      * The bar-position pair changed -> Free (a user typed a coordinate into a stepper). Checked
+        AFTER the orientation branch, so the rare simultaneous case lands on the more explicit Free.
+      * set_bar_position() (the Ctrl+drag path) already writes BOTH the position and Free directly
+        into the live cache before its own MSA write goes out, so by the time that write's echo
+        reaches this handler the "before" and "after" position already agree here -- no double-set,
+        no special-case flag needed to recognise "our own drag write".
+
+    LOOP GUARD: the write-back below (alignment and/or the zeroed pair) fires another
+    onSettingsChanged of its own. No re-entrancy flag is needed -- each write only happens when the
+    value actually CHANGES, so the echoed second pass finds them already equal and no-ops."""
     try:
         if linkage != LINKAGE:
             return
+        pre_orientation = _settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL)
+        pre_x = _settings.get(BAR_POS_X_KEY, 0)
+        pre_y = _settings.get(BAR_POS_Y_KEY, 0)
         _apply(new_settings)
+        post_orientation = _settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL)
+        post_alignment = _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG)
+        post_x = _settings.get(BAR_POS_X_KEY, 0)
+        post_y = _settings.get(BAR_POS_Y_KEY, 0)
+        orientation_changed = post_orientation != pre_orientation
+        position_changed = (post_x, post_y) != (pre_x, pre_y)
+        new_alignment = None
+        if orientation_changed and post_alignment != PROGRESS_ALIGN_FREE:
+            new_alignment = (PROGRESS_ALIGN_DAMAGE_LOG if post_orientation == PROGRESS_ORIENT_HORIZONTAL
+                             else PROGRESS_ALIGN_MINIMAP)
+        if position_changed:
+            new_alignment = PROGRESS_ALIGN_FREE
+        dirty = new_alignment is not None and new_alignment != post_alignment
+        if dirty:
+            _settings[PROGRESS_ALIGNMENT_KEY] = new_alignment
+        # ... AND DROPS THE STORED COORDINATES, on an orientation change ONLY. The two orientations
+        # have different surface geometries, so the other one's absolute pair lands the new bar
+        # somewhere it was never tuned for (observed live: the horizontal bar inheriting the
+        # vertical one's placement landed over the minimap). Zeroed rather than re-anchored,
+        # because (0, 0) is what bar_window._resolve reads as "use this orientation's default
+        # anchor" -- under Free too, which is how this stays compatible with Free being sticky:
+        # the ALIGNMENT is untouched by this branch, only the coordinates reset.
+        # THREE GUARDS, all load-bearing. `orientation_changed` alone confines it to an EXPLICIT
+        # flip -- a mount, a battle start, a stepper edit or any unrelated key's change all leave
+        # the orientation equal and never reach it, so a user's placement is never silently
+        # discarded. `not position_changed` yields to a coordinate typed in the SAME payload (the
+        # rare simultaneous case), matching the precedence the alignment branches above already
+        # give the more explicit edit. The non-zero test keeps the write-back -- and its echo --
+        # terminating.
+        if orientation_changed and not position_changed and (post_x, post_y) != (0, 0):
+            _settings[BAR_POS_X_KEY] = 0
+            _settings[BAR_POS_Y_KEY] = 0
+            dirty = True
+        if dirty:
+            g = _primary_api()
+            if g is not None:
+                try:
+                    g.updateModSettings(LINKAGE, _full_settings_for_write(g))
+                    try:
+                        g.saveState()
+                    except Exception:
+                        LOG_CURRENT_EXCEPTION()
+                except Exception:
+                    LOG_CURRENT_EXCEPTION()
         LOG_DEBUG("[moe] settings changed -> %r" % (_settings,))
         _notify()
     except Exception:
@@ -1156,9 +1336,10 @@ def _on_changed(linkage, new_settings):
 def _on_reset(linkage, defaults):
     """Panel 'reset to defaults' button. The host fires onResetMod (NOT onSettingsChanged),
     globally across every mod, so this is linkage-scoped. Restore our defaults, then force BOTH
-    positions back to AUTO (the garage widget's 0/0/0/0 and the in-battle bar's 0/0) and Follow
-    Carousel Mode back ON regardless of any seeded value the host snapshot may still carry, and
-    fan out."""
+    positions back to AUTO (the garage widget's 0/0/0/0 and the in-battle bar's 0/0), Orientation
+    back to Horizontal and Alignment back to Damage Log (so a reset panel is internally
+    consistent -- 0/0 IS the Damage Log anchor), and Follow Carousel Mode back ON, regardless of
+    any seeded value the host snapshot may still carry, and fan out."""
     try:
         if linkage != LINKAGE:
             return
@@ -1169,6 +1350,8 @@ def _on_reset(linkage, defaults):
         _settings[POS_H_KEY] = 0
         _settings[BAR_POS_X_KEY] = 0
         _settings[BAR_POS_Y_KEY] = 0
+        _settings[PROGRESS_ORIENTATION_KEY] = PROGRESS_ORIENT_HORIZONTAL
+        _settings[PROGRESS_ALIGNMENT_KEY] = PROGRESS_ALIGN_DAMAGE_LOG
         _settings[FOLLOW_CAROUSEL_KEY] = True
         LOG_DEBUG("[moe] settings reset -> %r" % (_settings,))
         _notify()
@@ -1236,11 +1419,18 @@ def set_bar_position(x, y, persist=True):
     movement updates that and nothing else. TRUE (the gesture end) additionally writes it through MSA
     so the panel's steppers track the drag and the position survives the session.
 
+    ALSO sets Alignment to Free -- THE DRAG-END SEAM: a Ctrl+drag is by definition a free pin, and
+    setting it here (rather than inferring it in _on_changed from the position change alone) is
+    what lets _on_changed's pre/post comparison recognise "this echo is our own drag write" for
+    free -- by the time MSA echoes this write back, the live cache already holds these exact values,
+    so that handler sees no change and no-ops (see its LOOP GUARD note).
+
     NO _notify(), unlike set_position: the bar's own host re-places the window directly in the same
     handler, so a fan-out would only cost every OTHER feature a needless apply_settings + re-push
     -- at pointer rate during a drag. Guarded so a missing / broken MSA never breaks the gesture."""
     _settings[BAR_POS_X_KEY] = clamp_pos(x)
     _settings[BAR_POS_Y_KEY] = clamp_pos(y)
+    _settings[PROGRESS_ALIGNMENT_KEY] = PROGRESS_ALIGN_FREE
     if not persist:
         return
     g = _primary_api()

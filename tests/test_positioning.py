@@ -4,11 +4,15 @@ domain.positioning imports zero game symbols. The extents below are the REAL far
 readouts measured in-client at 4K (probe_scale.py): 1x -> space 3840x2160, 2x -> 1920x1080,
 surface fixed 256x256, so movable extent = space - 256."""
 from moe_calculator.domain.positioning import (
-    anchor_centred, anchor_pinned, anchor_top_left, cursor_in_rect, cursor_logical,
+    anchor_centred, anchor_centred_reduced, anchor_minimap, anchor_offset,
+    anchor_top_left, cursor_in_rect, cursor_logical,
     cursor_top_left, damage_log_summary_hidden, efficiency_panel_wide)
 from moe_calculator.domain.constants import (
     BATTLE_ANCHOR_X, BATTLE_ANCHOR_Y, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED,
-    BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD)
+    BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD,
+    MINIMAP_SIZES, MM_GAP, PROGRESS_MM_GAP_BOTTOM, EFFICIENCY_MM_GAP_BOTTOM,
+    MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
+    VERTICAL_ANCHOR_Y_SHIFT, VERTICAL_ANCHOR_Y_SHIFT_LARGE)
 
 
 # Measured movable extents (space - 256 surface) at 4K.
@@ -178,43 +182,6 @@ def test_shift_never_applies_in_the_raised_state():
     assert efficiency_panel_wide(_ALL_OFF, (99999, 99999, 99999, 99999), _T) is False
 
 
-# --- the in-battle bars' Ctrl+drag position ---------------------------------
-# anchor_pinned wraps anchor_centred: a stored drag position (logical GUI px) takes over, and
-# 0 means AUTO -- which is the whole compatibility story, since every existing install stores
-# 0/0 and must land on the shipped anchor byte-for-byte.
-_FRAC, _XOFF, _YOFF = 0.865, 0, 36      # the Moving Average bar's shipped anchor constants
-
-
-def test_pinned_zero_is_auto_and_falls_back_to_the_shipped_anchor():
-    # 0/0 == "never dragged", and it is the ONLY auto pair. The result must be anchor_centred's,
-    # IDENTICALLY -- not merely close: this is the path every user who never touches the feature takes.
-    auto = anchor_centred(3584, 1904, _FRAC, _XOFF, _YOFF)
-    assert anchor_pinned(3584, 1904, 0, 0, _FRAC, _XOFF, _YOFF) == auto
-    # A lone axis IS a pin now: a bar parked flush against the top or left edge legitimately stores
-    # 0 on one axis, so only the exact (0, 0) pair may fall back.
-    assert anchor_pinned(3584, 1904, 900, 0, _FRAC, _XOFF, _YOFF) == (900, 0)
-    assert anchor_pinned(3584, 1904, 0, 900, _FRAC, _XOFF, _YOFF) == (0, 900)
-    # A corrupt store still degrades to auto, because _int maps anything unusable to 0 on BOTH axes.
-    assert anchor_pinned(3584, 1904, None, None, _FRAC, _XOFF, _YOFF) == auto
-    assert anchor_pinned(3584, 1904, "x", "y", _FRAC, _XOFF, _YOFF) == auto
-
-
-def test_a_stored_position_overrides_the_anchor_on_both_axes():
-    assert anchor_pinned(3584, 1904, 900, 640, _FRAC, _XOFF, _YOFF) == (900, 640)
-    # The anchor constants are then IGNORED -- a pin is absolute, not an offset from them.
-    assert anchor_pinned(3584, 1904, 900, 640, 0.1, 999, -999) == (900, 640)
-
-
-def test_a_stored_position_is_never_clamped_on_screen():
-    # THERE IS NO SAFEZONE. The user may park a bar past any screen edge, so a pin is honoured
-    # verbatim -- beyond the movable extent...
-    assert anchor_pinned(1664, 824, 3000, 1800, _FRAC, _XOFF, _YOFF) == (3000, 1800)
-    # ...and NEGATIVE, off the left/top edge, which the old [0, max] clamp used to teleport back.
-    assert anchor_pinned(1664, 824, -400, -120, _FRAC, _XOFF, _YOFF) == (-400, -120)
-    # A pin exactly AT the extent stays put too (nothing here reads max_x/max_y for a pin at all).
-    assert anchor_pinned(1664, 824, 1664, 824, _FRAC, _XOFF, _YOFF) == (1664, 824)
-
-
 def test_wide_does_not_truncate_on_short_values_tuple():
     # A fail-soft adapter read that returns FEWER values than flags must not silently drop the
     # trailing column via zip-truncation: a 5-digit total there would be missed and the overlay
@@ -268,8 +235,10 @@ def test_the_cursor_maps_to_its_own_logical_position_not_a_share_of_the_extent()
 
 def test_cursor_maps_clip_space_corners_to_the_space_corners_unclamped():
     # The screen corners map to the SPACE corners, not to the movable extent: nothing clamps.
-    # The top-left lands on the forbidden (0, 0) AUTO sentinel, so x -- and only x -- is nudged to 1.
-    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (1, 0)          # top-left, nudged off 0/0
+    # (0, 0) used to be nudged off the retired anchor_pinned AUTO sentinel; under Free alignment
+    # it is just the screen origin now, an ordinary position like any other, so the top-left maps
+    # to it VERBATIM -- no nudge.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (0, 0)          # top-left, verbatim
     assert cursor_top_left((1.0, -1.0), _SPACE, *_ARGS) == (1920, 1080)    # bottom-right, un-clamped
 
 
@@ -321,12 +290,12 @@ def test_cursor_drags_past_the_bottom_right_edge():
     assert cursor_top_left((1.0, -1.0), _SPACE, *(_ARGS + (500, 500))) == (2420, 1580)
 
 
-def test_cursor_never_emits_the_auto_sentinel_pair():
-    # (0, 0) is anchor_pinned's "never dragged" sentinel, so a drag that lands exactly there must be
-    # nudged off it -- otherwise releasing the mouse at the screen's top-left silently un-pins the bar
-    # and the next placement jumps back to the shipped anchor. One px on x is the whole fix.
-    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (1, 0)
-    # ...and it must be the ONLY nudge: either coordinate alone at 0 is a legal pin, untouched.
+def test_cursor_lands_on_the_origin_pair_verbatim_no_nudge():
+    # The retired anchor_pinned used (0, 0) as its "never dragged" AUTO sentinel, so a drag landing
+    # exactly there once had to be nudged one px off it. That sentinel is gone (offset (0, 0) under
+    # Damage Log alignment IS the shipped placement now, byte-for-byte -- there is nothing left to
+    # distinguish an "auto" case from), so cursor_top_left must return the exact origin, untouched.
+    assert cursor_top_left((-1.0, 1.0), _SPACE, *_ARGS) == (0, 0)
     assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (0, 300))) == (0, 300)
     assert cursor_top_left((-1.0, 1.0), _SPACE, *(_ARGS + (300, 0))) == (300, 0)
 
@@ -384,3 +353,236 @@ def test_cursor_fails_soft_when_a_pixel_read_has_no_usable_resolution():
     assert cursor_top_left((960, 540), ("a", "b"), *_ARGS) is None
     # ...but a CLIP-space read needs no resolution at all, so it still maps.
     assert cursor_top_left((0.0, 0.0), None, *_ARGS) == (960, 540)
+
+
+# --- Phase 2 (in-battle vertical bar): anchor_minimap ----------------------------------------
+# `x = space_x - mm_size - gap - overhang - edge_x`, `y = space_y - gap_bottom - edge_y`.
+# `edge_x`/`edge_y` are the ALIGNED EDGE's own offset from the surface's top-left corner (the
+# track's position inside the surface), NOT the surface's own width/height -- passing the
+# surface size (the shipped bug) aligns the wrong frame. UNCLAMPED -- there is no
+# movable-extent argument here at all, matching the module's no-safezone rule for
+# anchor_pinned / cursor_top_left.
+
+def test_minimap_anchor_formula():
+    x, y = anchor_minimap(space_x=1920, space_y=1080, edge_x=60, edge_y=200,
+                          mm_size=228, gap=8, gap_bottom=30, overhang=3)
+    assert x == 1920 - 228 - 8 - 3 - 60
+    assert y == 1080 - 30 - 200
+    assert (x, y) == (1621, 850)
+
+
+def test_minimap_anchor_changes_with_each_argument_independently():
+    # A regression against the formula silently degenerating to a subset of its terms: nudge one
+    # argument at a time and confirm ONLY the axis it belongs to moves, by exactly that amount.
+    base = anchor_minimap(1920, 1080, 60, 200, 228, 8, 30, 3)
+    assert anchor_minimap(1921, 1080, 60, 200, 228, 8, 30, 3) == (base[0] + 1, base[1])
+    assert anchor_minimap(1920, 1081, 60, 200, 228, 8, 30, 3) == (base[0], base[1] + 1)
+    assert anchor_minimap(1920, 1080, 61, 200, 228, 8, 30, 3) == (base[0] - 1, base[1])
+    assert anchor_minimap(1920, 1080, 60, 201, 228, 8, 30, 3) == (base[0], base[1] - 1)
+    assert anchor_minimap(1920, 1080, 60, 200, 229, 8, 30, 3) == (base[0] - 1, base[1])
+    assert anchor_minimap(1920, 1080, 60, 200, 228, 9, 30, 3) == (base[0] - 1, base[1])
+    assert anchor_minimap(1920, 1080, 60, 200, 228, 8, 31, 3) == (base[0], base[1] - 1)
+    assert anchor_minimap(1920, 1080, 60, 200, 228, 8, 30, 4) == (base[0] - 1, base[1])
+
+
+def test_minimap_anchor_is_unclamped_and_can_go_negative():
+    # A small enough space or wide enough bar legitimately pushes x/y negative -- there is nothing
+    # to clamp against here (no movable-extent argument on hand), matching anchor_pinned's rule.
+    x, y = anchor_minimap(space_x=100, space_y=100, edge_x=200, edge_y=200,
+                          mm_size=228, gap=8, gap_bottom=30, overhang=3)
+    assert x < 0 and y < 0
+
+
+def test_minimap_anchor_degrades_fail_soft_on_every_unusable_arg():
+    # Every argument goes through _int(): None / non-numeric / NaN degrades to 0 rather than
+    # raising, so an unreadable minimap-size or surface measurement lands the bar at a
+    # wrong-but-numeric spot instead of crashing the placement path.
+    assert anchor_minimap(None, None, None, None, None, None, None, None) == (0, 0)
+    assert anchor_minimap("x", "y", "w", "h", "mm", "g", "gb", "o") == (0, 0)
+    # A single NaN argument degrades to 0 rather than poisoning the whole sum with a NaN result.
+    x_clean, y_clean = anchor_minimap(1920, 1080, 60, 200, 228, 8, 30, 3)
+    x_nan, y_nan = anchor_minimap(1920, 1080, 60, 200, 228, 8, 30, float("nan"))
+    assert (x_nan, y_nan) == (x_clean + 3, y_clean), \
+        "a NaN overhang must degrade to 0 (dropping the -3), not poison the whole sum"
+
+
+# --- Phase 2: anchor_offset --------------------------------------------------------------------
+# `x, y = anchor(alignment, orientation) + (off_x, off_y)` -- adds a stored stepper offset to
+# whichever base anchor the alignment selected, uniformly and unclamped.
+
+def test_offset_adds_to_the_base_anchor_on_both_axes():
+    assert anchor_offset((100, 200), off_x=10, off_y=-5) == (110, 195)
+    assert anchor_offset((0, 0), off_x=0, off_y=0) == (0, 0)
+
+
+def test_offset_reads_a_vector2_style_anchor_too():
+    class _V(object):
+        x = 50.0
+        y = 60.0
+
+    assert anchor_offset(_V(), off_x=1, off_y=2) == (51, 62)
+
+
+def test_offset_has_no_side_effect_on_the_base_anchors_own_inputs():
+    # Composing an offset on top of a base anchor must not mutate whatever produced that anchor --
+    # anchor_offset only ever reads its `anchor` argument.
+    base = (100, 200)
+    anchor_offset(base, off_x=999, off_y=999)
+    assert base == (100, 200)
+
+
+def test_offset_is_unclamped():
+    # Matches the module's no-safezone rule: a user-configurable nudge may push the bar past any
+    # edge, whether the base anchor was itself clamped (anchor_centred_reduced) or not
+    # (anchor_minimap).
+    assert anchor_offset((0, 0), off_x=-99999, off_y=99999) == (-99999, 99999)
+
+
+def test_offset_degrades_unusable_anchor_to_origin_before_adding():
+    assert anchor_offset(None, off_x=5, off_y=7) == (5, 7)
+    assert anchor_offset("nonsense", off_x=5, off_y=7) == (5, 7)
+    assert anchor_offset((float("nan"), 0), off_x=5, off_y=7) == (5, 7)
+
+
+def test_offset_degrades_unusable_offsets_to_zero():
+    assert anchor_offset((10, 20), off_x=None, off_y="bad") == (10, 20)
+
+
+# --- Phase 2: anchor_centred_reduced -----------------------------------------------------------
+# The computed successor to anchor_centred: same X (`max_x // 2`, ignoring space_* entirely) and
+# the same [0, max_y] Y clamp, but Y is `int(space_y * y_frac) + y_shift` instead of
+# `int(max_y * y_frac) + y_offset` -- see TASKS/in-battle-vertical-bar-PLAN.md "Phase 2 approach".
+
+def test_reduced_x_uses_the_extent_and_ignores_space_entirely():
+    # X must match `max_x // 2` in BOTH functions, and must not move when space_x changes -- the
+    # reduction never even takes a space_x argument, which is the invariant this pins.
+    for space_y in (720, 1080, 1440, 2160):
+        x_old, _ = anchor_centred(3584, 1904, 0.5, 0, 0)
+        x_new, _ = anchor_centred_reduced(3584, 1904, space_y, 0.5, 0)
+        assert x_old == x_new == 3584 // 2
+
+
+def test_reduced_y_clamps_into_zero_and_max_y_both_directions():
+    # A huge POSITIVE shift clamps to max_y (never past the bottom of the movable extent)...
+    _, y_hi = anchor_centred_reduced(100, 500, 1080, 0.5, 999999)
+    assert y_hi == 500
+    # ...and a huge NEGATIVE shift clamps to 0 (never off the top), matching anchor_centred's own
+    # existing [0, max_y] clamp exactly.
+    _, y_lo = anchor_centred_reduced(100, 500, 1080, 0.5, -999999)
+    assert y_lo == 0
+
+
+def test_reduced_matches_the_shipped_horizontal_placement_within_one_px():
+    # THE MEASURED, NOT ASSUMED claim: int(space_y * frac) is int-of-sum where anchor_centred's
+    # form is sum-of-rounded-parts, so the two can differ by +/-1 logical px depending on the
+    # exact space_y -- NEVER a fixed delta (memory `anchor-y-reduction-is-not-bit-exact`). Each
+    # (bar, size) pair's PURE shift term (SHIFT_Y_REM * SIZE_F, un-rounded-summed with the
+    # fraction term) is derived here from the shipped TWO-term composites so this test moves with
+    # them rather than hand-duplicating a second copy of the constants:
+    #   progress default: composite 36 == -44 + round(0.865*92)   -> pure shift -44, surface_h 92
+    #   progress large:    composite 44 == -55 + round(0.865*115) -> pure shift -55, surface_h 115
+    #   efficiency default:composite 50 == -50 + round(0.865*116) -> pure shift -50, surface_h 116
+    #   efficiency large:  composite 62 == -63 + round(0.865*145) -> pure shift -63, surface_h 145
+    cases = (
+        ("progress default", 92, 36, -44),
+        ("progress large", 115, 44, -55),
+        ("efficiency default", 116, 50, -50),
+        ("efficiency large", 145, 62, -63),
+    )
+    frac = 0.865
+    max_x = 3584
+    # A wide RESOLUTION SWEEP -- wide enough to actually exercise the jitter (a narrow sweep could
+    # land on all-0 or all-+1 by accident and hide the -1 branch).
+    seen_deltas = set()
+    for space_y in range(600, 4000, 7):
+        for name, surface_h, offset, shift in cases:
+            max_y = space_y - surface_h
+            x_old, y_old = anchor_centred(max_x, max_y, frac, 0, offset)
+            x_new, y_new = anchor_centred_reduced(max_x, max_y, space_y, frac, shift)
+            assert x_old == x_new
+            delta = y_new - y_old
+            assert abs(delta) <= 1, (
+                "%s at space_y=%d drifted by %d (must be a bounded jitter, never more)" %
+                (name, space_y, delta))
+            seen_deltas.add(delta)
+    # The jitter must actually JITTER across the sweep -- a test that only ever saw 0 would not
+    # have caught a regression that widened the bound to +/-2 only at some other resolution, and
+    # a fixed-delta pin (rejected by the plan) would have looked identical to this at one point.
+    assert seen_deltas == {-1, 0, 1}, (
+        "the sweep did not exercise the full -1/0/+1 jitter: %r" % (seen_deltas,))
+    # ...and the concrete measured deltas at 1080p, pinned as the maintainer's own report records
+    # them (not re-derived): progress default 0, progress Large +1, efficiency default +1,
+    # efficiency Large +1.
+    expected_at_1080 = {"progress default": 0, "progress large": 1,
+                        "efficiency default": 1, "efficiency large": 1}
+    for name, surface_h, offset, shift in cases:
+        max_y = 1080 - surface_h
+        _, y_old = anchor_centred(max_x, max_y, frac, 0, offset)
+        _, y_new = anchor_centred_reduced(max_x, max_y, 1080, frac, shift)
+        assert y_new - y_old == expected_at_1080[name]
+
+
+# --- Phase 2: new constants mirror the vertical CSS tuner's live defaults -----------------------
+
+def test_minimap_size_table_matches_the_measured_geometry():
+    assert MINIMAP_SIZES == (228, 279, 329, 409, 510, 628)
+    assert len(MINIMAP_SIZES) == 6   # settingsCore's index range is [0, 5]
+
+
+def test_minimap_clearance_constants_match_the_tuner_defaults():
+    assert MM_GAP == 8
+    assert PROGRESS_MM_GAP_BOTTOM == 30
+    assert EFFICIENCY_MM_GAP_BOTTOM == 28
+
+
+def test_minimap_gap_bottom_constants_are_genuinely_per_bar():
+    # A regression against re-merging the two tuners' clearances back into one shared constant --
+    # they differ ON SCREEN now that the front-end change freed the slack (see constants.py).
+    assert PROGRESS_MM_GAP_BOTTOM != EFFICIENCY_MM_GAP_BOTTOM
+
+
+def test_minimap_tick_overhang_scales_by_the_large_x_length_factor():
+    # trackW=3, tickW*=9 -> overhang == (9-3)/2 == 3 at 1x; LARGE scales by SIZE_F*SIZE_XF ==
+    # 1.25*4/3 == 5/3 exactly, so 3 * 5/3 == 5 with no rounding ambiguity.
+    assert MM_TICK_OVERHANG == 3
+    assert MM_TICK_OVERHANG_LARGE == 5
+    assert MM_TICK_OVERHANG_LARGE == MM_TICK_OVERHANG * 5 // 3
+
+
+def test_the_vertical_track_x_terms_are_pure_composition_derivations():
+    # *_MM_TRACK_X is "where the track sits inside the surface", derived from the JS's V_BOX_LEFT_REM
+    # + that bar's own LEFT surface slack + trackW -- and NOTHING else, PLUS one MEASURED correction
+    # on the Moving Average bar only: two independent Ctrl+drags, in two different surface
+    # geometries, both landed its track 2 logical px to the right of the pure derivation (see
+    # constants.py) -- a repeatable miss, not the scatter an earlier single drag looked like. The
+    # Damage Efficiency bar's own single drag has since been inspected in-game and accepted as
+    # correct AS DERIVED, so it gets no correction.
+    #
+    # THE X SLACK IS PAD_REM ON ONE BAR AND NOT THE OTHER. The Moving Average bar's vertical surface
+    # reaches 63rem past its backdrop on EACH side (MoEProgress.js's V_PAD_X_REM) so it can cover its
+    # right-anchored captions' leftward ink, which PAD_REM alone clipped; the Damage Efficiency bar
+    # still uses PAD_REM on all four sides. This term is what keeps the widened surface from sliding
+    # the bar left on screen -- the surface grew, the track did not move inside it.
+    from moe_calculator.domain.constants import (
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
+
+    # (63 + 34) + 3 == 100 and (63 + 34*4/3 + 3*4/3) * 1.25 == 140.417 -> 140 is the PURE derivation;
+    # the shipped constant is that MINUS the flat -2 hand-placement correction (98 / 138).
+    assert (PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE) == (98, 138)
+    # (10 + 40) + 3 == 53 and (10 + 40*4/3 + 3*4/3) * 1.25 == 84.167 -> 84 -- no correction on top.
+    assert (EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE) == (53, 84)
+
+
+def test_vertical_anchor_shift_is_identical_for_both_bars():
+    # Unlike the horizontal siblings' 44-vs-50 split, both vertical compositions share the same
+    # backdrop geometry, so ONE constant covers both bars.
+    assert VERTICAL_ANCHOR_Y_SHIFT == -90
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -113
+    # LARGE is the SIZE_F (1.25) scale-up of the 1x shift, HALF-AWAY-FROM-ZERO rounded
+    # (-90*1.25 == -112.5 -> -113) -- NOT Python's own round(), which is banker's rounding and
+    # would give -112 here (round-half-to-even), the same convention
+    # EFFICIENCY_ANCHOR_Y_OFFSET_LARGE's -62.5 -> -63 term already uses.
+    magnitude = abs(VERTICAL_ANCHOR_Y_SHIFT * 1.25)
+    assert int(magnitude + 0.5) == 113
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == -113

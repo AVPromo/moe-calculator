@@ -124,6 +124,22 @@ _alt_held = False
 _ctrl_held = False
 
 
+# WHICH ORIENTATION THE OPEN BAR WINDOW WAS MOUNTED WITH (None == no bar has been opened since the
+# mod loaded). The two bar documents branch on `vertical` exactly ONCE, inside their mount: it picks
+# the DOM, the class prefix and the surface size, so it is a COMPOSITION and not a style, and no push
+# can change it after the fact. Comparing this record against the live setting is therefore the whole
+# live-flip mechanism -- see apply_settings. The variant radio gets an equivalent switch for free
+# because it changes WHICH window is gated on; an orientation change changes neither window's gate,
+# which is exactly why it needs its own branch.
+_bar_orientation = None
+
+
+def _bar_vertical():
+    """Whether the bars should draw their VERTICAL composition (pushed as the VM's `vertical`)."""
+    return (mod_settings.progress_bar_orientation()
+            == mod_settings.PROGRESS_ORIENT_VERTICAL)
+
+
 # --- which centre-screen bar is up -------------------------------------------
 
 def _window_gates():
@@ -148,10 +164,14 @@ def _on_mount_refresh(*args, **kwargs):
     # Avatar ready -> we're in a battle: open the overlay window, (re)arm the efficiency
     # listener, kick the thresholds loader, and push the initial model. Reset the played-tank
     # record so this battle promotes its vehicle exactly once (see push).
-    global _battle_recorded, _last_wide, _in_battle, _battle_epoch
+    global _battle_recorded, _last_wide, _in_battle, _battle_epoch, _bar_orientation
     try:
         _in_battle = True
-        _battle_recorded = False
+        # SEED the orientation record for this battle's windows, so a flip made LATER in the battle
+        # has something to be different from. Without this seed the very first settings change of a
+        # session could BE the flip, find no record, and leave the bar drawing the old composition
+        # until the next battle (see apply_settings).
+        _bar_orientation = _bar_vertical()
         # A NEW battle: bump the epoch the efficiency bar's JS delta latch resets on. Bumped BEFORE
         # the first refresh() below, so this battle's very first push already carries the new value.
         _battle_epoch += 1
@@ -259,20 +279,31 @@ def _on_scale_changed(*args, **kwargs):
 
 
 def _on_settings_changed(diff):
-    # settingsCore.onSettingsChanged(diff): the "Summarized damage" DAMAGE_LOG group drives
-    # our anchor (all four unticked -> summary block collapses -> events shift up -> raised
-    # anchor). Re-place only when one of those four flags changed. Fail-open (re-place anyway
-    # if the constants can't be resolved) -- a spurious re-place is harmless (idempotent).
+    # settingsCore.onSettingsChanged(diff) -- TWO unrelated keys ride this ONE event, which is
+    # exactly why no second listener is armed for the minimap:
+    #   * the "Summarized damage" DAMAGE_LOG group drives the OVERLAY's anchor (all four unticked
+    #     -> summary block collapses -> events shift up -> raised anchor).
+    #   * GAME.MINIMAP_SIZE drives the BARS' minimap alignment. The player's resize hotkey chain
+    #     ends in the minimap plugin's _saveSettings() -> AccountSettings.onSettingsChanging ->
+    #     this event with {'minimapSize': idx}, so a mid-battle resize is an EVENT, not a poll --
+    #     re-place and _resolve re-reads the index itself.
+    # Re-place only when one of those keys changed. Fail-open (re-place everything anyway if the
+    # constants can't be resolved) -- a spurious re-place is harmless (idempotent).
     try:
-        from account_helpers.settings_core.settings_constants import DAMAGE_LOG
+        from account_helpers.settings_core.settings_constants import DAMAGE_LOG, GAME
         flags = (DAMAGE_LOG.TOTAL_DAMAGE, DAMAGE_LOG.BLOCKED_DAMAGE,
                  DAMAGE_LOG.ASSIST_DAMAGE, DAMAGE_LOG.ASSIST_STUN)
         if diff is None or any(f in diff for f in flags):
             battle_view.apply_position()
+        if diff is None or GAME.MINIMAP_SIZE in diff:
+            progress_view.apply_position()
+            efficiency_view.apply_position()
     except Exception:
         LOG_CURRENT_EXCEPTION()
         try:
             battle_view.apply_position()
+            progress_view.apply_position()
+            efficiency_view.apply_position()
         except Exception:
             LOG_CURRENT_EXCEPTION()
 
@@ -367,7 +398,8 @@ def _interface_scale_holder():
 
 def _settings_core_holder():
     # settingsCore itself -- exposes onSettingsChanged (fired with a {name: value} diff). Used
-    # to re-place the overlay when the "Summarized damage" DAMAGE_LOG group toggles. Persists
+    # to re-place the overlay when the "Summarized damage" DAMAGE_LOG group toggles, and the bars
+    # when the minimap is resized mid-battle (GAME.MINIMAP_SIZE rides the same event). Persists
     # across battles like interfaceScale, so re-arming is idempotent (membership-checked).
     return battle_adapter._settings_core()
 
@@ -389,7 +421,8 @@ _LISTENERS = (
      _on_post_mortem_switched),
     # Interface-scale changes re-place the overlay so it keeps tracking WG's efficiency panel.
     ("interface scale", _interface_scale_holder, "onScaleChanged", _on_scale_changed),
-    # "Summarized damage" DAMAGE_LOG group toggles re-place the overlay (raised vs default).
+    # "Summarized damage" DAMAGE_LOG toggles re-place the overlay; a MINIMAP RESIZE (same event,
+    # GAME.MINIMAP_SIZE) re-places the bars. One listener, two keys -- see the handler.
     ("settings", _settings_core_holder, "onSettingsChanged", _on_settings_changed),
 )
 
@@ -699,14 +732,15 @@ def push_progress(rvm, snap, model):
             # glyph is dropped JS-side to match (MoEProgress.js paintStatic).
             axis_lo = progress_axis_lo(axis_hi, pre_avg)
         bar_size = mod_settings.progress_bar_size()
+        vertical = _bar_vertical()
         # The two VISIBILITY switches, both resolved in mod_settings so the pair can never disagree
         # between the bars: `alt_held` carries "Alt Press" AND "Always" (a permanently-held Alt IS
         # the Always mode -- the JS pins the bar at its hold plateau), `showEvents` carries "Events".
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f eta=%d alt=%s ctrl=%s size=%d ev=%s" % (
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f eta=%d alt=%s ctrl=%s size=%d ev=%s vert=%s" % (
             visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, eta, alt_held,
-            _ctrl_held, bar_size, show_events))
+            _ctrl_held, bar_size, show_events, vertical))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -732,6 +766,11 @@ def push_progress(rvm, snap, model):
             # Repeats of this battle to reach axis_hi (0 = already there, -1 = no data). The JS
             # appends it to the delta caption and renders nothing below 1.
             tx.setEtaBattles(eta)
+            # WHICH COMPOSITION the JS draws (horizontal / vertical). Read on EVERY push like the
+            # rest, but the JS only branches on it ONCE, at mount: it picks the DOM, the class
+            # prefix and the surface size, none of which is a style. A live flip therefore needs the
+            # window closed and reopened -- see apply_settings.
+            tx.setVertical(vertical)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -771,14 +810,15 @@ def push_efficiency(rvm, snap, model):
         bar_x = efficiency_bar_x(damage, stops)
         band = efficiency_band(damage, stops)
         bar_size = mod_settings.progress_bar_size()
+        vertical = _bar_vertical()
         # The two VISIBILITY switches -- see push_progress; resolved in mod_settings so both bars
         # agree by construction.
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
-                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s" % (
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s vert=%s" % (
                       visible, has_data, damage, bar_x, band, r[1], r[2], r[3], r[4], alt_held,
-                      _ctrl_held, _battle_epoch, bar_size, show_events))
+                      _ctrl_held, _battle_epoch, bar_size, show_events, vertical))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -802,6 +842,9 @@ def push_efficiency(rvm, snap, model):
             # The raw Ctrl state -- the drag gesture. Same wire meaning as push_progress's, and
             # both bars share the ONE stored position pair (bar_window / mod_settings).
             tx.setCtrlHeld(_ctrl_held)
+            # WHICH COMPOSITION the JS draws -- same wire meaning as push_progress's, including the
+            # mount-only branch that makes a live flip a close/reopen (see apply_settings).
+            tx.setVertical(vertical)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -818,14 +861,30 @@ def apply_settings():
     two bars in one pass: the deselected one is closed and the selected one opened. (Under the
     Alt-key mode the overlay window opens but stays hidden until Alt is held --
     push/battle_bar_visible decides visible.) A trailing re-place + re-push makes a live MODE switch
-    or a position-stepper edit, neither of which opens anything, take effect too."""
+    or a position-stepper edit, neither of which opens anything, take effect too.
+
+    AN ORIENTATION FLIP IS THE ONE CHANGE THAT NEEDS A CLOSE/REOPEN, and it gets one here. The bar
+    documents branch on `vertical` only at mount (it picks their DOM, their class prefix and their
+    surface size -- a composition, not a style), so no push can re-draw an already-mounted bar the
+    other way round. Unlike the variant radio, an orientation change does NOT change WHICH window is
+    gated on, so the loop below would leave the open window exactly as it is; `flipped` is what makes
+    it close first and the same pass reopen it, re-mounting the JS against the new orientation. The
+    reopened view pushes its own (different) surface size, and THAT resize round-trips back as
+    onSizeChanged -> bar_window._place, which is what re-places the window."""
+    global _bar_orientation
     try:
         opened = False
+        vertical = _bar_vertical()
+        flipped = _bar_orientation is not None and vertical != _bar_orientation
+        _bar_orientation = vertical
         for enabled, module in _window_gates():
-            if not enabled:
-                if module.active_view() is not None:
-                    module.close_window()
-            elif _in_battle and module.active_view() is None:
+            # `module is not battle_view` keeps the corner overlay out of the flip: it has no
+            # orientation and re-mounting it would be a pointless flap of a window the player is
+            # looking at.
+            remount = flipped and module is not battle_view
+            if (not enabled or remount) and module.active_view() is not None:
+                module.close_window()
+            if enabled and _in_battle and module.active_view() is None:
                 module.open_window()
                 opened = True
         if opened:

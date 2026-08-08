@@ -117,11 +117,13 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. FIFTEEN: the nine through barSize, then transEvents /
-    # transManual, showEvents, holdMs, ctrlHeld and etaBattles, all APPENDED after barSize so
-    # nothing above them is renumbered.
+    # side only is invisible in the client. SIXTEEN: the nine through barSize, then transEvents /
+    # transManual, showEvents, holdMs, ctrlHeld, etaBattles and (Phase 1) `vertical` -- draw the
+    # vertical composition instead of horizontal -- all APPENDED after barSize so nothing above
+    # them is renumbered.
     assert set(_push()) == _VM_PROPS
-    assert len(_VM_PROPS) == 15
+    assert "vertical" in _VM_PROPS
+    assert len(_VM_PROPS) == 16
 
 
 def test_push_writes_the_two_transition_flags_master_folded():

@@ -565,6 +565,164 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
 - `gen_icon_picker.ps1` — browsable grid of the game's quest-type / mark PNGs with their
   `img://` URLs, for choosing an overlay glyph. Same dead-path caveat.
 
+## The two VERTICAL bar tuners
+Vertical variants of both in-battle bars, sitting **beside the minimap** rather than centre-screen
+(the Orientation radio in the settings panel; see `TASKS/in-battle-vertical-bar-PLAN.md`). Phase 1
+landed both stylesheets and their JS DOM/surface branch into `src/…/MoECalculator/` —
+`MoEProgressVertical.css` / `MoEEfficiencyVertical.css`, `<link>`ed alongside the horizontal
+sheets from the same `MoEProgressView.html` / `MoEEfficiencyView.html`, with `goVertical()` in
+`MoEProgress.js` / `MoEEfficiency.js` doing the DOM half and `MoEBarTransient.js` doing the shared
+surface/shift/run-identity half — but the **tuners themselves stay dev-only** (no res_map entry,
+no shipped HTML): they are still where every proportion, timing and Large-mode value was settled
+and where a future re-tune happens, exactly like the horizontal tuners for the horizontal sheets.
+Every proportion is an exact **axis-swap** of the shipped `MoEProgress.css` / `MoEEfficiency.css`; a
+rotation preserves stroke weights, only the axes trade places. Axis convention on both: **0% at the
+BOTTOM, 100% at the TOP**, fill grows via `height` from `bottom: 0`, and every marker centres with
+**`translateY(+50%)`** — the `+`, not the horizontal bars' `-50%`: a `bottom`-anchored box shifts
+back DOWN by half its own length.
+```
+pwsh tools\dev\gen_bar_tuner_vertical.ps1 [-Out TASKS/refs/in-battle-bar-tuner-vertical.html]
+                     [-Backdrop <any image>] [-GameDir <dir>] [-ExtractIcons] [-SelfCheck]
+                     [-EmitCss [-CssOut TASKS/refs/MoEProgressVertical.css]]
+                     [-Artifact [-ArtifactOut TASKS/refs/in-battle-bar-tuner-vertical.artifact.html]]
+node tools\dev\check_bar_vertical.js          # the progress tuner's gate (~150 assertions)
+node tools\dev\make_eff_vertical_artifact.js  # regenerate the efficiency tuner's artifact twin
+node tools\dev\check_eff_vertical.js          # the efficiency tuner's gate + its own selfCheck()
+```
+- `gen_bar_tuner_vertical.ps1` — the vertical **MoE progress bar**. Class prefix **`.mpv-*`**, root
+  **`#moe-bar-root`** (the prefix, never `.mp-`, is what keeps the emitted CSS from colliding with
+  the shipped horizontal bar). Sibling of `gen_bar_tuner.ps1`, **not a flag on it** — same reason
+  `gen_overlay_tuner.ps1` / `eff_bar_tuner.html` are separate files. **`-EmitCss` writes a real
+  file** (`TASKS/refs/MoEProgressVertical.css`, gitignored) by running the generated `<script>` in a
+  headless DOM shim and clicking the real **Copy CSS** handler, exactly as the horizontal tuner
+  does, so the bytes are the button's bytes. `-Artifact` writes a skeleton-free twin (no
+  `<!DOCTYPE>/<html>/<head>/<body>`) for publishing as a Claude Artifact, **derived from the same
+  `$tpl`** so the two cannot drift. Adds a mock **minimap** to the stage (bottom-right, zero inset,
+  sizes from `measure_minimap.py`'s measured table) plus `stageW`/`stageH`/`mmIdx`/`mmGap`/
+  `mmGapBottom`: that placement math is **preview-only and never reaches the emitted CSS** — in-game
+  the window is positioned from Python via `window.move()`, same as the horizontal bar's `offX/offY`.
+- `eff_bar_tuner_vertical.html` — the vertical **Damage Efficiency bar**, hand-authored (a rename
+  clone of `eff_bar_tuner.html`). Class prefix **`.mev-*`**, root **`#mev-bar-root`**. It has **no
+  `-EmitCss` equivalent and no emit script**: CSS comes out of its in-page **Copy CSS** button only,
+  clipboard-only by design. **Do NOT point `tools/dev/emit_eff_css.js` at it** — that script targets
+  the HORIZONTAL tuner **by literal filename** and writes the shipped `src/…/MoEEfficiency.css`,
+  so aiming it here would overwrite the shipped horizontal stylesheet with vertical CSS.
+  `make_eff_vertical_artifact.js` regenerates the publishable twin
+  (`eff_bar_tuner_vertical.artifact.html`) — **run it after every tuner edit**, since
+  `check_eff_vertical.js` rebuilds it in memory and fails loudly on a stale one.
+- Both gates assert **emitted values** in a headless DOM shim, not file size (`-SelfCheck` still
+  only checks size + leftover `__TOKEN__`s, per `bar-tuner-selfcheck-is-not-a-gate`).
+  `check_bar_vertical.js` additionally pins `cssOut()` at the SCHEMA defaults **byte-for-byte**
+  against the checked-in `TASKS/refs/MoEProgressVertical.css`, so **re-run `-EmitCss` after any
+  generator edit** or the gate fails on the stale artifact.
+- **The re-trigger twin is EMITTED, not hand-added.** Both tuners emit a second, byte-identical
+  keyframe (`mpv-life-b` / `mev-life-b`) plus its own run class (`.mpv-run-b` / `.mev-run-b`) from
+  **one builder called twice**, so the pair cannot drift — unlike the shipped `MoEProgress.css`,
+  whose `mp-life` / `mp-life-b` pair is kept identical by hand. The JS alternates the two names
+  (`MoEBarTransient.js` `RUN_CLASSES`/`RUN_NAMES`) because a baked fade/hold/fade keyframe **cannot
+  be re-triggered in place**; without the pair the bar cannot re-raise for a second battle event.
+- **The `.mpv-lg` / `.mev-lg` Large-size blocks are emitted too**, mirroring the shipped `.mp-lg`
+  blocks. The size mode is delivered by the **root font size** (`SIZE_F` 1.25), so only a
+  **cross-axis (screen-x)** length owes the extra `SIZE_XF` = **4/3** — pure `SIZE_XF`, never
+  `SIZE_F` (verified against all nine shipped `.mp-lg` values). Because the axes are swapped, "x
+  length" now names the *cross* axis: track thickness, tick cross-spans, backdrop `left`/`width`,
+  caption `padding-right`/`translateX`, the icon and delta gaps. The bar **length**, tick
+  thicknesses, fonts, vertical gaps and the **dash grid** take **no rule**: restating one would
+  double-apply `SIZE_F`. Neither block is compound; the pair that must be compound is the
+  interface-scale one (`.mp-s1.mp-lg`), and neither tuner emits an `.mpv-s1`/`.mev-s1` rule at all.
+- **Both dash grids are `0deg`** ("to top"), so the first stop sits at the track's BOTTOM edge and
+  the period runs ALONG the bar's length — a dashed mask across the axis. The efficiency tuner
+  originally inherited the horizontal bar's **`90deg`** + `background-size: <period>rem 100%`, where
+  the period ran ACROSS a 3rem-wide track — narrower than one 3rem period, i.e. a single stripe, not
+  a grid; rotated, and its `.mev-lg` twin **deleted** rather than rescaled, because a `0deg` grid's
+  period is a **y**-length the root font already scales. The gate asserts that **absence**, not just
+  the presence of the base rule. Both tuners now carry the period in the gradient's own rem stops
+  with **no `background-size`**.
+  The one remaining difference is deliberate: the dash-**gap alpha** is `gapA` **0.5** in the
+  progress tuner (the horizontal tuner's own tuned default, which shipping hand-rewrites to opaque)
+  and an opaque **1** in the efficiency tuner. Not a tuner concern — leave both alone.
+- The in-browser **digit-count invariance** check (`checkCaptionInvariance()` in the progress tuner;
+  the equivalent inside the efficiency tuner's `selfCheck()`) needs a real layout engine and
+  **SKIPs** under both headless shims — visibly, and the gates assert the skip **fires**, not that
+  the check passes. Open the published artifact and press **Self-check** to actually run it.
+  The caption anchoring it guards is a hard contract: **one shared fixed `right: 100%`** on the base
+  `.mpv-cap` / `.mev-cap` rule with the icon and delta as **in-flow flex children**. A nudge
+  computed off a caption box's own content width is the bug this replaces.
+
+### The shipped vertical CSS is "emit + exactly 5 hand-edits" — `check_vertical_css_handedits.js`
+Both shipped stylesheets are their tuner's emit **plus exactly five documented hand-edits** (each
+marked `HAND-EDIT n/5` at its site in the CSS's own header/comments): the root rule's scoping +
+absolute positioning, a `#moe-bar-box` sizing shim the tuner never emits, the dash-gap stripe
+forced to opaque `rgba(...,1)`, `.mpv-lg`/`.mev-lg` renamed to the shared `.mp-lg` (the body class
+`MoEBarTransient.applySize` actually writes), and the two Large-mode root/box rules re-scoped to
+`body.mpv.mp-lg` / `body.mev.mp-lg`. Until this gate existed those five were enforced by comment
+only — a careless re-emit-and-paste (the exact mistake `emitcss-is-not-the-whole-shipped-
+stylesheet` records for the horizontal sheets) silently reverts any of them with no signal.
+```
+node tools\dev\check_vertical_css_handedits.js                 # exits 1 on any drift
+node tools\dev\check_vertical_css_handedits.js --probe-all      # every mutation, as a table
+node tools\dev\check_vertical_css_handedits.js --list-mutations
+node tools\dev\check_vertical_css_handedits.js --mutate=<key>   # anti-vacuity: MUST report failures
+```
+It regenerates a **fresh emit** for each bar — `gen_bar_tuner_vertical.ps1 -EmitCss` (a real,
+non-selfcheck CSS file) for the progress bar; for the efficiency bar, which has **no `-EmitCss`
+switch**, the same headless `cssOut()`-evaluation technique `check_eff_vertical.js` already uses
+(read the tuner as text, cut at its `// ---- panel wiring` marker, evaluate with `new Function`
+against a stub DOM) — then applies each hand-edit as a **pinned, ordered text edit** (the emit's
+exact "before" text is asserted present, not just assumed) and diffs the fully-edited result
+against the shipped file, comments and blank lines stripped. Any drift beyond the five edits fails
+the same comparison. Two traps it is built to avoid: the gap-alpha edit is scoped to
+**`.mpv-track::after`'s gradient stops only** — the same rule's `box-shadow` ring is legitimately
+`rgba(13,14,16,0.5)` and must never move; and the `.mpv-lg`/`.mev-lg` **absence** check strips
+comments first, since both names legitimately appear inside the very comments that document their
+own rename.
+**What it deliberately does not check**: the hand-edit *values* against any other source of truth
+(those are cross-checked by `check_bar_vertical.js` / `check_eff_vertical.js` / the Python
+positioning tests) — only that the shipped file equals "emit + exactly these edits, nothing else."
+It does not touch the horizontal sheets' own hand-edit sets.
+
+### The vertical DOM/surface/run-identity path — `check_bar_orientation_js.js`
+`check_progress_js.js` / `check_efficiency_js.js`'s hundreds of assertions read `.mp-*` literals
+that `ns()` rewrites into the live prefix at runtime, so they stayed green through the whole
+vertical port and verify **nothing** about the vertical branch. `check_bar_orientation_js.js`
+covers that gap, sharing the same `lib/gf_check_shim.js` idiom:
+```
+node tools\dev\check_bar_orientation_js.js
+node tools\dev\check_bar_orientation_js.js --probe-all
+node tools\dev\check_bar_orientation_js.js --list-mutations
+node tools\dev\check_bar_orientation_js.js --mutate=<key>
+```
+Both bars, both drive the same assertions: `goVertical()` / `V_MARKUP` actually building the
+vertical DOM (and a horizontal mount staying unaffected), the `V_BOX_*` → `resizeViewRem` surface
+push **and its post-deadline re-assert** (pushing once is not enough — the engine's 256×256
+size-timeout fallback runs last and wins), the orientation profile (`AX`/`GROW`/`CAP_C_AX`
+resolving to `bottom`/`height`/`null` vertically), the `mpv-run`/`mev-run` identity pair (never
+`mp-run`), the twin `-b` alternation restarting a second run, and the `animationend` name filter
+following the orientation. The harness's one addition over the two horizontal gates: `window.model`
+starts **empty** and is only populated the instant `engine.whenReady` resolves — mirroring the real
+client's timing — so a hypothetical regression that hoists the `vertical` read to module scope
+(instead of inside `whenReady`, per the port's own rule) would see `{}` and mount horizontal
+regardless, which the DOM-build assertions then catch.
+
+## Minimap rect measurement (offline, no client during analysis)
+The in-battle minimap's size-index -> pixel mapping is compiled AS3 with no Python
+accessor, so its on-screen rect (esp. the bottom-left corner) is recovered by diffing
+screenshots, not by reading a symbol:
+```
+python tools\dev\measure_minimap.py --hidden baseline.png --shots s0.png s1.png s2.png s3.png s4.png s5.png [--scale 1.5] [--json out.json]
+python tools\dev\measure_minimap.py --selfcheck    # assert-based self-test, no screenshots needed
+```
+Capture procedure (module docstring has the full version): pause a replay with Space,
+toggle the minimap off and screenshot (`--hidden`), toggle it on and cycle its size
+hotkeys through all 6 indices, screenshotting each (`--shots`, ascending index) — all 7
+at the SAME paused frame, camera untouched. WoT writes to the install dir's
+`screenshots/` folder. Device px is the durable output (`inset_x`/`inset_y` from the
+image's bottom-left edge); `--scale` (interface scale) adds a separate logical-px
+column. Reports a changed-pixel mask (not just a bbox) with `fill_ratio` and flags any
+secondary cluster (noise / unpaused frame) LOUDLY instead of unioning it into the bbox,
+and warns on a non-monotonic size sequence, a near-whole-image bbox (wrong frame pair),
+or a bbox outside the bottom-left quadrant.
+
 ## Decompiled source (re-clone as needed; not in repo)
 Match the client's branch/region — use the branch matching your client's major
 version (e.g. the `2.3.1.1` major line):

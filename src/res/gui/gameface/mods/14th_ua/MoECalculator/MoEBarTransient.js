@@ -22,13 +22,18 @@
 //     -- `showing` stays true through the whole fade-out, so a flag-based branch pins the bar at
 //     partial opacity;
 //   * the mp-run <-> mp-run-b identity alternation, so consecutive runs never share an
-//     animation-name for the engine to coalesce a restart with;
+//     animation-name for the engine to coalesce a restart with -- and each VERTICAL composition
+//     carries its own twin of that pair (mpv-run / mev-run, see RUN_CLASSES_V), because the two
+//     vertical stylesheets are namespace-disjoint from the horizontal ones;
 //   * the fallback end timer, without which one missing animationend wedges `showing` true forever
 //     and the bar shows once and never again;
 //   * the POST-DEADLINE surface re-assert -- the engine's default-view-size fallback runs LAST and
 //     WINS, so only a late re-assert puts the surface right (see SURFACE_REASSERT_MS).
 // The rewind before a COLD show, and the value commit after one, are the two things that DO differ
-// between the bars: they are the onRewind / onCommit hooks, not flattened away.
+// between the bars: they are the onRewind / onCommit hooks, not flattened away. The ORIENTATION is
+// the third: this module owns the surface/shift/run-identity half of the vertical composition
+// (cfg.vert + goVertical) and the bar owns the DOM half (onVertical), because only the bar knows
+// its own markup.
 //
 // The battle windows have NO hot-reload (they pin their resources at client launch), so every tweak
 // here costs a full client relaunch: tune in the browser, not in the client.
@@ -68,9 +73,9 @@ const SEEK_FADE_OUT = FADE_IN_MS + HOLD_MS;
 // observed ~2.2s.
 // It is load-bearing TWICE: `settled` flips off the back of it, because the re-assert IS the event
 // that makes the surface correct. Before it the surface is the 256x256 fallback -- which CLIPS the
-// composition and, since Python's anchor_centred bakes a term for the real surface height
-// (domain/constants.*_ANCHOR_Y_OFFSET), places the bar far too high. Delete either half and the bug
-// comes back.
+// composition and, since Python's anchor_centred_reduced computes its term from the real surface
+// height (domain/constants.*_ANCHOR_Y_SHIFT), places the bar far too high. Delete either half and
+// the bug comes back.
 const SURFACE_REASSERT_MS = 4000;
 // Slack between the re-assert and letting the bar show. The resize round-trips through C++
 // (Window._cResized -> onSizeChanged -> bridge/bar_window._place re-reads the movable extent), so
@@ -100,7 +105,7 @@ const HIT_MAGIC = 15;
 
 // --- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size, pushed as the VM's `barSize`) -----
 // TWO factors, one per axis, and they are the only two numbers the whole feature has. Defined HERE,
-// once, for both bars (Python's half is the two *_ANCHOR_Y_OFFSET_LARGE constants).
+// once, for both bars (Python's half is the two *_ANCHOR_Y_SHIFT_LARGE constants).
 //
 // SIZE_F IS DELIVERED BY THE ROOT FONT SIZE AND NOTHING ELSE. The rem->px factor in Gameface IS the
 // root font size, and WG's own bootstrap (gui/gameface/js/index.js) ends by writing it from
@@ -124,8 +129,21 @@ const SIZE_XF = 4 / 3;
 // Two interchangeable arming classes, each bound to its OWN identically-tuned @keyframes (the
 // second is each stylesheet's marked HAND-ADDED mp-life-b block), so consecutive runs never share
 // an animation-name and the engine has nothing to coalesce a restart with.
+//
+// THE VERTICAL COMPOSITIONS CARRY THEIR OWN PAIR, and it is PER BAR rather than one shared vertical
+// pair: the two vertical stylesheets are namespace-disjoint from the horizontal ones by design
+// (.mpv-* on MoEProgressVertical.css, .mev-* on MoEEfficiencyVertical.css -- the horizontal pair
+// shares .mp-* only because each registered view is its own document), so each emits its own twin
+// under its own prefix. Both orientations' keyframes are IDENTICALLY tuned -- same 6200ms, same
+// four stops, same 20rem translateY slide -- which is why one set of timing constants above serves
+// all four and no bar owes a second clock. The horizontal pair below is the shipped default; a bar
+// supplies its vertical pair through cfg.vert.run / cfg.vert.life (see createTransient).
 const RUN_CLASSES = ["mp-run", "mp-run-b"];
 const RUN_NAMES = ["mp-life", "mp-life-b"];
+// KEYED BY THE VERTICAL STYLESHEET'S OWN SCOPE CLASS (cfg.vert.cls), so a bar names its prefix
+// exactly once and nothing here needs a second discriminator.
+const RUN_CLASSES_V = { mpv: ["mpv-run", "mpv-run-b"], mev: ["mev-run", "mev-run-b"] };
+const RUN_NAMES_V = { mpv: ["mpv-life", "mpv-life-b"], mev: ["mev-life", "mev-life-b"] };
 
 // Group an integer with thousands separators: 2910 -> "2,910". The tuners' fmt() at their tuned
 // `comma` separator (MoEBattle.ttf carries "," and space, so both were shippable).
@@ -140,6 +158,43 @@ function fmt(n) {
 //   root                          the bar's #moe-bar-root element (mp-life animates ITS transform)
 //   boxLeft/boxTop/boxW/boxH      the composition's bounding box in document rem (== .mp-backdrop)
 //   pad                           slack for the shadow/glow bleed, on all four sides
+//   padX                          OPTIONAL, default `pad`. The X-AXIS slack, when the ink reaches
+//                                 further sideways than the box does and `pad` alone would clip it.
+//                                 Only the vertical Moving Average bar needs one (its captions are
+//                                 right-anchored and grow LEFTWARD past .mpv-backdrop by design --
+//                                 the backdrop deliberately does not cover them), so it is supplied
+//                                 as `vert.padX`; everything else leaves padX == pad and the
+//                                 four-sided-uniform derivation is unchanged byte-for-byte.
+//                                 IT IS ONE VALUE FOR BOTH SIDES, DELIBERATELY, and that is not a
+//                                 simplification -- it is the guarantee. The centred (Damage Log)
+//                                 anchor is `max_x // 2` in Python with NO x term at all
+//                                 (positioning.anchor_centred_reduced), which centres the SURFACE
+//                                 and therefore only centres the BAR while the surface brackets the
+//                                 track evenly. A per-side pad would let a caller silently slide
+//                                 every centred placement by half the asymmetry; this shape cannot
+//                                 express that. Pay the unused slack on the other side instead --
+//                                 the surface rect is invisible (the hit rect is collapsed
+//                                 unconditionally, and hitPad is height-dominated on both vertical
+//                                 bars at both sizes), so a wider surface costs literally nothing.
+//                                 It is an X length like `pad` and, like `pad`, it does NOT carry
+//                                 SIZE_XF: it is a rem-space allowance for rem-sized caption INK,
+//                                 which the root font already scales by SIZE_F alone.
+//   clipB                         OPTIONAL, default 0. Rem of the box's BOTTOM that the surface
+//                                 deliberately does NOT cover, i.e. how much backdrop bleed is
+//                                 CLIPPED at the surface's bottom edge. The ONE asymmetry in an
+//                                 otherwise four-sided-uniform `pad`, and it exists because the
+//                                 engine clamps every window into [0, space - surface] in compiled
+//                                 C++ (see bridge/bar_window's _extent, which DEPENDS on that
+//                                 clamp): the surface's bottom edge can therefore never go below the
+//                                 screen's, so the ONLY way to bring a bottom-anchored composition
+//                                 closer to the screen's bottom edge is to make its surface shorter.
+//                                 Both VERTICAL compositions use it (their tuners' approved look has
+//                                 the backdrop's lower bleed hanging off the stage bottom); the
+//                                 horizontal pair leaves it 0 and keeps the plain box + 2*pad.
+//                                 It is a Y length, so it carries SIZE_F alone via applySize's `f`
+//                                 and NEVER SIZE_XF. It never touches `shiftY`, so the composition
+//                                 does not move inside its surface and the mirrored Python constants
+//                                 (VERTICAL_ANCHOR_Y_SHIFT, MM_TRACK_Y) are UNCHANGED by it.
 //   onRewind(atCurrent)           OPTIONAL. Called inside a cold show, BEFORE the run is armed, to
 //                                 write the values the entry opens with (transitions suppressed).
 //                                 `atCurrent` true == the Alt entry: open ALREADY committed.
@@ -151,6 +206,23 @@ function fmt(n) {
 //                                 rewound nothing and sets it synchronously.
 //   onEnd()                       OPTIONAL. endRun's force-settle tail.
 //   onIdle()                      OPTIONAL. reset's tail (the resting/hidden state).
+//   vert                          OPTIONAL. THE VERTICAL ORIENTATION'S composition, adopted once at
+//                                 mount iff the model's `vertical` is true (see goVertical):
+//                                   cls    the vertical stylesheet's scope class, put on the BODY
+//                                          ("mpv" / "mev"); also the key into RUN_CLASSES_V above
+//                                   box    [left, top, w, h] -- that composition's own bounding box
+//                                          in document rem, replacing the horizontal box* args
+//                                   clipB  OPTIONAL, that composition's own bottom clip (see the
+//                                          `clipB` arg above), replacing the horizontal 0
+//                                   padX   OPTIONAL, that composition's own X-axis slack (see the
+//                                          `padX` arg above), replacing the horizontal `pad`
+//                                 A bar without it is horizontal-only and reads `vertical` never.
+//   onVertical()                  OPTIONAL, and only called if `vert` was adopted: the bar's own
+//                                 half of the switch (rebuild the DOM under the vertical prefix,
+//                                 repoint the cached element refs, flip its axis properties). Runs
+//                                 AFTER the geometry is re-derived and the scope class is on the
+//                                 body, but BEFORE the surface is pushed and before the first
+//                                 render, so nothing downstream ever sees the horizontal DOM.
 //
 // Returns { mount, settled, show, peek, ctrl, size, anim, hold, reset, disarm }.
 export function createTransient(cfg) {
@@ -160,24 +232,44 @@ export function createTransient(cfg) {
     const onCommit = cfg.onCommit || nop;
     const onEnd = cfg.onEnd || nop;
     const onIdle = cfg.onIdle || nop;
+    const onVertical = cfg.onVertical || nop;
 
     // --- the surface, and the rigid shift into it ------------------------------------------
     // A Gameface view PUSHES its own size to C++ through the `viewEnv` global
     // (viewEnv.resizeViewRem(w, h), rem == logical px); a view that never calls it gets the
     // engine's default-size fallback (see SURFACE_REASSERT_MS). There is NO Python-side and NO
     // res_map lever for this (bridge/bar_window.py). The surface is the composition's box plus
-    // `pad` on all four sides, and the whole composition is rigidly translated by that much so
-    // NOTHING sits at a negative coordinate -- an origin overflow is clipped at ANY surface size.
-    // `let`, not `const`, ONLY because of the large size mode: applySize re-derives the four that
-    // carry a factor (see it for the arithmetic). At the shipped size these ARE the four expressions
-    // below and nothing rewrites them. shiftY stays const: it is a pure y/uniform rem length, so the
-    // root font scales it and the value never changes.
-    let viewW = cfg.boxW + 2 * cfg.pad;
-    let viewH = cfg.boxH + 2 * cfg.pad;
-    let shiftX = cfg.pad - cfg.boxLeft;
-    const shiftY = cfg.pad - cfg.boxTop;      // MIRRORED (negated, plus the fraction-unit term) in
-                                              // Python as domain/constants.*_ANCHOR_Y_OFFSET
+    // `pad` on all four sides MINUS `clipB` off the bottom (see the arg -- 0 for both horizontal
+    // bars, non-zero for both vertical ones, and the ONE side that is not uniform), and the whole
+    // composition is rigidly translated by `pad` so NOTHING sits at a negative coordinate -- an
+    // origin overflow is clipped at ANY surface size. `clipB` deliberately does NOT enter shiftY:
+    // the composition stays exactly where it is inside the surface and only the surface's BOTTOM
+    // edge moves up, which is what makes the clip a pure clip and leaves every mirrored Python
+    // constant alone.
+    // `let`, not `const`, because of the large size mode (applySize re-derives the four that carry
+    // a factor -- see it for the arithmetic) AND, for shiftY, because of the VERTICAL orientation:
+    // goVertical swaps the whole composition box, and the vertical box is TALLER than it is wide
+    // where the horizontal one is the reverse, so every one of these five moves. Under a single
+    // orientation nothing rewrites them and they ARE the five expressions below.
+    // NORMALISED ONCE, HERE, so every later `cfg.clipB` / `cfg.padX` read is a number: the
+    // horizontal pair passes neither, and `2 * cfg.pad - undefined` is NaN, which would push a NaN
+    // surface size. `padX` falls back to `pad`, which is what keeps `2 * padX` identical to the
+    // `2 * pad` it replaces everywhere except the one composition that supplies its own.
+    cfg.clipB = cfg.clipB || 0;
+    cfg.padX = cfg.padX || cfg.pad;
+    let viewW = cfg.boxW + 2 * cfg.padX;
+    let viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;
+    let shiftX = cfg.padX - cfg.boxLeft;
+    let shiftY = cfg.pad - cfg.boxTop;        // MIRRORED (negated) in Python as
+                                              // domain/constants.*_ANCHOR_Y_SHIFT, and as
+                                              // VERTICAL_ANCHOR_Y_SHIFT under cfg.vert
     let hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+
+    // THE LIVE RUN IDENTITY PAIR. Horizontal by default; goVertical repoints both at the vertical
+    // composition's own twin (see RUN_CLASSES_V / RUN_NAMES_V), which is what makes armRun's
+    // alternation and the animationend name filter follow the orientation for free.
+    let runCls = RUN_CLASSES;
+    let runNames = RUN_NAMES;
 
     // THE LARGE SIZE MODE's state. `large` is the pushed flag; `baseFont` is the document's root
     // font-size as it was BEFORE we ever touched it, captured ONCE so repeated application cannot
@@ -248,8 +340,45 @@ export function createTransient(cfg) {
     let endT = null;
 
     function disarm() {
-        root.classList.remove(RUN_CLASSES[0]);
-        root.classList.remove(RUN_CLASSES[1]);
+        root.classList.remove(runCls[0]);
+        root.classList.remove(runCls[1]);
+    }
+
+    // ADOPT THE VERTICAL COMPOSITION -- called ONCE, from mount, and only when the model's
+    // `vertical` says so. Everything it touches is the geometry the surface push and the rigid
+    // shift are derived from, plus the run identity pair, plus the body scope class the vertical
+    // stylesheet hangs off; the DOM half is the bar's own (onVertical).
+    //
+    // WHY MOUNT AND NOT MODULE SCOPE: `observer.model` is a live getter over the engine's
+    // `window.model`, and the first moment it is guaranteed populated is inside engine.whenReady --
+    // which is also the last moment before the surface is pushed, so this is the ONE point where the
+    // flag is both readable and still early enough to matter. WHY ONCE: the composition is a DOM +
+    // surface + stylesheet-scope switch, not a style; a mid-battle Orientation change is handled by
+    // Python CLOSING and REOPENING the window (battle_bridge.apply_settings), which re-mounts this
+    // document and comes straight back through here.
+    // `cfg` is MUTATED rather than shadowed because applySize re-derives the same four values from
+    // it on every Large flip -- leaving the horizontal box in cfg would silently restore it there.
+    function goVertical() {
+        cfg.boxLeft = cfg.vert.box[0];
+        cfg.boxTop = cfg.vert.box[1];
+        cfg.boxW = cfg.vert.box[2];
+        cfg.boxH = cfg.vert.box[3];
+        cfg.clipB = cfg.vert.clipB || 0;
+        cfg.padX = cfg.vert.padX || cfg.pad;
+        viewW = cfg.boxW + 2 * cfg.padX;
+        viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;
+        shiftX = cfg.padX - cfg.boxLeft;
+        shiftY = cfg.pad - cfg.boxTop;
+        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
+        runCls = RUN_CLASSES_V[cfg.vert.cls] || RUN_CLASSES;
+        runNames = RUN_NAMES_V[cfg.vert.cls] || RUN_NAMES;
+        try {
+            // ON THE BODY, exactly like .mp-lg and for the same reason: the sizing shim
+            // #moe-bar-box is a body-level SIBLING of the JS-created root, so a class on the root
+            // could never scope a rule for it.
+            document.body.classList.add(cfg.vert.cls);
+        } catch (e) { /* fail-soft */ }
+        onVertical();
     }
 
     // Start (or restart) mp-life, seeking `seekMs` into it. THE single arming point -- coldShow,
@@ -267,7 +396,7 @@ export function createTransient(cfg) {
         root.style.animationPlayState = "";
         root.style.animationDelay = seekMs ? "-" + seekMs + "ms" : "0ms";
         void root.offsetWidth;
-        root.classList.add(RUN_CLASSES[armIdx]);
+        root.classList.add(runCls[armIdx]);
         clearTimeout(endT);
         // For an ANIMATED run this is the FALLBACK end timer: the run's own remaining duration plus
         // slack, so a working animationend always wins it. For an UN-ANIMATED one it is the REAL end
@@ -517,7 +646,7 @@ export function createTransient(cfg) {
     // cancel/end noise of the run it just superseded reports the OTHER name and is dropped here for
     // free. A pulse on an inner element (.mp-track) never reaches this listener.
     root.addEventListener("animationend", function (e) {
-        if (e.animationName !== RUN_NAMES[armIdx]) return;
+        if (e.animationName !== runNames[armIdx]) return;
         endRun(runId);
     });
 
@@ -664,11 +793,17 @@ export function createTransient(cfg) {
         // ROUNDED, because 4/3 is not representable: (460 * 4/3 + 20) * 1.25 evaluates to
         // 791.6666666666665, and the engine takes whole logical px (a floor there would hand us a
         // 1px-narrow surface). Both factors are exact at the shipped size, so this is identity there.
-        viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);
-        viewH = Math.round((cfg.boxH + 2 * cfg.pad) * f);
+        // `padX` does NOT carry `xf` -- see its arg note: it is rem-space slack for rem-sized ink,
+        // which the root font's SIZE_F already grows.
+        viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);
+        // clipB is a Y length like boxH and pad, so it takes `f` alone with them and NEVER `xf` --
+        // it stays INSIDE the parenthesis so the clip scales with the composition it clips (the
+        // caption ink below the track scales too), rather than staying a fixed logical-px bite that
+        // would eat into that ink under Large.
+        viewH = Math.round((cfg.boxH + 2 * cfg.pad - cfg.clipB) * f);
         // rem, so it self-scales with the root font -- 3dp to match the stylesheet's own x-lengths,
         // which keeps shiftX + the .mp-lg backdrop's `left` exactly `pad`.
-        shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;
+        shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;
         hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
         setRootFont();
         // THE SCALE GATE IS RE-EVALUATED ON EVERY FLIP, in BOTH directions, and is deliberately not
@@ -751,15 +886,22 @@ export function createTransient(cfg) {
         ctrlHeld = held === true;
     }
 
-    // Wire the bar up, ONCE, on engine ready. Three parts, in this order:
+    // Wire the bar up, ONCE, on engine ready. FOUR parts, in this order:
     //
+    //  (0) THE ORIENTATION, if the bar offers a vertical composition at all (cfg.vert). FIRST,
+    //      because every one of the three parts below is derived from the composition it picks --
+    //      the shift, the surface size, and the DOM the first render writes into. `=== true`, NOT
+    //      `!== false`: this is a STATE bool, and the shipped bar is HORIZONTAL, so an absent field
+    //      (a pre-push frame, an old harness fixture, a marshal that dropped it) must fail soft
+    //      toward the shipped composition -- the same rule `ctrlHeld` follows and the OPPOSITE of
+    //      the transition switches', which are feature switches whose shipped state is on.
     //  (1) THE RIGID TRANSLATION (unconditional -- an origin overflow is clipped at ANY surface
     //      size, so this must happen even without viewEnv). #moe-bar-root is
     //      position:absolute;left:0;top:0 in the CSS, and moving its origin carries the in-flow
     //      .mp-track AND the abspos .mp-backdrop with it -- relative geometry stays bit-for-bit
     //      identical and NO tuned value is touched. It has to be left/top and NOT a transform:
     //      mp-life animates the root's OWN transform and would clobber one. Python cancels the
-    //      shift (*_ANCHOR_Y_OFFSET) so the bar does not move on screen.
+    //      shift (*_ANCHOR_Y_SHIFT) so the bar does not move on screen.
     //  (2) THE SURFACE + INPUT RECT, pushed now and RE-ASSERTED after the engine's default-size
     //      deadline. The `settled` flip is NESTED in that callback on purpose: it is the re-assert
     //      that makes the surface correct, so the dependency is structural rather than a second
@@ -769,6 +911,7 @@ export function createTransient(cfg) {
     //  (3) the model subscription and the first render.
     function mount(observer, render) {
         engine.whenReady.then(() => {
+            if (cfg.vert && observer.model && observer.model.vertical === true) goVertical();
             root.style.left = shiftX + "rem";
             root.style.top = shiftY + "rem";
             pushSurfaceSize();
@@ -861,5 +1004,5 @@ export {
     FADE_IN_MS, HOLD_MS, FADE_OUT_MS, TOTAL_MS,
     SEEK_NONE, SEEK_PLATEAU, SEEK_FADE_OUT,
     SURFACE_REASSERT_MS, SURFACE_SETTLE_MS, END_MARGIN_MS, HIT_MAGIC,
-    RUN_CLASSES, RUN_NAMES,
+    RUN_CLASSES, RUN_NAMES, RUN_CLASSES_V, RUN_NAMES_V,
 };

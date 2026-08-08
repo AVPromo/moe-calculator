@@ -6,12 +6,23 @@
         <title>MoEEfficiencyView</title>
         <!-- Same-origin coui:// assets: `crossorigin` is inert and `defer` is not a valid
              <link> attribute; the module <script> defers by spec. Kept minimal.
-             ONLY MoEEfficiency.css. Deliberately NOT MoEProgress.css and NOT MoEBattle.css:
-             the tuner's emit reuses #moe-bar-root and the whole .mp-* prefix, IDENTICAL to
-             MoEProgress.css, which is harmless only because each registered view is its own
-             document. Loading both stylesheets here would collide every selector. The
-             @font-face this document needs is carried by MoEEfficiency.css itself. -->
+             ONLY MoEEfficiency.css (+ its vertical twin). Deliberately NOT MoEProgress.css and
+             NOT MoEBattle.css: the tuner's emit reuses #moe-bar-root and the whole .mp-* prefix,
+             IDENTICAL to MoEProgress.css, which is harmless only because each registered view is
+             its own document. Loading BOTH of those stylesheets here would collide every selector.
+             The @font-face this document needs is carried by MoEEfficiency.css itself (and the
+             vertical sheet therefore does not re-declare it).
+             MoEEfficiencyVertical.css IS DIFFERENT, and is linked: its prefix (.mev-*) is disjoint
+             from .mp-* by construction, so the only shared subjects are `body`, `#moe-bar-box` and
+             `#moe-bar-root` -- which it scopes under a `body.mev` class MoEEfficiency.js adds only
+             when it goes vertical. The composition is picked at MOUNT off the VM's `vertical`
+             (mod_settings.progress_bar_orientation), a branch rather than a second res_map layout:
+             a new itemID would cost every user a one-time client restart.
+             ORDER MATTERS: the vertical sheet comes SECOND so its rules are later in the cascade --
+             it out-specifies the horizontal ones anyway (see its header), but source order is the
+             tiebreak if a future rule ever lands at equal specificity. -->
         <link rel="stylesheet" href="MoEEfficiency.css" />
+        <link rel="stylesheet" href="MoEEfficiencyVertical.css" />
     </head>
     <body>
         <!-- Registered OpenWG Gameface view (mods/configs/res_map/MoEEfficiencyView.json) opened

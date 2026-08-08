@@ -143,12 +143,14 @@ def _push(damage, **snap_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # The bridge is this model's only producer: a prop added on one side without the other would
-    # silently leave the JS reading a default forever. SEVENTEEN: the ten that survived
+    # silently leave the JS reading a default forever. EIGHTEEN: the ten that survived
     # `damageDelta`'s removal (which RENUMBERED every property after it), then `battleEpoch`,
-    # `barSize`, `transEvents` / `transManual`, `showEvents`, `holdMs` and `ctrlHeld` -- every one
-    # APPENDED after altHeld for exactly that reason, since an append renumbers nothing.
+    # `barSize`, `transEvents` / `transManual`, `showEvents`, `holdMs`, `ctrlHeld` and (Phase 1)
+    # `vertical` -- draw the vertical composition instead of horizontal -- every one APPENDED after
+    # altHeld for exactly that reason, since an append renumbers nothing.
     assert set(_push(2000)) == _VM_PROPS
-    assert len(_VM_PROPS) == 17
+    assert "vertical" in _VM_PROPS
+    assert len(_VM_PROPS) == 18
 
 
 def test_the_push_keeps_no_state_between_calls(epoch):
@@ -378,7 +380,7 @@ def test_bar_host_reads_the_size_setting_inside_place_not_at_import(monkeypatch)
                         lambda *a: pytest.fail("_place swallowed an exception"))
 
     small, large = 36, 53                       # two DISTINCT offsets; the values are irrelevant
-    host = bar_window.BarHost("ItemId", object, 0.865, 0, small, large, "[test]")
+    host = bar_window.BarHost("ItemId", object, 0.865, 0, small, large, 0, 0, 30, "[test]")
     window = _FakeBarWindow((970, 906))
 
     monkeypatch.setattr(mod_settings, "progress_bar_size",
@@ -537,6 +539,84 @@ def test_nothing_opens_outside_a_battle(monkeypatch, windows):
     battle_bridge.apply_settings()
     assert windows["efficiency"].active_view() is None
     assert windows["progress"].active_view() is None    # the deselected one still closes
+
+
+# --- apply_settings: a live ORIENTATION flip closes + reopens the open bar, but never the
+# corner overlay ---------------------------------------------------------------
+
+def test_an_orientation_flip_closes_and_reopens_the_open_bar(monkeypatch, windows):
+    # Unlike the variant radio, an orientation change does not change WHICH window is gated on
+    # (see _window_gates/apply_settings docstrings) -- it needs its own close/reopen branch
+    # because the bar document only branches on `vertical` once, at mount. `windows` starts with
+    # the Moving Average bar already open under progress_bar_variant == MOVING_AVERAGE (the
+    # `_fresh_battle` autouse fixture already has progress_bar_enabled() == True).
+    monkeypatch.setattr(battle_bridge, "_bar_orientation", mod_settings.PROGRESS_ORIENT_HORIZONTAL)
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_VERTICAL)
+    battle_bridge.apply_settings()
+    assert windows["progress"].log == ["close", "open"]
+    assert windows["progress"].active_view() is not None
+    assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_VERTICAL
+
+
+def test_an_orientation_flip_does_not_remount_the_corner_overlay(monkeypatch, windows):
+    # The corner overlay has no orientation and is deliberately excluded from the flip
+    # (`module is not battle_view` in apply_settings) -- re-mounting it on every Orientation
+    # radio click would be a pointless flap of a window the player is looking at. Open the
+    # overlay FIRST (battle_enabled True) so a spurious remount would show up as a close+open
+    # pair in its log; the real behaviour is an untouched, still-open window.
+    monkeypatch.setattr(mod_settings, "battle_enabled", lambda: True)
+    windows["battle"].open_window()
+    windows["battle"].log = []          # only observe what apply_settings itself does below
+    monkeypatch.setattr(battle_bridge, "_bar_orientation", mod_settings.PROGRESS_ORIENT_HORIZONTAL)
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_VERTICAL)
+    battle_bridge.apply_settings()
+    assert windows["battle"].log == []
+    assert windows["battle"].active_view() is not None
+    # The gated bar still gets its own close/reopen -- the overlay's exclusion is not a
+    # side effect of the flip flag being false altogether.
+    assert windows["progress"].log == ["close", "open"]
+
+
+def test_no_orientation_change_does_not_touch_either_window(monkeypatch, windows):
+    # The counterpart guard: an unrelated settings change (orientation UNCHANGED) must not close
+    # and reopen the bar that is already up -- `flipped` must be False, not vacuously True.
+    monkeypatch.setattr(battle_bridge, "_bar_orientation", mod_settings.PROGRESS_ORIENT_HORIZONTAL)
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_HORIZONTAL)
+    battle_bridge.apply_settings()
+    assert windows["progress"].log == []
+    assert windows["battle"].log == []
+
+
+def test_the_first_settings_change_of_a_battle_is_not_mistaken_for_a_flip(monkeypatch, windows):
+    # `_bar_orientation` starts at None until `_on_mount_refresh` seeds it (memory: without the
+    # seed, the FIRST settings change of a session could BE the flip and find no record). Confirm
+    # apply_settings itself tolerates the None seed rather than only the mount path.
+    monkeypatch.setattr(battle_bridge, "_bar_orientation", None)
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_VERTICAL)
+    battle_bridge.apply_settings()
+    assert windows["progress"].log == []            # no spurious remount on the very first read
+    assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_VERTICAL
+
+
+def test_a_battle_mount_seeds_bar_orientation_from_the_live_setting(monkeypatch, windows):
+    # _on_mount_refresh must SEED `_bar_orientation` every mount (not just leave the record from a
+    # previous battle/session), so the very first settings change of a fresh battle has the right
+    # thing to compare against -- see the None-seed test above for what breaks without it.
+    monkeypatch.setattr(battle_bridge, "_bar_orientation", None)
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_VERTICAL)
+    battle_bridge._on_mount_refresh()
+    assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_VERTICAL
+    # And a later mount RE-seeds it -- a stale True carried from a Vertical battle must not survive
+    # into a fresh one where the player has since switched back to Horizontal.
+    monkeypatch.setattr(mod_settings, "progress_bar_orientation",
+                        lambda: mod_settings.PROGRESS_ORIENT_HORIZONTAL)
+    battle_bridge._on_mount_refresh()
+    assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_HORIZONTAL
 
 
 # --- battleEpoch: the JS delta latch's battle-boundary signal -----------------

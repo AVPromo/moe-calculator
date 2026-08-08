@@ -9,6 +9,15 @@
 // ONE of the two, which is the only reason both stylesheets can own #moe-bar-root and the .mp-*
 // prefix. Never <link> both in one document.
 //
+// TWO ORIENTATIONS, ONE DOCUMENT, and that is NOT a contradiction of the line above: this document
+// DOES <link> a second stylesheet, MoEEfficiencyVertical.css, whose prefix (.mev-*) is disjoint from
+// .mp-* by construction -- so the only selectors that can collide are `body`, `#moe-bar-box` and
+// `#moe-bar-root`, and those three are the only ones the vertical sheet scopes under its `body.mev`
+// class. Which composition draws comes from mod_settings' progress_bar_orientation, pushed as the
+// VM's `vertical`, as a MOUNT-TIME branch (goVertical) -- NOT a second res_map layout, because a new
+// itemID would cost every user a one-time client restart. The PLACEMENT half is Python's and already
+// orientation-aware (bridge/bar_window._resolve).
+//
 // Because this is a registered view, OUR data model (EfficiencyVM) IS the view's own root
 // ViewModel: a bare ModelObserver() with NO feature name, fields read DIRECTLY off the root
 // (model.damage, ...). No nested submodel and NO unwrap dance -- that is only the garage's
@@ -103,8 +112,8 @@ let large = false;
 // rest from them (its box*/pad arguments), exactly as this file used to:
 //   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 480     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
 //   VIEW_H_REM = BOX_H_REM + 2 * PAD_REM == 116     SHIFT_Y_REM = PAD_REM - BOX_TOP_REM  == 50
-// SHIFT_Y_REM is MIRRORED (negated, plus the fraction-unit term) in Python as
-// domain/constants.EFFICIENCY_ANCHOR_Y_OFFSET, so changing BOX_TOP_REM or PAD_REM moves the bar on
+// SHIFT_Y_REM is MIRRORED (negated) in Python as
+// domain/constants.EFFICIENCY_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
 // screen until that constant follows. The hit padding and the re-assert timing live in the shared
 // module (its HIT_MAGIC / SURFACE_REASSERT_MS -- both LOAD-BEARING, read its header).
 const BOX_LEFT_REM = -80;                            // .mp-backdrop's left  == leftmost edge
@@ -113,7 +122,79 @@ const BOX_W_REM = 460;                               // .mp-backdrop's width  (=
 const BOX_H_REM = 96;                                // .mp-backdrop's height
 const PAD_REM = 10;                                  // slack for the shadow/glow bleed
 
-// Build the root once and cache it. Markup shape is the tuner's stage verbatim
+// --- THE VERTICAL ORIENTATION (mod_settings.progress_bar_orientation, pushed as the VM's
+// `vertical`) ------------------------------------------------------------------------------------
+// A SECOND COMPOSITION IN THE SAME DOCUMENT, not a restyle of this one: its own stylesheet
+// (MoEEfficiencyVertical.css, <link>ed alongside MoEEfficiency.css from MoEEfficiencyView.html),
+// its own namespace-disjoint prefix (.mev-*), its own DOM order (numeral BEFORE icon, delta LEFT of
+// the numeral) and its own surface. NO second res_map entry: orientation is a MOUNT-TIME branch,
+// and a new itemID would cost every user a one-time client restart.
+//
+// V_BOX_* IS .mev-backdrop, exactly as BOX_* above is .mp-backdrop. Note it is NOT a transpose of
+// these four -- the vertical tuner's own tuned lengths -- but its TOP and HEIGHT are IDENTICAL to
+// the vertical Moving Average bar's (-80 / 360), which is why the two share ONE Python shift
+// constant where their horizontal siblings need -50 and -44 apiece:
+//   V_VIEW_W_REM = V_BOX_W_REM + 2 * PAD_REM == 116   V_SHIFT_X_REM = PAD_REM - V_BOX_LEFT_REM == 50
+//   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
+//                               - V_CLIP_B_REM == 318 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
+// V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
+// -113 for Large == -round(90 * SIZE_F)). #moe-bar-box in MoEEfficiencyVertical.css is sized to the
+// derived surface -- and unlike the horizontal file's box (left at the tuner's own emitted 460x55,
+// deliberately not a surface copy) that one IS a third copy: keep it in lockstep.
+//
+// THE SURFACE IS THE ONLY SIDE THAT IS NOT box + PAD_REM, AND THAT IS THE WHOLE POINT (V_CLIP_B_REM).
+// Read the sibling MoEProgress.js's own V_CLIP_B_REM note first -- the mechanism, the engine clamp it
+// works around and the Large-mode reasoning are IDENTICAL and are written out once, there. Only the
+// two numbers differ, because the two vertical tuners' bottom gaps differ:
+//   V_CLIP_B_REM == (V_BOX_H_REM + 2*PAD_REM) - (V_SHIFT_Y_REM + barLen + bottomGap)
+//                == 380 - (90 + 200 + 28) == 62
+// `bottomGap` 28 is THIS bar's tuned value (tools/dev/eff_bar_tuner_vertical.html:470), against the
+// Moving Average tuner's 30 -- a difference that used to be UNOBSERVABLE (both were below the shared
+// 90 of slack, so the clamp flushed either to the same place) and is observable now, which is exactly
+// why domain/constants' single MM_GAP_BOTTOM is split per bar in the same change.
+// The surface's below-the-track slack becomes 318 - 290 == 28 == the tuned gap exactly (290 is
+// V_SHIFT_Y_REM + barLen == domain/constants.MM_TRACK_Y, which this does NOT move). Under Large the
+// pushed surface is round(318 * SIZE_F) == 398 against MM_TRACK_Y_LARGE 363, i.e. 35 of slack ==
+// 28 * SIZE_F exactly -- so the fixed 28 is unreachable there and the engine's flush delivers the
+// scaled gap, which is the sibling's 30 -> 37 case with this bar's own two numbers.
+// WHAT IT COSTS, DERIVED FROM THE SHIPPED CSS, is 3.5rem of clearance on the bottom caption's ink and
+// nothing else. .mev-cap.bt (MoEEfficiencyVertical.css) is `top: 100%` + `margin-top: 3rem` off the
+// track's bottom end and its flex row is `line-height: 20.5rem` tall (the numeral's line box beats its
+// 16rem .dmg icon; the delta is position:absolute and contributes no height at all), so its box ends
+// 3 + 20.5 == 23.5rem below the track; the numeral's 1rem dark-drop text-shadow radius reaches 24.5,
+// the icon's translateY(0.5rem) + its ::before 106% glow (3% of 16rem) reaches 22.2, and the delta --
+// `top: 0` + translate(_, 1.5rem), 15.5rem tall, + 1rem of drop -- reaches 21.0. So the deepest ink is
+// 24.5 against 28 of slack. The ONLY thing past the edge is the band glow's soft tail (the 6rem blur
+// on .mev-cap.bt .mev-v under every #moe-bar-root.mev-b-* band, reaching ~29.5), which the tuner clips
+// at its own stage bottom at the same 28.
+// THE 256x256 SIZE-TIMEOUT FALLBACK STILL RUNS LAST AND STILL WINS here, and the vertical surface is
+// pushed and RE-ASSERTED after the deadline by the same shared machinery (MoEBarTransient's
+// SURFACE_REASSERT_MS); each push round-trips back as onSizeChanged -> bar_window._place, which is
+// what makes the placement agree with the surface.
+const V_BOX_LEFT_REM = -40;                          // .mev-backdrop's left
+const V_BOX_TOP_REM = -80;                           // .mev-backdrop's top
+const V_BOX_W_REM = 96;                              // .mev-backdrop's width
+const V_BOX_H_REM = 360;                             // .mev-backdrop's height
+const V_CLIP_B_REM = 62;                             // backdrop bleed the SURFACE clips off the bottom
+
+// THE LIVE ORIENTATION PROFILE -- see the sibling MoEProgress.js for the same three-value shape.
+//   PFX      the class prefix every selector and toggled class here is written in. The source spells
+//            everything "mp-..." and ns() rewrites it, so the literals stay greppable.
+//   AX       the property a marker's position is written to: `left` / `bottom` (0% at the BOTTOM).
+//   GROW     the property the fill grows along: `width` / `height`.
+//   CAP_C_AX the axis the CURRENT caption tracks, or null if it does not move. It is null on the
+//            vertical composition, where the current value + delta are a STATIC readout below the
+//            track's bottom end and only the current TICK follows the fill -- which also retires
+//            capClampPct entirely there (a static caption cannot overflow the corridor).
+let PFX = "mp";
+let AX = "left";
+let GROW = "width";
+let CAP_C_AX = "left";
+
+function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
+
+// THE HORIZONTAL COMPOSITION'S MARKUP (the vertical one is V_MARKUP below; ensureRoot builds this
+// one and goVertical replaces it). Markup shape is the tuner's stage verbatim
 // (eff_bar_tuner.html:333-351): backdrop, then the track carrying the fill, the four FIXED
 // requirement ticks, the one moving current tick, the four requirement captions (three marksOnGun
 // glyphs + the barrel_mark at 100 %) and the current caption with its BARE signed delta -- no
@@ -121,12 +202,7 @@ const PAD_REM = 10;                                  // slack for the shadow/glo
 // wrapper carries the gap, size and fade, the inner numeral is what JS writes the digits into (see
 // the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
-function ensureRoot() {
-    let root = document.getElementById("moe-bar-root");
-    if (root) return root;
-    root = document.createElement("div");
-    root.id = "moe-bar-root";
-    root.innerHTML =
+const MARKUP =
         '<div class="mp-backdrop"></div>' +
         '<div class="mp-track">' +
         '  <div class="mp-fill"></div>' +
@@ -146,20 +222,86 @@ function ensureRoot() {
         '  <div class="mp-cap up mp-capC"><i class="mp-ico dmg"></i><span class="mp-v"></span>' +
         '<span class="mp-d"><span class="mp-d-num"></span></span></div>' +
         '</div>';
+
+// ...and THE VERTICAL COMPOSITION'S markup, tools/dev/eff_bar_tuner_vertical.html's stage verbatim.
+// FOUR structural differences from the horizontal template above, all of them the tuner's tuned
+// layout and none free to "tidy":
+//   * NUMERAL BEFORE ICON in every caption (the icon trails, away from the track), and the DELTA
+//     FIRST on the current caption. That ordering is what makes the shared right:100% anchor
+//     digit-count invariant: the icon is the LAST in-flow child, flush against a FIXED edge, so only
+//     the numeral grows and it grows leftward. Reversing it re-introduces the exact defect that
+//     shipped once on the horizontal Moving Average bar.
+//   * the four requirement captions split by ROLE, not one `dn` class: r1-r3 are `lf` (each beside
+//     its own 25/50/75% tick) and r4 is `tp` (a static cap above the track's TOP end), because a
+//     vertical axis has no single "below the track" side to share.
+//   * the current caption is `bt mev-capC` -- a static cap below the BOTTOM end. It keeps mev-capC
+//     purely so the ref lookup below is one selector for both orientations.
+//   * every caption is a SIBLING of .mev-track rather than a child, exactly as the tuner has them
+//     (root and track are the same 3x200rem box, so every percentage resolves identically; this
+//     only keeps the diff against the tuner readable).
+const V_MARKUP =
+        '<div class="mev-backdrop"></div>' +
+        '<div class="mev-track">' +
+        '  <div class="mev-fill"></div>' +
+        '  <div class="mev-tick mev-req r1"></div>' +
+        '  <div class="mev-tick mev-req r2"></div>' +
+        '  <div class="mev-tick mev-req r3"></div>' +
+        '  <div class="mev-tick mev-req r4"></div>' +
+        '  <div class="mev-tick mev-cur"></div>' +
+        '</div>' +
+        '<div class="mev-cap lf r1"><span class="mev-v"></span><i class="mev-ico mk mk1"></i></div>' +
+        '<div class="mev-cap lf r2"><span class="mev-v"></span><i class="mev-ico mk mk2"></i></div>' +
+        '<div class="mev-cap lf r3"><span class="mev-v"></span><i class="mev-ico mk mk3"></i></div>' +
+        '<div class="mev-cap tp r4"><span class="mev-v"></span><i class="mev-ico bm"></i></div>' +
+        '<div class="mev-cap bt mev-capC"><span class="mev-d"><span class="mev-d-num"></span></span>' +
+        '<span class="mev-v"></span><i class="mev-ico dmg"></i></div>';
+
+function ensureRoot() {
+    let root = document.getElementById("moe-bar-root");
+    if (root) return root;
+    root = document.createElement("div");
+    root.id = "moe-bar-root";
+    root.innerHTML = MARKUP;
     document.body.appendChild(root);
     return root;
 }
 
 const root = ensureRoot();
-const fill = root.querySelector(".mp-fill");
-const tCur = root.querySelector(".mp-tick.mp-cur");
-const reqTicks = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-tick.r" + i); });
-const reqCaps = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-cap.r" + i); });
-const capC = root.querySelector(".mp-cap.up");
-const capD = capC.querySelector(".mp-d");
-const capDN = capC.querySelector(".mp-d-num");
+// `let`, not `const`, because goVertical() rebuilds the root's contents under the .mev- prefix and
+// every ref has to be re-queried against the new nodes. Under a single orientation nothing rewrites
+// them. `.mp-capC` (not the old `.mp-cap.up`) is the current caption's lookup on BOTH orientations:
+// the vertical composition's equivalent role class is `bt`, not `up`, so the shared marker class is
+// what makes one ns()-rewritten selector serve both.
+let fill = root.querySelector(".mp-fill");
+let tCur = root.querySelector(".mp-tick.mp-cur");
+let reqTicks = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-tick.r" + i); });
+let reqCaps = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-cap.r" + i); });
+let capC = root.querySelector(".mp-capC");
+let capD = capC.querySelector(".mp-d");
+let capDN = capC.querySelector(".mp-d-num");
 
-function capV(c) { return c.querySelector(".mp-v"); }
+// ADOPT THE VERTICAL COMPOSITION -- the bar's half of MoEBarTransient's onVertical hook (the shared
+// module owns the surface, the rigid shift, the run-identity pair and the body scope class). Called
+// ONCE, inside engine.whenReady, BEFORE the surface push and before the first render, so nothing
+// downstream ever sees the horizontal DOM. A mid-battle Orientation change re-mounts this document
+// (Python closes and reopens the window -- battle_bridge.apply_settings) and comes straight back
+// through here; there is deliberately no live re-composition path.
+function goVertical() {
+    PFX = "mev";
+    AX = "bottom";
+    GROW = "height";
+    CAP_C_AX = null;                 // a STATIC bottom cap here -- see the profile note
+    root.innerHTML = V_MARKUP;
+    fill = root.querySelector(".mev-fill");
+    tCur = root.querySelector(".mev-tick.mev-cur");
+    reqTicks = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mev-tick.r" + i); });
+    reqCaps = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mev-cap.r" + i); });
+    capC = root.querySelector(".mev-capC");
+    capD = capC.querySelector(".mev-d");
+    capDN = capC.querySelector(".mev-d-num");
+}
+
+function capV(c) { return c.querySelector(ns(".mp-v")); }
 
 // --- the pushed state ---------------------------------------------------------------------
 // `cur` is the latest push; `last` is the previous one. `last === null` means "no baseline yet":
@@ -240,11 +382,16 @@ function capClampPct(p) {
 // No rewind/snap variant and no transition suppression, unlike MoEProgress.setPos: this bar has a
 // single set of values, so the CSS's 400ms fill/left transitions may always run -- exactly what the
 // tuner's own hit() does. On a cold entry they run under the 600ms fade-in and are invisible.
+// THE AXIS IS A PAIR OF PROPERTY NAMES, not two code paths: GROW is the fill's growth property
+// (`width` horizontally, `height` vertically -- 0% at the BOTTOM) and AX the current tick's position
+// property (`left` / `bottom`). CAP_C_AX is null on the vertical composition, where the current
+// caption is a static readout below the track's bottom end -- so capClampPct, whose whole job is
+// keeping a MOVING caption inside a horizontal corridor, is not reached there at all.
 function setPos(x) {
     const p = x.toFixed(3) + "%";
-    fill.style.width = p;
-    tCur.style.left = p;
-    capC.style.left = capClampPct(x).toFixed(3) + "%";
+    fill.style[GROW] = p;
+    tCur.style[AX] = p;
+    if (CAP_C_AX) capC.style[CAP_C_AX] = capClampPct(x).toFixed(3) + "%";
 }
 
 // Everything that does NOT animate: the four requirement numerals, which of them are met, the band
@@ -256,10 +403,10 @@ function paintStatic() {
         capV(reqCaps[i]).textContent = fmt(cur.r[i]);
         reqTicks[i].classList.toggle("met", i + 1 <= cur.band);
     }
-    BAND_CLASSES.forEach(function (c, i) { root.classList.toggle(c, i === cur.band); });
+    BAND_CLASSES.forEach(function (c, i) { root.classList.toggle(ns(c), i === cur.band); });
     // The pulse rule is #moe-bar-root.mp-b-au.mp-pulse .mp-track, so this class is inert off gold
     // anyway -- gate it on the band regardless, so the DOM says what it means.
-    root.classList.toggle("mp-pulse", cur.band === 4);
+    root.classList.toggle(ns("mp-pulse"), cur.band === 4);
     capV(capC).textContent = fmt(cur.damage);
     capDN.textContent = (delta > 0 ? "+" : "") + fmt(delta);
 }
@@ -296,6 +443,13 @@ const T = createTransient({
     pad: PAD_REM,
     onEnd: dropDelta,
     onIdle: dropDelta,
+    // THE VERTICAL COMPOSITION. `cls` is the body scope class MoEEfficiencyVertical.css hangs off AND
+    // the key to that stylesheet's own re-trigger keyframe twin (MoEBarTransient's RUN_CLASSES_V);
+    // `box` replaces the four box* arguments above. Adopted at mount iff the model's `vertical` is
+    // true, which then calls goVertical above for the DOM half.
+    vert: { cls: "mev", box: [V_BOX_LEFT_REM, V_BOX_TOP_REM, V_BOX_W_REM, V_BOX_H_REM],
+            clipB: V_CLIP_B_REM },
+    onVertical: goVertical,
 });
 
 function dropDelta() {

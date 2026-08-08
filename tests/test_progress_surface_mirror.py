@@ -10,9 +10,12 @@ THE SURFACE SIZE is written down THREE times.
 MoEProgress.js's VIEW_W_REM / VIEW_H_REM (derived from the composition's measured box + PAD_REM)
 are the source of truth. They are also spelled out as literals in MoEProgress.css's #moe-bar-box
 (the static sizing shim that makes the document measurable, so the engine's 256x256 default-size
-fallback never fires -- see MoEProgressView.html), and BOTH of them feed
-domain/constants.PROGRESS_ANCHOR_Y_OFFSET: it cancels the JS's SHIFT_Y_REM and converts the
-placement fraction from the movable extent to the viewport using the surface height.
+fallback never fires -- see MoEProgressView.html), and BOX_H_REM feeds
+domain/constants.PROGRESS_ANCHOR_Y_SHIFT: it cancels the JS's SHIFT_Y_REM, which is the composition's
+whole intra-surface shift and now the WHOLE constant -- the extent-to-viewport fraction conversion
+the old two-term PROGRESS_ANCHOR_Y_OFFSET composite also carried is computed by
+positioning.anchor_centred_reduced instead (see its docstring), so no surface-height term is baked
+here at all any more.
 
 The battle window has no hot-reload, so a drift between the three costs a client relaunch to
 notice: assert the actual EMITTED VALUES here rather than trusting the comments.
@@ -24,9 +27,9 @@ from decimal import Decimal, ROUND_HALF_UP
 import pytest
 
 from moe_calculator.domain.constants import (
-    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET,
-    PROGRESS_ANCHOR_Y_OFFSET_LARGE)
-from moe_calculator.domain.positioning import anchor_centred
+    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_SHIFT,
+    PROGRESS_ANCHOR_Y_SHIFT_LARGE, VERTICAL_ANCHOR_Y_SHIFT, VERTICAL_ANCHOR_Y_SHIFT_LARGE)
+from moe_calculator.domain.positioning import anchor_centred_reduced, anchor_offset
 from moe_calculator.domain.rounding import iround_half_away
 
 _WIDGET = os.path.join(os.path.dirname(__file__), "..", "src", "res", "gui", "gameface", "mods",
@@ -93,6 +96,375 @@ def _large_shift_y(js):
     return iround_half_away(Decimal(_shift_y(js)) * _size_factor("SIZE_F"))
 
 
+def _css_rect(src, selector):
+    """left/top/width/height (all whole rem) out of ONE CSS rule -- the vertical composition's
+    own bounding box, .mpv-backdrop, mirroring what .mp-backdrop is for the horizontal one."""
+    body = _css_rule(src, selector)
+    def _prop(name):
+        match = re.search(r"%s:\s*(-?\d+)rem;" % name, body)
+        assert match, "MoEProgressVertical.css: %s has no %s" % (selector, name)
+        return int(match.group(1))
+    return _prop("left"), _prop("top"), _prop("width"), _prop("height")
+
+
+def _v_surface_wh(js):
+    """The vertical surface the JS pushes to the engine -- V_BOX_W_REM + 2*V_PAD_X_REM on the
+    width (MoEBarTransient's `viewW = cfg.boxW + 2 * cfg.padX;`), V_BOX_H_REM + 2*PAD_REM -
+    V_CLIP_B_REM on the height (`viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;`). NEITHER axis is the
+    uniform PAD_REM, and each departure is its own deliberate thing: the height CLIPS the backdrop's
+    own bottom bleed (V_CLIP_B_REM) and the width reaches far PAST the backdrop on both sides to
+    cover the right-anchored captions' leftward ink (V_PAD_X_REM). Both carry their derivation in
+    the JS's own notes."""
+    pad = _js_const(js, "PAD_REM")
+    return (_js_const(js, "V_BOX_W_REM") + 2 * _js_const(js, "V_PAD_X_REM"),
+            _js_const(js, "V_BOX_H_REM") + 2 * pad - _js_const(js, "V_CLIP_B_REM"))
+
+
+def _v_shift_x(js):
+    """MoEProgress.js's vertical SHIFT_X_REM (goVertical's `cfg.padX - cfg.boxLeft`) -- how far
+    RIGHT the composition sits inside its own surface, i.e. how much room the captions have to grow
+    leftward into before the surface clips them."""
+    return _js_const(js, "V_PAD_X_REM") - _js_const(js, "V_BOX_LEFT_REM")
+
+
+def _v_shift_y(js):
+    """MoEProgress.js's vertical SHIFT_Y_REM (goVertical's `cfg.pad - cfg.boxTop`, fed from
+    V_BOX_TOP_REM) -- mirrored (negated) in Python as VERTICAL_ANCHOR_Y_SHIFT."""
+    return _js_const(js, "PAD_REM") - _js_const(js, "V_BOX_TOP_REM")
+
+
+def test_the_vertical_box_consts_quote_the_backdrop_rule():
+    # V_BOX_* is .mpv-backdrop -- the vertical composition's own bounding box, axis-swapped from
+    # .mp-backdrop/BOX_* above (memory `emitted-css-gate-needs-absence-assertions`'s sibling
+    # concern: a JS-side literal with no CSS-side cross-check can drift silently). Mirrors
+    # test_css_sizing_box_matches_the_js_surface's contract under the vertical prefix.
+    css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
+    assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == \
+        _css_rect(css, ".mpv-backdrop")
+    assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-34, -80, 72, 360)
+
+
+def test_the_vertical_clip_is_fed_from_its_own_constant():
+    # `viewH`'s `- cfg.clipB` term (MoEBarTransient.js) is only meaningful if the vertical config
+    # actually hands it V_CLIP_B_REM by name -- a literal or a copy of the wrong bar's constant
+    # would still satisfy every OTHER derivation test while the clip silently drifted.
+    js = _read("MoEProgress.js")
+    assert re.search(r"clipB:\s*V_CLIP_B_REM\s*[,}]", js), \
+        "MoEProgress.js: vert config's clipB is not fed from V_CLIP_B_REM"
+    assert _js_const(js, "V_CLIP_B_REM") == 60
+
+
+def test_the_vertical_css_sizing_box_matches_the_js_surface():
+    # body.mpv #moe-bar-box mirrors the surface _v_surface_wh derives, exactly as the horizontal
+    # #moe-bar-box mirrors BOX_W/H_REM + 2*PAD_REM in test_css_sizing_box_matches_the_js_surface.
+    # The width is NOT box + 2*PAD_REM any more: V_PAD_X_REM widens BOTH sides so the surface covers
+    # the right-anchored captions' leftward ink (the backdrop deliberately does not -- see
+    # test_the_vertical_captions_fit_inside_the_surface, the gate on the value itself) while staying
+    # concentric with the track (test_the_wider_vertical_surface_does_not_move_the_centred_track).
+    css = _read("MoEProgressVertical.css")
+    match = re.search(r"body\.mpv #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*height:\s*(\d+)rem;\s*\}",
+                       css)
+    assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
+    box = (int(match.group(1)), int(match.group(2)))
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (198, 320)
+
+
+def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
+    # VERTICAL_ANCHOR_Y_SHIFT is ONE constant for BOTH bars (unlike the horizontal 44-vs-50
+    # split): both vertical compositions share the same backdrop geometry (top: -80rem,
+    # height: 360rem) and the same PAD_REM == 10, so this bar's own derivation already pins the
+    # shared value -- the efficiency mirror file re-derives it independently off ITS OWN JS, and
+    # the two must agree (see that file's copy of this test).
+    js = _read("MoEProgress.js")
+    assert VERTICAL_ANCHOR_Y_SHIFT == -_v_shift_y(js) == -90
+
+
+def test_the_vertical_large_shift_is_the_same_pure_term_scaled_by_size_f():
+    # The LARGE twin -- half-away rounding, the same convention every other *_SHIFT_LARGE uses
+    # (-112.5 -> -113).
+    js = _read("MoEProgress.js")
+    assert VERTICAL_ANCHOR_Y_SHIFT_LARGE == \
+        -iround_half_away(Decimal(_v_shift_y(js)) * _size_factor("SIZE_F")) == -113
+
+
+def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
+    # body.mpv.mp-lg #moe-bar-box restates ONLY the width, in DOCUMENT REM, at V_BOX_W_REM*SIZE_XF +
+    # 2*V_PAD_X_REM (the root font's SIZE_F is layered on top of every rem for free, including this
+    # one and the unrestated height) -- so the LOGICAL PX surface under Large is this rem value times
+    # SIZE_F for width, and the default height times SIZE_F alone. DO NOT write the logical-px number
+    # into the shim: 222 * 1.25 == 277.5 -> 278, and a 278rem shim would push a 347px surface.
+    # ONLY THE BACKDROP HALF TAKES SIZE_XF. The pad is rem-space slack for rem-sized ink (the caption
+    # glyphs and the shadow bleed), which the root font already grows by SIZE_F -- giving it the x
+    # factor too would over-pad by 25%, the same rule PAD_REM has always followed.
+    # Pinned: progress vertical Large -> 278 x 400.
+    css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
+    match = re.search(r"body\.mpv\.mp-lg #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*\}", css)
+    assert match, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
+    large_w_rem = int(match.group(1))
+    xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
+    pad = _js_const(js, "PAD_REM")
+    assert large_w_rem == (_js_const(js, "V_BOX_W_REM") * xf
+                           + 2 * _js_const(js, "V_PAD_X_REM"))
+    _, default_h = _v_surface_wh(js)
+    assert (iround_half_away(Decimal(large_w_rem) * f),
+            iround_half_away(Decimal(default_h) * f)) == (278, 400)
+
+
+def _advances(js):
+    """MoEBattle.ttf's per-glyph advances in em, scraped from MoEProgress.js's OWN hmtx note.
+
+    Scraped, not transcribed, so the file that DERIVES its horizontal extremes from these four and
+    the test that derives the vertical ones can never disagree about the font. Anchored on the
+    horizontal header's `plus` spelling, which occurs exactly once."""
+    match = re.search(r"digit ([\d.]+)em, comma ([\d.]+), paren ([\d.]+),\s*\n?//\s*plus ([\d.]+)",
+                      js)
+    assert match, "MoEProgress.js: the MoEBattle.ttf advance note is gone or reworded"
+    return dict(zip(("digit", "comma", "paren", "sign"),
+                    (Decimal(g) for g in match.groups())))
+
+
+def _ink(adv, size, digits=0, commas=0, parens=0, signs=0):
+    """One numeral's rendered width in rem, at `size` rem and letter-spacing 0."""
+    return size * (digits * adv["digit"] + commas * adv["comma"]
+                   + parens * adv["paren"] + signs * adv["sign"])
+
+
+def test_the_vertical_captions_fit_inside_the_surface():
+    """Every vertical caption row's worst-case LEFTWARD ink must fit inside V_SHIFT_X_REM.
+
+    THE GAP THIS CLOSES, and the reason the bug shipped: there was NO X-axis fit check on either
+    vertical bar. The tuner's own checkCaptionInvariance() proves the caption ANCHOR does not move
+    when the digit count changes -- it says nothing about whether the ink FITS -- and every other
+    surface assertion in this file compares one copy of a number against another copy of the same
+    number, so all of them stayed green while the surface cut two of the three rows in half.
+
+    WHY A STATIC WORST CASE IS SOUND HERE. The three captions are RIGHT-anchored (`right: 100%;
+    left: auto`, the track's own left edge) with the icon as the LAST in-flow child, so the anchor
+    is digit-count invariant BY CONSTRUCTION and content grows strictly leftward from a fixed edge
+    -- widest content == furthest reach, with no layout feedback. See the stylesheet's anchor note.
+
+    RE-DERIVED, NEVER TRANSCRIBED: every length is read out of the rule that owns it and every glyph
+    advance out of MoEProgress.js's own hmtx note, so a retune of a gap, a font-size or an icon box
+    moves BOTH sides of the comparison together and only a real overflow fails.
+
+    THE BUDGET IS THE 4-DIGIT DELTA (maintainer's call), not the 3-digit one: "(+2,970)" needs a
+    combined damage around 150,000 but costs nothing to cover, and the margin left over is small.
+    """
+    css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
+    adv = _advances(js)
+    what = "MoEProgressVertical.css"
+
+    def decls(sel):
+        return _sole_rule_decls(css, sel, what)
+
+    def rem(sel, prop):
+        return _rem(decls(sel), prop, what)
+
+    def tx(sel):
+        """The rule's OWN translateX term -- the residual rightward nudge off the shared anchor."""
+        match = re.search(r"translateX\((-?[\d.]+)rem\)", decls(sel))
+        assert match, "%s: %s has no translateX" % (what, sel)
+        return Decimal(match.group(1))
+
+    def shadow(sel):
+        """The widest text-shadow BLUR radius one rule declares -- the ink's halo past its box."""
+        blurs = re.findall(r"-?[\d.]+rem\s+-?[\d.]+rem\s+([\d.]+)rem", decls(sel))
+        assert blurs, "%s: %s declares no text-shadow" % (what, sel)
+        return max(Decimal(b) for b in blurs)
+
+    ico_gap = rem(".mpv-cap .mpv-ico", "margin-left")
+    # capR's two numeral+icon groups are swapped (eta+battles leads, requirement+mark trails; see
+    # MoEProgress.js's V_MARKUP), so the inter-group gap now sits on `.mpv-v`, not `.mpv-eta` -- same
+    # 4rem value, just moved to the new leading child of the group it precedes.
+    eta_gap = rem(".mpv-capR .mpv-v", "margin-left")
+    drop = shadow(".mpv-cap .mpv-v,\n.mpv-cap .mpv-eta,\n.mpv-cap .mpv-d")   # the base dark drop
+    glow = shadow(".mpv-v.mpv-up,\n.mpv-d-num.mpv-up,\n.mpv-eta.mpv-up")     # the sign colour glow
+    d_size = rem(".mpv-cap .mpv-d", "font-size")
+    d_gap_em = re.search(r"margin-right:\s*([\d.]+)em;", decls(".mpv-cap .mpv-d"))
+    assert d_gap_em, "%s: the delta's gap is no longer an em" % what
+    d_gap = d_size * Decimal(d_gap_em.group(1))
+
+    # Per row: [font-size, the row's own in-flow terms, the halo on its LEFTMOST child, x-gaps].
+    # A combined-damage numeral is worst-cased at "3,050" -- 4 digits and a comma -- exactly as the
+    # horizontal composition's own extremes in MoEProgress.js are.
+    def numeral(size):
+        return _ink(adv, size, digits=4, commas=1)
+
+    r_size, c_size, p_size = (rem(s, "font-size") for s in (".mpv-capR", ".mpv-capC", ".mpv-capP"))
+    rows = {
+        # [eta numeral][battles glyph][requirement numeral][mark glyph] -- the sum is order-
+        # independent, but this list is kept in the shipped DOM order for readability.
+        ".mpv-capR": (r_size,
+                      [_ink(adv, r_size, digits=2),      # "99", the PROGRESS_ETA_CAP
+                       ico_gap, rem(".mpv-ico", "width"),         # battles takes the BASE box
+                       eta_gap, numeral(r_size), ico_gap, rem(".mpv-ico.mk", "width")],
+                      drop, ico_gap + eta_gap + ico_gap),
+        # [delta][proj numeral][damage glyph] -- the delta is the leftmost child, so its SIGN GLOW
+        # (the widest shadow in the file) is what the surface has to clear, not the base drop.
+        ".mpv-capC": (c_size,
+                      [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
+                       numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
+                      glow, ico_gap + d_gap),
+        # [pre numeral][damage-projection glyph]
+        ".mpv-capP": (p_size,
+                      [numeral(p_size), ico_gap, rem(".mpv-ico.dmgp", "width")],
+                      drop, ico_gap),
+    }
+
+    allowance = Decimal(_v_shift_x(js))
+    worst, gaps = Decimal(0), Decimal(0)
+    for sel, (_size, terms, halo, row_gaps) in rows.items():
+        # The anchor is the track's own left edge (x == 0 in composition coordinates); the row's
+        # content right edge sits at -padding-right + translateX off it, and grows leftward.
+        reach = sum(terms) + halo + rem(sel, "padding-right") - tx(sel)
+        assert reach <= allowance, (
+            "%s's worst-case ink reaches %srem left of the track while the surface only allows "
+            "%srem (V_PAD_X_REM - V_BOX_LEFT_REM) -- the caption is CLIPPED" % (sel, reach,
+                                                                                allowance))
+        worst, gaps = max(worst, reach), max(gaps, row_gaps)
+    # ...and the margin is real, not a hairline: a retune that eats it should be a decision, not a
+    # surprise. 4.5rem was the maintainer's chosen slack over the 4-digit-delta worst case.
+    assert allowance - worst >= 4, \
+        "only %srem of caption clearance is left -- budget the surface deliberately" % (
+            allowance - worst)
+
+    # LARGE NEEDS NO TWIN, and this is why rather than an assumption: the allowance grows by the
+    # backdrop's left bleed picking up SIZE_XF (an x-length), while the ink only grows on its x-GAPS
+    # (neither pad, nor any font-size, box or halo, takes the x factor -- the root font's SIZE_F
+    # already carries all of those, on both sides of the comparison). So Default keeps binding.
+    xf = _size_factor("SIZE_XF")
+    extra_allowance = -Decimal(_js_const(js, "V_BOX_LEFT_REM")) * (xf - 1)
+    assert extra_allowance > gaps * (xf - 1), (
+        "the Large allowance grows by %srem but a row's x-gaps grow by up to %srem -- Default no "
+        "longer binds and this test owes a Large twin" % (extra_allowance, gaps * (xf - 1)))
+
+
+# The vertical MA surface as it shipped BEFORE V_PAD_X_REM existed: (width, shiftX) == box + 2*10
+# and 10 - (-34). Frozen here on purpose -- these two ARE the reference the widening promised not to
+# move, and the test below is the promise. They are the ONLY historical literals in this file and
+# they must never be "updated to match": updating them is exactly the regression.
+_PRE_PAD_X_SURFACE = (92, 44)
+
+
+@pytest.mark.parametrize("space_w", [1920, 2560, 3440])
+def test_the_wider_vertical_surface_does_not_move_the_centred_track(space_w):
+    """The Damage Log (centred) alignment must land the vertical track EXACTLY where the
+    pre-V_PAD_X_REM surface did, at every viewport width.
+
+    WHY THIS IS THE LOAD-BEARING TEST OF THE WHOLE CHANGE. `anchor_centred_reduced` puts the window
+    at `max_x // 2` with NO x compensation term anywhere in Python (PROGRESS_ANCHOR_X_OFFSET is 0),
+    so it centres the SURFACE and only centres the BAR while the surface brackets the track evenly
+    -- the same invariant test_the_large_backdrop_stays_symmetric_about_the_track guards for the
+    horizontal composition. Widening the surface on the LEFT ALONE (the obvious way to stop the
+    caption clip) silently slides this alignment right by half the asymmetry: 26 logical px at
+    Default, 33 at Large, at every resolution, with every other assertion in this file still green.
+    Applying V_PAD_X_REM to BOTH sides is what buys the exact equality below, and paying ~53rem of
+    surface on a side nobody looks at is free (the rect is never drawn and the hit rect is collapsed
+    unconditionally -- see the hitPad assertion at the end).
+
+    COMPOSED THROUGH THE REAL FUNCTIONS, not re-derived arithmetic: the same
+    anchor_centred_reduced -> anchor_offset chain bar_window.BarHost._resolve runs, so the `// 2`
+    floor and its parity are exercised rather than modelled.
+    """
+    js = _read("MoEProgress.js")
+    surface_w, _surface_h = _v_surface_wh(js)
+    shift_x = _v_shift_x(js)
+    old_w, old_shift = _PRE_PAD_X_SURFACE
+
+    def track_x(width, shift):
+        # Only x matters here; the y arguments are _resolve's real ones and do not affect it.
+        base = anchor_centred_reduced(space_w - width, 1080 - 320, 1080,
+                                      PROGRESS_ANCHOR_Y_FRAC, VERTICAL_ANCHOR_Y_SHIFT)
+        x, _y = anchor_offset(base, PROGRESS_ANCHOR_X_OFFSET, 0)
+        return x + shift
+
+    assert track_x(surface_w, shift_x) == track_x(old_w, old_shift), (
+        "the centred vertical track moved from %s to %s at %spx wide -- the surface is no longer "
+        "concentric with the track" % (track_x(old_w, old_shift), track_x(surface_w, shift_x),
+                                       space_w))
+
+    # ...AND THE LARGE TWIN, which can only be bounded, not equal. Both the old and the new Large
+    # surface are half-away rounded off a fractional intermediate and `max_x // 2` floors a result
+    # whose parity differs between them, so the two land up to a pixel apart by construction -- the
+    # same species of jitter memory `anchor-y-reduction-is-not-bit-exact` names on the Y axis.
+    # Measured at exactly 0.25px here; a whole pixel is the ceiling worth failing on.
+    f, xf = _size_factor("SIZE_F"), _size_factor("SIZE_XF")
+    box_w, pad_x = _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_PAD_X_REM")
+    box_left, pad = _js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "PAD_REM")
+    large_w = iround_half_away((Decimal(box_w) * xf + 2 * pad_x) * f)
+    large_shift = (pad_x - Decimal(box_left) * xf) * f
+    old_large_w = iround_half_away((Decimal(box_w) * xf + 2 * pad) * f)
+    old_large_shift = (pad - Decimal(box_left) * xf) * f
+    drift = track_x(large_w, large_shift) - track_x(old_large_w, old_large_shift)
+    assert abs(drift) < 1, (
+        "the centred vertical track moved %s logical px under Large -- that is a real move, not "
+        "the sub-pixel `// 2` parity jitter" % drift)
+
+    # THE INPUT RECT IS UNMOVED TOO, and that is why the extra surface is free rather than a
+    # trade-off: hitPad is ceil(max(w, h) / 2) and the vertical composition is height-dominated at
+    # BOTH sizes, so widening the surface does not change it by a single rem. (It would not matter
+    # even if it did -- pushHitArea collapses the rect unconditionally -- but a grown hit rect would
+    # still be worth knowing about, and this is the cheapest place to notice.)
+    _, surface_h = _v_surface_wh(js)
+    assert max(surface_w, surface_h) == max(old_w, surface_h), \
+        "the vertical surface is no longer height-dominated -- hitPad now tracks its WIDTH"
+
+
+def test_the_reachable_minimap_gap_equals_surface_h_minus_track_y():
+    # THE INVARIANT the two placement fixes exist to satisfy, pinned from BOTH sides rather than
+    # just the tuned constant: the engine clamps every window into [0, space - surface] (memory
+    # `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`), so whenever
+    # gap_bottom is smaller than the surface's own below-the-track slack (surface_h - edge_y) the
+    # closest reachable bottom gap IS that slack, not the tuned constant -- and it only equals the
+    # tuned constant because the front-end clip (V_CLIP_B_REM) was sized to make it so. A surface
+    # retune that forgets to also retune the clip would silently detach this bar from its tuned
+    # gap; this test is the tripwire for that.
+    from moe_calculator.domain.constants import PROGRESS_MM_GAP_BOTTOM, MM_TRACK_Y, MM_TRACK_Y_LARGE
+
+    js = _read("MoEProgress.js")
+    _, surface_h = _v_surface_wh(js)
+    assert surface_h - MM_TRACK_Y == PROGRESS_MM_GAP_BOTTOM
+
+    # LARGE is a +/-1 JITTER, not bit-exact (the sibling concern memory
+    # `anchor-y-reduction-is-not-bit-exact` names for the horizontal anchor): MM_TRACK_Y_LARGE and
+    # the surface height are each independently half-away rounded off a fractional intermediate, so
+    # their difference and round(gap * SIZE_F) can land 1 apart -- measured here as exactly 1 for
+    # this bar (400 - 363 == 37, round(30 * 1.25) == 38).
+    f = _size_factor("SIZE_F")
+    surface_h_large = iround_half_away(Decimal(surface_h) * f)
+    tuned_large = iround_half_away(Decimal(PROGRESS_MM_GAP_BOTTOM) * f)
+    delta = (surface_h_large - MM_TRACK_Y_LARGE) - tuned_large
+    assert abs(delta) <= 1, (
+        "the Large reachable gap drifted by %d from round(gap * SIZE_F), which must be a bounded "
+        "+/-1 jitter, never more" % delta)
+
+
+def test_the_vertical_dash_grids_gap_stripe_stays_fully_opaque():
+    # Phase 1 porting instruction ("Dash-gap alpha -- CLOSED"): unlike the vertical PROGRESS
+    # TUNER's gapA default of 0.5 (inherited from the horizontal progress tuner's own tuned
+    # default), the SHIPPED vertical progress stylesheet hand-rewrites the gap to opaque
+    # (rgba(13,14,16,1)), exactly like the horizontal bar already does. SCOPED to
+    # .mpv-track::after's OWN gradient -- a bare value search for "0.5" would either miss this
+    # rule or false-hit the box-shadow ring in the SAME rule, which is legitimately
+    # rgba(13,14,16,0.5) (it sits OUTSIDE the fill and was never part of this porting
+    # instruction).
+    body = _css_rule(_read("MoEProgressVertical.css"), ".mpv-track::after")
+    match = re.search(r"background-image:\s*repeating-linear-gradient\(([^;]*)\);", body)
+    assert match, "MoEProgressVertical.css: .mpv-track::after has no repeating-linear-gradient"
+    stops = re.findall(r"rgba?\(([^)]*)\)", match.group(1))
+    assert len(stops) == 4, "expected one dash + one gap stop pair, got %r" % (stops,)
+    for gap in stops[2:]:
+        parts = [p.strip() for p in gap.split(",")]
+        assert len(parts) == 3 or float(parts[3]) == 1.0, \
+            "the vertical dash grid's GAP stripe must be fully opaque, not %r" % (gap,)
+    # ...while the outset ring stays at the garage bar's 0.5 -- it sits OUTSIDE the fill, and is
+    # NOT the value this porting instruction touches.
+    box_shadow = re.search(r"box-shadow:\s*([^;]+);", body)
+    assert box_shadow and box_shadow.group(1).strip() == "0 0 0 1rem rgba(13,14,16,0.5)"
+
+
 def test_both_bars_read_the_new_show_events_flag_as_not_false():
     # `showEvents` is a NEW VM bool, and a model that does not carry it (a pre-push frame, an old
     # harness fixture, a marshal that dropped it) must degrade to the SHIPPED behaviour -- "an
@@ -147,6 +519,15 @@ def test_the_twin_keyframe_blocks_stay_identical_modulo_the_name():
     # comment; a tuner re-emission or a hand-tuned stop is exactly what breaks it.
     css = _read("MoEProgress.css")
     assert _keyframes(css, "mp-life") == _keyframes(css, "mp-life-b")
+
+
+def test_the_vertical_twin_keyframe_blocks_stay_identical_modulo_the_name():
+    # mpv-life-b is the SAME re-trigger twin, for the VERTICAL composition (Phase 0: "built from
+    # ONE builder called TWICE so they are byte-identical by construction rather than by hand" --
+    # MoEBarTransient.js's RUN_CLASSES_V/RUN_NAMES_V alternate .mpv-run / .mpv-run-b the same way
+    # the horizontal pair above alternates .mp-run/.mp-run-b).
+    css = _read("MoEProgressVertical.css")
+    assert _keyframes(css, "mpv-life") == _keyframes(css, "mpv-life-b")
 
 
 def test_the_slide_distance_matches_the_tuner_json():
@@ -423,60 +804,56 @@ def _read_tuner():
         return handle.read()
 
 
-def test_python_y_offset_cancels_the_js_shift_and_converts_frac_to_viewport():
-    # PROGRESS_ANCHOR_Y_OFFSET is TWO summed terms, both owned by the JS:
-    #   -SHIFT_Y_REM      cancels the composition's intra-surface downward shift, so the bar stays
-    #                     put on screen. THIS is the lockstep the test has always guarded: change
-    #                     SHIFT_Y_REM in the JS without changing the Python and the bar moves.
-    #   +frac * VIEW_H_REM  UNIT CONVERSION. anchor_centred applies the fraction to the MOVABLE
-    #                     EXTENT (space_h - surface_h), so adding frac*surface_h back turns it into
-    #                     a fraction of the VIEWPORT, which is how PROGRESS_ANCHOR_Y_FRAC is tuned:
-    #                     frac*(H - surface_h) + frac*surface_h == frac*H, at every resolution.
-    # Every term is read from the shipped JS -- no literal 34 here -- so a JS-only edit to the
-    # shift, the pad, or the measured box still fails this.
+def test_python_y_shift_cancels_the_js_intra_surface_shift():
+    # PROGRESS_ANCHOR_Y_SHIFT is now the PURE term -- just -SHIFT_Y_REM, cancelling the
+    # composition's intra-surface downward shift so the bar stays put on screen. THIS is the
+    # lockstep the test has always guarded: change SHIFT_Y_REM in the JS without changing the
+    # Python and the bar moves. The extent-to-viewport UNIT CONVERSION the retired two-term
+    # PROGRESS_ANCHOR_Y_OFFSET composite also carried is gone -- anchor_centred_reduced computes
+    # it algebraically by applying the fraction to space_y directly (see its docstring), so no
+    # surface-height term is baked into this constant any more.
     js = _read("MoEProgress.js")
-    surface_h = _surface_wh(js)[1]
-    assert PROGRESS_ANCHOR_Y_OFFSET == \
-        -_shift_y(js) + int(round(PROGRESS_ANCHOR_Y_FRAC * surface_h))
+    assert PROGRESS_ANCHOR_Y_SHIFT == -_shift_y(js)
 
 
-def test_python_large_y_offset_is_the_same_two_terms_scaled_by_size_f():
-    # The LARGE twin, derived the SAME two ways from the SAME shipped JS -- only every length is in
-    # logical px now, so both terms carry SIZE_F and NEITHER carries SIZE_XF (this is the Y axis).
-    # No literal 53 here: a retune of the pad, the box or the fraction propagates, and so does a
-    # change to SIZE_F itself. NOT a mirror of the 1x value, and not a mirror of SHIFT_Y_REM either.
+def test_python_large_y_shift_is_the_same_pure_term_scaled_by_size_f():
+    # The LARGE twin, derived the SAME way from the SAME shipped JS -- only in logical px now, so
+    # it carries SIZE_F and NOT SIZE_XF (this is the Y axis). No literal here: a retune of the pad
+    # or the box propagates, and so does a change to SIZE_F itself.
     js = _read("MoEProgress.js")
-    f = _size_factor("SIZE_F")
-    surface_h = Decimal(_surface_wh(js)[1])
-    assert PROGRESS_ANCHOR_Y_OFFSET_LARGE == \
-        -_large_shift_y(js) + iround_half_away(Decimal(str(PROGRESS_ANCHOR_Y_FRAC))
-                                               * surface_h * f)
+    assert PROGRESS_ANCHOR_Y_SHIFT_LARGE == -_large_shift_y(js)
 
 
 @pytest.mark.parametrize("space_h", [1080, 1440])
 def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(space_h):
-    # THE invariant the offset's second term exists for, and the one nothing caught: the track's
-    # top edge must land at PROGRESS_ANCHOR_Y_FRAC of the VIEWPORT height -- resolution-invariant
-    # by construction, hence both heights. Composed exactly as progress_view._place does it: the
-    # far-sentinel clamp hands anchor_centred the movable extent (logical space - surface), and the
-    # track then sits SHIFT_Y_REM below the window's top edge. 1px of slack for anchor_centred's
-    # int() floor. Before the fix, 0.85 of the extent alone put the track at 77.7vh.
+    # THE invariant the pure shift term exists for: the track's top edge must land at
+    # PROGRESS_ANCHOR_Y_FRAC of the VIEWPORT height -- resolution-invariant by construction, hence
+    # both heights. Composed exactly as bar_window.BarHost._resolve does it now: the far-sentinel
+    # clamp hands anchor_centred_reduced the movable extent AND the full space_y (the fraction is
+    # applied to space_y directly, no extent-to-viewport conversion needed any more -- see
+    # anchor_centred_reduced's docstring), then the stored X/Y stepper offset (0 here) composes on
+    # top via anchor_offset, and the track sits SHIFT_Y_REM below the window's top edge. 1px of
+    # slack for the int() floor. Before the original fix, 0.85 of the extent alone put the track at
+    # 77.7vh.
     #
     # ...AND THE SAME FOR THE LARGE SIZE MODE, which is the whole point of that mode: it is a pure
     # scale-up, so the bar must not MOVE. Everything on the large side is bigger -- the surface, the
     # intra-surface shift, hence the Y compensation -- and the track's top edge has to come out at
-    # the SAME fraction of the same viewport, which is asserted directly (`same` below) as well as
-    # against the fraction. Slack is 1.5px on the large side: anchor_centred's int() floor loses up
-    # to 1 and the offset's own round() up to 0.5 (at 1x those happen to cancel to <= 1).
+    # the SAME fraction of the same viewport, asserted both against the fraction and directly
+    # against the 1x placement. Slack is 1.5px on the large side.
     js = _read("MoEProgress.js")
     surface_w, surface_h = _surface_wh(js)
-    _x, y = anchor_centred(1920 - surface_w, space_h - surface_h, PROGRESS_ANCHOR_Y_FRAC,
-                           PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_OFFSET)
+    max_x, max_y = 1920 - surface_w, space_h - surface_h
+    base = anchor_centred_reduced(max_x, max_y, space_h, PROGRESS_ANCHOR_Y_FRAC,
+                                  PROGRESS_ANCHOR_Y_SHIFT)
+    _x, y = anchor_offset(base, PROGRESS_ANCHOR_X_OFFSET, 0)
     top = y + _shift_y(js)
     assert abs(top - PROGRESS_ANCHOR_Y_FRAC * space_h) <= 1
     lw, lh = _large_surface_wh(js)
-    _lx, ly = anchor_centred(1920 - lw, space_h - lh, PROGRESS_ANCHOR_Y_FRAC,
-                             PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_OFFSET_LARGE)
+    lmax_x, lmax_y = 1920 - lw, space_h - lh
+    lbase = anchor_centred_reduced(lmax_x, lmax_y, space_h, PROGRESS_ANCHOR_Y_FRAC,
+                                   PROGRESS_ANCHOR_Y_SHIFT_LARGE)
+    _lx, ly = anchor_offset(lbase, PROGRESS_ANCHOR_X_OFFSET, 0)
     large_top = ly + _large_shift_y(js)
     assert abs(large_top - PROGRESS_ANCHOR_Y_FRAC * space_h) <= 1.5, \
         "the LARGE bar's track lands at %s of the viewport, not %s" % (

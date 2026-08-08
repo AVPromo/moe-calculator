@@ -8,9 +8,9 @@ import pytest
 from moe_calculator.domain.battle_builder import (
     battles_to_axis_hi, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
 from moe_calculator.domain.constants import (
-    EWMA_K, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_OFFSET,
+    EWMA_K, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_SHIFT,
     PROGRESS_ETA_CAP, PROGRESS_ETA_MARGIN)
-from moe_calculator.domain.positioning import anchor_centred
+from moe_calculator.domain.positioning import anchor_centred, anchor_centred_reduced, anchor_offset
 
 # The shape battle_adapter fills from moe_wgapi.get_thresholds(): D65 / D85 / D95 / D100, keyed
 # by PERCENTILE (mark_axis indexes MARK_PERCENTS into it, not MARK_COUNTS).
@@ -127,21 +127,28 @@ def test_centred_anchor_y_offset_cancels_the_intra_surface_shift():
     # THE INVARIANT the compensation exists for: shifting the bar +N inside the surface and the
     # window -N leaves the bar's ON-SCREEN y exactly where it was. Same extent both sides, so
     # this isolates the translation from the surface-height change that also moves max_y.
-    shift = -PROGRESS_ANCHOR_Y_OFFSET
+    # PROGRESS_ANCHOR_Y_SHIFT is the PURE shift term now (already negative -- no negation here,
+    # unlike the retired two-term PROGRESS_ANCHOR_Y_OFFSET composite this used to read).
+    shift = PROGRESS_ANCHOR_Y_SHIFT
     plain = anchor_centred(1664, 800, PROGRESS_ANCHOR_Y_FRAC)[1]
     compensated = anchor_centred(1664, 800, PROGRESS_ANCHOR_Y_FRAC,
-                                 PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_OFFSET)[1]
-    assert compensated + shift == plain
+                                 PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT)[1]
+    assert compensated - shift == plain
 
 
 def test_centred_anchor_needs_no_x_compensation():
     # X self-calibrates: max_x == space_w - surface_w, so max_x // 2 centres ANY surface width,
     # and the composition is symmetric about its own centre -> the bar's centre lands on the
-    # screen's centre at both the old 256 fallback width and the new one. Hence X_OFFSET == 0.
+    # screen's centre at both the old 256 fallback width and the new one. Hence X_OFFSET == 0 --
+    # and it is composed via anchor_offset now (the live call site's shape): anchor_centred_reduced
+    # takes no x_offset argument at all any more, so PROGRESS_ANCHOR_X_OFFSET is added on top of
+    # its result instead of being threaded through the anchor function itself.
     space_w = 1920
     assert PROGRESS_ANCHOR_X_OFFSET == 0
     for surface_w in (256, 480):
-        x = anchor_centred(space_w - surface_w, 800, 0.85, PROGRESS_ANCHOR_X_OFFSET)[0]
+        max_x = space_w - surface_w
+        base = anchor_centred_reduced(max_x, 800, 1080, 0.85, 0)
+        x = anchor_offset(base, PROGRESS_ANCHOR_X_OFFSET, 0)[0]
         assert x + surface_w // 2 == space_w // 2
 
 

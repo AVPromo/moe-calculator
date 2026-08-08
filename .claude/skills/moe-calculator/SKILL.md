@@ -1,6 +1,6 @@
 ---
 name: moe-calculator
-description: Use when working anywhere in the 14th_ua MoE Calculator repo and you need orientation — the mod's identity, versions, dependencies, the src/ tree, the shared cross-feature modules, the MoE data source, or the exact dev/deploy/test/REPL commands. Start here, then branch to moe-garage, moe-battle, moe-settings, or moe-build-release.
+description: Use when working anywhere in the 14th_ua MoE Calculator repo and you need orientation — the mod's identity, versions, dependencies, the src/ tree, the shared cross-feature modules, the MoE data source, or the exact dev/deploy/test/REPL commands. Start here, then branch to moe-garage, moe-battle, moe-progress, moe-settings, or moe-build-release.
 ---
 
 # 14th_ua's MoE Calculator — project map
@@ -10,7 +10,8 @@ orientation; the concrete patterns live in the harness skill `wotmod-basics`. Th
 features and the build each have their own project skill:
 
 - **`moe-garage`** — the hangar percentile-bar widget, end-to-end.
-- **`moe-battle`** — the in-battle live-MoE overlay, end-to-end.
+- **`moe-battle`** — the in-battle live-MoE corner overlay, end-to-end.
+- **`moe-progress`** — the two centre-screen transient battle bars (Moving Average / Damage Efficiency), end-to-end.
 - **`moe-settings`** — the MSA settings panel + its 4 toggles, end-to-end.
 - **`moe-build-release`** — packaging, deploy, version files, dev loop, release.
 

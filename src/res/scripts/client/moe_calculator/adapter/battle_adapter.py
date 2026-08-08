@@ -26,6 +26,7 @@ import BigWorld
 
 from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, _safe, _safe_int
 from moe_calculator.domain import battle_types as bt
+from moe_calculator.domain.constants import MINIMAP_SIZES
 from moe_calculator.adapter import engine_adapter
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import baseline_cache
@@ -67,6 +68,38 @@ def read_damage_log_summary_flags():
     except Exception:
         LOG_CURRENT_EXCEPTION()
         return True, True, True, True
+
+
+def read_minimap_size_index():
+    """The player's current minimap size as settingsCore's 0-based index, CLAMPED into
+    [0, len(MINIMAP_SIZES) - 1]. Feeds domain.positioning.anchor_minimap via
+    constants.MINIMAP_SIZES (bridge/bar_window._minimap_size_index) so a minimap-aligned bar
+    knows how wide the minimap it must clear is.
+
+    SOURCE-DERIVED, NOT LIVE-CONFIRMED. `GAME.MINIMAP_SIZE == 'minimapSize'`
+    (account_helpers/settings_core/settings_constants.py) and getSetting returns a plain int in
+    the canonical range [0, 5] (MINIMAP_MIN/MAX_SIZE_INDEX in
+    gui/Scaleform/daapi/view/battle/shared/minimap/settings.py) -- read off the decompile, never
+    yet watched over the REPL. So this is written so a WRONG ASSUMPTION MIS-PLACES THE BAR rather
+    than raising into the engine: the whole read is _safe_int-guarded and the result is clamped
+    the way WG's own clampMinimapSizeIndex() clamps it (the getter itself does NOT clamp, so a
+    stray out-of-range or None value would otherwise reach the table). A stored None resolves
+    through a resolution-keyed default in practice and should never surface here -- the guard does
+    not rely on that.
+
+    FAIL-SOFT TO THE LARGEST INDEX, deliberately: a too-large guess parks the bar further left,
+    clear of the minimap over empty screen (ugly, obvious, harmless), while a too-small one draws
+    it ON TOP of the minimap, obscuring information the player is using."""
+    top = len(MINIMAP_SIZES) - 1
+    try:
+        from account_helpers.settings_core.settings_constants import GAME
+        core = _settings_core()
+        if core is None:
+            return top
+        return min(max(_safe_int(lambda: core.getSetting(GAME.MINIMAP_SIZE), top), 0), top)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return top
 
 
 def _efficiency_ctrl():

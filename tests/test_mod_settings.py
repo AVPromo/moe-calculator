@@ -25,7 +25,11 @@ from moe_calculator.bridge.mod_settings import (
     POS_X_KEY, POS_Y_KEY, POS_W_KEY, POS_H_KEY, FOLLOW_CAROUSEL_KEY, POS_MAX,
     BAR_POS_X_KEY, BAR_POS_Y_KEY,
     clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position,
-    bar_pos_x, bar_pos_y, set_bar_position)
+    bar_pos_x, bar_pos_y, set_bar_position,
+    PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL,
+    PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP,
+    PROGRESS_ALIGN_FREE,
+    progress_bar_orientation, progress_bar_alignment)
 from moe_calculator.adapter import settings_i18n
 
 
@@ -52,7 +56,8 @@ def test_defaults_when_empty_or_none():
     # Efficiency (0, the v13 order), both of its VISIBILITY triggers on with "Always" off, all
     # three TRANSITION switches on (the animated bar is what shipped), BOTH drag positions at auto
     # (the garage widget's 0/0/0/0 and the in-battle bar's 0/0 -- the v18 pair, which is what keeps
-    # every existing user's bar on the shipped anchor) and Follow Carousel on. The hold duration
+    # every existing user's bar on the shipped anchor), Orientation Horizontal and Alignment Damage
+    # Log (v21 -- also byte-identical to what shipped) and Follow Carousel on. The hold duration
     # defaults to 5 SECONDS -- the JS transient's own baked HOLD_MS / 1000, so an existing bar's
     # length does not change on update.
     assert merge_settings(None) == DEFAULTS
@@ -67,7 +72,16 @@ def test_defaults_when_empty_or_none():
                         PROGRESS_HOLD_SECONDS_KEY: 5,
                         POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+                        PROGRESS_ORIENTATION_KEY: 0, PROGRESS_ALIGNMENT_KEY: 0,
                         FOLLOW_CAROUSEL_KEY: True}
+    # THE v21 RADIOS: an int 0 each (Horizontal / Damage Log), never a bool -- the same trap as the
+    # other two radios.
+    assert DEFAULTS[PROGRESS_ORIENTATION_KEY] is PROGRESS_ORIENT_HORIZONTAL
+    assert DEFAULTS[PROGRESS_ALIGNMENT_KEY] is PROGRESS_ALIGN_DAMAGE_LOG
+    for key in (PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY):
+        assert not isinstance(DEFAULTS[key], bool)
+    assert (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL) == (0, 1)
+    assert (PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP, PROGRESS_ALIGN_FREE) == (0, 1, 2)
     # An INT, never a bool -- the same trap as the two radios: a bool here would poison every
     # _coerce round-trip and the panel would store True instead of a second count.
     assert DEFAULTS[PROGRESS_HOLD_SECONDS_KEY] is PROGRESS_HOLD_DEFAULT
@@ -119,6 +133,7 @@ def test_overlays_known_keys():
                     PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
                     POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                     mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
+                    PROGRESS_ORIENTATION_KEY: 0, PROGRESS_ALIGNMENT_KEY: 0,
                     FOLLOW_CAROUSEL_KEY: False}
 
 
@@ -298,6 +313,300 @@ def test_progress_bar_size_getter_defaults_tracks_and_reclamps():
         assert not isinstance(progress_bar_size(), bool)
     del mod_settings._settings[PROGRESS_SIZE_KEY]
     assert progress_bar_size() == PROGRESS_SIZE_DEFAULT
+
+
+# --- v21: the Orientation radio (the mod's THIRD non-bool setting) -----------------------------
+
+def test_coerce_orientation_key_is_not_booled():
+    # Same trap as the variant/size radios: index 1 (Vertical) must not fall through to bool() and
+    # become True.
+    assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, 1) == PROGRESS_ORIENT_VERTICAL
+    assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, 1) is not True
+    assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, 0) is not False
+    assert not isinstance(mod_settings._coerce(PROGRESS_ORIENTATION_KEY, 1), bool)
+    # THE BOOL TRAP, named: True is an int subclass equal to 1, so a naive int() cast would pass
+    # it through as the legal index 1 (Vertical) instead of being rejected as corrupt.
+    assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, True) == PROGRESS_ORIENT_HORIZONTAL
+    assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, True) is not True
+    # Only two options exist -- anything past Vertical is corrupt.
+    for bad in (True, False, PROGRESS_ORIENT_VERTICAL + 1, -1, None, "abc", [1]):
+        assert mod_settings._coerce(PROGRESS_ORIENTATION_KEY, bad) == PROGRESS_ORIENT_HORIZONTAL, \
+            "%r leaked through the orientation branch" % (bad,)
+    assert merge_settings({PROGRESS_ORIENTATION_KEY: 1})[PROGRESS_ORIENTATION_KEY] == \
+        PROGRESS_ORIENT_VERTICAL
+    assert merge_settings({PROGRESS_ORIENTATION_KEY: True})[PROGRESS_ORIENTATION_KEY] == \
+        PROGRESS_ORIENT_HORIZONTAL
+
+
+def test_progress_bar_orientation_getter_reclamps_a_corrupt_store():
+    mod_settings._seed(dict(DEFAULTS))
+    assert progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
+    mod_settings._apply({PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL})
+    assert progress_bar_orientation() == PROGRESS_ORIENT_VERTICAL
+    for junk in (True, 5, -2, None, "x"):
+        mod_settings._settings[PROGRESS_ORIENTATION_KEY] = junk
+        assert progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL, \
+            "%r leaked on read" % (junk,)
+        assert not isinstance(progress_bar_orientation(), bool)
+    del mod_settings._settings[PROGRESS_ORIENTATION_KEY]
+    assert progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
+
+
+# --- v21: the Alignment radio (the mod's FOURTH non-bool setting, max_index=2) ------------------
+
+def test_coerce_alignment_key_is_not_booled():
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 1) == PROGRESS_ALIGN_MINIMAP
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 2) == PROGRESS_ALIGN_FREE
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 1) is not True
+    for good in (0, 1, 2):
+        assert not isinstance(mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, good), bool)
+    # THE BOOL TRAP again: True must not pass through as the legal index 1 (Minimap).
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, True) == PROGRESS_ALIGN_DAMAGE_LOG
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, True) is not True
+    # THREE options this time (0, 1, 2) -- anything past Free is corrupt.
+    for bad in (True, False, PROGRESS_ALIGN_FREE + 1, -1, None, "abc", [1]):
+        assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, bad) == PROGRESS_ALIGN_DAMAGE_LOG, \
+            "%r leaked through the alignment branch" % (bad,)
+    assert merge_settings({PROGRESS_ALIGNMENT_KEY: 2})[PROGRESS_ALIGNMENT_KEY] == \
+        PROGRESS_ALIGN_FREE
+    assert merge_settings({PROGRESS_ALIGNMENT_KEY: True})[PROGRESS_ALIGNMENT_KEY] == \
+        PROGRESS_ALIGN_DAMAGE_LOG
+
+
+def test_progress_bar_alignment_getter_reclamps_a_corrupt_store():
+    mod_settings._seed(dict(DEFAULTS))
+    assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
+    mod_settings._apply({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP})
+    assert progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+    mod_settings._apply({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE})
+    assert progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    for junk in (True, 5, -2, None, "x"):
+        mod_settings._settings[PROGRESS_ALIGNMENT_KEY] = junk
+        assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG, \
+            "%r leaked on read" % (junk,)
+        assert not isinstance(progress_bar_alignment(), bool)
+    del mod_settings._settings[PROGRESS_ALIGNMENT_KEY]
+    assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
+
+
+# --- v21: set_bar_position() (the drag-end seam) also sets Alignment to Free -------------------
+
+def test_set_bar_position_sets_alignment_free_at_persist_true(monkeypatch):
+    mod_settings._seed(_defaults_with({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP}))
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+    set_bar_position(120, 240, persist=True)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
+
+
+def test_set_bar_position_sets_alignment_free_at_persist_false():
+    # THE DRAG-END SEAM fires on every mouse-move too (persist=False, the live drag), not just the
+    # gesture end -- Free is set unconditionally, before the persist check, so mid-drag reads
+    # already see the correct alignment.
+    mod_settings._seed(_defaults_with({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP}))
+    set_bar_position(120, 240, persist=False)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+
+
+# --- v21: _on_changed's alignment auto-set state machine ----------------------------------------
+
+def _seed_live(orientation, alignment, x=0, y=0):
+    mod_settings._seed(_defaults_with({
+        PROGRESS_ORIENTATION_KEY: orientation, PROGRESS_ALIGNMENT_KEY: alignment,
+        BAR_POS_X_KEY: x, BAR_POS_Y_KEY: y}))
+
+
+def test_on_changed_orientation_switch_reanchors_horizontal_to_vertical():
+    # Horizontal -> Vertical, alignment NOT already Free -> re-anchors to Minimap.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+
+
+def test_on_changed_orientation_switch_reanchors_vertical_to_horizontal():
+    # Vertical -> Horizontal, alignment NOT already Free -> re-anchors to Damage Log.
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
+
+
+def test_on_changed_free_alignment_is_sticky_across_orientation_flip_both_directions():
+    # THE EXPLICIT MAINTAINER REQUIREMENT, both directions: once Alignment is Free, an Orientation
+    # switch must NEVER silently re-anchor it -- a user (or a drag) positioned the bar freely on
+    # purpose, and a mode switch is not permission to un-pin it.
+    # The COORDINATE reset that rides the same flip (below) must not weaken this: it zeroes the
+    # pair, never the alignment, which is exactly why it is done as a coordinate reset at all.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+
+
+def test_on_changed_stepper_edit_sets_alignment_free():
+    # A CHANGED bar-position pair with an UNCHANGED orientation is a typed coordinate (a stepper
+    # edit), not a drag (set_bar_position already sets Free itself) and not an orientation switch
+    # -- so this is the one case _on_changed itself must recognise and re-anchor to Free.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 0})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+
+
+def test_on_changed_simultaneous_orientation_and_position_change_lands_on_free():
+    # The rarer simultaneous case: both changed in one payload -- the position branch is checked
+    # AFTER the orientation branch, so the more explicit Free wins over a re-anchor.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 0})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+
+
+def test_on_changed_no_orientation_or_position_change_leaves_alignment_alone():
+    # Neither axis changed (some OTHER key in the payload changed, e.g. a checkbox) -> the
+    # alignment auto-set must not fire at all.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                                       BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
+                                       BATTLE_KEY: False})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+
+
+# --- an EXPLICIT orientation change also DROPS the stored coordinates ---------------------------
+# The two orientations have different surface geometries, so carrying one's absolute pair over to
+# the other lands the bar somewhere it was never tuned for (observed live: the horizontal bar
+# inheriting the vertical one's placement landed over the minimap). The reset is a COORDINATE
+# reset, never an alignment change -- that is what lets it apply under Free, which is sticky.
+
+def test_on_changed_orientation_switch_zeroes_the_stored_position_pair():
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=900, y=500)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, x=-120, y=640)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                                       BAR_POS_X_KEY: -120, BAR_POS_Y_KEY: 640})
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+
+
+def test_on_changed_orientation_switch_persists_the_zeroed_pair_through_msa(monkeypatch):
+    # The zeroing is a live-cache write like the alignment auto-set beside it, so it owes the same
+    # write-back: the panel's two steppers must show 0/0 after the flip, and it must survive the
+    # session. Asserted on the WRITTEN dict, not just the getters.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+    # Free alone would have written NOTHING here (it is sticky, so the alignment branch no-ops) --
+    # so this write count is the zeroing's own, not the alignment's riding along.
+    assert fake.write_count == 1
+    assert fake.save_count == 1
+    assert fake.written[BAR_POS_X_KEY] == 0 and fake.written[BAR_POS_Y_KEY] == 0
+    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
+
+
+def test_on_changed_stepper_edit_does_not_zero_the_pair():
+    # A typed coordinate with an UNCHANGED orientation must be honoured verbatim -- zeroing it
+    # would make the two steppers impossible to use at all.
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 700})
+    assert (bar_pos_x(), bar_pos_y()) == (250, 700)
+
+
+def test_on_changed_simultaneous_orientation_and_position_change_keeps_the_typed_pair():
+    # The rare both-in-one-payload case: the coordinate the user just typed wins over the reset,
+    # the same precedence the alignment branches already give the more explicit edit (that payload
+    # also lands on Free -- see the alignment test of the same name above).
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 700})
+    assert (bar_pos_x(), bar_pos_y()) == (250, 700)
+
+
+def test_on_changed_unrelated_key_change_does_not_zero_the_pair(monkeypatch):
+    # A foreign-shaped payload for one of OUR keys (a checkbox) leaves the orientation equal, so
+    # the reset must not fire -- and nothing must be written back at all. The call count is what
+    # proves the guard held: the resulting pair is (900, 500) either way if the write were a
+    # no-op mutation, so only the write count separates "did not fire" from "fired harmlessly".
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500,
+                                       BATTLE_KEY: False})
+    assert (bar_pos_x(), bar_pos_y()) == (900, 500)
+    assert fake.write_count == 0
+
+
+def test_a_foreign_mods_change_never_zeroes_the_pair(monkeypatch):
+    # MSA broadcasts onSettingsChanged GLOBALLY. A foreign linkage must not even reach the
+    # comparison -- otherwise every other mod's orientation-shaped key could wipe our coordinates.
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+    mod_settings._on_changed("com.someone_else.other_mod",
+                             {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL})
+    assert (bar_pos_x(), bar_pos_y()) == (900, 500)
+    assert fake.write_count == 0
+
+
+def test_on_changed_loop_guard_does_not_refire_on_the_echoed_pass(monkeypatch):
+    # THE LOOP GUARD: the alignment write-back fires another onSettingsChanged of its own (MSA
+    # echoes the write), so a second _on_changed pass with the SAME already-updated values must
+    # NOT write through MSA again. A value-only assertion cannot see this (the value is equal
+    # either way) -- only the CALL COUNT proves the guard actually stopped the loop rather than
+    # merely writing the same thing twice.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    payload = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+              BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0}
+    # FIRST pass: orientation actually changed -> alignment re-anchors to Minimap -> ONE write.
+    mod_settings._on_changed(LINKAGE, payload)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+    assert fake.write_count == 1
+    assert fake.save_count == 1
+
+    # SECOND pass: MSA's echo of that same write. Orientation is now ALREADY Vertical (no change
+    # from the live cache's own perspective) and the position pair is unchanged too, so the
+    # handler must find nothing to update and must NOT call updateModSettings/saveState again.
+    mod_settings._on_changed(LINKAGE, payload)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+    assert fake.write_count == 1, "the echoed pass re-fired updateModSettings"
+    assert fake.save_count == 1, "the echoed pass re-fired saveState"
+
+
+def test_on_changed_loop_guard_covers_the_position_zeroing_too(monkeypatch):
+    # The SAME loop guard for the zeroing's own write-back, which is a second thing that can echo.
+    # A value-only assertion is blind here (the pair reads (0, 0) after either one or two writes),
+    # so this is a CALL COUNT test by necessity -- and it is a distinct case from the alignment
+    # guard above, which never engages under Free.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+    assert fake.write_count == 1
+
+    # MSA's echo of that write: orientation already Vertical, pair already zeroed -> nothing to do.
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                       BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0})
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+    assert fake.write_count == 1, "the echoed pass re-fired updateModSettings"
+    assert fake.save_count == 1, "the echoed pass re-fired saveState"
 
 
 # --- the Transitions group: a master folded into its two children's getters -------------------
@@ -747,24 +1056,36 @@ def test_template_settings_version_pins_the_current_layout():
     # moved, but a descriptor edit reaches an existing install ONLY through a forward bump
     # (register()'s saved-truthy path never calls setModTemplate), and Aslain folds
     # minimum/maximum/snapInterval into its _settingsStructure signature besides.
-    assert SETTINGS_VERSION == 20
+    # Bumped 20 -> 21 for the vertical-bar Orientation/Alignment radios: two new varNames, two new
+    # standalone RadioButtonGroup rows spliced ABOVE the X/Y steppers in the fourth column-1
+    # category (COL1_KEYS 24 -> 26), and that category's header TEXT changing "Bar Position" ->
+    # "Layout" (the i18n key stays catBarPosition). The radios' OPTION LABELS are structural to
+    # MSA too, so only this forward bump reaches an existing install; the migration branch
+    # (_migrate_pre_v21_layout) is a LOOKUP keyed on the ABSENCE of progress_bar_orientation, not
+    # arithmetic -- see that function.
+    assert SETTINGS_VERSION == 21
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
-def test_template_column1_is_three_categories_each_a_label_then_its_group():
+def test_template_column1_is_four_categories_each_a_label_then_its_group():
+    # RENAMED from "...is_three_categories..." (v18 already made this a FOUR-category column with
+    # "Bar Position"; the old name was stale well before v21 -- see the SETTINGS_VERSION 20->21
+    # comment). Kept an accurate name this time: a stale test NAME is how the next reader
+    # misjudges what the assertions below actually cover.
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # TWENTY-FOUR controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
-    # followed by that feature's controls: "Battle Calculator" + [In-Battle master, Alt child,
-    # counted-assist child], spacer, then "Battle Progress" + [Progress Bar master + its three
-    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two standalone radios],
-    # then a THIRD Empty spacer and "Transitions" -- its OWN header since the hold-duration Slider
-    # arrived -- + [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer
-    # (ahead of the Slider, v19) + the UNGROUPED hold Slider, which hangs off that header rather
-    # than the master (its masterVarName absence is pinned in
+    # TWENTY-SIX controls (grew from 24 at v21) = FOUR CATEGORIES separated by Empty spacers, each
+    # a bare Label header followed by that feature's controls: "Battle Calculator" + [In-Battle
+    # master, Alt child, counted-assist child], spacer, then "Battle Progress" + [Progress Bar
+    # master + its three VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two
+    # standalone radios], then a THIRD Empty spacer and "Transitions" -- its OWN header since the
+    # hold-duration Slider arrived -- + [Transitions master, Events child, Alt Press child] + a
+    # FOURTH Empty spacer (ahead of the Slider, v19) + the UNGROUPED hold Slider, which hangs off
+    # that header rather than the master (its masterVarName absence is pinned in
     # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
-    # "Bar Position" + [the two standalone position steppers] (v18). The header names the feature,
-    # which is why every master reads just "Enabled" (was "Show").
+    # "Layout" (header text as of v21; i18n key stays catBarPosition) + [the two NEW standalone
+    # Orientation/Alignment radios, ABOVE the two standalone position steppers]. The header names
+    # the feature, which is why every master reads just "Enabled" (was "Show").
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
@@ -776,7 +1097,7 @@ def test_template_column1_is_three_categories_each_a_label_then_its_group():
         "Empty",
         "Slider",
         "Empty",
-        "Label", "NumericStepper", "NumericStepper"]
+        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper"]
     # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
     assert [c["varName"] for c in col1 if "varName" in c] == [
         BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
@@ -785,6 +1106,7 @@ def test_template_column1_is_three_categories_each_a_label_then_its_group():
         PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY,
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
         PROGRESS_HOLD_SECONDS_KEY,
+        PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
         mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
     # ...and the four category headers carry no varName at all -- and they are the ONLY four, so
     # no group can quietly grow a header row of its own.
@@ -796,21 +1118,28 @@ def test_template_column1_is_three_categories_each_a_label_then_its_group():
     assert col1[0]["text"] == u"<b>Battle Calculator</b>" and col1[0]["useHTML"] is True
     assert col1[5]["text"] == u"<b>Battle Progress</b>" and col1[5]["useHTML"] is True
     assert col1[14]["text"] == u"<b>Transitions</b>" and col1[14]["useHTML"] is True
-    assert col1[21]["text"] == u"<b>Bar Position</b>" and col1[21]["useHTML"] is True
+    # THE v21 RENAME: "Bar Position" -> "Layout" (text only; the i18n key stays catBarPosition).
+    assert col1[21]["text"] == u"<b>Layout</b>" and col1[21]["useHTML"] is True
     # All FIVE Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Battle Progress"; the second heads "Mode"; the third heads
-    # "Transitions"; the fourth heads the hold Slider (v19); the fifth heads "Bar Position".
+    # "Transitions"; the fourth heads the hold Slider (v19); the fifth heads "Layout".
     assert col1[4] == {"type": "Empty"}
     assert col1[10] == {"type": "Empty"}
     assert col1[13] == {"type": "Empty"}
     assert col1[18] == {"type": "Empty"}
     assert col1[20] == {"type": "Empty"}
     assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13, 18, 20]
-    # The two position steppers are STANDALONE -- no masterVarName, no conditions -- so they stay
-    # readable and editable while the Progress Bar master is off, exactly like the column-2 pair.
+    # The two v21 radios AND the two position steppers are all STANDALONE -- no masterVarName, no
+    # conditions -- so they stay readable and editable while the Progress Bar master is off, exactly
+    # like the column-2 pair.
     for control in col1[22:]:
         assert "masterVarName" not in control and "conditions" not in control
+    # The two new radios sit directly between the "Layout" header and the two steppers.
+    assert col1[22]["varName"] == PROGRESS_ORIENTATION_KEY
+    assert col1[23]["varName"] == PROGRESS_ALIGNMENT_KEY
+    assert col1[24]["varName"] == mod_settings.BAR_POS_X_KEY
+    assert col1[25]["varName"] == mod_settings.BAR_POS_Y_KEY
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -1191,8 +1520,8 @@ def test_col_keys_lockstep_with_template_order():
     # ...and every Empty in the template is covered by one: a spacer added without a sentinel would
     # shift the whole tail of the zip and silently retitle every control after it. SEVEN now (grew
     # from six in v19): column 1 has a spacer ahead of "Battle Progress", "Mode", "Transitions",
-    # the hold Slider (new, v19) and "Bar Position"; column 2 has one ahead of "Layout" and one
-    # ahead of "Position".
+    # the hold Slider (new, v19) and "Layout" (header text as of v21; i18n key stays
+    # catBarPosition); column 2 has one ahead of "Layout" and one ahead of "Position".
     assert sentinels == sum(1 for col, _k in _column_pairs(tmpl)
                             for c in tmpl[col] if c["type"] == "Empty") == 7
 
@@ -1383,20 +1712,28 @@ def test_follow_carousel_default_true_and_getter():
 
 class _FakeMsa(object):
     """A stand-in ModsSettingsAPI sink: returns a stored dict from getModSettings and records
-    the full dict written by updateModSettings + whether saveState flushed it."""
+    the full dict written by updateModSettings + whether saveState flushed it.
+
+    write_count/save_count exist ALONGSIDE written/saved (not a replacement) so a loop-guard test
+    can assert the CALL COUNT: the resulting VALUE is identical whether a handler wrote once or
+    fired a second redundant write, so only the count can see the difference."""
     def __init__(self, current):
         self._current = current
         self.written = None
         self.saved = False
+        self.write_count = 0
+        self.save_count = 0
 
     def getModSettings(self, linkage, template):
         return dict(self._current)
 
     def updateModSettings(self, linkage, data):
         self.written = data
+        self.write_count += 1
 
     def saveState(self):
         self.saved = True
+        self.save_count += 1
 
 
 def test_set_position_writes_full_dict_preserving_enabled(monkeypatch):
@@ -1450,13 +1787,25 @@ def test_set_position_clamps_and_survives_absent_msa(monkeypatch):
 
 def test_on_reset_forces_auto_position_and_follow_on():
     # The per-mod Reset must snap the position back to auto (0/0/0/0) and Follow Carousel Mode
-    # back ON, overriding any stale pin the host reset snapshot may still carry.
+    # back ON, overriding any stale pin the host reset snapshot may still carry. It must also
+    # force the in-battle bar's position to auto (0/0) and Orientation/Alignment back to
+    # Horizontal/Damage Log -- 0/0 IS the Damage Log anchor, so a reset panel is internally
+    # consistent -- regardless of any seeded value the host snapshot still carries.
     mod_settings._seed({GARAGE_KEY: True, BATTLE_KEY: True,
                         POS_X_KEY: 500, POS_Y_KEY: 300, POS_W_KEY: 1920, POS_H_KEY: 1080,
+                        BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640,
+                        PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                        PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP,
                         FOLLOW_CAROUSEL_KEY: False})
     mod_settings._on_reset(LINKAGE, {POS_X_KEY: 999, POS_Y_KEY: 888,
+                                     BAR_POS_X_KEY: 777, BAR_POS_Y_KEY: 666,
+                                     PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                     PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
                                      FOLLOW_CAROUSEL_KEY: False})
     assert (pos_x(), pos_y(), pos_w(), pos_h()) == (0, 0, 0, 0)
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
     assert follow_carousel() is True
 
 
@@ -1708,7 +2057,13 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
         mod_settings.BAR_POS_Y_KEY: 640,
         FOLLOW_CAROUSEL_KEY: False,     # default True
     }
+    # progress_bar_orientation / progress_bar_alignment are DELIBERATELY ABSENT from `old`: this
+    # store is pre-v21 (the whole point of the fixture), and those two keys did not exist before
+    # v21 -- their value is DERIVED by _migrate_pre_v21_layout, not carried across like every other
+    # key here, so they are checked separately below instead of by this "must differ" loop.
     for key in DEFAULTS:
+        if key in (PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY):
+            continue
         assert old[key] != DEFAULTS[key], "%s must differ from its default to prove anything" % key
     api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
     _run_register(api)
@@ -1745,13 +2100,64 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     assert (mod_settings.pos_x(), mod_settings.pos_y()) == (700, 300)
     assert (mod_settings.pos_w(), mod_settings.pos_h()) == (1920, 1080)
     assert mod_settings.follow_carousel() is False
+    # ...and the two v21 keys, which this store never had: _migrate_pre_v21_layout DERIVES them
+    # rather than carrying a stored value across. Orientation always seeds Horizontal (the only
+    # axis that existed pre-v21); Alignment seeds Free because the stored bar position (810, 640)
+    # is non-zero -- exactly what Alignment=Free means -- and the coordinates themselves carry
+    # across verbatim via the normal DEFAULTS overlay above (bar_pos_x()/bar_pos_y() == 810/640,
+    # not asserted again here since BAR_POS_X_KEY/BAR_POS_Y_KEY aren't exposed by name in this
+    # test's imports; see the dedicated test below for both migration branches in isolation).
+    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert not isinstance(mod_settings._settings[PROGRESS_ORIENTATION_KEY], bool)
+    assert not isinstance(mod_settings._settings[PROGRESS_ALIGNMENT_KEY], bool)
 
     # ...and the same survived to DISK, in one coalesced write (the transient reset never lands).
     written = api.state["settings"][LINKAGE]
     for key, value in old.items():
         assert written[key] == value, "%s was wiped by the settingsVersion bump" % key
+    # ...and the DERIVED keys reached disk too, at exactly the values just asserted live.
+    assert written[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_HORIZONTAL
+    assert written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
     assert api.updated == 1
     assert api.saved == 1
+
+
+def test_migrate_pre_v21_layout_non_zero_position_means_free_alignment():
+    # ONE branch of the fixup: a pre-v21 store's non-zero (progress_bar_pos_x, progress_bar_pos_y)
+    # was an ABSOLUTE top-left, exactly what Alignment=Free means -- so it seeds Free and the
+    # coordinates are left untouched (the caller's normal DEFAULTS overlay carries them across, not
+    # this function). Orientation always seeds Horizontal (the only axis that existed pre-v21).
+    old = {BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640}
+    mod_settings._migrate_pre_v21_layout(old)
+    assert old[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_HORIZONTAL
+    assert old[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
+    assert (old[BAR_POS_X_KEY], old[BAR_POS_Y_KEY]) == (810, 640)   # untouched, not re-derived
+
+
+def test_migrate_pre_v21_layout_zero_position_means_damage_log_alignment():
+    # THE OTHER branch: a zero (or absent) pair means the bar was on the shipped anchor, so it
+    # seeds Damage Log -- still 0/0, the byte-identical shipped placement. Nobody's bar moves.
+    old = {BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0}
+    mod_settings._migrate_pre_v21_layout(old)
+    assert old[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_HORIZONTAL
+    assert old[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_DAMAGE_LOG
+
+    # Absent keys behave exactly like a stored zero (clamp_pos's own 0 fallback).
+    absent = {}
+    mod_settings._migrate_pre_v21_layout(absent)
+    assert absent[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_HORIZONTAL
+    assert absent[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_DAMAGE_LOG
+
+
+def test_migrate_pre_v21_layout_leaves_a_v21plus_store_untouched():
+    # A store that ALREADY carries progress_bar_orientation is >= v21 and must be left exactly as
+    # the user set it -- even a corrupt/out-of-range value, which is `_coerce`'s job to clamp on
+    # read, not this fixup's.
+    at_v21 = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL, BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0}
+    mod_settings._migrate_pre_v21_layout(at_v21)
+    assert at_v21[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_VERTICAL   # untouched
+    assert PROGRESS_ALIGNMENT_KEY not in at_v21   # never added -- the whole function short-circuits
 
 
 def test_migrate_pre_v13_variant_flips_only_when_the_v13_marker_key_is_absent():
@@ -1843,3 +2249,19 @@ def test_same_version_load_does_not_migrate(_run_register):
     assert api.template_cb is None
     assert api.updated == 0
     assert api.saved == 0
+
+
+def test_a_mount_never_zeroes_the_stored_bar_position(_run_register):
+    # A MOUNT is the other thing that must never trigger the orientation-change coordinate reset:
+    # register() on an existing install runs the saved-truthy _seed path and never calls
+    # _on_changed at all, so a Vertical install's stored pair must come back verbatim on every
+    # launch. (Were the reset ever moved into a seed/apply path instead, this goes red.)
+    stored = {"enabled": True,
+              PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+              PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
+              BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500}
+    api = _FakeMsaApi(stored=stored, stored_version=SETTINGS_VERSION)
+    _run_register(api)
+    assert (bar_pos_x(), bar_pos_y()) == (900, 500)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert api.updated == 0

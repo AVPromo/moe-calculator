@@ -1,0 +1,381 @@
+/* MoEEfficiencyVertical.css -- VERTICAL variant of the in-battle DAMAGE EFFICIENCY bar (class
+   prefix .mev-, never .mp-). Tuned in the browser (tools/dev/eff_bar_tuner_vertical.html) and
+   ported from that tuner's cssOut(): it has NO -EmitCss switch and its "Copy CSS" button is
+   clipboard-only, so the emit is regenerated HEADLESSLY the way tools/dev/check_eff_vertical.js
+   already does it -- read the tuner as text, truncate at its "// ---- panel wiring" marker, and
+   evaluate cssOut() with `new Function` against a self-returning stub node. Do NOT point
+   tools/dev/emit_eff_css.js at the vertical tuner: it targets the HORIZONTAL one by literal
+   filename. The battle window has no hot-reload; tune in the browser, not in the client.
+
+   AXIS: damage, BOTTOM (0%) to TOP (100%), the same piecewise-linear five-stop -> four-equal-
+   quarters mapping as the horizontal sibling, rotated. The fill grows via `height` from bottom:0;
+   every marker positions with bottom:<pct> + translateY(+50%) -- note the +50%, not the horizontal
+   bar's -50%: a bottom-anchored box must shift back DOWN by half its own length to land on its
+   point. Position comes from Python (window.move()), NOT from CSS.
+
+   THIS SHEET IS LOADED ALONGSIDE MoEEfficiency.css, NOT INSTEAD OF IT (MoEEfficiencyView.html
+   links both; orientation is a MOUNT-TIME branch in MoEEfficiency.js, not a second res_map layout
+   -- a new itemID would cost every user a one-time client restart). The two sheets are
+   namespace-DISJOINT by construction (.mp-* vs .mev-*), so nothing below can collide with a
+   horizontal rule except the THREE shared subjects -- `body`, `#moe-bar-box` and `#moe-bar-root` --
+   and those are the only selectors here carrying the `body.mev` scope. `mev` goes on the BODY
+   (MoEBarTransient's goVertical), because #moe-bar-box is a body-level SIBLING of the JS-created
+   root and a class on the root could never reach it; `body.mev ...` is also (1,1,1) so it
+   out-specifies the horizontal sheet's own `.mp-lg #moe-bar-root` (1,1,0) outright rather than
+   winning on source order.
+
+   THE SHIPPED FILE IS THE EMIT PLUS FIVE DELIBERATE HAND-EDITS -- never copy an emit over it (the
+   repo lesson `emitcss-is-not-the-whole-shipped-stylesheet`). Each is marked HAND-EDIT n/5:
+     1  `#mev-bar-root` is normalised to the shipped `#moe-bar-root` THROUGHOUT (the tuner uses its
+        own id purely so a candidate can never collide with the shipped bar).
+     2  the root rule drops the tuner's `right: 639px; bottom: 28px` minimap-placement PREVIEW --
+        that is a JS mock of a Python computation and must never reach the stylesheet -- and gains
+        the shipped root's `left: 0; top: 0` origin, z-index and pointer-events:none.
+     3  #moe-bar-box, the sizing shim -- not emitted at all (the tuner has no surface).
+     4  `.mev-lg` becomes `.mp-lg` -- the body class MoEBarTransient.applySize actually writes.
+     5  the two Large rules whose subject is #moe-bar-root / #moe-bar-box are scoped `body.mev.mp-lg`.
+   NOT a hand-edit here, unlike the sibling MoEProgressVertical.css: this tuner ALREADY emits the
+   dash grid's gap stripe opaque (rgba(13,14,16,1)), pinned by check_eff_vertical.js. Leave it.
+   The @font-face is not re-declared either -- MoEEfficiency.css is <link>ed in the same document
+   and carries it. Anything else diverging from a fresh emit is drift, not intent. */
+
+/* HAND-EDIT 1/5 + 2/5 -- see the header. */
+body.mev #moe-bar-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3rem;
+  height: 200rem;
+  z-index: 9000;
+  pointer-events: none;
+  font-family: "MoEBattle", "Arial Narrow", sans-serif;
+  opacity: 0;
+}
+/* HAND-EDIT 3/5 -- THE SIZING SHIM. #moe-bar-root is position:absolute and contributes ZERO
+   content size, so #moe-bar-box (declared in MoEEfficiencyView.html, NOT JS-created -- it must
+   exist at the FIRST layout pass) is what gives the document in-flow content. IT DOES NOT STOP THE
+   ENGINE'S SIZE TIMEOUT -- re-measured live on the Moving Average bar and disproven;
+   MoEBarTransient's post-deadline SURFACE_REASSERT_MS is the only fix. Kept because it is the
+   honest description of the document's size, and the horizontal sheet's 460x55 is the wrong shape
+   entirely for this composition. Unlike the horizontal file's box (which is left at the tuner's own
+   emitted 460x55 and is deliberately NOT a copy of the surface), this one IS the surface
+   MoEEfficiency.js pushes: width V_BOX_W_REM + 2*PAD_REM == 96+20, height
+   V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM == 360+20-62.
+   THE HEIGHT IS 62rem SHORT OF THE COMPOSITION ON PURPOSE, and that is the surface's own doing, not
+   this rule's: the surface CLIPS .mev-backdrop's lower bleed so the engine's screen clamp can bring
+   the bar's track down to the tuner's 28-logical-px `bottomGap` off the screen bottom (read
+   MoEEfficiency.js's V_CLIP_B_REM note, and its sibling MoEProgress.js's, for the derivation). This
+   rule only keeps describing whatever the surface actually is, and it stays a plain rem box either
+   way, so it cannot reflow the composition when the surface shrinks past it. */
+body.mev #moe-bar-box { width: 116rem; height: 318rem; }
+.mev-backdrop {
+  position: absolute;
+  top: -80rem;
+  left: -40rem;
+  height: 360rem;
+  width: 96rem;
+  z-index: 0;
+}
+.mev-backdrop::before {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background: url(checker.png) repeat;
+  background-size: auto;
+  image-rendering: pixelated;
+  opacity: 0.1;
+  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+}
+.mev-backdrop::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: -1;
+  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+.mev-track {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  width: 3rem;
+  background: rgba(0,0,0,0.45);
+}
+/* The garage dash grid, ROTATED: 0deg ("to top") puts the first stop at the track's BOTTOM edge and
+   runs the period ALONG the axis, carried by the gradient's own rem stops. `background-size: 100%
+   3rem` is the TRANSPOSED form of the horizontal bar's `3rem 100%` x-period tiling: this sheet used
+   to drop background-size entirely instead of transposing it, which rasterized the gradient across
+   the whole element and smeared each dash's ink over ~4 device px instead of a crisp 2 -- tiling
+   from a 3rem tile fixes that. The period is still a Y-length the root font already scales via
+   SIZE_F, which is why the .mp-lg block below declares no twin for this rule. The gap stripe is
+   opaque as emitted (see the header): the garage look this clones is a MASK over the solid fill.
+   The RING keeps 0.5 -- a separate knob, outside the fill, matching the garage's. */
+.mev-track::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: 1;
+  background-image: repeating-linear-gradient(0deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2rem,rgba(13,14,16,1) 2rem,rgba(13,14,16,1) 3rem);
+  background-size: 100% 3rem;
+  box-shadow: 0 0 0 1rem rgba(13,14,16,0.5);
+}
+/* THE AXIS: fill grows HEIGHT from bottom:0 (mask-not-overlay idiom unchanged). */
+.mev-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 0;
+  background: rgba(237,230,217,0.8);
+  transition: height 400ms cubic-bezier(.2,.8,.2,1);
+}
+/* Ticks always cross the track: bottom:<pct%> + translateY(50%) (bottom-anchored centring --
+   the sign is +50%, not the horizontal sibling's -50%, because a bottom-anchored box must
+   shift itself back DOWN by half its own length to land on that point). */
+.mev-tick { position: absolute; left: 50%; height: 2rem; z-index: 2;
+            transform: translate(-50%, 50%); }
+.mev-tick.mev-req { width: 9rem; background: rgba(237,230,217,0.8);
+                    transform: translate(-50%, 50%) translateX(0rem); }
+.mev-tick.mev-req.met { background: rgba(237,230,217,0.8); }
+.mev-tick.mev-cur {
+  width: 9rem;
+  height: 2rem;
+  background: rgba(255,255,255,1);
+  transform: translate(-50%, 50%) translateX(0rem);
+  transition: bottom 400ms cubic-bezier(.2,.8,.2,1);
+}
+.mev-tick.r1 { bottom: 25%; }
+.mev-tick.r2 { bottom: 50%; }
+.mev-tick.r3 { bottom: 75%; }
+.mev-tick.r4 { bottom: 100%; }
+/* ONE SHARED RIGHT-ALIGNMENT LINE FOR EVERY CAPTION (the fix -- see the file header's own
+   bug-fix note): right:100% of #moe-bar-root + translateX(--lfclear) is a FIXED point, never
+   dependent on any caption's own content width, so a numeral's digit count can only grow the
+   box LEFTWARD and can never move an icon, a delta, or any other caption. r1-r3, r4 and the
+   current caption all share it. Icon and delta are IN-FLOW flex children (was: out-of-flow
+   absolute+transform hanging off the box's own edge, which a self-referencing -50% on r4/the
+   current caption used to drag along with it -- see gen_bar_tuner_vertical.ps1's .mpv-cap /
+   the shipped MoEProgress.css's .mp-cap for the same idiom this adopts).
+   DO NOT "OPTICALLY CENTRE" the r4 / current captions over the track: that needs a WIDTH-SCALED
+   term, i.e. the digit-count bug returning. A non-zero residual nudge (capxR4 / capxCur below) is
+   legitimate per-group geometry; a nudge computed off the box's own size is the defect. */
+.mev-cap {
+  position: absolute; display: flex; flex-direction: row; align-items: center;
+  white-space: nowrap; z-index: 3; right: 100%;
+}
+/* r1/r2/r3: each bottom-anchored on its OWN tick (25/50/75%) via bottom:<pct%> +
+   translateY(50%) -- the vertical analogue of a caption riding beside its tick. --lfclear
+   clears the WIDER tick's outer edge (crossPad(), == domain/constants.MM_TICK_OVERHANG on the
+   Python side); --capxreq is a small residual TRIM, r1-r3 ONLY (split from r4's --capxr4, own knob
+   -- see the file header's own note on why they legitimately differ). */
+.mev-cap.lf {
+  transform: translateY(50%) translateX(-3rem) translateX(-2rem);
+  font-size: 12rem;
+  line-height: 15.5rem;
+}
+.mev-cap.r1 { bottom: 25%; }
+.mev-cap.r2 { bottom: 50%; }
+.mev-cap.r3 { bottom: 75%; }
+/* r4: the 100% tick's caption, a static cap ABOVE the track's top end -- reads as the axis's
+   top end cap. padding-bottom, not margin-bottom: Coherent drops margin on the bottom:100%-
+   anchored side (gameface-drops-margin-on-the-anchored-side). --capxr4 is r4's OWN residual:
+   r4 sits above the track's END, not beside a tick, so it needs a DIFFERENT constant push than
+   r1-r3's --capxreq to land back over the track -- still a fixed constant, never a function of
+   the numeral's own width. */
+.mev-cap.tp {
+  bottom: 100%; padding-bottom: 4rem;
+  transform: translateX(-3rem) translateX(11rem);
+  font-size: 12rem;
+  line-height: 15.5rem;
+}
+/* THE CURRENT/LATEST VALUE CAPTION -- a STATIC readout below the track's bottom end. There is
+   no moving marker element; only the CURRENT TICK (above) still tracks the fill, which is why
+   MoEEfficiency.js's capClampPct corridor is horizontal-only and is skipped entirely here.
+   top:100% is the one side Coherent's margin drop does NOT apply to (see r4 above), so margin-top
+   here is fine as written. */
+.mev-cap.bt {
+  top: 100%; margin-top: 3rem;
+  transform: translateX(-3rem) translateX(13rem);
+  font-size: 16rem;
+  line-height: 20.5rem;
+}
+.mev-cap .mev-v {
+  position: relative;
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0em;
+  text-shadow: 0 0 1rem rgba(0,0,0,0.5);
+}
+.mev-cap.lf .mev-v, .mev-cap.tp .mev-v { transform: translateY(0rem); }
+.mev-cap.bt .mev-v { transform: translateY(0rem); }
+/* Every caption's icon/numeral(/delta) mini-row runs HORIZONTALLY, same axis as the horizontal
+   sibling's row, with the ORDER REVERSED: numeral comes BEFORE its icon (the icon trails,
+   away from the track), and on the current caption the delta sits LEFT of the numeral (was
+   right). The icon is now an IN-FLOW flex child: align-items:center centres it, margin-left
+   carries the gap (an ordinary in-flow margin, not the anchored-side one Coherent drops), and
+   the per-role Y nudge is its own small residual transform. */
+.mev-ico { position: relative; display: block; flex: none;
+  width: 13rem;
+  height: 13rem;
+}
+.mev-cap .mev-ico { margin-left: 1rem; }
+.mev-cap.lf .mev-ico { transform: translateY(0.25rem); }
+.mev-cap.tp .mev-ico { transform: translateY(-0.25rem); }
+.mev-cap.bt .mev-ico { transform: translateY(0.5rem); }
+.mev-ico::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 106%;
+  height: 106%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+.mev-cap.lf .mev-ico::before, .mev-cap.tp .mev-ico::before {
+  background: radial-gradient(circle at 50% 50%, rgba(26,26,26,0.5) 0%, transparent 73%);
+}
+#moe-bar-root.mev-b-w .mev-cap.bt .mev-ico::before { background: radial-gradient(circle at 50% 50%, rgba(237,230,217,0.3) 0%, transparent 73%); }
+#moe-bar-root.mev-b-g .mev-cap.bt .mev-ico::before { background: radial-gradient(circle at 50% 50%, rgba(123,236,55,0.8) 0%, transparent 73%); }
+#moe-bar-root.mev-b-t .mev-cap.bt .mev-ico::before { background: radial-gradient(circle at 50% 50%, rgba(90,154,211,0.8) 0%, transparent 73%); }
+#moe-bar-root.mev-b-v .mev-cap.bt .mev-ico::before { background: radial-gradient(circle at 50% 50%, rgba(115,23,196,0.8) 0%, transparent 73%); }
+#moe-bar-root.mev-b-au .mev-cap.bt .mev-ico::before { background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.9) 0%, transparent 73%); }
+.mev-ico::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.mev-ico.mk { width: 16rem; height: 16rem; }
+.mev-ico.mk::after { background-size: contain; filter: brightness(1); }
+.mev-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
+.mev-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
+.mev-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
+.mev-ico.bm { width: 14rem; height: 14rem; }
+.mev-ico.bm::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png);
+  background-size: 228.7%;
+  filter: brightness(3);
+}
+.mev-ico.dmg { width: 16rem; height: 16rem; }
+.mev-ico.dmg::after {
+  background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_damage.png);
+  background-size: 342.5%;
+  filter: brightness(3);
+}
+/* The delta hangs LEFT of the numeral now (was right of it): right:100% + one translate()
+   carrying the gap and the residual Y nudge, same fade-on-opacity idiom. */
+.mev-cap.bt .mev-d {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  transform: translate(-4.2rem, 2.5rem);
+  font-size: 12rem;
+  line-height: 15.5rem;
+  color: #ffffff;
+  font-weight: 600;
+  text-shadow: 0 0 1rem rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: opacity 500ms ease-out;
+}
+.mev-cap.bt .mev-d.on { opacity: 1; }
+
+#moe-bar-root.mev-b-w .mev-fill { background: rgba(237,230,217,0.8); }
+#moe-bar-root.mev-b-w .mev-tick.mev-cur { box-shadow: 0 0 6rem rgba(237,230,217,0.8),0 0 2rem rgba(237,230,217,0.8); }
+#moe-bar-root.mev-b-w .mev-cap.bt .mev-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(237,230,217,0.5),0 0 2rem rgba(237,230,217,0.5); }
+#moe-bar-root.mev-b-g .mev-fill { background: rgba(123,236,55,0.8); }
+#moe-bar-root.mev-b-g .mev-tick.mev-cur { box-shadow: 0 0 6rem rgba(123,236,55,0.8),0 0 2rem rgba(123,236,55,0.8); }
+#moe-bar-root.mev-b-g .mev-cap.bt .mev-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(123,236,55,0.9),0 0 2rem rgba(123,236,55,0.9); }
+#moe-bar-root.mev-b-t .mev-fill { background: rgba(51,146,230,0.8); }
+#moe-bar-root.mev-b-t .mev-tick.mev-cur { box-shadow: 0 0 6rem rgba(51,146,230,0.8),0 0 2rem rgba(51,146,230,0.8); }
+#moe-bar-root.mev-b-t .mev-cap.bt .mev-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(90,154,211,1),0 0 2rem rgba(90,154,211,1); }
+#moe-bar-root.mev-b-v .mev-fill { background: rgba(115,23,196,0.8); }
+#moe-bar-root.mev-b-v .mev-tick.mev-cur { box-shadow: 0 0 6rem rgba(115,23,196,0.8),0 0 2rem rgba(115,23,196,0.8); }
+#moe-bar-root.mev-b-v .mev-cap.bt .mev-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(115,23,196,1),0 0 2rem rgba(115,23,196,1); }
+#moe-bar-root.mev-b-au .mev-fill { background: rgba(255,205,90,0.8); }
+#moe-bar-root.mev-b-au .mev-tick.mev-cur { box-shadow: 0 0 6rem rgba(255,205,90,0.8),0 0 2rem rgba(255,205,90,0.8); }
+#moe-bar-root.mev-b-au .mev-cap.bt .mev-v { text-shadow: 0 0 1rem rgba(0,0,0,0.5),0 0 6rem rgba(255,205,90,0.9),0 0 2rem rgba(255,205,90,0.9); }
+
+@keyframes mev-life{
+  0%{opacity:0;transform:translateY(20rem);animation-timing-function:ease-in}
+  9.68%{opacity:1;transform:translateY(0rem);animation-timing-function:linear}
+  90.32%{opacity:1;transform:translateY(0rem);animation-timing-function:ease-in}
+  100%{opacity:0;transform:translateY(20rem)}}
+#moe-bar-root.mev-run{animation:mev-life 6200ms both}
+/* THE RE-TRIGGER TWIN -- byte-identical to mev-life apart from the name (one builder emits
+   both). A baked fade/hold/fade keyframe cannot be re-triggered in place: the JS restart is
+   remove-class -> force-reflow -> re-add-class, and if Coherent coalesces the re-add with
+   the run it just cancelled the restart is a NO-OP -- which, with the root resting at
+   opacity 0 under `both` fill, leaves the bar permanently INVISIBLE after its first
+   appearance. So the JS ALTERNATES .mev-run / .mev-run-b (MoEBarTransient.js
+   RUN_CLASSES_V/RUN_NAMES_V): consecutive runs carry names the engine cannot coalesce.
+   Without the pair this bar cannot re-raise for a second battle event. */
+@keyframes mev-life-b{
+  0%{opacity:0;transform:translateY(20rem);animation-timing-function:ease-in}
+  9.68%{opacity:1;transform:translateY(0rem);animation-timing-function:linear}
+  90.32%{opacity:1;transform:translateY(0rem);animation-timing-function:ease-in}
+  100%{opacity:0;transform:translateY(20rem)}}
+#moe-bar-root.mev-run-b{animation:mev-life-b 6200ms both}
+@keyframes mev-pulse{
+  0%,100%{box-shadow:0 0 8rem rgba(255,205,90,0.9)}
+  50%{box-shadow:0 0 16rem rgba(255,205,90,1.00)}}
+#moe-bar-root.mev-b-au.mev-pulse .mev-track{animation:mev-pulse 1200ms ease-in-out infinite}
+
+/* ===== THE "LARGE" SIZE MODE (mod_settings.progress_bar_size == 1). The mode is delivered by
+   the ROOT FONT SIZE (MoEBarTransient.js SIZE_F == 1.25), which IS the rem->px factor in
+   Gameface, so that one write re-lays the whole composition 1.25x and correctly leaves every %,
+   em, gradient stop and derived background-size ratio alone. What is left is the CROSS-AXIS
+   (screen-x) lengths, which must reach 5/3 total and therefore owe SIZE_XF == 4/3 ALONE on top
+   of it -- so every declaration below is an x-length and nothing else. Do NOT add a font-size, a
+   bar length, a tick thickness, an icon box, a vertical gap or a keyframe here: the root font
+   already has them and restating one would DOUBLE-APPLY SIZE_F.
+   HAND-EDIT 4/5: the tuner emits this block under `.mev-lg`; the class MoEBarTransient.applySize
+   actually writes on the body is `.mp-lg`, shared by both orientations (the SIZE flag is
+   orientation-independent), so every selector below is rewritten to it. Do not "restore" .mev-lg
+   -- nothing would ever match it.
+   THE DASH GRID TAKES NO RULE HERE, deliberately: a 0deg grid's period is a y-length the root font
+   already scales, so a reintroduced twin would double-apply SIZE_F. check_eff_vertical.js carries a
+   NAMED ABSENCE assertion for exactly that, because a value-equality gate has no other way to
+   notice the horizontal bar's twin creeping back in. */
+/* HAND-EDIT 5/5: the emit's `.mev-lg #mev-bar-root` plus the shim rule the tuner never emits, both
+   scoped `body.mev.mp-lg` (1,2,1) so they out-specify the horizontal sheet's own
+   `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is
+   V_BOX_W_REM*SIZE_XF + 2*PAD_REM == 128 + 20; its HEIGHT is unchanged (the root font carries
+   SIZE_F on a y-length), exactly as the horizontal block's own twin restates width only. */
+body.mev.mp-lg #moe-bar-root { width: 4rem; }
+body.mev.mp-lg #moe-bar-box { width: 148rem; }
+.mp-lg .mev-track { width: 4rem; }
+.mp-lg .mev-backdrop { left: -53.333rem; width: 128rem; }
+.mp-lg .mev-tick.mev-req { width: 12rem;
+  transform: translate(-50%, 50%) translateX(0rem); }
+.mp-lg .mev-tick.mev-cur { width: 12rem;
+  transform: translate(-50%, 50%) translateX(0rem); }
+.mp-lg .mev-cap.lf { transform: translateY(50%) translateX(-4rem) translateX(-2.667rem); }
+.mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(14.667rem); }
+.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }
+.mp-lg .mev-cap .mev-ico { margin-left: 1.333rem; }
+.mp-lg .mev-cap.bt .mev-d { transform: translate(-5.6rem, 2.5rem); }
+
+/* Axis + timings for the JS (mirrored in MoEBarTransient.js / MoEEfficiency.js -- the VERTICAL
+   keyframes are identically tuned to the horizontal ones, which is why one set of timing constants
+   serves both orientations). The tuner's trailing `minimap` placement block is deliberately NOT
+   carried over: those numbers are the PYTHON side's (domain/constants MINIMAP_SIZES, MM_GAP,
+   MM_GAP_BOTTOM, MM_TICK_OVERHANG) and a second copy here would be drift waiting to happen.
+{
+  "axis": "damage, five stops -> four equal quarters, BOTTOM(0%) to TOP(100%) (barX, same as the horizontal sibling)",
+  "dmgStopsSource": "snapshot.thresholds{1,2,3,100}",
+  "barStops": [0, 25, 50, 75, 100],
+  "fadeInMs": 600,
+  "holdMs": 5000,
+  "fadeOutMs": 600,
+  "totalMs": 6200,
+  "slideRem": 20,
+  "slideEasingIn": "ease-in",
+  "slideEasingOut": "ease-in",
+  "fillDurationMs": 400,
+  "fillEasing": "cubic-bezier(.2,.8,.2,1)",
+  "deltaHoldMs": 1600,
+  "deltaFadeMs": 500,
+  "deltaFadeEasing": "ease-out",
+  "pulseMs": 1200,
+  "barLenRem": 200,
+  "crossPadRem": 3
+}
+*/

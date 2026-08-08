@@ -4,9 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**14th_ua's MoE Calculator** (`com.14th_ua.moe_calculator`) — a World of Tanks **EU 2.3.1.1** Garage mod.
+**14th_ua's MoE Calculator** (`com.14th_ua.moe_calculator`) — a World of Tanks Garage mod.
 Hard dependency: **OpenWG GameFace**. Player-facing docs live in this repo's
 `README.md` / `INSTALL.md` (add them); WoT-modding background: `RESEARCH.md`.
+
+Client/mod versions rot at every client upgrade — this file is NOT the source of truth for
+them. Read: **deploy target** = `deploy.local.json` (`"version"`); **mod version** = `src/meta.xml`
+(`<version>`); **what the client actually is** = the game's own `version.xml`. As of 2026-08-06:
+deploy target / client **2.3.1.1**, mod **2.0.0**.
 
 ## The one rule that bites everywhere
 

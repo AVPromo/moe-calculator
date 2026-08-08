@@ -114,44 +114,39 @@ EFFICIENCY_WIDE_THRESHOLD = 9999
 PROGRESS_ANCHOR_Y_FRAC = 0.865
 PROGRESS_ANCHOR_X_OFFSET = 0
 
-# COMPENSATION for the bar's placement -- a WIRE CONTRACT with the JS. TWO terms, summed:
-#   1. -SHIFT_Y_REM (== -44). MoEProgress.js shifts the whole composition into POSITIVE
-#      document coordinates (nothing may sit at a negative x/y or the engine clips it there,
-#      whatever the surface size), by SHIFT_X_REM / SHIFT_Y_REM. That pushes the bar
-#      SHIFT_Y_REM down inside its own surface, so the window moves UP by exactly that much
-#      and the bar stays put on screen. Keep in lockstep with MoEProgress.js SHIFT_Y_REM
-#      (1rem == 1 logical px): if SHIFT_Y_REM changes, THIS constant must change with it.
-#   2. +round(PROGRESS_ANCHOR_Y_FRAC * 92) (== +80). UNIT CONVERSION. anchor_centred applies
-#      the fraction to the MOVABLE EXTENT (space_h - surface_h, surface_h == 92 == the JS's
-#      VIEW_H_REM), not to the viewport, so a bare 0.865 landed the track at
-#      int(988*0.865) + 44 - 44 = 854 of 1080 == 79.1vh, not the tuned 86.5vh. Adding
-#      frac*surface_h back cancels the -frac*surface_h the extent form subtracts, at EVERY
-#      resolution: 0.865*(H-92) + 0.865*92 == 0.865*H. At 1080 the track top is now
-#      854 + 44 + 36 = 934 (== 0.865*1080 within the extent term's 1px int() floor).
-# CONSEQUENCE: this is NO LONGER a plain mirror of -SHIFT_Y_REM -- the two are related but not
-# equal, and PROGRESS_ANCHOR_Y_FRAC above now genuinely reads as "fraction of viewport height".
-# X gets NO compensation on purpose: anchor_centred's `max_x // 2` centres whatever surface
-# width the view asks for and the composition is symmetric about its own centre, so the
-# horizontal centring self-calibrates (and needs no unit conversion either). Do not fight it.
-PROGRESS_ANCHOR_Y_OFFSET = 36
+# COMPENSATION for the bar's placement -- a WIRE CONTRACT with the JS, and ONE PURE TERM:
+# -SHIFT_Y_REM (== -44). MoEProgress.js shifts the whole composition into POSITIVE document
+# coordinates (nothing may sit at a negative x/y or the engine clips it there, whatever the
+# surface size), by SHIFT_X_REM / SHIFT_Y_REM. That pushes the bar SHIFT_Y_REM down inside its
+# own surface, so the window moves UP by exactly that much and the bar stays put on screen. Keep
+# in lockstep with MoEProgress.js SHIFT_Y_REM (1rem == 1 logical px): if SHIFT_Y_REM changes,
+# THIS constant must change with it.
+# WAS A TWO-TERM COMPOSITE, retired by the Alignment wiring: PROGRESS_ANCHOR_Y_OFFSET == 36 ==
+# (-44) + 80, where term 2 was +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM) == round(0.865 * 92)
+# == +80, a UNIT CONVERSION that existed ONLY because anchor_centred applied the fraction to the
+# MOVABLE EXTENT (space_h - surface_h) rather than to the viewport. positioning
+# .anchor_centred_reduced applies it to space_h DIRECTLY, which cancels that term algebraically at
+# every resolution (see its docstring), so nothing bakes it any more -- and no future alignment
+# has to bake its own. What is left is the pure intra-surface shift, which is NEGATIVE (the
+# window moves UP), a plain mirror of -SHIFT_Y_REM again. PROGRESS_ANCHOR_Y_FRAC above still
+# genuinely reads as "fraction of viewport height".
+# X gets NO compensation on purpose: `max_x // 2` centres whatever surface width the view asks
+# for and the composition is symmetric about its own centre, so the horizontal centring
+# self-calibrates (and needs no unit conversion either). Do not fight it.
+PROGRESS_ANCHOR_Y_SHIFT = -44
 
-# ...and the SAME two-term compensation for the LARGE size mode (mod_settings.progress_bar_size == 1),
-# which is a pure scale-up of the composition and must NOT move the bar on screen. The mode's two
-# factors live in MoEBarTransient.js -- SIZE_F = 1.25 (delivered by the ROOT FONT SIZE, so every rem
-# length renders 1.25x with no CSS edit) and SIZE_XF = 4/3 (the EXTRA factor an x-length carries in the
-# stylesheets' .mp-lg block, to reach 5/3 total). Neither term below takes SIZE_XF: this is the Y axis.
-#   1. -(SHIFT_Y_REM * SIZE_F) == -(44 * 1.25) == -55. SHIFT_Y_REM is UNCHANGED at 44 -- it is a rem
-#      length in the CSS (root.style.top), so the root font scales it for free -- but THIS constant is
-#      logical px, which is what the extra * 1.25 converts.
-#   2. +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 92 * 1.25)
-#      == round(0.865 * 115) == +99. Same unit conversion as above; VIEW_H_REM is still 92 (a
-#      y/uniform rem length), and 115 is the logical-px height the JS actually pushes to
-#      resizeViewRem -- an ENGINE API, whose rem is C++'s and is NOT affected by our root font.
-#   sum: -55 + 99 = 44. At 1080 the track top lands at int((1080-115)*0.865) + 44 + 55 = 933,
-#   i.e. 0.865*1080 within the extent term's 1px int() floor -- exactly where the 1x bar sits.
-# X still gets NO compensation, and only because the .mp-lg block keeps the backdrop SYMMETRIC about
-# the track (left == -bleed', width == track' + 2*bleed'), so `max_x // 2` centres it for free.
-PROGRESS_ANCHOR_Y_OFFSET_LARGE = 44
+# ...and the SAME shift for the LARGE size mode (mod_settings.progress_bar_size == 1), which is a
+# pure scale-up of the composition and must NOT move the bar on screen:
+#   -(SHIFT_Y_REM * SIZE_F) == -(44 * 1.25) == -55.
+# SIZE_F = 1.25 lives in MoEBarTransient.js and is delivered by the ROOT FONT SIZE, so every rem
+# length renders 1.25x with no CSS edit: SHIFT_Y_REM is UNCHANGED at 44 (it is a rem length in the
+# CSS, root.style.top), and THIS constant is logical px, which is what the extra * 1.25 converts.
+# SIZE_XF (4/3, the EXTRA factor an x-length carries in the stylesheets' .mp-lg block) never
+# appears here -- this is the Y axis (memory `mp-lg-x-lengths-are-pure-sizexf-not-sizef`).
+# WAS PROGRESS_ANCHOR_Y_OFFSET_LARGE == 44 == (-55) + 99, term 2 being
+# +round(PROGRESS_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 115) == +99 -- retired
+# for the reason the 1x constant above documents.
+PROGRESS_ANCHOR_Y_SHIFT_LARGE = -55
 
 # The damage-efficiency bar's window anchor -- its OWN three constants, not the progress bar's.
 # Only one of the two centre-screen bars is ever open (they are radio alternatives), but the
@@ -160,33 +155,200 @@ PROGRESS_ANCHOR_Y_OFFSET_LARGE = 44
 # Y_FRAC is the phase-1 tuner's settled stage placement (eff_bar_tuner.html `offY` = 86.5vh --
 # the same ribbon-clearing height the Moving Average bar was tuned to); X_OFFSET is its `offX` 0,
 # and anchor_centred's `max_x // 2` centres whatever surface width the JS asks for.
-# Y_OFFSET is the same TWO-term compensation PROGRESS_ANCHOR_Y_OFFSET documents at length above,
-# recomputed against the REAL MoEEfficiency.js (it was seeded provisionally from the progress bar
-# while that file did not exist):
-#   1. -SHIFT_Y_REM == -50. MoEEfficiency.js shifts the whole composition into POSITIVE document
-#      coordinates by PAD_REM - BOX_TOP_REM == 10 - (-40) == 50, so the window moves UP by exactly
-#      that much and the bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in
-#      MoEEfficiency.css (-40rem) -- the composition's topmost edge.
-#   2. +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == +round(0.865 * 116) == +100. UNIT
-#      CONVERSION: anchor_centred applies the fraction to the MOVABLE EXTENT (space_h - surface_h),
-#      not to the viewport, and adding frac*surface_h back cancels the -frac*surface_h the extent
-#      form subtracts, at EVERY resolution. VIEW_H_REM == BOX_H_REM + 2*PAD_REM == 96 + 20 == 116
-#      (.mp-backdrop's height plus the JS's four-sided slack).
-#   sum: -50 + 100 = 50. At 1080 the track top lands at int((1080-116)*0.865) + 50 + 50 = 933,
-#   i.e. 0.865*1080 within the extent term's 1px int() floor -- same as the other bar.
-# COINCIDENCE, NOT A MIRROR: this happens to equal SHIFT_Y_REM (50) because round(0.865*116) is
-# 100 == 2*50. The two terms are independent -- any JS pad/box/frac change moves this value.
+# Y_SHIFT is the same ONE PURE TERM PROGRESS_ANCHOR_Y_SHIFT documents at length above, measured
+# against the REAL MoEEfficiency.js:
+#   -SHIFT_Y_REM == -50. MoEEfficiency.js shifts the whole composition into POSITIVE document
+#   coordinates by PAD_REM - BOX_TOP_REM == 10 - (-40) == 50, so the window moves UP by exactly
+#   that much and the bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in
+#   MoEEfficiency.css (-40rem) -- the composition's topmost edge.
+# WAS EFFICIENCY_ANCHOR_Y_OFFSET == 50 == (-50) + 100, term 2 being
+# +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == round(0.865 * 116) == +100 (VIEW_H_REM ==
+# BOX_H_REM + 2*PAD_REM == 96 + 20 == 116, .mp-backdrop's height plus the JS's four-sided slack) --
+# the extent-to-viewport conversion retired by anchor_centred_reduced. The old composite happening
+# to equal SHIFT_Y_REM was a coincidence of round(0.865*116) == 2*50; THIS value is the shift
+# itself, so the coincidence is gone with the term.
 EFFICIENCY_ANCHOR_Y_FRAC = 0.865
 EFFICIENCY_ANCHOR_X_OFFSET = 0
-EFFICIENCY_ANCHOR_Y_OFFSET = 50
+EFFICIENCY_ANCHOR_Y_SHIFT = -50
 
-# ...and its LARGE-mode twin, derived exactly as PROGRESS_ANCHOR_Y_OFFSET_LARGE documents at length
-# (read that first -- it explains why only SIZE_F appears here and never SIZE_XF):
-#   1. -(SHIFT_Y_REM * SIZE_F) == -(50 * 1.25) == -63 (50*1.25 == 62.5, half-away rounds up).
-#   2. +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 116 * 1.25)
-#      == round(0.865 * 145) == +125. 145 is the logical-px height MoEEfficiency's transient pushes.
-#   sum: -63 + 125 = 62. At 1080 the track top lands at int((1080-145)*0.865) + 62 + 63 = 933, i.e.
-#   0.865*1080 within the int() floor -- the same place the 1x bar sits.
-# NOT a mirror of anything: unlike the 1x pair (where round(0.865*116) happened to be 2*50), the two
-# terms here share no coincidence at all. Any JS pad/box/frac change moves this value.
-EFFICIENCY_ANCHOR_Y_OFFSET_LARGE = 62
+# ...and its LARGE-mode twin, derived exactly as PROGRESS_ANCHOR_Y_SHIFT_LARGE documents (read that
+# first -- it explains why only SIZE_F appears here and never SIZE_XF):
+#   -(SHIFT_Y_REM * SIZE_F) == -(50 * 1.25) == -62.5 -> -63 (half-away rounding, i.e. away from
+#   zero: the shift is negative, so it rounds DOWN to -63 and the window moves UP by the full 63).
+# WAS EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == 62 == (-63) + 125, term 2 being
+# +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM * SIZE_F) == round(0.865 * 145) == +125 (145 is the
+# logical-px height MoEEfficiency's transient pushes) -- retired with its sibling above.
+EFFICIENCY_ANCHOR_Y_SHIFT_LARGE = -63
+
+# --- Phase 2 (in-battle vertical bar): minimap-anchored placement geometry -------------------
+# Feeds domain.positioning.anchor_minimap, which places a vertical bar to the LEFT of the
+# minimap instead of proportionally down the screen -- see
+# TASKS/in-battle-vertical-bar-PLAN.md "Phase 2 -- Python placement".
+
+# Measured logical-px minimap size per settingsCore GAME.MINIMAP_SIZE index (0-5), INVARIANT
+# across resolution AND interface scale, the minimap flush to the screen's bottom-right corner
+# with ZERO inset -- see tools/dev/measure_minimap.py's module docstring (the measurement
+# source; corner-scan + connected-component cross-check, [228,279,329,409,510,628] +/-1px JPEG
+# noise, confirmed at 3840x2160 scale 1/2 and 2560x1440 scale 1). The settingsCore read does NOT
+# clamp its own range -- callers must clamp the index into [0, 5] before indexing this tuple.
+MINIMAP_SIZES = (228, 279, 329, 409, 510, 628)
+
+# Bar -> minimap logical-px clearances -- the vertical tuners' DEFAULTS. Fixed logical-px design
+# values, NOT rem lengths: unlike MM_TICK_OVERHANG below they do not scale with the Large size mode.
+# BOTH ARE MEASURED TO THE VISIBLE TRACK BOX, never to the window surface -- the tuners' own
+# barRightPx() / barBottomPx() (gen_bar_tuner_vertical.ps1:377-378) and the efficiency tuner's
+# placement() (eff_bar_tuner_vertical.html) place the TRACK on the stage, which is why
+# anchor_minimap needs the *_MM_TRACK_X / MM_TRACK_Y terms below to convert into surface coordinates.
+# MM_GAP == 8 in BOTH tuners. THE BOTTOM GAP DOES NOT MATCH, AND IS NOW SPLIT PER BAR: the Moving
+# Average tuner's `mmGapBottom` default is 30 (gen_bar_tuner_vertical.ps1:451) and the Damage
+# Efficiency tuner's `bottomGap` default is 28 (eff_bar_tuner_vertical.html:470).
+# IT USED TO BE ONE SHARED 30, deliberately, because the difference was UNOBSERVABLE: the engine
+# clamps a window into [0, space - surface] in compiled C++ (memory
+# `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`), so every value below the
+# surface's own below-the-track slack -- then a shared surface_h - MM_TRACK_Y == 380 - 290 == 90 --
+# placed BOTH bars identically, flush to the screen's bottom, and neither tuned number was reachable.
+# THE FRONT-END CHANGE THAT FREES THE SLACK HAS LANDED, which is the exact condition the shared
+# value's own note named for splitting this: each vertical composition's surface now stops at its own
+# tuned gap below the track instead of below the backdrop's lower bleed (MoEProgress.js /
+# MoEEfficiency.js V_CLIP_B_REM, 60 and 62 rem of clipped bleed respectively), so the slack is 30 and
+# 28 -- both tuned gaps are reachable and a 2px difference between them is now visible on screen. So
+# each bar carries its own, threaded through BarHost exactly as *_MM_TRACK_X is (bar_window's
+# `mm_gap_bottom` argument).
+# STILL FIXED LOGICAL PX, with NO Large twin, and that is not an omission: under the Large size mode
+# the clip scales with the composition (it rides applySize's `* f`), so the slack becomes 37 / 35 and
+# a fixed 30 / 28 is once again UNREACHABLE -- the engine flushes to the bottom and the track lands at
+# the tuned gap * SIZE_F, i.e. the same look 1.25x, which is what a scaled composition wants. Adding a
+# *_LARGE twin here would compute the identical placement with more code. See MoEProgress.js's
+# V_CLIP_B_REM note for why the clip must stay inside that factor.
+MM_GAP = 8
+PROGRESS_MM_GAP_BOTTOM = 30
+EFFICIENCY_MM_GAP_BOTTOM = 28
+
+# Half the tick's cross-axis overhang past the track's own edge (ticks are wider than the
+# track), mirrored from the vertical tuner's live formula (gen_bar_tuner_vertical.ps1:371
+# halfOverhang(): max(tickWEnd, tickWPre, tickWProj) - trackW, halved -- "if more than one tick
+# cross-length exists, use the widest"). The shipped vertical CSS's defaults are all three tick
+# cross-lengths == 9rem and trackW == 3rem (gen_bar_tuner_vertical.ps1:429-432), so
+# overhang == (9 - 3) / 2 == 3 logical px at 1x (1rem == 1 logical px at the default root font).
+# LARGE mode: trackW/tickW are CROSS-AXIS ("x") lengths, so under the Large size mode's total
+# x-length factor of SIZE_F * SIZE_XF == 1.25 * 4/3 == 5/3 (memory
+# `mp-lg-x-lengths-are-pure-sizexf-not-sizef`; the same reasoning PROGRESS_ANCHOR_Y_SHIFT_LARGE's
+# header explains for the two-term composites above), the overhang -- being a difference of two
+# x-lengths -- scales by that SAME 5/3: 3 * 5/3 == 5 exactly, no rounding ambiguity.
+MM_TICK_OVERHANG = 3
+MM_TICK_OVERHANG_LARGE = 5
+
+# The vertical bar's ENTIRE intra-surface shift compensation -- positioning.anchor_centred_reduced's
+# `y_shift` argument when orientation == vertical -- and, under the space_y-based reduction (see
+# anchor_centred_reduced's own docstring), the WHOLE constant, not a two-term sum: term 2 (the
+# extent-to-viewport fraction conversion) is cancelled algebraically once the caller passes
+# space_y directly, so no alignment or orientation ever needs to bake it separately.
+# IDENTICAL for both bars, unlike their horizontal siblings' -44-vs--50 split: both vertical
+# compositions share the same backdrop geometry (`top: -80rem`, `height: 360rem`), so with the
+# shared PAD_REM == 10 both shipped JS files use (mirroring how EFFICIENCY's SHIFT_Y_REM derives
+# from PAD_REM - BOX_TOP_REM above):
+#   SHIFT_Y_REM == PAD_REM - BOX_TOP_REM == 10 - (-80) == 90.
+#   1x:    -SHIFT_Y_REM == -90.
+#   LARGE: -(SHIFT_Y_REM * SIZE_F) == -(90 * 1.25) == -112.5 -> -113 (half-away rounding, the
+#          same convention EFFICIENCY_ANCHOR_Y_SHIFT_LARGE's -62.5 -> -63 term already uses).
+# Do NOT re-add a term 2 here -- see anchor_centred_reduced's docstring for why none is needed.
+# The horizontal composites are collapsed the same way now (PROGRESS_/EFFICIENCY_ANCHOR_Y_SHIFT
+# (_LARGE) above), so every orientation carries exactly one shift per size and nothing else.
+# STILL SHARED EVEN THOUGH THE TWO VERTICAL SURFACES NO LONGER MATCH (320 rem tall on the Moving
+# Average bar, 318 on the Damage Efficiency one -- see the *_MM_GAP_BOTTOM split above and the JS's
+# V_CLIP_B_REM): this constant is a function of BOX_TOP_REM and PAD_REM alone, and those two ARE
+# identical on both. Nothing here is derived from the surface's HEIGHT any more.
+VERTICAL_ANCHOR_Y_SHIFT = -90
+VERTICAL_ANCHOR_Y_SHIFT_LARGE = -113
+
+# WHERE THE VERTICAL COMPOSITION'S TRACK SITS INSIDE ITS OWN SURFACE -- positioning.anchor_minimap's
+# `edge_x` / `edge_y`, i.e. the offset from the surface's top-LEFT corner to the two edges the
+# minimap gaps are measured against. The shipped minimap placement had NO such term (it passed the
+# surface's own width/height), which aligned the SURFACE's far edges instead of the track's and put
+# the bar 45-63 logical px too far LEFT and 90 too HIGH -- the same surface-vs-composition frame
+# mismatch VERTICAL_ANCHOR_Y_SHIFT above cancels for the centred anchor. Derived from the SAME five
+# numbers those shifts are (the JS's V_BOX_* + PAD_REM) plus the track's own two CSS lengths, so
+# nothing here is measured or tuned:
+#
+#   the track box IS #moe-bar-root -- `width: 3rem` (trackW, the cross axis) by `height: 200rem`
+#   (barLen, the axis) in MoEProgressVertical.css:43-44 / MoEEfficiencyVertical.css:47-48 -- and
+#   MoEBarTransient's mount writes it to (SHIFT_X_REM, SHIFT_Y_REM) inside the surface, so:
+#
+#     edge_x == SHIFT_X_REM + trackW == (padX - V_BOX_LEFT_REM) + 3
+#     edge_y == SHIFT_Y_REM + barLen == (PAD_REM - V_BOX_TOP_REM)  + 200
+#
+# `padX` IS THE SURFACE'S X SLACK AND IS NOT PAD_REM ON BOTH BARS. The Moving Average bar's
+# vertical surface reaches further sideways than its backdrop does, because its right-anchored
+# captions grow leftward past it and PAD_REM alone CLIPPED them (MoEProgress.js's V_PAD_X_REM == 63,
+# which carries the whole derivation -- including why it is applied to BOTH sides even though only
+# the left needs it: the centred alignment centres the SURFACE, so an asymmetric one moves the bar);
+# the Damage Efficiency bar still uses PAD_REM on all four sides.
+# GROWING THAT SLACK MOVES THE TRACK INSIDE THE SURFACE, so this constant has to grow with it or the
+# whole bar slides left by the difference -- the surface widened on the left alone, the composition
+# did not move within it, and nothing on screen may change.
+#
+# X IS PER BAR because the two vertical surfaces differ in their left clearance
+# (V_BOX_LEFT_REM -34 vs -40, and now the pad on top), and it is a CROSS-AXIS length, so LARGE
+# carries SIZE_XF == 4/3 on every x-length AND SIZE_F == 1.25 through the root font (memory
+# `mp-lg-x-lengths-are-pure-sizexf-not-sizef`; the pad is NOT an x-length -- see
+# MoEBarTransient.applySize, which re-derives shiftX as `padX - boxLeft * xf`):
+#   Moving Average:    (63 + 34) + 3 == 100
+#     LARGE:           (63 + 34*4/3 + 3*4/3) * 1.25 == 112.333 * 1.25 == 140.417 -> 140
+#   Damage Efficiency: (10 + 40) + 3 == 53
+#     LARGE:           (10 + 40*4/3 + 3*4/3) * 1.25 == 67.333 * 1.25 == 84.167 -> 84
+#
+# A maintainer Ctrl+drag of this bar once landed 2 logical px off this derivation, and a second,
+# independent Ctrl+drag of the Moving Average bar landed 2px off ITS OWN pure derivation the OTHER
+# way -- at the time read as hand-drag scatter at this maintainer's 4K x2 screen (1 logical px ==
+# 2 device px), since the two straddled the derived values symmetrically.
+#
+# THAT READING HAS SINCE BEEN OVERTURNED FOR THE MOVING AVERAGE BAR ONLY, by a THIRD, independent
+# Ctrl+drag on a freshly-deployed build, in a DIFFERENT surface geometry from either earlier one
+# (a different shiftX, i.e. a different composition width) -- and it landed on the SAME track-left
+# the second drag did, not a fresh scatter point:
+#
+#   MA drag #1, OLD geometry (shiftX 44):  pos_x 1354 -> track-left 1354 + 44 == 1398
+#   MA drag #2, NEW geometry (shiftX 97):  pos_x 1301 -> track-left 1301 + 97 == 1398
+#   pure derivation (edge_x 100):  1920 - 510 - 8 - 3 - 100 == 1299, + shiftX 97 == 1396
+#
+# Two independent drags landing on the IDENTICAL value across two different geometries is a
+# repeatable 2px-right miss, not scatter (scatter would not repeat exactly). So PROGRESS_MM_TRACK_X
+# below carries that -2 as a MEASURED HAND-PLACEMENT CORRECTION, specific to THIS bar: decreasing
+# edge_x moves anchor_minimap's `x = space_x - mm_size - gap - overhang - edge_x` RIGHT by the same
+# amount, landing the derived surface x at 1301 (+ shiftX 97 == 1398, matching both drags).
+# _LARGE gets the SAME FLAT -2, not a scaled one -- matching how every other fixed logical-px
+# clearance in this file is treated (MM_GAP, *_MM_GAP_BOTTOM have no Large twin because a clearance
+# is a fixed logical-px design value, invariant to the size mode; this correction is the same kind
+# of fixed hand-measured offset, not a composition length that scales with SIZE_F/SIZE_XF).
+#
+# THE DAMAGE EFFICIENCY BAR IS DELIBERATELY NOT GIVEN THIS CORRECTION. EFFICIENCY_MM_TRACK_X below
+# stays the pure derivation (53 / 84) -- its own single hand-drag (the FIRST one above) is still
+# just one data point, never confirmed by a second independent drag the way the Moving Average
+# bar's now is, and it has since been inspected in-game and accepted as correct as derived. The two
+# bars' compositions differ (different surfaces, different shiftX), so nothing here licenses
+# copying a Moving-Average-specific measurement onto its sibling.
+# THE Y AXIS WAS DELIBERATELY LEFT ALONE by that same re-placement. The stored drag pair's y was 820,
+# i.e. 58 px BELOW the auto-placed 762, which would mean a bottom gap of -30 -- unreachable: the
+# engine clamps every window into [0, space - surface] in compiled C++ (memory
+# `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`) and the surface's own
+# below-the-track slack (V_VIEW_H_REM - MM_TRACK_Y == 318 - 290 == 28 == EFFICIENCY_MM_GAP_BOTTOM) is
+# a HARD FLOOR. The bar on screen was therefore already sitting at exactly the shipped Y, which is
+# why EFFICIENCY_MM_GAP_BOTTOM is unchanged. Lowering it further needs a SURFACE change
+# (MoEEfficiency.js V_CLIP_B_REM), never a constant nudge here.
+# Y IS SHARED, exactly as VERTICAL_ANCHOR_Y_SHIFT is and for the same reason (both vertical
+# backdrops have the identical `top: -80rem` / `height: 360rem`), and it is a Y length, so LARGE
+# carries SIZE_F alone -- no SIZE_XF anywhere on this axis:
+#   (10 + 80) + 200 == 290
+#     LARGE:  290 * 1.25 == 362.5 -> 363 (half-away rounding, the convention
+#             VERTICAL_ANCHOR_Y_SHIFT_LARGE's -112.5 -> -113 already uses)
+#
+# NO HORIZONTAL TWIN EXISTS ON PURPOSE. Neither horizontal tuner has any minimap placement at all
+# (only the two VERTICAL ones do), so a horizontal bar beside the minimap has no tuned reference to
+# reproduce -- bar_window._resolve keeps passing the surface's own edges there, which is what it
+# always did. Do not invent the four numbers; tune them first if that alignment ever matters.
+PROGRESS_MM_TRACK_X = 98              # pure derivation 100, -2 measured hand-placement correction
+PROGRESS_MM_TRACK_X_LARGE = 138        # pure derivation 140, same flat -2 (see the comment above)
+EFFICIENCY_MM_TRACK_X = 53              # pure derivation, no correction (see the comment above)
+EFFICIENCY_MM_TRACK_X_LARGE = 84
+MM_TRACK_Y = 290
+MM_TRACK_Y_LARGE = 363

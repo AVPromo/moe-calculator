@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MoE progress bar -- Shipped vs Variant A vs Variant B</title>
+<!--
+  progress_bar_variant_a.html -- throwaway-but-tunable BROWSER prototype comparing the shipped
+  "Moving Average" in-battle progress bar against two alternatives:
+    * Variant A -- the LEFT axis end is rescaled off the career EWMA + a calibration window,
+      instead of the held mark's requirement (so the fill head's visible per-battle movement
+      grows). Unchanged axis identity otherwise.
+    * Variant B -- the SHIPPED bar's axis is left exactly alone (unchanged axisLo/mp-pre/mark
+      glyphs); instead a small fixed-scale VERNIER is added below the main track, plotting
+      projAvg - preAvg directly so a small delta reads at a magnified, constant scale regardless
+      of where it sits on the (wide) main axis.
+  A and B are INDEPENDENT options, not a progression -- see each stage's own caption.
+
+  NOT shipped, NOT built, and src/ is untouched. Single file, everything inlined, works from
+  file:// and under a CSP that blocks every external host: no external CSS/JS/fonts/images.
+
+  WHAT IS COPIED VERBATIM (faithful clone, not a redesign):
+    * The ACTUAL src/res/gui/gameface/mods/14th_ua/MoECalculator/MoEProgress.css, byte-identical,
+      comments and all, in the "SHIPPED CSS -- VERBATIM" block below. The ONLY two edits are the
+      @font-face src (a data: URI instead of the two sibling-relative sources) and the
+      checker.png background (a data: URI instead of the bare sibling url) -- both marked inline
+      with "HARNESS EDIT". Everything else, including the two APPENDED hand-authored blocks
+      (Large size mode, interface-scale correction) and the trailing JSON timings comment, is
+      exactly what ships. Per the repo's own "-EmitCss is not the whole shipped stylesheet"
+      lesson, a re-emit of the tuner would NOT reproduce this file -- this is why it was copied
+      from disk rather than regenerated.
+    * The DOM shape is MoEProgress.js's ensureRoot() innerHTML, verbatim (backdrop, track, 4
+      ticks, 4 captions, delta split into static parens + a glowing .mp-d-num child).
+    * The render arithmetic (axisPct, fmt, the sign-glow gate on the ROUNDED delta magnitude,
+      paintStatic's icon selection) is a direct, unabridged port of MoEProgress.js's paintStatic /
+      showVal -- see PORT NOTES below for exactly what was intentionally left out (the whole
+      show/hide/peek transient in MoEBarTransient.js, which has nothing to do with axis
+      calibration and only obscures the comparison this file exists to make).
+
+  GAME ART: NO SUBSTITUTION LEFT. All six glyphs (icon_battle_condition_barrel_mark/damage/top.png,
+  mark_1/2/3.png) are the REAL uncropped PNGs, byte-identical to this repo's TASKS/refs/icons/ (no
+  crop/pad/re-encode -- verified by decoding the inlined base64 back to bytes and diffing against
+  the source files), inlined straight into the SHIPPED CSS block below with the shipped
+  background-size percentages (228.7% / 342.5% / 274.7% / `contain`) untouched. checker.png is
+  likewise a real 84-byte asset that ships beside this CSS, inlined as a data: URI byte-identical
+  to the file on disk (see the report for how it was extracted -- plain base64, no re-encode).
+
+  FONT: the REAL bundled MoEBattle.ttf (2.5 KB cut, 19-glyph numeric subset: digits and
+  % ( ) + - , . / space -- NO LETTERS, no infinity glyph) is inlined as a data: URI, byte-identical
+  to the shipped file. See the ETA/vernier notes below for why this matters for every numeral node.
+-->
+<style>
+/* =====================================================================================
+   SHIPPED CSS -- VERBATIM (src/res/gui/gameface/mods/14th_ua/MoECalculator/MoEProgress.css)
+   Only the two HARNESS EDIT lines differ from the file on disk (a data: URI in place of the two
+   sibling-relative font sources, and a data: URI in place of the bare checker.png sibling url).
+   ===================================================================================== */
+/* MoEProgress.css -- in-battle centre-screen MoE progress bar. Tuned in the browser
+   (tools/dev/gen_bar_tuner.ps1) and copied VERBATIM; the battle window has no hot-reload.
+   Position comes from Python (window.move()), NOT from CSS -- tuner stage placement was
+   top 85vh, centre offset 0rem. Font: the bundled MoEBattle numeric subset,
+   19 glyphs (digits % ( ) + - , . / space) -- NO LETTERS, a word label renders blank.
+   Sizes in rem (1rem == 1 logical px); colours by VALUE (Gameface drops a declaration
+   whose var() cannot resolve). JS sets .mp-fill width and the .mp-proj / .mp-capC left as
+   percentages, and toggles .mp-up/.mp-down on the fill + the bottom numerals. The two
+   axis-end captions are pure CSS (they hang off the track ends), so JS measures nothing. */
+
+/* ADDITION 1 OF 2 TO THE TUNER'S EMITTED FILE. #moe-bar-root asks for font-family "MoEBattle"
+   but the tuner ran in a browser and never emitted a face for it, and this document does NOT
+   <link> MoEBattle.css (that would drag the whole corner overlay's rules in with it). So the
+   6-line declaration is copied verbatim from MoEBattle.css:23-29 -- same family name, same
+   single weight-600 cut, same bare-sibling url FIRST: Coherent resolves an @font-face src
+   against the DOCUMENT directory only, so a subdir-relative path silently falls back to Arial
+   Narrow. That is also why this file must sit right beside MoEBattle.ttf and checker.png. */
+@font-face {
+    font-family: "MoEBattle";
+    font-weight: 600;
+    font-style: normal;
+    /* HARNESS EDIT: shipped src is
+         url(MoEBattle.ttf) format("truetype"),
+         url("coui://gui/gameface/mods/14th_ua/MoECalculator/MoEBattle.ttf") format("truetype");
+       -- both sibling/coui paths are dead in a browser, so the same bytes are inlined instead. */
+    src: url(data:font/ttf;base64,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) format("truetype");
+}
+
+/* ADDITION 2 OF 2 TO THE TUNER'S EMITTED FILE (not tuned, no tuned value touched) -- THE SIZING
+   SHIM. Not relevant to this harness (the harness sizes each bar's stage itself), kept only for
+   verbatim fidelity of the pasted stylesheet -- neither rule is referenced by any element below. */
+body { margin: 0; }
+#moe-bar-box { width: 380rem; height: 92rem; }
+
+#moe-bar-root {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200rem;
+  z-index: 9000;
+  pointer-events: none;
+  text-align: center;
+  font-family: "MoEBattle", "Arial Narrow", sans-serif;
+  opacity: 0;
+}
+.mp-backdrop {
+  position: absolute;
+  left: -80rem;
+  top: -34rem;
+  width: 360rem;
+  height: 72rem;
+  z-index: 0;
+}
+.mp-backdrop::before {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  /* HARNESS EDIT: shipped is `background: url(checker.png) repeat;` -- the same 84-byte file,
+     inlined byte-identical (plain base64 of the file on disk, no re-encode). */
+  background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAG0lEQVR4nGNgYGD4D8VgwARjwAAjEhusCkMFAJJcAwPqsfV0AAAAAElFTkSuQmCC) repeat;
+  background-size: auto;
+  background-position: 0px 0px;
+  image-rendering: pixelated;
+  opacity: 0.1;
+  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+}
+.mp-backdrop::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: -1;
+  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+.mp-track {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 3rem;
+  background: rgba(0,0,0,0.45);
+}
+.mp-track::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  z-index: 1;
+  background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2rem,rgb(13,14,16) 2rem,rgb(13,14,16) 3rem);
+  background-size: 3rem 100%;
+  background-repeat: repeat;
+  box-shadow: 0 0 0 1rem rgba(13,14,16,0.5);
+}
+.mp-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0;
+  background: rgba(237,230,217,0.8);
+  transition: width 600ms cubic-bezier(.2,.8,.2,1) 600ms;
+}
+.mp-fill.mp-up   { background: rgba(123,236,55,0.8); }
+.mp-fill.mp-down { background: rgba(211,68,63,0.8); }
+.mp-tick {
+  position: absolute;
+  top: 50%;
+  width: 2rem;
+  height: 9rem;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+.mp-tick.mp-end   { background: rgba(237,230,217,0.8); }
+.mp-tick.mp-left  { left: 0; }
+.mp-tick.mp-right { left: 100%; }
+.mp-tick.mp-pre   { background: rgba(237,230,217,0.75); }
+.mp-tick.mp-proj  {
+  background: rgba(255,255,255,1);
+  box-shadow: 0 0 6rem rgba(255,255,255,0.5),0 0 2rem rgba(255,255,255,0.5);
+  transition: left 600ms cubic-bezier(.2,.8,.2,1) 600ms;
+}
+.mp-tick.mp-proj.mp-up   { box-shadow: 0 0 6rem rgba(123,236,55,0.9),0 0 2rem rgba(123,236,55,0.9); }
+.mp-tick.mp-proj.mp-down { box-shadow: 0 0 6rem rgba(211,68,63,0.9),0 0 2rem rgba(211,68,63,0.9); }
+.mp-cap {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+  z-index: 3;
+}
+.mp-cap.up { bottom: 100%; padding-bottom: 6rem; font-size: 14rem;
+             line-height: 18rem; }
+.mp-cap.dn { top: 100%; margin-top: 6rem; font-size: 16rem;
+             line-height: 20.5rem; }
+.mp-cap.side { top: 50%; transform: translateY(-50%); font-size: 14rem;
+               line-height: 18rem; }
+.mp-cap.side .mp-v { transform: translateY(-0.5rem); }
+.mp-cap.side.mp-capL { left: auto; right: 100%; padding-right: 8rem; }
+.mp-cap.side.mp-capR { left: 100%; margin-left: 3rem; }
+.mp-cap .mp-ico { margin-right: 1rem; }
+.mp-cap .mp-v,
+.mp-cap .mp-d {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0em;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5);
+}
+.mp-cap .mp-d {
+  position: absolute;
+  left: 100%;
+  margin-left: 0.35em;
+  font-size: 12rem;
+  transform: translateY(1.5rem);
+  line-height: 15.5rem;
+  opacity: 0;
+  transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
+}
+.mp-v.mp-up,
+.mp-d-num.mp-up {
+  color: #ffffff;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(123,236,55,0.9),
+               0rem 0rem 1rem rgba(123,236,55,0.9);
+}
+.mp-v.mp-down,
+.mp-d-num.mp-down {
+  color: #ffffff;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(211,68,63,0.9),
+               0rem 0rem 1rem rgba(211,68,63,0.9);
+}
+.mp-cap.mp-capC { transition: left 600ms cubic-bezier(.2,.8,.2,1) 600ms; }
+.mp-ico {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 13rem;
+  height: 13rem;
+  transform: translate(0rem, 0rem);
+}
+.mp-capL .mp-ico { transform: translate(0rem, 0.5rem); }
+.mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15rem; }
+.mp-capC .mp-ico { transform: translate(0rem, 1rem); margin-left: -17rem; }
+.mp-capR .mp-ico { transform: translate(0rem, 0.5rem); }
+.mp-ico::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 106%;
+  height: 106%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
+}
+.mp-capL .mp-ico::before,
+.mp-capR .mp-ico::before {
+  background: radial-gradient(circle at 50% 50%, rgba(26,26,26,0.5) 0%, transparent 73%);
+}
+.mp-ico::after {
+  content: "";
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.mp-ico.dmgp { width: 14rem; height: 14rem; }
+.mp-ico.dmgc { width: 16rem; height: 16rem; }
+/* HARNESS EDIT (real art, not a substitution): shipped src is
+     url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png)
+   -- dead outside the client, so the SAME uncropped 128x128 RGBA PNG (from this repo's own
+   TASKS/refs/icons/, no re-encode) is inlined instead. background-size stays the shipped 228.7%,
+   untouched -- see the report for why re-measuring it would be wrong. */
+.mp-ico.dmgp::after {
+  background-image: url(data:image/png;base64,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);
+  background-size: 228.7%;
+  filter: brightness(3);
+}
+/* Same treatment: shipped ...icon_battle_condition_damage.png -> the real 128x128 RGBA PNG.
+   background-size stays the shipped 342.5%. */
+.mp-ico.dmgc::after {
+  background-image: url(data:image/png;base64,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);
+  background-size: 342.5%;
+  filter: brightness(3);
+}
+/* Shipped ...icon_battle_condition_top.png -> the real 128x128 RGBA PNG. background-size stays
+   the shipped 274.7%. */
+.mp-ico.moe { width: 17rem; height: 17rem; }
+.mp-ico.moe::after {
+  background-image: url(data:image/png;base64,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);
+  background-size: 274.7%;
+  filter: brightness(3);
+}
+.mp-ico.mk { width: 17rem; height: 17rem; }
+.mp-ico.mk::after { background-size: contain; }
+/* mark_1/2/3.png -- the real 24x24 RGBA PNGs, byte-identical from this repo's TASKS/refs/icons/. */
+.mp-ico.mk1::after { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA+UlEQVRIx2P4//8/Ay0xw6gFQ8OCEwf3tB/es3Py0f27HWliwc71K5Kbqkp6ZvV359PEguk9zaYz+lo3zZnQse7Q5lXsVLdgxaxergmNZftaK/IOHFi32I4mkbx16bQliya13rt2eGM7TSx4eGpb7rd7x7/dOb7tMo2S6XONV5f2/v//6tL///+eatAmHzy7cO3c7hWfv949mUMTC/asmtW6YGLL3VPbVyyliQXbls2xXTtv0pl18yYfXz9vMhfVLVg9fxpHV3350mmdTetn9bWa0KQs2rJ6acWM/s4ZuzauSqGNBetW2R7du2vqiYN720aL61EL6GMBAMhdp1rhdn0OAAAAAElFTkSuQmCC); }
+.mp-ico.mk2::after { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAByElEQVRIx2P4//8/Ay0xw6gFg9eC7RvW1KxbsbTj2IG9jsjiRw/sad6wclnnjk1rbSmyYOGMSTGNlcU9XU01GcjikzqaIyZ3tUzdtGJxBUUW7Fq72LK/qWrNyrmTN8+d2MEGE9+9dplVV135qjXzp28BqmEn24Idy+dwTW6t2r950fRzC6e0W8PET25fzbV8et/RrtqSg0c3L7OjKJIv7Vm7bNnUjnv718xtQxZfPbN70ZTWilvndq1op8iC20c35f1+dPrr/5cXL6PIPTmX9+XW8a9ACy5RmEw/aFzau+r//9dXgdznGnDxf081Lu9d/f/15X3/317Zr0FRPrh6cN2VKwfWfvn/4XoOiviB9Vf2rJzx6cX5vTkUWXB+18r2SS0Vt8/vXLkMWXzD/P6WXStmPgLFE0UWzOltsu5rLDs0t7/l8N7V87lg4itn9dpsWDDl3Nal00+c2rGai2wLDmxZzTGlo2HlyjmTdyydMcEMJr5gSh/H3End66rzMxZvX7HAgqKyaNuaZVVzJ/fPXjl/Vjyy+NSettxZk3pmbVm9NIkiC1YtXmC9eumith2bN9SiZMZN6+wO79k55ej+3c2j9cGoBbTDALutkr8NdLmyAAAAAElFTkSuQmCC); }
+.mp-ico.mk3::after { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAACc0lEQVRIx+3VW0/TUADAcd4g+yT7AErkYSTqFzHCi0iWmEzAaxi7dIy5rd1WCo52W9u1a3fvHOx+ZzfUBQQTmZAtUSPig3LRxIQKMZudLzQxJj7wcNLkd3ryfzinp308z/f9y9F3Efi/AsVMQh3wuAEv6RwSeiWXAgrJmLWUSVwVeimbVIW8tL5eyl4TFVj20SPEUxvGuux3hb4SoEdm7isMC5BBLvR4iBk1zDwCaXRBISqwZAYGEaMmNPt4gshzbH/H5+dUlxGDOrwE6v35CNN1jkSHvBgcM6keUKmAu//cQD5ESMzKiYxSMZYOu+ZlHacWn5x5WjMlz2b9zuGO12M+CYnMFTFQUz1dOyxqk+sx2s25oFY1SmqF/oyACQLS7GwVQoDQfUtGPMnY22kW1YoK7G9k5S8SnkP+08aG0Fu1qPx4p3rULEd7/GB7Vf6jVT9uJJh1kcd0T7pbjpw+zt7/Iv3tH6R766lffvKu659fZaT8/hb/rbnKn60V9R2ctJ9vxinka7PI3e6Ze9/YfJmgD46alfEe/7i++aYYOfzeWhsXFXhdCAIr1Hybw6240JOeRa0DVL2tLlOk0BtJFoDUk9thB4iLCqR9DhkJ62o4PFdyQICku9HuBZkPhdb8GFgOoGDXcwFimLDqajbtw2w95pWcG+Dc9gEnbAhatNP+uA+/0nEWgwf005MkrFcGF02aSx1PBakBD2rjMEgf8dgtg6LuohDlnLpza2Qm6EZvCD3CkvcQ4ywSDzCjQjfrlGOISYeEKfymqEAll7yei0ctLOHouQYifkZWSsVtp/dTz7kPs7TM48LUf/rF/+Ai8PfjJwFEg4DDl+R+AAAAAElFTkSuQmCC); }
+.mp-ico.none { display: none; }
+#moe-bar-root.mp-full .mp-track,
+#moe-bar-root.mp-full .mp-fill,
+#moe-bar-root.mp-full .mp-tick {
+  box-shadow: 0 0 8rem rgba(255,205,90,0.5);
+}
+#moe-bar-root.mp-full .mp-fill {
+  background: rgba(255,205,90,0.8);
+}
+#moe-bar-root.mp-full .mp-v {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0 0 8rem rgba(255,205,90,0.5),
+               0 0 2rem rgba(255,205,90,0.5);
+}
+@keyframes mp-life {
+    0% { opacity: 0; transform: translateY(20rem); animation-timing-function: ease-in; }
+  9.68% { opacity: 1; transform: translateY(0rem); animation-timing-function: linear; }
+  90.32% { opacity: 1; transform: translateY(0rem); animation-timing-function: ease-in; }
+  100% { opacity: 0; transform: translateY(20rem); }
+}
+#moe-bar-root.mp-run { animation: mp-life 6200ms both; }
+@keyframes mp-pulse {
+  0%, 100% { box-shadow: 0 0 8rem rgba(255,205,90,0.5); }
+  50% { box-shadow: 0 0 16rem rgba(255,205,90,0.80); }
+}
+#moe-bar-root.mp-full.mp-pulse .mp-track { animation: mp-pulse 1200ms ease-in-out infinite; }
+@keyframes mp-life-b {
+    0% { opacity: 0; transform: translateY(20rem); animation-timing-function: ease-in; }
+  9.68% { opacity: 1; transform: translateY(0rem); animation-timing-function: linear; }
+  90.32% { opacity: 1; transform: translateY(0rem); animation-timing-function: ease-in; }
+  100% { opacity: 0; transform: translateY(20rem); }
+}
+#moe-bar-root.mp-run-b { animation: mp-life-b 6200ms both; }
+
+/* ===== APPENDED HAND-ADDED BLOCK -- THE "LARGE" SIZE MODE. Not exercised by this harness (no
+   size-mode control here -- it is orthogonal to the axis calibration this file compares), kept
+   for verbatim fidelity only. See the shipped file on disk for the full comment. */
+.mp-lg #moe-bar-box { width: 500rem; }
+.mp-lg #moe-bar-root { width: 266.667rem; }
+.mp-lg .mp-backdrop { left: -106.667rem; width: 480rem; }
+.mp-lg .mp-track::after {
+  background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgb(13,14,16) 2.667rem,rgb(13,14,16) 4rem);
+  background-size: 4rem 100%;
+}
+.mp-lg .mp-tick { width: 2.667rem; }
+.mp-lg .mp-cap .mp-ico { margin-right: 1.333rem; }
+.mp-lg .mp-cap.side.mp-capL { padding-right: 10.667rem; }
+.mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }
+.mp-lg .mp-cap .mp-d { margin-left: 0.467em; }
+.mp-lg .mp-capP .mp-ico { margin-left: -15.333rem; }
+.mp-lg .mp-capC .mp-ico { margin-left: -17.333rem; }
+/* ===== END APPENDED HAND-ADDED BLOCK ===== */
+
+/* ===== APPENDED HAND-ADDED BLOCK -- INTERFACE-SCALE CAPTION CORRECTION. Not exercised by this
+   harness (no `.mp-s1` toggle here), kept for verbatim fidelity only. */
+.mp-s1 .mp-capC .mp-ico       { transform: translate(0rem, 0rem); }
+.mp-s1.mp-lg .mp-capC .mp-ico { transform: translate(0rem, 0.2rem); }
+.mp-s1 .mp-cap .mp-d          { transform: translateY(0.5rem); }
+.mp-s1.mp-lg .mp-cap .mp-d    { transform: translateY(0.7rem); }
+/* ===== END APPENDED INTERFACE-SCALE BLOCK ===== */
+
+/* Animation timings for phase 2's JS (the numbers, not just the CSS):
+{
+  "fadeInMs": 600,
+  "holdMs": 5000,
+  "fadeOutMs": 600,
+  "totalMs": 6200,
+  "slideRem": 20,
+  "slideEasingIn": "ease-in",
+  "slideEasingOut": "ease-in",
+  "fadeEasing": "ease-in",
+  "tickDelayMs": 600,
+  "tickDurationMs": 600,
+  "tickEasing": "cubic-bezier(.2,.8,.2,1)",
+  "valueSwapMs": 600,
+  "deltaFadeMs": 600,
+  "deltaFadeEasing": "cubic-bezier(.2,.8,.2,1)",
+  "glowPulseMs": 1200,
+  "axisMode": "mark",
+  "windowN": 60,
+  "topGlyph": "barrel_mark",
+  "bottomGlyph": "damage"
+}
+*/
+/* =====================================================================================
+   END SHIPPED CSS
+   ===================================================================================== */
+
+/* =====================================================================================
+   HARNESS OVERRIDES -- everything below is NEW, not part of the shipped stylesheet. Kept in its
+   own block so the boundary with the verbatim copy above stays visible at a glance.
+   ===================================================================================== */
+html { font-size: 1px; }   /* 1rem == 1 logical px, exactly the convention the shipped CSS
+                              assumes (see MoEBarTransient.js's header) -- so "same 200rem
+                              track" above really is a 200px-wide track on screen here too. */
+/* The bar is a battle HUD overlay that never shows itself outside a run/peek transient; this
+   harness wants it permanently visible for side-by-side comparison, so the base opacity is
+   force-overridden. Nothing else about the transient (mp-run, mp-life, peek, hold) is used or
+   needed here -- see the PORT NOTES comment in the <script> for what was deliberately left out. */
+#moe-bar-root { opacity: 1; }
+/* GAME-ART SUBSTITUTION -- GONE. The six glyphs (barrel_mark/damage/top/mk1/mk2/mk3) are now
+   the REAL uncropped PNGs, inlined in the SHIPPED CSS block above with the shipped rules
+   (background-size, filter) untouched -- see the report for the alpha>32 bbox measurement that
+   confirms they land correctly at those percentages. Nothing left to override here. */
+
+/* ================= VARIANT B's VERNIER -- a NEW harness-only widget, not a shipped rule. =====
+   Variant B's base bar is the SHIPPED markup/CSS above, untouched (see the paint() call site).
+   This is an ADDITION below it: a short, fixed-scale, signed track plotting projAvg - preAvg
+   directly, so a small per-battle delta reads at a constant, magnified scale regardless of where
+   preAvg happens to sit on the (wide) main axis.
+   COLOUR REUSE, NOT CLASS REUSE: the instruction is to reuse the shipped colour RULES -- the
+   values below are copied byte-for-byte from the cited shipped selector, not invented -- but the
+   classes themselves are new. Sharing the actual `.mp-fill`/`.mp-tick.mp-pre` selectors was
+   rejected on purpose: those are positioned as percentages of the 200rem MAIN track and carry the
+   main bar's own transition timing, so re-scoping them to a 60-260rem vernier would either fight
+   that percentage math or require overriding every positioning declaration anyway -- more
+   surface, not less, for the exact same visual result.
+   PARKED, NOT TRAVELLING: fixed left/top, no per-frame reposition -- this repo has a recorded
+   lesson about an abspos child inside a padded caption drifting with the rem->px factor
+   (padding-gap-on-a-caption-drags-its-abspos-children), and a vernier that moved with the fill
+   head would also collide with capC's caption band (see the clearance arithmetic below). Sibling
+   of .mp-track inside #moe-bar-root (NOT inside .mp-track), so it never inherits the track's own
+   percentage-based left/width semantics.
+   CLEARANCE: capC's bottom caption box starts at the track's own bottom (root y=3rem, .mp-track's
+   height) + margin-top 6rem = 9rem, and extends its own pinned line-height (20.5rem) down to
+   root y=29.5rem (MoEProgress.css's caption-pin block). top:34rem below leaves a clean 4.5rem
+   gap -- comfortably clear of capC on every input this harness can produce (capC's box height is
+   fixed by the pin, not by content, so no delta/ETA text length can push it further down). */
+.mp-vernier { position: absolute; left: 50%; top: 34rem; transform: translateX(-50%);
+  text-align: center; z-index: 5; }
+/* CHROME -- PLACEHOLDER, NOT AUTHENTIC WG CHROME. The maintainer asked for the in-game T-803
+   reload-timer box; it does not exist to copy: the whole in-battle HUD in this client is
+   Flash/Scaleform (no `battle` dir under gui/gameface/_dist/production/mono/, zero CSS matches
+   for reload/ammo, it ships inside AmmunitionPanel.swf -- confirmed by grepping the packed
+   client CSS, not assumed). So this frame is built from THIS MOD's OWN visual language instead:
+   the .mp-backdrop checker-dither + dark-radial treatment, verbatim values, wrapped around the
+   vernier's track+caption with `padding` (so it auto-sizes to whatever VERNIER_WIDTH is dragged
+   to -- no JS sizing math needed). display:inline-block is what makes an ordinary block
+   shrink-to-fit its content instead of stretching to the (auto-width) .mp-vernier parent.
+   STACKING: unlike .mp-backdrop (a SIBLING of .mp-track with its own low z-index, 0 < 1), this
+   frame is the PARENT of its own track/cap, so the same "z-index:0 sibling" trick does not apply
+   -- z-index:-1 on both pseudos is the mechanism this SAME stylesheet already uses for an
+   analogous behind-the-content pseudo (.mp-ico::before's glow), reused here for the same reason:
+   it sinks a positioned pseudo below its static-flow siblings within one stacking context.
+   REPLACE WITH A SCREENSHOT-MEASURED MOCK before this ships anywhere real. */
+.mp-vernier-frame { position: relative; z-index: 0; display: inline-block;
+  padding: 9rem 12rem 7rem; }
+.mp-vernier-frame::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAG0lEQVR4nGNgYGD4D8VgwARjwAAjEhusCkMFAJJcAwPqsfV0AAAAAElFTkSuQmCC) repeat;
+  background-size: auto; background-position: 0px 0px; image-rendering: pixelated;
+  opacity: 0.1; mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+}
+.mp-vernier-frame::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+/* Track background: byte-identical value to the shipped .mp-track's own `background`. */
+.mp-vernier-track { position: relative; height: 3rem; background: rgba(0,0,0,0.45); }
+/* Fill neutral/up/down: byte-identical values to the shipped .mp-fill / .mp-fill.mp-up /
+   .mp-fill.mp-down. Grows from the CENTRE (left:50% anchor, JS sets left+width per side) rather
+   than from the left edge -- the one geometry difference from .mp-fill, which is exactly why this
+   cannot just be `.mp-fill` with a different parent. */
+.mp-vernier-fill { position: absolute; top: 0; height: 100%; background: rgba(237,230,217,0.8); }
+.mp-vernier-fill.mp-up { background: rgba(123,236,55,0.8); }
+.mp-vernier-fill.mp-down { background: rgba(211,68,63,0.8); }
+/* Centre (zero/break-even) tick: byte-identical geometry+colour to the shipped .mp-tick / .mp-pre,
+   fixed at the midpoint (never moves -- that IS zero on this scale). z-index:2, matching the
+   shipped tick's stacking position above the fill. */
+.mp-vernier-tick { position: absolute; left: 50%; top: 50%; width: 2rem; height: 9rem;
+  transform: translate(-50%, -50%); background: rgba(237,230,217,0.75); z-index: 2; }
+/* SATURATION MUST BE VISIBLE: when |delta| > VERNIER_SPAN the fill pegs at the track's own end
+   (clamped, so it never overflows the box), and a pegged fill is otherwise pixel-identical to a
+   merely-large one -- which is exactly the misleading case the task calls out. The glow reused
+   here is the shipped GOLD "requirement met" glow (#moe-bar-root.mp-full's own box-shadow value,
+   0 0 8rem rgba(255,205,90,0.5)) -- an EXISTING shipped colour, not an invented one, and it reads
+   naturally as "maxed out" since that is what it already means on the main bar. The numeral is
+   the SEPARATE, honest tell: it always shows the true (unclamped) magnitude, so a pegged bar next
+   to a numeral bigger than VERNIER_SPAN cannot be mistaken for "delta happens to equal the span". */
+.mp-vernier-track.mp-pegged { box-shadow: 0 0 8rem rgba(255,205,90,0.5); }
+/* Caption: same typographic treatment as the shipped .mp-cap .mp-v (colour, weight, dark-drop
+   shadow) and the same sign-glow triple-shadow as .mp-v.mp-up / .mp-v.mp-down -- values copied,
+   not re-derived. Own font-size/line-height (16rem/20.5rem, matching .mp-cap.dn's) since it is not
+   a flex row riding .mp-cap's centring trick -- it is a plain centred block (text-align:center on
+   the .mp-vernier ancestor), which is all a single centred numeral needs. */
+.mp-vernier-cap { margin-top: 6rem; font-family: "MoEBattle", "Arial Narrow", sans-serif;
+  font-size: 16rem; line-height: 20.5rem; color: #ffffff; font-weight: 600;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5); }
+.mp-vernier-cap.mp-up {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(123,236,55,0.9),
+               0rem 0rem 1rem rgba(123,236,55,0.9);
+}
+.mp-vernier-cap.mp-down {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(211,68,63,0.9),
+               0rem 0rem 1rem rgba(211,68,63,0.9);
+}
+/* ================= END VARIANT B's VERNIER ================= */
+
+/* ---- page chrome (px throughout -- NOT rem, so the 1rem==1px override above never touches it,
+   and this stays a normal-sized control panel regardless of the bar's own logical-px scale). ---- */
+:root{ --bg:#14151a; --panel:#1d2027; --ink:#e9e6df; --muted:#8b93a1; --line:#2b2f38; --gold:#c79a3f; }
+*{ box-sizing:border-box; }
+body{ background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,sans-serif;
+  margin:0; display:flex; min-height:100vh; }
+.stages{ flex:1; padding:24px; overflow:auto; }
+.bar-stage{ position:relative; height:190px; background:radial-gradient(ellipse at 50% 40%,#23262e,#101114);
+  border:1px solid var(--line); border-radius:8px; margin-bottom:22px; overflow:hidden; }
+.bar-stage h2{ position:absolute; left:12px; top:10px; margin:0; font-size:13px; font-weight:700;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--gold); z-index:20; }
+/* The tuner's own centring idiom (gen_bar_tuner.ps1 / eff_bar_tuner.html): a harness-only
+   wrapper positions the composition; #moe-bar-root's own left/top (0/0, shipped) then place the
+   track relative to THIS anchor, so no shipped position value is touched. */
+.mp-anchor{ position:absolute; left:50%; top:95px; transform:translateX(-50%); }
+/* Variant B's stage is taller: the vernier (top:34rem below root + its own track/gap/caption)
+   reaches further down than the other two bars' composition does. */
+#stageVariantB { height: 260px; }
+
+.panel{ width:400px; flex:none; background:var(--panel); border-left:1px solid var(--line);
+  padding:18px; overflow:auto; height:100vh; position:sticky; top:0; }
+.panel h1{ font-size:16px; margin:0 0 4px; font-weight:800; }
+.panel .sub{ font-size:11.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
+.seg{ display:flex; gap:6px; margin:0 0 10px; }
+.seg button{ flex:1; background:#0f1013; border:1px solid var(--line); color:var(--ink);
+  padding:7px 4px; border-radius:6px; font-size:12px; cursor:pointer; }
+.seg button.on{ border-color:var(--gold); color:var(--gold); font-weight:700; }
+.ctl{ margin:10px 0; }
+.ctl .lab{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; }
+.ctl .lab b{ color:var(--gold); font-weight:700; }
+.ctl .inp{ display:flex; gap:8px; align-items:center; }
+.ctl input[type=range]{ flex:1; accent-color:var(--gold); }
+.ctl input[type=number]{ width:74px; background:#0f1013; border:1px solid var(--line); color:var(--ink);
+  border-radius:5px; padding:4px 6px; font-size:12px; font-variant-numeric:tabular-nums; }
+.hr{ border:0; border-top:1px solid var(--line); margin:16px 0; }
+.playbtn{ width:100%; background:var(--gold); color:#1a160c; border:0; border-radius:8px;
+  padding:11px; font-weight:800; font-size:13px; cursor:pointer; margin-top:6px; }
+.note{ font-size:10.5px; color:var(--muted); margin-top:14px; line-height:1.5; }
+.readout{ background:#0f1013; border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+  font-family:"Cascadia Code",Consolas,monospace; font-size:11px; color:#b9c2cf; white-space:pre;
+  margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div class="stages">
+  <div class="bar-stage" id="stageShipped">
+    <h2>Shipped -- axisLo = held mark's requirement</h2>
+    <div class="mp-anchor" id="anchorShipped">
+      <div id="moe-bar-root">
+        <div class="mp-backdrop"></div>
+        <div class="mp-track">
+          <div class="mp-fill"></div>
+          <div class="mp-tick mp-end mp-left"></div>
+          <div class="mp-tick mp-pre"></div>
+          <div class="mp-tick mp-proj"></div>
+          <div class="mp-tick mp-end mp-right"></div>
+          <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+          <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
+          <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
+          <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar-stage" id="stageVariant">
+    <h2>Variant A -- axisLo = max(0, min(ewma_project_raw(preAvg, 0), axisHi - MIN_WINDOW))</h2>
+    <div class="mp-anchor" id="anchorVariant">
+      <div id="moe-bar-root">
+        <div class="mp-backdrop"></div>
+        <div class="mp-track">
+          <div class="mp-fill"></div>
+          <div class="mp-tick mp-end mp-left"></div>
+          <div class="mp-tick mp-pre"></div>
+          <div class="mp-tick mp-proj"></div>
+          <div class="mp-tick mp-end mp-right"></div>
+          <!-- mp-capL's icon is <i class="mp-ico none"> and STAYS that way for this bar --
+               axisLo is no longer a mark, so JS never sets it to mk1/mk2/mk3/moe (see paint()). -->
+          <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+          <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
+          <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
+          <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bar-stage" id="stageVariantB">
+    <h2>Variant B -- shipped axis, unchanged + a magnified vernier below</h2>
+    <div class="mp-anchor" id="anchorVariantB">
+      <!-- The base bar is the SHIPPED markup, byte-identical to the "Shipped" stage above --
+           unchanged axisLo, mp-pre where it is, both mark glyphs intact. paint() below calls this
+           with isVariant=false, exactly like the Shipped stage. -->
+      <div id="moe-bar-root">
+        <div class="mp-backdrop"></div>
+        <div class="mp-track">
+          <div class="mp-fill"></div>
+          <div class="mp-tick mp-end mp-left"></div>
+          <div class="mp-tick mp-pre"></div>
+          <div class="mp-tick mp-proj"></div>
+          <div class="mp-tick mp-end mp-right"></div>
+          <div class="mp-cap side mp-capL"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+          <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v"></span></div>
+          <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>
+            <span class="mp-d">(<span class="mp-d-num"></span>)</span></div>
+          <div class="mp-cap side mp-capR"><i class="mp-ico none"></i><span class="mp-v"></span></div>
+        </div>
+        <!-- THE VERNIER (addition, not a shipped element): parked below the track, fixed
+             position, does not travel with the fill head. See the CSS block above for the
+             clearance arithmetic and the colour-reuse rationale. -->
+        <div class="mp-vernier">
+          <div class="mp-vernier-frame">
+            <div class="mp-vernier-track">
+              <div class="mp-vernier-fill"></div>
+              <div class="mp-vernier-tick"></div>
+            </div>
+            <div class="mp-vernier-cap"><span class="mp-vernier-num"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h1>MoE progress bar -- Shipped vs Variant A vs Variant B</h1>
+  <p class="sub">All three stages read the SAME preAvg / cd / axisHi. Variant A rescales axisLo;
+    Variant B leaves the shipped axis untouched and adds a fixed-scale vernier below it instead --
+    they are independent options, not a progression (see each stage's own caption). Drag
+    preAvg/cd and watch how far each fill head (and the vernier) actually moves.</p>
+
+  <div class="ctl"><div class="lab"><span>Mark segment (loads a plausible threshold pair)</span></div>
+    <div class="seg" id="segSeg">
+      <button data-m="0">0 marks</button><button data-m="1" class="on">1 mark</button>
+      <button data-m="2">2 marks</button><button data-m="3">3 marks</button>
+    </div>
+  </div>
+
+  <div class="ctl"><div class="lab"><span>preAvg (career EWMA combined dmg)</span><b id="preAvgOut"></b></div>
+    <div class="inp"><input type="range" id="preAvg" min="0" max="6000" step="1">
+      <input type="number" id="preAvgNum" min="0" max="6000" step="1"></div></div>
+
+  <div class="ctl"><div class="lab"><span>cd (this battle's live combined dmg)</span><b id="cdOut"></b></div>
+    <div class="inp"><input type="range" id="cd" min="0" max="6000" step="1">
+      <input type="number" id="cdNum" min="0" max="6000" step="1"></div></div>
+
+  <div class="ctl"><div class="lab"><span>axisHi (next mark requirement)</span><b id="axisHiOut"></b></div>
+    <div class="inp"><input type="range" id="axisHi" min="0" max="8000" step="1">
+      <input type="number" id="axisHiNum" min="0" max="8000" step="1"></div></div>
+
+  <hr class="hr">
+  <!-- NEG_PAD is GONE (maintainer correction): the axis floor is now ewma_project_raw(preAvg, 0)
+       -- the SAME formula the fill's own projAvg uses, at cd=0 -- so it can never drift from it
+       and there is no arbitrary pad constant to tune. -->
+  <div class="ctl"><div class="lab"><span><b>MIN_WINDOW</b> (Variant A's axis-floor knob)</span><b id="minWindowOut"></b></div>
+    <div class="inp"><input type="range" id="minWindow" min="0" max="2000" step="1">
+      <input type="number" id="minWindowNum" min="0" max="2000" step="1"></div></div>
+
+  <div class="ctl"><div class="lab"><span><b>ETA_MARGIN</b> (ETA's reference-level knob)</span><b id="etaMarginOut"></b></div>
+    <div class="inp"><input type="range" id="etaMargin" min="0" max="0.50" step="0.01">
+      <input type="number" id="etaMarginNum" min="0" max="0.50" step="0.01"></div></div>
+
+  <div class="ctl"><div class="lab"><span>EWMA_K (domain/constants.py's baked value)</span><b id="ewmaKOut"></b></div>
+    <div class="inp"><input type="range" id="ewmaK" min="0.001" max="0.2" step="0.0001">
+      <input type="number" id="ewmaKNum" min="0.001" max="0.2" step="0.0001"></div></div>
+
+  <hr class="hr">
+  <div class="ctl"><div class="lab"><span><b>VERNIER_SPAN</b> (Variant B, damage at each end)</span><b id="vernierSpanOut"></b></div>
+    <div class="inp"><input type="range" id="vernierSpan" min="20" max="300" step="1">
+      <input type="number" id="vernierSpanNum" min="20" max="300" step="1"></div></div>
+
+  <div class="ctl"><div class="lab"><span><b>VERNIER_WIDTH</b> (Variant B, track width in rem)</span><b id="vernierWidthOut"></b></div>
+    <div class="inp"><input type="range" id="vernierWidth" min="60" max="260" step="1">
+      <input type="number" id="vernierWidthNum" min="60" max="260" step="1"></div></div>
+
+  <button class="playbtn" id="playBtn">Play battle (ramp cd 0 -&gt; current over ~4s)</button>
+
+  <div class="readout" id="readout"></div>
+
+  <p class="note">ETA text on Variant A's delta: "+18/12" battles at this pace to reach a
+    REFERENCE level ETA_MARGIN above axisHi (not axisHi itself, and not extrapolated from this
+    battle's own cd) -- so the count reads something for EVERY cd, including a bad battle, where
+    it grows rather than blanking to "--". "+18/--" is now a should-never-happen fallback for a
+    genuinely non-finite result, not the normal bad-battle reading. "/" (no surrounding spaces)
+    and "--" ONLY -- this node is styled with the widget's own MoEBattle font, whose bundled
+    subset is just digits % ( ) + - , . / space, so "~", "&middot;" or "&#8734;" (U+221E, not in
+    that subset) would render BLANK in the real Coherent engine even though a browser's
+    font-fallback would quietly draw them (see the report for why that's a trap, not a fix). The
+    count is capped at 99, not 999 -- see computeEta() in the script below for the exact formula
+    and the sign check that proves n > 0 whenever the guard lets it run.</p>
+
+  <p class="note">Variant B's vernier caption (".mp-vernier-num") is ALSO styled with MoEBattle,
+    so it follows the SAME 19-glyph discipline: signed delta + "/" + ETA count, no spaces, "--"
+    for the should-never-happen case -- identical text shape to Variant A's, just a second place
+    it appears. SATURATION: the fill clamps to the track's own end once |delta| exceeds
+    VERNIER_SPAN, and the track takes the shipped GOLD "requirement met" glow (reused, not
+    invented) so a pegged reading is visibly distinct from a merely-large one -- the numeral keeps
+    showing the true, unclamped magnitude either way, so the two together are unambiguous. See the
+    readout for the vernier's effective magnification vs the main axis at each mark segment.</p>
+</div>
+
+<script>
+"use strict";
+// ============================================================================================
+// PORT NOTES -- what came from MoEProgress.js / MoEBarTransient.js and what was deliberately cut.
+//
+// KEPT (ported near-verbatim): fmt() (thousands separator), axisPct() (clamped 0..100%
+// position), paintStatic's icon selection (setIco: 0 marks -> none, 1..3 -> mk<k>, "next mark"
+// at 3 held -> the general MoE glyph), and showVal's SIGN-GLOW GATE -- glow tests
+// Math.round(Math.abs(delta)) !== 0, i.e. the ROUNDED magnitude exactly as fmt() displays it,
+// never the raw float -- so a displayed "(+0)" can never glow green/red here either.
+//
+// CUT ON PURPOSE: the whole show/hide/peek TRANSIENT (MoEBarTransient.js's mp-run/mp-life
+// arming, the Alt-peek pause/resume, the surface re-assert, the hold-duration correction). None
+// of that has anything to do with axis calibration -- the one thing this file exists to compare
+// -- and playing it back would only add motion that obscures the comparison. This harness keeps
+// #moe-bar-root permanently visible (opacity:1 override) and updates the fill/tick/caption
+// targets directly; the SHIPPED CSS transitions (600ms cubic-bezier, 600ms delay on
+// .mp-fill/.mp-proj/.mp-capC) still animate every change exactly as they do in-game, so "play
+// battle" still shows real motion, just without the fade-in/hold/fade-out envelope around it.
+// ============================================================================================
+
+function fmt(n) {
+  n = Math.round(Number(n) || 0);
+  var sign = n < 0 ? "-" : "";
+  return sign + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function axisPct(v, lo, hi) {
+  var w = hi - lo;
+  if (w <= 0) return 0;
+  return Math.max(0, Math.min(1, (v - lo) / w)) * 100;
+}
+
+function setIco(el, k) {
+  el.className = "mp-ico" + (k === 0 ? " none" : k === 4 ? " moe" : " mk mk" + k);
+}
+
+// Direct port of domain/battle_builder.ewma_project_raw: one EWMA fold of `cd` into `prevAvg`.
+// Both the fill's own projAvg AND Variant A's axis floor call THIS, at cd = state.cd and cd = 0
+// respectively -- the floor is provably the fill's minimum (cd >= 0) because it is the SAME
+// formula evaluated at the smallest cd can be, never a re-derived `preAvg*(1-k)` literal.
+function ewmaProjectRaw(prevAvg, cd, k) {
+  var prev = Number(prevAvg) || 0;
+  return prev + k * ((Number(cd) || 0) - prev);
+}
+
+// MAINTAINER CORRECTION: the first cut asked "how many repeats of THIS battle reach axisHi",
+// which has no answer once cd <= hi and collapsed to "--" across that whole range -- wrong,
+// because the count must read something for every cd and must GROW when a bad battle drags the
+// average down. This version instead extrapolates from projAvg towards a REFERENCE performance
+// level L that does NOT come from this battle at all -- n depends on cd ONLY through projAvg,
+// never through a bare cd term:
+//   L = axisHi * (1 + ETA_MARGIN)                              // a fixed target above axisHi
+//   n = ceil( ln((axisHi - L) / (projAvg - L)) / ln(1 - k) )    // solve avg_n == axisHi for n,
+//                                                                  where avg_n folds L repeatedly
+// SIGN CHECK (so this is asserted, not trusted): while projAvg < axisHi < L, (axisHi - L) and
+// (projAvg - L) are BOTH negative, and |axisHi - L| < |projAvg - L| (L is further from axisHi
+// than from projAvg is impossible to get backwards here since axisHi < L by construction and
+// projAvg < axisHi), so the ratio sits in (0,1), its ln is negative, and dividing by the also-
+// negative ln(1-k) yields a positive n. Guards: projAvg >= axisHi returns 0 (mark already made --
+// mp-full is already firing, "0 battles remaining" is the correct reading, not "--"). "--" is now
+// a SHOULD-NEVER-HAPPEN fallback for a genuinely non-finite result, not the normal bad-battle
+// reading -- see the monotonicity/neutral-point checks in the report for why normal use never
+// reaches it. Capped at 99 (not 999): the count is typically two digits now, and the cap is a
+// player-legible ceiling, not a computed one -- see the CHARSET note at the ETA text site for why
+// the cap size is also what keeps `.mp-d` from clipping.
+var ETA_CAP = 99;
+function computeEta(projAvg, axisHi, k, margin) {
+  if (projAvg >= axisHi) return 0;
+  var L = axisHi * (1 + margin);
+  var ratio = (axisHi - L) / (projAvg - L);
+  if (!(ratio > 0 && ratio < 1)) return -1;      // should never happen given the guard above
+  var n = Math.log(ratio) / Math.log(1 - k);
+  if (!isFinite(n)) return -1;
+  var c = Math.ceil(n);
+  if (!isFinite(c)) return -1;
+  return Math.min(ETA_CAP, Math.max(0, c));
+}
+
+// U+221E is NOT in MoEBattle.ttf's 19-glyph subset, so "--" is the ONLY fidelity-preserving
+// choice here -- no browser-only toggle. In-game Coherent renders an unmapped glyph BLANK
+// rather than falling back to a system font, so an "∞"/"~"/"·" that merely LOOKS fine in this
+// browser tab would ship as invisible characters. Under the reference-level model above this
+// path should NEVER fire in normal use (computeEta's own comment) -- it stays only as a
+// non-finite-input backstop. See the charset note at the ETA text site below (paint()) for the
+// full 19-glyph list and why the separator is "/" with no surrounding spaces and the count is a
+// bare integer.
+var INF_TXT = "--";
+
+// --- mark-segment presets -----------------------------------------------------------------
+// Real MARK_PERCENTS anchors (domain/constants.py: 65/85/95, +100 goalpost) with plausible
+// combined-damage requirements for a mid-tier tank (same numbers gen_bar_tuner.ps1's own tuner
+// ships as its THR preset, so this harness agrees with the sibling tool).
+var MARK_PAIRS = [
+  { lo: 0,    hi: 2450 },   // 0 marks held -> chasing the 1st (65th pct)
+  { lo: 2450, hi: 3050 },   // 1 mark held  -> chasing the 2nd (85th pct)
+  { lo: 3050, hi: 3620 },   // 2 marks held -> chasing the 3rd (95th pct)
+  { lo: 3620, hi: 4400 },   // 3 marks held -> chasing the goalpost (100th pct)
+];
+
+var state = {
+  preAvg: 2800,
+  cd: 0,
+  axisHi: MARK_PAIRS[1].hi,
+  marksLo: MARK_PAIRS[1].lo,
+  marksCount: 1,
+  minWindow: 200,
+  etaMargin: 0.10,    // ETA_MARGIN -- the reference level L = axisHi * (1 + etaMargin)
+  ewmaK: 2.0 / 101,   // domain/constants.py EWMA_N=100 -> EWMA_K = 2/(100+1)
+  vernierSpan: 80,    // VERNIER_SPAN -- damage at each end of Variant B's vernier
+  vernierWidth: 120,  // VERNIER_WIDTH -- Variant B's vernier track width, in rem
+};
+
+// --- wire up one bar instance ---------------------------------------------------------------
+function barRefs(stageEl) {
+  var root = stageEl.querySelector("#moe-bar-root");
+  return {
+    root: root,
+    fill: root.querySelector(".mp-fill"),
+    tPre: root.querySelector(".mp-pre"),
+    tProj: root.querySelector(".mp-proj"),
+    capL: root.querySelector(".mp-capL"),
+    capP: root.querySelector(".mp-capP"),
+    capC: root.querySelector(".mp-capC"),
+    capR: root.querySelector(".mp-capR"),
+    capD: root.querySelector(".mp-capC .mp-d"),
+    capDN: root.querySelector(".mp-capC .mp-d-num"),
+  };
+}
+function capV(c) { return c.querySelector(".mp-v"); }
+
+var shipped = barRefs(document.getElementById("stageShipped"));
+var variant = barRefs(document.getElementById("stageVariant"));
+var variantB = barRefs(document.getElementById("stageVariantB"));
+
+// --- Variant B's vernier refs (a SECOND, independent readout, not part of barRefs' shape) ------
+var vern = (function () {
+  var root = document.getElementById("stageVariantB");
+  return {
+    track: root.querySelector(".mp-vernier-track"),
+    fill: root.querySelector(".mp-vernier-fill"),
+    num: root.querySelector(".mp-vernier-num"),
+  };
+})();
+
+function paint(b, isVariant) {
+  var axisHi = state.axisHi;
+  // Variant A's floor is ewma_project_raw(preAvg, 0) -- the SAME fold projAvg uses below, at the
+  // smallest cd can ever be (combined_damage clamps cd >= 0 upstream), so the floor is provably
+  // the fill's own minimum and can never sit to the right of it. MIN_WINDOW only binds in a
+  // narrow band: the window is already >= k*preAvg (~40 damage at preAvg 2000) with no MIN_WINDOW
+  // at all, so it only matters once preAvg sits within a few tens of damage of axisHi.
+  var axisLo = isVariant
+    ? Math.max(0, Math.min(ewmaProjectRaw(state.preAvg, 0, state.ewmaK), axisHi - state.minWindow))
+    : state.marksLo;
+  var projAvg = ewmaProjectRaw(state.preAvg, state.cd, state.ewmaK);
+
+  // mp-pre stays axisPct(preAvg) unchanged on BOTH bars. On Variant A its meaning is now exact,
+  // not approximate: axisLo == preAvg*(1-k) at cd=0, so the span from the left edge to this tick
+  // is PRECISELY the decay a 0-damage battle costs you -- and it is exactly the span the fill
+  // crosses with your first point of damage (see the endpoint sanity check in the report).
+  var pPre = axisPct(state.preAvg, axisLo, axisHi).toFixed(3) + "%";
+  var pProj = axisPct(projAvg, axisLo, axisHi).toFixed(3) + "%";
+  b.fill.style.width = pProj;
+  b.tProj.style.left = pProj;
+  b.capC.style.left = pProj;
+  b.tPre.style.left = pPre;
+  b.capP.style.left = pPre;
+
+  capV(b.capL).textContent = fmt(axisLo);
+  capV(b.capR).textContent = fmt(axisHi);
+  capV(b.capP).textContent = fmt(state.preAvg);
+  capV(b.capC).textContent = fmt(projAvg);
+
+  // Item 2: Variant A's left end is no longer a mark -- never paint a mark glyph there.
+  setIco(b.capL.querySelector(".mp-ico"), isVariant ? 0 : state.marksCount);
+  // capR (the axis-HI end) keeps its "next mark" meaning on BOTH bars -- axisHi is unchanged.
+  setIco(b.capR.querySelector(".mp-ico"), state.marksCount >= 3 ? 4 : state.marksCount + 1);
+
+  var d = projAvg - state.preAvg;
+  var glows = Math.round(Math.abs(d)) !== 0;   // rounded magnitude -- MoEProgress.js's own gate
+  var text = (d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d));
+  if (isVariant) {
+    // CHARSET-CONSTRAINED: capDN is styled with font-family "MoEBattle", whose bundled 19-glyph
+    // subset is ONLY 0-9 % ( ) + - , . / space (MoEProgress.css's own header comment). NEVER put
+    // "~", "·", "≈", "∞" or a letter in this node -- Coherent draws an unmapped glyph BLANK (no
+    // system-font fallback the way a browser would), so any of those would ship invisible. "/" is
+    // in the subset and doubles as the separator, with NO surrounding spaces (+18/33, not
+    // +18 / 33 -- the shorter string is also the clipping fix, see the report); the count is a
+    // bare integer capped at ETA_CAP=99; "--" (two hyphens, also in the subset) is the
+    // should-never-happen fallback (see computeEta's header comment).
+    var n = computeEta(projAvg, axisHi, state.ewmaK, state.etaMargin);
+    text += "/" + (n === -1 ? INF_TXT : String(n));
+  }
+  b.capDN.textContent = text;
+  b.capD.style.opacity = "1";
+  [capV(b.capC), b.capDN, b.fill, b.tProj].forEach(function (e) {
+    e.classList.toggle("mp-up", glows && d > 0);
+    e.classList.toggle("mp-down", glows && d < 0);
+  });
+  b.root.classList.toggle("mp-full", projAvg >= axisHi);
+}
+
+// Variant B's vernier: plots (projAvg - preAvg) directly, at a FIXED scale independent of where
+// preAvg sits on the (wide, 200rem) main axis -- that fixed scale is the whole point, so nothing
+// here reads axisLo/axisHi/marksLo at all except axisHi for the ETA (the shipped bar's own
+// reference target, unchanged from the main paint() call for this stage).
+function paintVernier() {
+  var axisHi = state.axisHi;
+  var projAvg = ewmaProjectRaw(state.preAvg, state.cd, state.ewmaK);
+  var d = projAvg - state.preAvg;
+  var span = state.vernierSpan;
+  var pegged = Math.abs(d) > span;
+  var clamped = Math.max(-span, Math.min(span, d));
+  var pct = 50 + (clamped / span) * 50;   // 0..100, 50 == centre == break-even
+
+  vern.track.style.width = state.vernierWidth + "rem";
+  vern.track.classList.toggle("mp-pegged", pegged);
+  // Grows from the CENTRE, not from the left edge like the main .mp-fill: positive delta anchors
+  // its LEFT edge at 50% and grows the WIDTH rightward; negative delta anchors its RIGHT edge at
+  // 50% (left = pct%, width = 50-pct%) and grows leftward. Both forms keep the edge at 50% fixed,
+  // which is what "grows from the centre" means geometrically.
+  if (d >= 0) {
+    vern.fill.style.left = "50%";
+    vern.fill.style.width = (pct - 50).toFixed(3) + "%";
+  } else {
+    vern.fill.style.left = pct.toFixed(3) + "%";
+    vern.fill.style.width = (50 - pct).toFixed(3) + "%";
+  }
+  var glows = Math.round(Math.abs(d)) !== 0;
+  vern.fill.classList.toggle("mp-up", glows && d > 0);
+  vern.fill.classList.toggle("mp-down", glows && d < 0);
+
+  // SAME 19-glyph charset discipline as Variant A's capDN -- see that comment for the full list.
+  // The numeral shows the TRUE (unclamped) magnitude even while the FILL pegs -- that pairing is
+  // what makes a pegged reading unambiguous rather than indistinguishable from a merely-large one.
+  var text = (d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d));
+  var n = computeEta(projAvg, axisHi, state.ewmaK, state.etaMargin);
+  text += "/" + (n === -1 ? INF_TXT : String(n));
+  vern.num.textContent = text;
+  vern.num.classList.toggle("mp-up", glows && d > 0);
+  vern.num.classList.toggle("mp-down", glows && d < 0);
+}
+
+// The vernier's effective magnification vs the shipped bar's own axis, at the CURRENT segment:
+// (rem per damage point on the vernier) / (rem per damage point on the 200rem main track).
+function vernierMagnification(span, width, axisHi, marksLo) {
+  var mainSpan = axisHi - marksLo;
+  if (mainSpan <= 0) return 0;
+  return (width / (2 * span)) / (200 / mainSpan);
+}
+
+function render() {
+  paint(shipped, false);
+  paint(variant, true);
+  paint(variantB, false);   // Variant B's BASE bar -- shipped axis, isVariant=false, unchanged
+  paintVernier();
+  var mag = vernierMagnification(state.vernierSpan, state.vernierWidth, state.axisHi, state.marksLo);
+  document.getElementById("readout").textContent =
+    "preAvg=" + fmt(state.preAvg) + "  cd=" + fmt(state.cd) + "  axisHi=" + fmt(state.axisHi) + "\n" +
+    "projAvg=" + ewmaProjectRaw(state.preAvg, state.cd, state.ewmaK).toFixed(2) + "\n" +
+    "shipped.axisLo=" + fmt(state.marksLo) + "\n" +
+    "variantA.axisLo=" + fmt(Math.max(0, Math.min(ewmaProjectRaw(state.preAvg, 0, state.ewmaK), state.axisHi - state.minWindow))) + "\n" +
+    "variantB.vernier magnification (this segment)=" + mag.toFixed(2) + "x";
+}
+
+// --- controls ---------------------------------------------------------------------------
+// outFmt is optional -- ETA_MARGIN shows its Out label as a percentage (a raw "0.10" reads as
+// gibberish next to a slider dragging 0.00-0.50); every other knob keeps the plain decimals/fmt
+// formatting.
+function bindPair(rangeId, numId, key, decimals, outFmt) {
+  var r = document.getElementById(rangeId), n = document.getElementById(numId);
+  function fmtOut(v) { return outFmt ? outFmt(v) : (decimals ? Number(v).toFixed(decimals) : fmt(v)); }
+  r.value = state[key]; n.value = decimals ? Number(state[key]).toFixed(decimals) : state[key];
+  document.getElementById(rangeId + "Out") && (document.getElementById(rangeId + "Out").textContent = fmtOut(state[key]));
+  function set(v) {
+    state[key] = Number(v) || 0;
+    r.value = state[key]; n.value = decimals ? state[key].toFixed(decimals) : state[key];
+    var out = document.getElementById(rangeId + "Out");
+    if (out) out.textContent = fmtOut(state[key]);
+    render();
+  }
+  r.addEventListener("input", function () { set(r.value); });
+  n.addEventListener("input", function () { set(n.value); });
+}
+bindPair("preAvg", "preAvgNum", "preAvg");
+bindPair("cd", "cdNum", "cd");
+bindPair("axisHi", "axisHiNum", "axisHi");
+bindPair("minWindow", "minWindowNum", "minWindow");
+bindPair("etaMargin", "etaMarginNum", "etaMargin", 2, function (v) { return Math.round(v * 100) + "%"; });
+bindPair("ewmaK", "ewmaKNum", "ewmaK", 4);
+bindPair("vernierSpan", "vernierSpanNum", "vernierSpan");
+bindPair("vernierWidth", "vernierWidthNum", "vernierWidth");
+
+// Mark segment picker: loads a plausible (lo, hi) pair and the marks count. axisHi stays a
+// live, independently editable slider afterwards -- picking a segment just seeds it.
+document.getElementById("segSeg").addEventListener("click", function (e) {
+  var btn = e.target.closest("button[data-m]");
+  if (!btn) return;
+  [].forEach.call(this.querySelectorAll("button"), function (b) { b.classList.remove("on"); });
+  btn.classList.add("on");
+  var m = Number(btn.getAttribute("data-m"));
+  state.marksCount = m;
+  state.marksLo = MARK_PAIRS[m].lo;
+  state.axisHi = MARK_PAIRS[m].hi;
+  document.getElementById("axisHi").value = state.axisHi;
+  document.getElementById("axisHiNum").value = state.axisHi;
+  document.getElementById("axisHiOut").textContent = fmt(state.axisHi);
+  render();
+}.bind(document.getElementById("segSeg")));
+
+// "Play battle": ramps cd from 0 up to whatever it is currently SET to, over ~4s, so the fill's
+// motion is visible rather than judged from a static screenshot (the whole point of the request).
+var playing = false;
+document.getElementById("playBtn").addEventListener("click", function () {
+  if (playing) return;
+  var target = state.cd;
+  if (target <= 0) return;
+  playing = true;
+  var start = null;
+  var DUR = 4000;
+  function step(t) {
+    if (start === null) start = t;
+    var e = Math.min(1, (t - start) / DUR);
+    state.cd = target * e;
+    document.getElementById("cd").value = state.cd;
+    document.getElementById("cdNum").value = Math.round(state.cd);
+    document.getElementById("cdOut").textContent = fmt(state.cd);
+    render();
+    if (e < 1) requestAnimationFrame(step);
+    else playing = false;
+  }
+  requestAnimationFrame(step);
+});
+
+render();
+</script>
+</body>
+</html>

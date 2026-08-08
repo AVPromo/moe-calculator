@@ -85,9 +85,17 @@ def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
     translates its whole composition into positive document coordinates so nothing is clipped
     at the document origin (MoEProgress.js SHIFT_X_REM / SHIFT_Y_REM), which pushes the bar
     that far DOWN inside its own surface. Moving the window UP by the same amount (a NEGATIVE
-    y_offset, constants.PROGRESS_ANCHOR_Y_OFFSET) leaves the bar exactly where it was on
+    y_offset, constants.PROGRESS_ANCHOR_Y_SHIFT) leaves the bar exactly where it was on
     screen. X needs no such term: `max_x // 2` centres whatever surface width the view asks
-    for, and the composition is symmetric about its own centre, so the centring self-adapts."""
+    for, and the composition is symmetric about its own centre, so the centring self-adapts.
+
+    SUPERSEDED AND NO LONGER CALLED BY THE MOD -- anchor_centred_reduced below is what
+    bridge/bar_window.py._resolve places with. This is kept as the pre-reduction REFERENCE the
+    test suite compares that form against (the +/-1 int-floor bound), and for no other reason: the
+    `y_offset` it takes was a TWO-TERM composite (the retired constants.PROGRESS_ANCHOR_Y_OFFSET
+    (_LARGE) / EFFICIENCY_ANCHOR_Y_OFFSET(_LARGE)) baking both the intra-surface cancellation above
+    AND an extent-to-viewport fraction conversion, while the shipped constants are now the PURE
+    shift term alone. Do NOT add a third variant, and do not place with this one."""
     max_x = _int(max_x)
     max_y = _int(max_y)
     frac = _float(y_frac)
@@ -96,30 +104,159 @@ def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
     return x, y
 
 
-def anchor_pinned(max_x, max_y, pos_x, pos_y, y_frac, x_offset=0, y_offset=0):
-    """Top-left (x, y) for a centre-screen bar the user may have Ctrl+DRAGGED somewhere.
+def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift):
+    """Top-left (x, y) in logical GUI space for a HORIZONTALLY CENTRED window -- the COMPUTED
+    successor to anchor_centred above, and what bridge/bar_window.py._resolve now places the
+    Damage-Log-aligned bar with (see TASKS/in-battle-vertical-bar-PLAN.md "Phase 2 approach: the
+    anchor-Y term is COMPUTED, not baked"). Same job, reduced math: takes the FULL logical space
+    `space_y` in place of the
+    movable extent `max_y` for the Y fraction, and a single PURE shift term (`y_shift`) in place
+    of a baked two-term composite.
 
-    `pos_x` / `pos_y` are the stored drag position (mod_settings.bar_pos_x / bar_pos_y) in the
-    SAME LOGICAL GUI SPACE the window is moved in -- deliberately NOT pinned to a viewport like
-    the garage widget's posW/posH pair, because that space is already interface-scale invariant
-    (see the module header), so there is nothing to rescale.
+    WHY THE REDUCTION IS VALID. anchor_centred's `y_offset` sums two terms: -shift (cancelling
+    the composition's intra-surface offset) and +round(y_frac * surface_h) (converting the
+    fraction from "of the movable extent" to "of the viewport", needed only because
+    anchor_centred multiplies the fraction by max_y == space_y - surface_h). Substituting:
 
-    0/0 MEANS AUTO, and ONLY the exact pair: an untouched install falls straight through to
-    anchor_centred, so the shipped *_ANCHOR_* placement stays byte-identical for every user who
-    never drags. Anything else -- including a lone axis, a negative coordinate and a coordinate
-    past the movable extent -- is an explicit pin, honoured VERBATIM.
+        y = int(max_y * frac) + (-shift + round(frac * surface_h))
+          = int((space_y - surface_h) * frac) + round(frac * surface_h) - shift
+         ~= int(space_y * frac) - shift
 
-    NOT CLAMPED ON SCREEN, deliberately: the user is allowed to park a bar half (or wholly) off
-    any edge, so there is no "safezone" here and none in the writer either (cursor_top_left
-    below). A corrupt / non-numeric store still degrades to 0 via _int, i.e. to auto.
+    i.e. once the fraction is applied to `space_y` directly, the extent-to-viewport conversion
+    term is exactly cancelled and never needs computing (or baking per orientation/alignment) at
+    all -- `y_shift` is the WHOLE remaining constant, always negative-or-zero, one value per
+    (bar, size), shared by every alignment that uses this anchor at all.
 
-    `max_x` / `max_y` are unused by the pinned branch and kept only for anchor_centred's
-    fallback -- the far-sentinel extent measurement is still what centres an unpinned bar."""
-    x = _int(pos_x)
-    y = _int(pos_y)
-    if x == 0 and y == 0:
-        return anchor_centred(max_x, max_y, y_frac, x_offset, y_offset)
+    THREE ARGUMENTS, not two, because of what each is for: `max_x` centres X the same way
+    anchor_centred does (`max_x // 2` -- still the movable EXTENT, not `space_x`: it centres the
+    surface exactly without this function knowing the surface width, and that trick only works on
+    the extent, never on the full space). `max_y` still bounds the Y CLAMP (a fraction near 1.0
+    plus a small negative shift must not push the bar below the movable extent, and a huge
+    positive shift must not push it above the extent's top) -- the clamp target does not change
+    just because the multiplication no longer uses it. `space_y` is what the fraction itself is
+    now applied to.
+
+    ACCEPTED, MEASURED RISK: int(space_y * frac) is int-of-sum where the old form is
+    sum-of-rounded-parts, so this can differ from anchor_centred's result by +/-1 logical px
+    depending on the exact space_y -- confirmed by direct computation across a wide span of
+    resolutions (not assumed to be 0; see the implementer's report). Do not chase a "fix" for
+    this -- there is no baked constant left to nudge, and the two forms are only equivalent up to
+    that 1px int-floor discretization by construction, at every resolution.
+
+    Fail-soft, matching anchor_centred: an unusable (non-numeric / NaN) max_x/max_y/space_y,
+    y_frac or y_shift degrades to 0 via _int/_float."""
+    max_x = _int(max_x)
+    max_y = _int(max_y)
+    space_y = _int(space_y)
+    frac = _float(y_frac)
+    shift = _int(y_shift)
+    x = min(max(0, max_x // 2), max_x)
+    y = min(max(0, int(space_y * frac) + shift), max_y)
     return x, y
+
+
+def anchor_minimap(space_x, space_y, edge_x, edge_y, mm_size, gap, gap_bottom, overhang):
+    """Top-left (x, y) in logical GUI space for a bar anchored to the LEFT of the minimap.
+
+    The minimap sits flush to the screen's bottom-right corner with ZERO inset at every
+    resolution and interface scale (memory `minimap-onscreen-geometry-measured-table`), so both
+    axes are plain subtraction from the FULL logical space `space_x, space_y` -- unlike
+    anchor_centred_reduced / anchor_top_left there is no movable-extent term here at all, because
+    this anchor does not track a Ctrl+drag extent, it tracks the minimap's own edge:
+
+        x = space_x - mm_size - gap - overhang - edge_x
+        y = space_y - gap_bottom - edge_y
+
+    `mm_size` is the measured minimap size for the current settingsCore GAME.MINIMAP_SIZE index
+    (constants.MINIMAP_SIZES, already clamped [0, 5] by the caller -- WG's own getter does not
+    clamp). `gap` / `gap_bottom` are the fixed logical-px clearances (constants.MM_GAP, shared by both
+    bars, and constants.*_MM_GAP_BOTTOM, one PER BAR -- each vertical tuner tuned its own: 30 and 28).
+    `overhang` is half the bar's tick cross-axis overhang past its own track edge
+    (constants.MM_TICK_OVERHANG(_LARGE)) -- the track's right edge sits `gap + overhang` clear of
+    the minimap, but the TICK's outer edge (which is what visually reads as "the bar") sits only
+    `gap` clear, mirroring the vertical tuner's `halfOverhang()`.
+
+    `edge_x` / `edge_y` ARE WHAT MAKE THE TWO GAPS MEAN WHAT THE TUNER MEANT, and passing the wrong
+    thing for them WAS the shipped bug. They are the ALIGNED EDGE's own offset from the surface's
+    top-LEFT corner: `edge_x` from the surface's left edge out to the edge that has to clear the
+    minimap, `edge_y` from the surface's top edge down to the edge that has to clear the screen
+    bottom. The shipped call passed the bar's own SURFACE WIDTH/HEIGHT, which aligns the SURFACE's
+    far edges -- and that is not the frame `gap` / `gap_bottom` were tuned in:
+    tools/dev/gen_bar_tuner_vertical.ps1's barRightPx() / barBottomPx() (and the efficiency
+    tuner's placement()) place the visible TRACK box on the stage, while the vertical compositions
+    leave a wide margin of caption space, backdrop bleed and shadow pad between the track and the
+    surface (constants.*_MM_TRACK_X / MM_TRACK_Y: 45-63 logical px of it on x, 90 on y -- which is
+    exactly how far the bar landed off). This is the same surface-vs-composition frame mismatch the
+    *_ANCHOR_Y_SHIFT constants cancel for the centred anchor, and it is the CALLER that supplies the
+    per-bar, per-size term -- see bar_window._resolve, which still passes the surface's own edges
+    for a HORIZONTAL bar because no tuner ever placed that composition beside the minimap.
+
+    THE Y RESULT IS NOT ALWAYS REACHABLE, and this function deliberately does not pretend otherwise
+    by clamping. The engine clamps EVERY window into [0, space - surface] in compiled C++
+    (movePyWindow -- memory `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`;
+    bar_window._extent's far-sentinel calibration DEPENDS on that clamp existing), so a
+    `gap_bottom` SMALLER than the surface's own below-the-track slack (surface_h - edge_y) cannot be
+    honoured at all: the surface would have to hang past the screen's bottom edge, and it may not.
+    The engine flushes the surface to the bottom instead, which is still the closest reachable
+    placement to the tuner's. X has no such ceiling -- the surface overhangs the MINIMAP, not the
+    screen.
+    WHICH IS WHY THE SLACK IS A FRONT-END NUMBER, and it has since been shrunk to exactly each
+    vertical bar's tuned gap: the surface used to be sized to contain the whole backdrop (380 rem
+    tall against edge_y 290, i.e. 90 of slack, so both tuned gaps -- 30 and 28 -- were unreachable
+    and both bars flushed to the same spot ~60px high). It is now sized to contain the bottom
+    caption's INK and to CLIP the backdrop's lower bleed, exactly as each tuner's stage clips it
+    (MoEProgress.js / MoEEfficiency.js V_CLIP_B_REM), so at the Default size both gaps are reachable
+    and land on their tuned value. Under the LARGE size mode the clip scales with the composition
+    while `gap_bottom` stays fixed logical px, so this ceiling engages again -- deliberately, since
+    flushing then delivers the tuned gap * SIZE_F, which is the same look scaled (constants
+    .*_MM_GAP_BOTTOM). Do NOT clamp here to paper over either case.
+
+    UNCLAMPED, deliberately, matching the module's no-safezone rule (cursor_top_left below): a
+    small enough space or wide enough bar can legitimately push x/y negative,
+    and there is nothing to clamp against here anyway -- unlike anchor_centred_reduced there is no
+    movable-extent argument on hand to clamp into.
+
+    Fail-soft: every argument degrades via _int, so an unreadable minimap-size read or a bad
+    surface measurement lands the bar at a wrong-but-numeric spot rather than raising."""
+    space_x = _int(space_x)
+    space_y = _int(space_y)
+    edge_x = _int(edge_x)
+    edge_y = _int(edge_y)
+    mm_size = _int(mm_size)
+    gap = _int(gap)
+    gap_bottom = _int(gap_bottom)
+    overhang = _int(overhang)
+    x = space_x - mm_size - gap - overhang - edge_x
+    y = space_y - gap_bottom - edge_y
+    return x, y
+
+
+def anchor_offset(anchor, off_x=0, off_y=0):
+    """Top-left (x, y) for `anchor` nudged by a stored stepper offset -- POSITIVE = right/down,
+    UNIFORMLY regardless of which alignment produced `anchor`:
+
+        x, y = anchor(alignment, orientation) + (off_x, off_y)
+
+    This is what RETIRED the old anchor_pinned's 0/0-means-auto sentinel (deleted with the wiring
+    step): under Damage Log alignment, offset (0, 0) already IS the shipped placement (the base
+    anchor returned verbatim, no sentinel to fall through), so every alignment composes the same
+    way, always -- THIS function has no "auto" case and no branch of any kind. The caller does:
+    bar_window._resolve picks the BASE anchor, and a (0, 0) pair under FREE alignment makes it pick
+    the orientation's default anchor instead of the origin (so an Orientation change can reset the
+    coordinates without disturbing the sticky Free alignment). That choice is the caller's alone --
+    do not reintroduce a sentinel here.
+
+    UNCLAMPED, matching the module's no-safezone rule (cursor_top_left below): the base
+    anchor may already be clamped (anchor_centred_reduced) or not (anchor_minimap), and a
+    user-configurable nudge on top of either is allowed to push the bar past any edge -- that is
+    the whole point of an offset control.
+
+    Fail-soft: an unusable `anchor` (wrong shape / non-numeric / NaN) degrades to (0, 0) before
+    the offset is added (via the same `_xy` the cursor helpers below use); an unusable `off_x` /
+    `off_y` degrades to 0 via `_int`."""
+    point = _xy(anchor)
+    ax, ay = (0, 0) if point is None else point
+    return _int(ax) + _int(off_x), _int(ay) + _int(off_y)
 
 
 def cursor_logical(cursor, screen, space_x, space_y):
@@ -185,19 +322,21 @@ def cursor_top_left(cursor, screen, space_x, space_y, grab_x=0, grab_y=0):
     gesture START, carried for the whole gesture so the bar keeps the point it was grabbed by
     instead of teleporting its corner under the cursor on the first event.
 
-    NOT CLAMPED AT ALL -- there is no on-screen safezone. The user may drag a bar past any edge,
-    including off the left/top into negative coordinates, and anchor_pinned honours whatever lands
-    here verbatim. The ONE forbidden result is the exact pair (0, 0), which is anchor_pinned's AUTO
-    sentinel: a drag that happens to land there is nudged one px on x so it can never be misread as
-    "never dragged". Returns None whenever cursor_logical does."""
+    NOT CLAMPED AT ALL, AND NO RESULT IS FORBIDDEN -- there is no on-screen safezone. The user may
+    drag a bar past any edge, including off the left/top into negative coordinates, and the stored
+    pair is honoured verbatim (a drag end sets Alignment := Free, so the pair IS the top-left).
+    The exact pair (0, 0) used to be nudged one px on x because it was the deleted anchor_pinned's
+    AUTO sentinel, and it is once again a value the placement path reads as AUTO (bar_window
+    ._resolve: a (0, 0) pair under Free defers to the orientation's default anchor, which is what
+    lets an Orientation change reset the coordinates without un-sticking Free). The nudge has NOT
+    come back with it: dragging a bar's top-left onto exactly logical (0, 0) and having it snap to
+    the default anchor is the accepted, explicitly-agreed cost of that reset, and re-adding a
+    silent 1px lie here would just move the surprise somewhere harder to find. Returns None
+    whenever cursor_logical does."""
     point = cursor_logical(cursor, screen, space_x, space_y)
     if point is None:
         return None
-    x = int(point[0] + _float(grab_x))
-    y = int(point[1] + _float(grab_y))
-    if x == 0 and y == 0:
-        x = 1
-    return x, y
+    return int(point[0] + _float(grab_x)), int(point[1] + _float(grab_y))
 
 
 def cursor_in_rect(point, top_left, size):

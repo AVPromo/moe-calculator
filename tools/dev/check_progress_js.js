@@ -249,11 +249,12 @@ const MUTATIONS = {
         'root.classList.toggle("mp-full", cur.projAvg >= cur.axisHi);',
         'root.classList.toggle("mp-full", false);'],
     "wrong-next-mark-glyph": ["B",
-        "setIco(capR, cur.marks >= 3 ? 4 : cur.marks + 1);", "setIco(capR, cur.marks);"],
-    // THE MARK PAIR MUST STAY FIRST in .mp-capR's markup: setIco()/capV() are both first-match
-    // querySelectors, so swapping the two icon+value pairs repoints setIco at the battles glyph
-    // (stripping its static "battles" class) instead of the mark. Caught by "the battles glyph
-    // keeps its static family class" in the "first push" section below.
+        "setIco(cur.marks >= 3 ? 4 : cur.marks + 1);", "setIco(cur.marks);"],
+    // THE MARK PAIR MUST STAY FIRST in .mp-capR's markup: capV() is a first-match querySelector and
+    // the horizontal composition's assertions below are written to that order, so swapping the two
+    // icon+value pairs repoints the requirement writer at the count. (setIco no longer cares: it
+    // writes to the mount-cached capMkIco, which the vertical composition's opposite order forced --
+    // see MoEProgress.js.) Caught by the "capR marks the next mark" className assertion below.
     "battles-pair-comes-first": ["B",
         "'  <div class=\"mp-cap side mp-capR\"><i class=\"mp-ico none\"></i>' +\n" +
         "        '<span class=\"mp-v\"></span><i class=\"mp-ico battles\"></i>' +\n" +
@@ -336,18 +337,18 @@ const MUTATIONS = {
     // The x-lengths carry SIZE_XF on top of the root font's SIZE_F; drop it and the surface is
     // 1.5x wide instead of 2x, cropping the composition.
     "size-surface-loses-the-x-factor": ["T",
-        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
-        "viewW = Math.round((cfg.boxW + 2 * cfg.pad) * f);"],
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);",
+        "viewW = Math.round((cfg.boxW + 2 * cfg.padX) * f);"],
     // PAD_REM is slack on BOTH axes and must not take the x factor.
     "size-pad-wrongly-takes-the-x-factor": ["T",
-        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.pad) * f);",
-        "viewW = Math.round((cfg.boxW + 2 * cfg.pad) * xf * f);"],
+        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);",
+        "viewW = Math.round((cfg.boxW + 2 * cfg.padX) * xf * f);"],
     // The y/uniform half must NOT take the x factor (that is what keeps the bar's height right).
     "size-height-wrongly-takes-the-x-factor": ["T",
-        "viewH = Math.round((cfg.boxH + 2 * cfg.pad) * f);",
-        "viewH = Math.round((cfg.boxH * xf + 2 * cfg.pad) * f);"],
+        "viewH = Math.round((cfg.boxH + 2 * cfg.pad - cfg.clipB) * f);",
+        "viewH = Math.round((cfg.boxH * xf + 2 * cfg.pad - cfg.clipB) * f);"],
     "size-shift-not-re-derived": ["T",
-        "shiftX = Math.round((cfg.pad - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
+        "shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
     // The CSS side and the surface must be re-pushed together: the engine round-trips the resize
     // back into Python's _place, which is what makes the two agree on where the bar sits.
     "size-no-surface-repush": ["T",

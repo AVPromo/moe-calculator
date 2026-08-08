@@ -42,7 +42,7 @@
    an empty, transparent sizing shim; the abspos bar root overlays it and no tuned geometry moves.
    380 x 92 MIRRORS MoEProgress.js's VIEW_W_REM / VIEW_H_REM, which are the SOURCE OF TRUTH
    (BOX_W/H_REM + 2*PAD_REM). Same mirrored-constant contract as the JS's SHIFT_Y_REM <->
-   Python's domain/constants.PROGRESS_ANCHOR_Y_OFFSET: change one, change all of them.
+   Python's domain/constants.PROGRESS_ANCHOR_Y_SHIFT: change one, change all of them.
    tests/test_progress_surface_mirror.py fails if they drift. */
 body { margin: 0; }
 #moe-bar-box { width: 380rem; height: 92rem; }

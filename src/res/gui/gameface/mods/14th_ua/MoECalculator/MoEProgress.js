@@ -22,6 +22,13 @@
 // window has NO hot-reload (it pins its resources at client launch), so every tweak here costs a
 // full client relaunch: tune in the browser, not in the client.
 //
+// TWO ORIENTATIONS, ONE DOCUMENT. The bar draws HORIZONTALLY (MoEProgress.css, .mp-*) or VERTICALLY
+// beside the minimap (MoEProgressVertical.css, .mpv-*) depending on mod_settings'
+// progress_bar_orientation, pushed as the VM's `vertical`. Both stylesheets are <link>ed from
+// MoEProgressView.html and are namespace-DISJOINT; the choice is a MOUNT-TIME branch (goVertical),
+// NOT a second res_map layout -- a new itemID would cost every user a one-time client restart. The
+// PLACEMENT half is Python's and already orientation-aware (bridge/bar_window._resolve).
+//
 // pointer-events:none throughout (in the CSS) -- pure HUD info, never an input target.
 import { ModelObserver } from "../../libs/model.js";
 // The transient machinery -- arming, the negative-delay debounce, the Alt peek's pause/seek, the end
@@ -130,8 +137,8 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // rest from them (its box*/pad arguments), exactly as this file used to:
 //   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 380     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
 //   VIEW_H_REM = BOX_H_REM + 2 * PAD_REM == 92      SHIFT_Y_REM = PAD_REM - BOX_TOP_REM  == 44
-// SHIFT_Y_REM is MIRRORED (negated, plus the fraction-unit term) in Python as
-// domain/constants.PROGRESS_ANCHOR_Y_OFFSET, so changing BOX_TOP_REM or PAD_REM moves the bar on
+// SHIFT_Y_REM is MIRRORED (negated) in Python as
+// domain/constants.PROGRESS_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
 // screen until that constant follows -- and #moe-bar-box in MoEProgress.css is sized to the derived
 // surface, a THIRD copy: keep all three in lockstep. The hit padding and the re-assert timing live
 // in the shared module (its HIT_MAGIC / SURFACE_REASSERT_MS -- both LOAD-BEARING, read its header).
@@ -141,19 +148,163 @@ const BOX_W_REM = 360;                               // .mp-backdrop's width
 const BOX_H_REM = 72;                                // .mp-backdrop's height
 const PAD_REM = 10;
 
-// Build the root once and cache it. Markup shape is the tuner's stage: backdrop, the track with its
+// --- THE VERTICAL ORIENTATION (mod_settings.progress_bar_orientation, pushed as the VM's
+// `vertical`) ------------------------------------------------------------------------------------
+// A SECOND COMPOSITION IN THE SAME DOCUMENT, not a restyle of this one: its own stylesheet
+// (MoEProgressVertical.css, <link>ed alongside MoEProgress.css from MoEProgressView.html), its own
+// namespace-disjoint class prefix (.mpv-*), its own DOM order (numeral BEFORE icon) and its own
+// surface. NO second res_map entry and NO second BarHost: orientation is a MOUNT-TIME branch, and a
+// new itemID would cost every user a one-time client restart.
+//
+// V_BOX_* IS .mpv-backdrop, exactly as BOX_* above is .mp-backdrop -- and it is the axis-swap of it
+// with the tuner's own tuned lengths, NOT a transpose of these four (72 wide against 360 tall, vs
+// 360 x 72; the side clearance is 34 a side, not 80, because a vertical bar's captions grow along
+// its cross axis and the tuned overhang differs). PAD_REM serves the Y axis; the X axis is
+// V_PAD_X_REM (see its own note below), so:
+//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 97
+//                            + 2 * V_PAD_X_REM == 198
+//   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
+//                                - V_CLIP_B_REM == 320 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
+// V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
+// and -113 for Large == -round(90 * SIZE_F)), which is SHARED with the Damage Efficiency bar --
+// unlike the horizontal pair's 44-vs-50 split, both vertical compositions have the identical
+// backdrop top and height. #moe-bar-box in MoEProgressVertical.css is sized to the derived surface,
+// a THIRD copy: keep all three in lockstep.
+//
+// THE SURFACE IS THE ONLY SIDE THAT IS NOT box + PAD_REM, AND THAT IS THE WHOLE POINT (V_CLIP_B_REM).
+// The engine clamps EVERY window into [0, space - surface] in compiled C++ (movePyWindow -- memory
+// `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`; bar_window._extent's
+// far-sentinel calibration DEPENDS on that clamp existing), so the surface's bottom edge can never go
+// below the screen's, and a bar anchored to the minimap therefore lands however far its TRACK sits
+// above its own surface bottom -- never closer. At a full box + PAD_REM surface that was
+// 380 - 290 == 90 logical px, against the vertical tuner's tuned `mmGapBottom` of 30
+// (tools/dev/gen_bar_tuner_vertical.ps1:451), i.e. the tuned look was unreachable by ~60px and
+// domain/constants.PROGRESS_MM_GAP_BOTTOM could not be honoured at all.
+// THE SURFACE DOES NOT HAVE TO CONTAIN THE BACKDROP -- only the caption INK. The tuner's stage clips
+// the backdrop's lower bleed at exactly this gap and that IS the approved appearance, so the surface
+// is shortened to the tuned gap and the bleed clips at its bottom edge:
+//   V_CLIP_B_REM == (V_BOX_H_REM + 2*PAD_REM) - (V_SHIFT_Y_REM + barLen + mmGapBottom)
+//                == 380 - (90 + 200 + 30) == 60
+// and the surface's below-the-track slack becomes 320 - 290 == 30 == the tuned gap exactly (290 is
+// V_SHIFT_Y_REM + barLen == domain/constants.MM_TRACK_Y, which this does NOT move -- see below).
+// WHAT IT COSTS, DERIVED FROM THE SHIPPED CSS, is 3rem of clearance on the bottom caption's ink and
+// nothing else. .mpv-capC (MoEProgressVertical.css) is `top: 100%` + `margin-top: 6rem` off the
+// track's bottom end, its flex row is `line-height: 20.5rem` tall (the tallest of its three children:
+// the 20.5 numeral line box beats the 16rem .dmgc icon and the 15.5rem delta), so its box ends
+// 6 + 20.5 == 26.5rem below the track; the numeral's own translateY(-0.5rem) plus its 1rem dark-drop
+// text-shadow radius reaches 27.0, the delta's translateY(1.5rem) + the same 1rem reaches 25.5, and
+// the icon's translate(0, 1rem) + its ::before 106% glow (3% of 16rem) reaches 26.2. So the deepest
+// ink is 27.0 against 30 of slack. The ONLY thing past the edge is the sign-glow's soft tail (the
+// 6rem blur on .mpv-d-num / .mpv-v in the up/down states, reaching ~32.5) -- which the tuner clips
+// at its stage bottom too, at the same 30, which is what the maintainer approved.
+// IT MOVES NOTHING ELSE, BY CONSTRUCTION: the clip is applied to the SURFACE only and never to
+// shiftY, so the composition sits exactly where it did inside the surface and BOTH mirrored Python
+// constants -- VERTICAL_ANCHOR_Y_SHIFT (-90) and MM_TRACK_Y (290) -- are unchanged. Nothing reflows
+// either: every length in the two vertical stylesheets is a rem or a % of a rem-sized ancestor (the
+// only viewport-relative rule in either document is `body { margin: 0 }`), so a shorter surface can
+// only clip, never re-lay-out.
+// UNDER LARGE the clip is inside applySize's `* f`, so the slack is 400 - 363 == 37 logical px while
+// PROGRESS_MM_GAP_BOTTOM stays a fixed 30: the gap is then UNREACHABLE and the engine flushes the
+// surface to the screen bottom, which lands the track at 30 * SIZE_F == 37.5 -> 37. That is the
+// tuned gap SCALED, i.e. the same look 1.25x, which is exactly right -- do NOT "fix" it with a
+// MM_GAP_BOTTOM_LARGE twin, and do NOT take the clip out of the `* f` to force reachability: a
+// fixed-px clip would keep biting the same 60rem out of a composition whose ink grew 1.25x, and the
+// bottom caption would start clipping for real.
+// THE 256x256 SIZE-TIMEOUT FALLBACK STILL RUNS LAST AND STILL WINS on this path -- the vertical
+// surface is pushed and RE-ASSERTED after the deadline by exactly the same shared machinery
+// (MoEBarTransient's SURFACE_REASSERT_MS), and each push round-trips back to Python as
+// onSizeChanged -> bar_window._place, which is what makes the placement agree with the surface.
+//
+// ...AND THE X AXIS IS NOT box + PAD_REM EITHER (V_PAD_X_REM). The three captions are
+// RIGHT-ANCHORED and grow LEFTWARD from a fixed edge (`right: 100%; left: auto`,
+// MoEProgressVertical.css's .mpv-cap), so their ink runs well past .mpv-backdrop's left edge --
+// and unlike the horizontal bar, THE BACKDROP IS NOT MEANT TO COVER THEM (maintainer's call: the
+// look is settled, the backdrop stays exactly where the tuner put it). At the shipped
+// PAD_REM the surface's left edge sat at -44rem and CUT TWO OF THE THREE ROWS. So the X slack is
+// decoupled from the backdrop rect: V_PAD_X_REM widens the SURFACE alone, .mpv-backdrop's
+// `left: -34rem; width: 72rem` is untouched, and nothing on screen moves but the clip.
+//
+// IT IS APPLIED TO BOTH SIDES EVEN THOUGH ONLY THE LEFT NEEDS IT, and that is the load-bearing
+// half. Only the LEFT reach is a real requirement -- the right side has ~48rem of dead space at
+// PAD_REM already -- but a LEFT-ONLY pad makes the surface asymmetric about the track, and the
+// centred (Damage Log) alignment is `max_x // 2` with NO x term in Python
+// (positioning.anchor_centred_reduced), i.e. it centres the SURFACE and only centres the BAR while
+// the two are concentric. Left-only would have slid that alignment 26 logical px right at Default
+// and 33 at Large -- a visible move, for a fix whose whole brief was "nothing on screen may look
+// different except that the caption text is no longer cut off". Symmetric costs 53rem of surface
+// on a side nobody looks at and is FREE: the surface rect is never drawn, the mouse hit rect is
+// collapsed unconditionally (MoEBarTransient's pushHitArea), and hitPad is height-dominated at both
+// sizes -- max(198, 320) and max(278, 400) are the SAME 320/400 the shipped surface gave, so the
+// input rect does not move by a single rem. Do NOT "reclaim" the right side.
+// THE WORST-CASE REACH, re-derived from the shipped CSS and MoEBattle.ttf's own advances (digit
+// 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the same figures the horizontal extremes
+// above use). Each row's ink starts at `-padding-right + translateX` off the track's left edge and
+// grows leftward; the design is digit-count INVARIANT at the anchor (see the CSS's own note), so a
+// static worst case is sound:
+//   .mpv-capC (bottom) IS THE EXTREME, and only with a 4-DIGIT delta -- which is what is budgeted
+//     for, per the maintainer, not the 3-digit case:
+//     (-6 + 16) - [ 39.78 ("(+2,970)" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
+//     12rem) + 35.52 ("3,050" at 16rem) + 1.00 (the shared icon gap) + 16.00 (.mpv-ico.dmgc) ]
+//     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -92.49rem.
+//     A 3-digit delta ("(+297)" == 30.89) reaches only -83.61.
+//   .mpv-capR (top): (-6 + 14) - [ 13.81 ("99" at 14rem, the leading eta group) + 1 + 13
+//     (.mpv-ico's base box, the battles glyph) + 4 (the eta gap) + 31.08 ("3,050" at 14rem, the
+//     trailing requirement group) + 1 + 17 (.mpv-ico.mk) ] - 1.00 (the base dark drop) ==
+//     -73.89rem (SUM, unchanged by the group swap -- see V_MARKUP).
+//   .mpv-capP (moving): (-6 + 0) - [ 31.08 + 1 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.08rem.
+// So the surface's left edge goes to -97rem (92.49 + 4.5rem of margin) and
+//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63
+// tests/test_progress_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is the
+// GATE on all of the above -- it re-derives every row from the stylesheet and the advances rather
+// than trusting this note, and goes red the moment V_PAD_X_REM is trimmed.
+// LARGE IS STRICTLY SLACKER and needs no twin: the allowance is `V_PAD_X_REM - V_BOX_LEFT_REM*4/3`
+// == 108.33rem (the backdrop's left bleed is an x-length and takes SIZE_XF; V_PAD_X_REM, like
+// PAD_REM, does NOT -- the ink it covers is rem-sized and rides the root font's SIZE_F alone),
+// while the ink only grows on its three x-GAPS. The Default size keeps binding.
+// THE MINIMAP ANCHOR MUST FOLLOW THIS CONSTANT. domain/constants.PROGRESS_MM_TRACK_X's PURE
+// derivation is `V_SHIFT_X_REM + trackW`, i.e. where the track sits inside the surface -- widen
+// the left slack without growing it and the whole bar slides left by the difference. The shipped
+// constant also carries a further -2 measured hand-placement correction on top; see its
+// derivation there.
+const V_BOX_LEFT_REM = -34;                          // .mpv-backdrop's left
+const V_BOX_TOP_REM = -80;                           // .mpv-backdrop's top
+const V_BOX_W_REM = 72;                              // .mpv-backdrop's width
+const V_BOX_H_REM = 360;                             // .mpv-backdrop's height
+const V_CLIP_B_REM = 60;                             // backdrop bleed the SURFACE clips off the bottom
+const V_PAD_X_REM = 63;                              // the X slack, decoupled from the backdrop
+
+// THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
+// together by goVertical() below and never touched again.
+//   PFX   the class prefix every selector and every toggled class in this file is written in. The
+//         source spells everything as "mp-..." and ns() rewrites it, so the literals stay greppable.
+//   AX    the property a marker's position is written to: `left` along a horizontal axis, `bottom`
+//         along a vertical one (0% at the BOTTOM -- see the stylesheet's axis note).
+//   GROW  the property the fill grows along: `width` vs `height`.
+//   CAP_C_AX  the axis the BOTTOM-CENTRE caption tracks, or null if it does not move. On the
+//         horizontal bar capC rides the proj tick; on the vertical one it is a STATIC cap below the
+//         track's bottom end and capP (the pre caption) is the only caption that moves. That is the
+//         tuner's tuned layout, not an omission -- see MoEProgressVertical.css's .mpv-capC.
+let PFX = "mp";
+let AX = "left";
+let GROW = "width";
+let CAP_C_AX = "left";
+
+// Rewrite a class name or a selector from the source's .mp-* spelling into the LIVE prefix. A no-op
+// while horizontal, so the shipped path costs one string compare per call and nothing else. The
+// two prefixes are DISJOINT by design (see the vertical stylesheet's header), which is the whole
+// reason a blanket token rewrite is safe here.
+function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
+
+// THE HORIZONTAL COMPOSITION'S MARKUP (the vertical one is V_MARKUP below; ensureRoot builds this
+// one and goVertical replaces it, which is why they are two constants and not one branch inside the
+// builder). Markup shape is the tuner's stage: backdrop, the track with its
 // four ticks, then THREE captions -- the tuner's fourth, .mp-capL, carried the axis FLOOR numeral
 // and is gone (axisLo is the battle's starting projection, not a requirement, and the label said
 // nothing the moving caption does not). Each caption is ONE flex row -- icon, value, and on capC the
 // delta, whose PARENS are static text on the wrapper so they never glow (see the .mp-d / .mp-d-num
 // split in the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
-function ensureRoot() {
-    let root = document.getElementById("moe-bar-root");
-    if (root) return root;
-    root = document.createElement("div");
-    root.id = "moe-bar-root";
-    root.innerHTML =
+const MARKUP =
         '<div class="mp-backdrop"></div>' +
         '<div class="mp-track">' +
         '  <div class="mp-fill"></div>' +
@@ -165,45 +316,141 @@ function ensureRoot() {
         '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>' +
         '<span class="mp-d">(<span class="mp-d-num"></span>)</span></div>' +
-        // THE MARK PAIR MUST COME FIRST IN THIS ROW, and two helpers silently depend on it: setIco()
-        // and capV() both do a querySelector for the FIRST .mp-ico / .mp-v, so reordering these four
-        // nodes repoints the mark-glyph writer at the battles glyph and the requirement writer at the
-        // count -- with no error and no test in this file to catch it. The requirement's glyph is the
-        // only one setIco ever rewrites; the battles glyph's class is STATIC (paintStatic only
-        // toggles `none` on it), which is why it can safely share the .mp-ico family here.
+        // THE MARK PAIR MUST COME FIRST IN THIS ROW: capV() does a querySelector for the FIRST
+        // .mp-v, so reordering these four nodes repoints the requirement writer at the count -- with
+        // no error to catch it. The mark GLYPH no longer cares (setIco writes to the mount-cached
+        // capMkIco, which the vertical composition's opposite order forced), but the numeral still
+        // does. The requirement's glyph is the only one setIco ever rewrites; the battles glyph's
+        // class is STATIC (paintStatic only toggles `none` on it), which is why it can safely share
+        // the .mp-ico family here.
         '  <div class="mp-cap side mp-capR"><i class="mp-ico none"></i>' +
         '<span class="mp-v"></span><i class="mp-ico battles"></i>' +
         '<span class="mp-eta"></span></div>' +
         '</div>';
+
+// ...and THE VERTICAL COMPOSITION'S markup, the tuner's own stage verbatim
+// (tools/dev/gen_bar_tuner_vertical.ps1). FOUR structural differences from the horizontal template
+// above, all of them the tuner's tuned layout and none of them free to "tidy":
+//   * NUMERAL BEFORE ICON in every caption (the icon trails, away from the track). That is what
+//     makes the shared right:100% anchor digit-count invariant -- the icon is the LAST in-flow
+//     child, flush against a FIXED edge, so only the numeral grows, and leftward. Reversing it
+//     re-introduces the exact defect that shipped once on the horizontal bar.
+//   * the DELTA is ordered FIRST on capC (delta, numeral, icon), an in-flow flex child with a
+//     margin gap -- never an out-of-flow box hanging off a content-dependent edge.
+//   * capP lives INSIDE .mpv-track and capR / capC are its SIBLINGS, exactly as the tuner has them
+//     (root and track are the same 3x200rem box, so every percentage resolves identically either
+//     way; this only keeps the diff against the tuner readable).
+//   * the two axis-end ticks are mpv-bottom / mpv-top, not mp-left / mp-right.
+// capR's two groups are SWAPPED from the tuner's own stage (maintainer's call, ported here only --
+// the tuner is untouched, see MoEProgressVertical.css's HAND-EDIT 6/6): the eta-numeral+battles-icon
+// pair leads (flush against the row's growing left edge) and the requirement-numeral+mark-icon pair
+// trails, flush against the fixed right anchor -- so the row now reads [eta numeral][battles
+// glyph][requirement numeral][mark glyph], and it is the MARK icon, not the battles one, that is the
+// last in-flow child pinned to the digit-count-invariant anchor. The etaGap (4rem / 5.333rem Large)
+// rides .mpv-capR .mpv-v's own margin-left now, not .mpv-eta's -- it is still the gap BETWEEN the
+// two groups, just before the OTHER one. Because the mark icon is no longer capR's FIRST .mpv-ico,
+// setIco() below writes to a CACHED element captured at mount (capMkIco) rather than re-selecting a
+// positional first match; capV()/capEtaIco/capEta stay class-filtered as they always were and do not
+// care about order at all.
+const V_MARKUP =
+        '<div class="mpv-backdrop"></div>' +
+        '<div class="mpv-track">' +
+        '  <div class="mpv-fill"></div>' +
+        '  <div class="mpv-tick mpv-end mpv-bottom"></div>' +
+        '  <div class="mpv-tick mpv-pre"></div>' +
+        '  <div class="mpv-tick mpv-proj"></div>' +
+        '  <div class="mpv-tick mpv-end mpv-top"></div>' +
+        '  <div class="mpv-cap mpv-capP"><span class="mpv-v"></span>' +
+        '<i class="mpv-ico dmgp"></i></div>' +
+        '</div>' +
+        '<div class="mpv-cap mpv-capR"><span class="mpv-eta"></span><i class="mpv-ico battles"></i>' +
+        '<span class="mpv-v"></span><i class="mpv-ico none"></i></div>' +
+        '<div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num"></span>)</span>' +
+        '<span class="mpv-v"></span><i class="mpv-ico dmgc"></i></div>';
+
+function ensureRoot() {
+    let root = document.getElementById("moe-bar-root");
+    if (root) return root;
+    root = document.createElement("div");
+    root.id = "moe-bar-root";
+    root.innerHTML = MARKUP;
     document.body.appendChild(root);
     return root;
 }
 
 const root = ensureRoot();
-const fill = root.querySelector(".mp-fill");
-const tPre = root.querySelector(".mp-pre");
-const tProj = root.querySelector(".mp-proj");
-const capP = root.querySelector(".mp-capP");
-const capC = root.querySelector(".mp-capC");
-const capR = root.querySelector(".mp-capR");
-const capD = capC.querySelector(".mp-d");
-const capDN = capC.querySelector(".mp-d-num");
+// `let`, not `const`, because goVertical() re-builds the root's contents under the .mpv- prefix and
+// every one of these has to be re-queried against the new nodes. Under a single orientation nothing
+// rewrites them.
+let fill = root.querySelector(".mp-fill");
+let tPre = root.querySelector(".mp-pre");
+let tProj = root.querySelector(".mp-proj");
+let capP = root.querySelector(".mp-capP");
+let capC = root.querySelector(".mp-capC");
+let capR = root.querySelector(".mp-capR");
+let capD = capC.querySelector(".mp-d");
+let capDN = capC.querySelector(".mp-d-num");
 // The remaining-battles pair on capR. Its own classes, NOT a second .mp-v / an .mp-ico index: see the
-// mark-pair-comes-first note on the template above.
-const capEtaIco = capR.querySelector(".mp-ico.battles");
-const capEta = capR.querySelector(".mp-eta");
+// mark-pair-comes-first note on the template above (horizontal only -- the vertical capR swaps the
+// two groups; see V_MARKUP and capMkIco below).
+let capEtaIco = capR.querySelector(".mp-ico.battles");
+let capEta = capR.querySelector(".mp-eta");
+// ...and the MARK glyph, the one icon setIco() ever rewrites -- CAPTURED HERE, ONCE, exactly like
+// capEtaIco, because it is the only addressing that survives BOTH the two compositions' opposite DOM
+// orders AND setIco's own wholesale className reassignment (which drops any marker class the moment
+// the first glyph lands). `.none` is its markup-literal state in BOTH templates and nothing else
+// carries that class at mount -- paintStatic only ever toggles `none` onto the BATTLES glyph, later.
+// A CLASS-FILTERING SELECTOR IS NOT AN OPTION HERE, and that is engine fact, not preference:
+// Coherent Gameface's selector engine (win64/cohtml.WindowsDesktop.dll) implements exactly
+// :hover :active :root :host :nth-child :first-child :last-child :only-child :focus ::part ::slotted
+// ::selection -- there is NO :not, in the pseudo-class table or anywhere else in the binary, and
+// WG's own shipped Gameface corpus (614 JS, 515 CSS) does not use one either. A
+// `querySelector(".mp-ico:not(.battles)")` is an "Invalid CSS selector (...) in QuerySelector!",
+// and the unguarded `.className` write on its result threw out of paintStatic and blanked the whole
+// bar. Keep any new lookup to plain class / compound-class selectors.
+let capMkIco = capR.querySelector(".mp-ico.none");
 
-function capV(c) { return c.querySelector(".mp-v"); }
+// ADOPT THE VERTICAL COMPOSITION -- the bar's half of MoEBarTransient's onVertical hook (the
+// shared module owns the surface, the rigid shift, the run-identity pair and the body scope class).
+// Called ONCE, inside engine.whenReady, BEFORE the surface push and before the first render, so
+// nothing downstream ever sees the horizontal DOM. A mid-battle Orientation change re-mounts this
+// document (Python closes and reopens the window -- battle_bridge.apply_settings), which comes
+// straight back through here; there is deliberately no live re-composition path.
+function goVertical() {
+    PFX = "mpv";
+    AX = "bottom";
+    GROW = "height";
+    CAP_C_AX = null;                 // capC is a STATIC bottom cap here -- see the profile note
+    root.innerHTML = V_MARKUP;
+    fill = root.querySelector(".mpv-fill");
+    tPre = root.querySelector(".mpv-pre");
+    tProj = root.querySelector(".mpv-proj");
+    capP = root.querySelector(".mpv-capP");
+    capC = root.querySelector(".mpv-capC");
+    capR = root.querySelector(".mpv-capR");
+    capD = capC.querySelector(".mpv-d");
+    capDN = capC.querySelector(".mpv-d-num");
+    capEtaIco = capR.querySelector(".mpv-ico.battles");
+    capEta = capR.querySelector(".mpv-eta");
+    capMkIco = capR.querySelector(".mpv-ico.none");
+}
+
+function capV(c) { return c.querySelector(ns(".mp-v")); }
 
 // The mark glyph for the NEXT-MARK caption: k in 1..3 -> mk<k>; k=4 (3 marks held, no higher mark
 // to chase) -> the general MoE glyph; k=0 -> no icon at all (.none is display:none).
-// FIRST .mp-ico ONLY, and .mp-capR now holds two: the mark pair is first in the template precisely so
-// this keeps addressing it (see the note there). The k=0 arm is unreached from paintStatic today --
-// its only caller passes marks+1 or 4 -- but it stays, because without it a stray 0 would write the
-// nonexistent class "mk mk0" and blank the glyph silently instead of hiding it.
-function setIco(c, k) {
-    c.querySelector(".mp-ico").className =
-        "mp-ico" + (k === 0 ? " none" : k === 4 ? " moe" : " mk mk" + k);
+// IT WRITES TO THE CACHED capMkIco AND NEVER RE-SELECTS -- .mp-capR holds TWO .mp-ico nodes and the
+// two compositions order them oppositely, so a per-call positional lookup would silently overwrite
+// the BATTLES glyph's class on the vertical bar (dropping `battles` entirely -- this reassigns
+// className wholesale). See capMkIco for why the filtering cannot be done in the selector.
+// NULL-GUARDED, per this codebase's fail-soft rule: a missing glyph must cost the glyph, never the
+// whole bar -- an unguarded deref here threw out of paintStatic and blanked the composition.
+// The k=0 arm is unreached from paintStatic today -- its only caller passes marks+1 or 4 -- but it
+// stays, because without it a stray 0 would write the nonexistent class "mk mk0" and blank the
+// glyph silently instead of hiding it.
+function setIco(k) {
+    if (!capMkIco) return;
+    capMkIco.className = ns("mp-ico") + (k === 0 ? " none" : k === 4 ? " moe" : " mk mk" + k);
 }
 
 // --- the pushed state ---------------------------------------------------------------------
@@ -231,15 +478,20 @@ function axisPct(v) {
 // Position the fill, the moving tick and its caption. anim=false SNAPS (transition:none) -- used
 // to rewind to the resting value before a cold show. The 600ms transition DELAY lives in the CSS
 // (.mp-fill, .mp-proj, .mp-capC), so JS sets the target once and lets CSS time it.
+// THE AXIS IS A PAIR OF PROPERTY NAMES, not two code paths: GROW is the fill's growth property
+// (`width` horizontally, `height` vertically -- 0% at the BOTTOM) and AX the marker's position
+// property (`left` / `bottom`). CAP_C_AX is null on the vertical composition, where capC is a static
+// cap below the track's bottom end and does not track the proj tick at all; the transition writes
+// stay unconditional because suppressing a transition an element never declares costs nothing.
 function setPos(v, anim) {
     const p = axisPct(v).toFixed(3) + "%";
     const t = anim ? "" : "none";
     fill.style.transition = t;
     tProj.style.transition = t;
     capC.style.transition = t;
-    fill.style.width = p;
-    tProj.style.left = p;
-    capC.style.left = p;
+    fill.style[GROW] = p;
+    tProj.style[AX] = p;
+    if (CAP_C_AX) capC.style[CAP_C_AX] = p;
 }
 
 // The bottom-centre numeral shows pre_avg while the bar fades + slides IN, then swaps to proj_avg
@@ -287,8 +539,8 @@ function showVal(sw) {
     // battles remaining is worse, so invert" -- resist it; there is no separate battles-count
     // delta to test against, only this one d.
     [capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {
-        e.classList.toggle("mp-up", glows && d > 0);
-        e.classList.toggle("mp-down", glows && d < 0);
+        e.classList.toggle(ns("mp-up"), glows && d > 0);
+        e.classList.toggle(ns("mp-down"), glows && d < 0);
     });
 }
 
@@ -296,7 +548,7 @@ function showVal(sw) {
 // tick and caption, and the met-requirement gold. Safe to re-run on every push.
 function paintStatic() {
     capV(capR).textContent = fmt(cur.axisHi);
-    setIco(capR, cur.marks >= 3 ? 4 : cur.marks + 1);   // 3 marks -> the general MoE glyph
+    setIco(cur.marks >= 3 ? 4 : cur.marks + 1);         // 3 marks -> the general MoE glyph
     // THE REMAINING-BATTLES COUNT, second pair of the same row -- moved here off the delta because it
     // is a countdown to THIS requirement, and because on the delta it cost 15.18rem of the clipping
     // budget (see the header's re-derivation).
@@ -316,9 +568,9 @@ function paintStatic() {
     capEta.textContent = showEta ? fmt(cur.eta) : "";
     capV(capP).textContent = fmt(cur.preAvg);
     const pre = axisPct(cur.preAvg).toFixed(3) + "%";
-    tPre.style.left = pre;
-    capP.style.left = pre;
-    root.classList.toggle("mp-full", cur.projAvg >= cur.axisHi);
+    tPre.style[AX] = pre;
+    capP.style[AX] = pre;
+    root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);
 }
 
 // Schedule the numeral/delta/sign commit for VALUE_SWAP_MS from now -- the same delay the
@@ -423,6 +675,13 @@ const T = createTransient({
     onCommit: commitClimb,
     onEnd: settleValues,
     onIdle: idleValues,
+    // THE VERTICAL COMPOSITION. `cls` is the body scope class MoEProgressVertical.css hangs off AND
+    // the key to that stylesheet's own re-trigger keyframe twin (MoEBarTransient's RUN_CLASSES_V);
+    // `box` replaces the four box* arguments above. Adopted at mount iff the model's `vertical` is
+    // true, which then calls goVertical below for the DOM half.
+    vert: { cls: "mpv", box: [V_BOX_LEFT_REM, V_BOX_TOP_REM, V_BOX_W_REM, V_BOX_H_REM],
+            clipB: V_CLIP_B_REM, padX: V_PAD_X_REM },
+    onVertical: goVertical,
 });
 
 function render(model) {

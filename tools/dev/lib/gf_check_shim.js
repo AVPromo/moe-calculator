@@ -85,6 +85,15 @@ class El {
     set innerHTML(html) { this.children = []; parseHTML(html, this); }
     appendChild(el) { this.children.push(el); return el; }
     // Class selectors only, but COMPOUND ones (".mp-tick.mp-cur", ".mp-cap.r1") -- see the header.
+    // DELIBERATELY NO PSEUDO-CLASS SUPPORT, and `:not()` least of all. A `:not(.battles)` filter was
+    // added here for one build so a setIco() written against it would pass, and it hid a real engine
+    // incompatibility: Coherent Gameface's selector engine
+    // (win64/cohtml.WindowsDesktop.dll) implements exactly :hover :active :root :host :nth-child
+    // :first-child :last-child :only-child :focus ::part ::slotted ::selection -- there is no :not,
+    // and WG's own shipped corpus (614 JS, 515 CSS) never uses one. In the client that selector is
+    // an "Invalid CSS selector (...) in QuerySelector!" and the unguarded deref on its result blanked
+    // the whole Moving Average bar. THIS SHIM MUST MIRROR WHAT THE ENGINE CAN DO, NOT WHAT OUR CODE
+    // WISHES FOR: do not widen it to make a selector pass -- change the selector.
     querySelector(sel) {
         const want = sel.split(".").filter(Boolean);
         for (const child of this.children) {
