@@ -153,15 +153,56 @@ const PROGRESS_EDITS = [
      '.mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
      '.mp-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
      '4/6+5/6 Large block'],
-    // HAND-EDIT 6/6: capR's two numeral+icon groups are swapped in the SHIPPED markup (eta+battles
-    // leads, requirement+mark trails -- see MoEProgress.js's V_MARKUP), so the inter-group gap the
-    // tuner puts on `.mpv-eta` moves to `.mpv-v` instead, in both Default and Large. The tuner's own
-    // capR markup/order is untouched -- this is a shipped-only retarget, not a value retune.
-    ['.mpv-capR .mpv-eta { margin-left: 4rem; }', '.mpv-capR .mpv-v { margin-left: 4rem; }',
-     '6/6 eta-gap retarget (Default)'],
+    // HAND-EDIT 6/6: the ETA row split (Job 1: "move the ETA on top of the next mark
+    // requirement") plus the marks/battles icon box-and-gap parity pass (Job 2). Replaces the OLD
+    // 6/6 eta-gap retarget outright -- the tuner's own capR markup keeps both numeral+icon groups
+    // on ONE row, untouched, so this whole change is shipped-only, ported here by hand.
+    //
+    // 6a: insert the NEW `.mpv-capEta` row right after capR, stacked above it via
+    // `bottom: 100%; padding-bottom: 30rem` (== capR's own 24rem box + a 6rem visual gap), same
+    // right-anchor mechanism copied verbatim from capR.
+    ['.mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;\n' +
+     '            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }',
+     '.mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;\n' +
+     '            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }\n' +
+     '.mpv-capEta { bottom: 100%; padding-bottom: 30rem; padding-right: 6rem;\n' +
+     '              transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }',
+     '6a/6 capEta row inserted'],
+    // 6b: split the old combined capR-scoped Y-nudge rules into per-row copies (same values,
+    // capEta's copy governs the battles icon + eta numeral it now owns).
+    ['.mpv-capR .mpv-ico { transform: translate(0rem, 0.5rem); }\n' +
+     '.mpv-capR .mpv-v,\n.mpv-capR .mpv-eta { transform: translateY(-0.5rem); }',
+     '.mpv-capR .mpv-ico { transform: translate(0rem, 0.5rem); }\n' +
+     '.mpv-capR .mpv-v { transform: translateY(-0.5rem); }\n' +
+     '.mpv-capEta .mpv-ico { transform: translate(0rem, 0.5rem); }\n' +
+     '.mpv-capEta .mpv-eta { transform: translateY(-0.5rem); }',
+     '6b/6 per-row Y-nudge split'],
+    // 6c: Job 2's box lever, dmgp -- widened to match dmgc's already-correct ink gap.
+    ['.mpv-ico.dmgp { width: 14rem; height: 14rem; }',
+     '.mpv-ico.dmgp { width: 16rem; height: 16rem; }', '6c/6 dmgp box 14->16'],
+    // 6d + 6e: Job 2's box lever, the two "achievement glyph" icons (moe replaces mk at 3 marks).
+    ['.mpv-ico.moe { width: 17rem; height: 17rem; }',
+     '.mpv-ico.moe { width: 13rem; height: 13rem; }', '6d/6 moe box 17->13'],
+    ['.mpv-ico.mk { width: 17rem; height: 17rem; }',
+     '.mpv-ico.mk { width: 13rem; height: 13rem; }', '6e/6 mk box 17->13'],
+    // 6f: the old etaGap rule/comment retargeted into the mark icon's own margin correction (Job
+    // 2's margin lever -- the box shrink above alone cannot reach the other rows' ~3rem gap
+    // because the marksOnGun asset's ink-to-box ratio is not the fixed icoFill(0.75) the OTHER
+    // icons get).
+    ['.mpv-capR .mpv-eta { margin-left: 4rem; }',
+     '.mpv-cap .mpv-ico.mk { margin-left: -0.25rem; }', '6f/6 mk margin correction (Default)'],
+    // 6g + 6h: the Large twins -- the new capEta row's own Large positioning (byte-identical to
+    // capR's), and the mark icon margin's own 4/3 twin, replacing the OLD eta-gap retarget's Large
+    // twin outright.
+    // NOTE: these two anchor on `.mp-lg`, not `.mpv-lg` -- edit 4/6+5/6 above (the rename) has
+    // ALREADY run on this same text by the time these apply.
+    ['.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }',
+     '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }\n' +
+     '.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(18.667rem); }',
+     '6g/6 capEta Large twin'],
     ['.mp-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
-     '.mp-lg .mpv-capR .mpv-v { margin-left: 5.333rem; }',
-     '6/6 eta-gap retarget (Large)'],
+     '.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -0.333rem; }',
+     '6h/6 mk margin correction (Large)'],
 ];
 
 const EFFICIENCY_EDITS = [

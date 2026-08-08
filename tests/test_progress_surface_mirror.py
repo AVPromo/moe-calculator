@@ -283,10 +283,10 @@ def test_the_vertical_captions_fit_inside_the_surface():
         return max(Decimal(b) for b in blurs)
 
     ico_gap = rem(".mpv-cap .mpv-ico", "margin-left")
-    # capR's two numeral+icon groups are swapped (eta+battles leads, requirement+mark trails; see
-    # MoEProgress.js's V_MARKUP), so the inter-group gap now sits on `.mpv-v`, not `.mpv-eta` -- same
-    # 4rem value, just moved to the new leading child of the group it precedes.
-    eta_gap = rem(".mpv-capR .mpv-v", "margin-left")
+    # The mark icon's own margin OVERRIDES the shared 1rem gap outright (a more-specific rule, not
+    # an addition to it -- Job 2's own correction closing the residual its box shrink alone could
+    # not reach). Read the override's OWN value, never `ico_gap` plus it.
+    mk_gap = rem(".mpv-cap .mpv-ico.mk", "margin-left")
     drop = shadow(".mpv-cap .mpv-v,\n.mpv-cap .mpv-eta,\n.mpv-cap .mpv-d")   # the base dark drop
     glow = shadow(".mpv-v.mpv-up,\n.mpv-d-num.mpv-up,\n.mpv-eta.mpv-up")     # the sign colour glow
     d_size = rem(".mpv-cap .mpv-d", "font-size")
@@ -301,14 +301,19 @@ def test_the_vertical_captions_fit_inside_the_surface():
         return _ink(adv, size, digits=4, commas=1)
 
     r_size, c_size, p_size = (rem(s, "font-size") for s in (".mpv-capR", ".mpv-capC", ".mpv-capP"))
+    eta_size = rem(".mpv-capEta", "font-size")
     rows = {
-        # [eta numeral][battles glyph][requirement numeral][mark glyph] -- the sum is order-
-        # independent, but this list is kept in the shipped DOM order for readability.
+        # [requirement numeral][mark glyph] -- capR no longer carries the eta group at all (Job 1:
+        # the ETA row now STACKS ABOVE capR instead of sharing its row -- see .mpv-capEta below).
         ".mpv-capR": (r_size,
-                      [_ink(adv, r_size, digits=2),      # "99", the PROGRESS_ETA_CAP
-                       ico_gap, rem(".mpv-ico", "width"),         # battles takes the BASE box
-                       eta_gap, numeral(r_size), ico_gap, rem(".mpv-ico.mk", "width")],
-                      drop, ico_gap + eta_gap + ico_gap),
+                      [numeral(r_size), mk_gap, rem(".mpv-ico.mk", "width")],
+                      drop, mk_gap),
+        # [eta numeral][battles glyph] -- capEta's OWN row, the same right-anchor mechanism as
+        # capR (padding-right/transform copied verbatim -- see MoEProgressVertical.css).
+        ".mpv-capEta": (eta_size,
+                        [_ink(adv, eta_size, digits=2),   # "99", the PROGRESS_ETA_CAP
+                         ico_gap, rem(".mpv-ico", "width")],   # battles takes the BASE box
+                        drop, ico_gap),
         # [delta][proj numeral][damage glyph] -- the delta is the leftmost child, so its SIGN GLOW
         # (the widest shadow in the file) is what the surface has to clear, not the base drop.
         ".mpv-capC": (c_size,
@@ -347,6 +352,73 @@ def test_the_vertical_captions_fit_inside_the_surface():
     assert extra_allowance > gaps * (xf - 1), (
         "the Large allowance grows by %srem but a row's x-gaps grow by up to %srem -- Default no "
         "longer binds and this test owes a Large twin" % (extra_allowance, gaps * (xf - 1)))
+
+
+def test_the_stacked_eta_row_fits_above_the_track_without_clipping():
+    """The NEW `.mpv-capEta` row's worst-case UPWARD ink must fit inside the surface's top pad.
+
+    THE GAP THIS CLOSES: there is no Y-axis fit gate at all for either vertical bar (the tuner's own
+    checkCaptionInvariance() only proves an anchor does not move, never that the ink fits -- see the
+    X-axis test's own docstring for the sibling defect this bar already shipped once on its BOTTOM
+    row). Job 1 stacked a second caption row above capR and was explicitly asked to prove the fit
+    rather than trust the maintainer's own "~56rem of headroom" estimate -- this is that proof,
+    re-derived from source on every run rather than pinned as two literals that would have to agree
+    by hand.
+
+    THE MEASURE, in the same top-down coordinate `.mpv-backdrop`'s `top` property uses (y == 0 at
+    the track's own top edge, growing MORE NEGATIVE upward): capR's own box reaches
+    `padding-bottom + line-height` above the track top (it has no padding-top). capEta stacks
+    directly on TOP of that via its own `padding-bottom` (see MoEProgressVertical.css's HAND-EDIT
+    6/6 note), so capEta's box reaches `capEta's padding-bottom + capEta's line-height` above the
+    track top. The worst-case INK adds the row's own translateY nudge and the widest text-shadow
+    blur in the file (the up/down sign glow -- capEta's numeral carries it) on top of the box, the
+    same halo convention the X-axis test above already uses.
+
+    THE ALLOWANCE is the surface's own top clearance, `-V_BOX_TOP_REM + PAD_REM` -- the backdrop's
+    top bleed plus the uniform Y pad. V_CLIP_B_REM never enters here: it only shortens the surface's
+    BOTTOM (see MoEProgress.js's own note), never the top.
+    """
+    css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
+    what = "MoEProgressVertical.css"
+
+    def decls(sel):
+        return _sole_rule_decls(css, sel, what)
+
+    def rem(sel, prop):
+        return _rem(decls(sel), prop, what)
+
+    def translate_y(sel):
+        match = re.search(r"translateY\((-?[\d.]+)rem\)", decls(sel))
+        assert match, "%s: %s has no translateY" % (what, sel)
+        return abs(Decimal(match.group(1)))
+
+    def shadow(sel):
+        blurs = re.findall(r"-?[\d.]+rem\s+-?[\d.]+rem\s+([\d.]+)rem", decls(sel))
+        assert blurs, "%s: %s declares no text-shadow" % (what, sel)
+        return max(Decimal(b) for b in blurs)
+
+    cap_r_box = rem(".mpv-capR", "padding-bottom") + rem(".mpv-capR", "line-height")
+    cap_eta_box = rem(".mpv-capEta", "padding-bottom") + rem(".mpv-capEta", "line-height")
+    assert cap_eta_box >= cap_r_box + rem(".mpv-capR", "padding-bottom"), (
+        "capEta's own padding-bottom (%srem) does not clear capR's box (%srem) -- the two rows "
+        "would overlap" % (rem(".mpv-capEta", "padding-bottom"), cap_r_box))
+
+    nudge = translate_y(".mpv-capEta .mpv-eta")
+    glow = shadow(".mpv-v.mpv-up,\n.mpv-d-num.mpv-up,\n.mpv-eta.mpv-up")
+    worst_reach = cap_eta_box + nudge + glow
+
+    allowance = -Decimal(_js_const(js, "V_BOX_TOP_REM")) + Decimal(_js_const(js, "PAD_REM"))
+    assert worst_reach <= allowance, (
+        "capEta's worst-case ink reaches %srem above the track while the surface only allows "
+        "%srem (PAD_REM - V_BOX_TOP_REM) -- the new row is CLIPPED, and V_BOX_TOP_REM / "
+        "V_BOX_H_REM / VERTICAL_ANCHOR_Y_SHIFT (shared with the vertical Damage Efficiency bar) "
+        "would have to move" % (worst_reach, allowance))
+    # A real margin, not a hairline -- Job 1's own re-derivation obligation was "prove it fits",
+    # not "prove it barely fits". Pinned loosely (not an exact literal) so a legitimate future
+    # retune of the gap or the font-size does not have to chase a brittle bound.
+    assert allowance - worst_reach >= 20, (
+        "only %srem of headroom is left above the stacked row -- re-check before trusting it" % (
+            allowance - worst_reach))
 
 
 # The vertical MA surface as it shipped BEFORE V_PAD_X_REM existed: (width, shiftX) == box + 2*10

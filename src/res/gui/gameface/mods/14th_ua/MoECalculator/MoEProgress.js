@@ -238,27 +238,54 @@ const PAD_REM = 10;
 // viewW by -- the X axis still collapses to zero width either way, and the Y axis (which this
 // widening never touches) is untouched. The input rect does not move. Do NOT "reclaim" the right
 // side.
-// THE WORST-CASE REACH, re-derived from the shipped CSS and MoEBattle.ttf's own advances (digit
-// 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the same figures the horizontal extremes
-// above use). Each row's ink starts at `-padding-right + translateX` off the track's left edge and
-// grows leftward; the design is digit-count INVARIANT at the anchor (see the CSS's own note), so a
-// static worst case is sound:
-//   .mpv-capC (bottom) IS THE EXTREME, and only with a 4-DIGIT delta -- which is what is budgeted
-//     for, per the maintainer, not the 3-digit case:
+// THE WORST-CASE REACH, RE-DERIVED for the row split + Job 2's icon resize (mk/moe 17->13rem,
+// dmgp 14->16rem -- see MoEProgressVertical.css's own notes), from the shipped CSS and
+// MoEBattle.ttf's own advances (digit 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the
+// same figures the horizontal extremes above use). Each row's ink starts at
+// `-padding-right + translateX` off the track's left edge and grows leftward; the design is
+// digit-count INVARIANT at the anchor (see the CSS's own note), so a static worst case is sound:
+//   .mpv-capC (bottom) IS STILL THE EXTREME, untouched by either job, and only with a 4-DIGIT
+//     delta -- which is what is budgeted for, per the maintainer, not the 3-digit case:
 //     (-6 + 16) - [ 39.78 ("(+2,970)" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
 //     12rem) + 35.52 ("3,050" at 16rem) + 1.00 (the shared icon gap) + 16.00 (.mpv-ico.dmgc) ]
 //     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -92.49rem.
 //     A 3-digit delta ("(+297)" == 30.89) reaches only -83.61.
-//   .mpv-capR (top): (-6 + 14) - [ 13.81 ("99" at 14rem, the leading eta group) + 1 + 13
-//     (.mpv-ico's base box, the battles glyph) + 4 (the eta gap) + 31.08 ("3,050" at 14rem, the
-//     trailing requirement group) + 1 + 17 (.mpv-ico.mk) ] - 1.00 (the base dark drop) ==
-//     -73.89rem (SUM, unchanged by the group swap -- see V_MARKUP).
-//   .mpv-capP (moving): (-6 + 0) - [ 31.08 + 1 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.08rem.
-// So the surface's left edge goes to -97rem (92.49 + 4.5rem of margin) and
-//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63
+//   .mpv-capR (now JUST the requirement group -- the eta group moved to its own row below):
+//     (-6 + 14) - [ 31.08 ("3,050" at 14rem) + 1 + 13 (.mpv-ico.mk, WAS 17) ] - 1.00 (the base
+//     dark drop) == -38.08rem -- well short of its old -73.89rem now the eta group is gone and
+//     the mark icon shrank.
+//   .mpv-capEta (NEW, stacked above capR): (-6 + 14) - [ 13.81 ("99" at 14rem, the
+//     PROGRESS_ETA_CAP ceiling) + 1 + 13 (.mpv-ico's base box, the battles glyph) ] - 1.00 ==
+//     -20.81rem -- the SLACKEST row in the file by a wide margin.
+//   .mpv-capP (moving, dmgp WAS 14, now 16rem): (-6 + 0) - [ 31.08 + 1 + 16 (.mpv-ico.dmgp) ]
+//     - 1.00 == -55.08rem (up 2rem from the old -53.08, exactly dmgp's own box growth).
+// capC is STILL the extreme after both jobs (92.49 > 55.08 > 38.08 > 20.81), so the surface's left
+// edge stays exactly where it was:
+//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63   (UNCHANGED -- neither job moves this)
 // tests/test_progress_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is the
 // GATE on all of the above -- it re-derives every row from the stylesheet and the advances rather
-// than trusting this note, and goes red the moment V_PAD_X_REM is trimmed.
+// than trusting this note, and goes red the moment V_PAD_X_REM is trimmed. Splitting capR into
+// capR + capEta means the test's `rows` dict owes a matching split, or it silently keeps checking
+// the STALE (pre-split) shape and goes green over a layout it no longer describes.
+//
+// THE Y-AXIS FIT FOR THE NEW STACKED ROW (Job 1's own re-derivation obligation -- the maintainer's
+// estimate of "~56rem of headroom" was explicitly flagged as unverified and is checked here
+// instead of trusted). Measuring DOWN from the track's own top edge (y=0, the same origin
+// V_BOX_TOP_REM uses): .mpv-capR's own box reaches capR's padding-bottom(6) + line-height(18) ==
+// 24rem above the track top. .mpv-capEta stacks on top of THAT via its own
+// `padding-bottom: 30rem` (== capR's 24rem box + a 6rem visual gap, the same magnitude this file
+// already uses to clear the track), so capEta's box reaches 30 + 18(its own line-height) == 48rem
+// above the track top. Add the row's own translateY nudge (-0.5rem, capEta's numeral) and the
+// widest text-shadow in the file (the up/down sign glow, 6rem) for the worst-case ink, exactly as
+// the X-fit test's own `halo` term does: 48 + 0.5 + 6 == 54.5rem.
+// THE SURFACE'S OWN TOP CLEARANCE is -V_BOX_TOP_REM + PAD_REM == 80 + 10 == 90rem (the backdrop's
+// own top bleed plus the uniform Y pad -- V_CLIP_B_REM only shortens the BOTTOM, never the top).
+// 90 - 54.5 == 35.5rem of spare: the new row fits comfortably inside the EXISTING backdrop/surface
+// with room to spare, so NEITHER V_BOX_TOP_REM/V_BOX_H_REM NOR VERTICAL_ANCHOR_Y_SHIFT (shared with
+// the vertical Damage Efficiency bar) had to move for this change -- exactly what Job 1 asked to
+// confirm before touching either. tests/test_progress_surface_mirror.py carries the matching gate,
+// re-deriving both sides from source rather than hardcoding 54.5 and 90 as two literals that would
+// have to agree by hand.
 // LARGE IS STRICTLY SLACKER and needs no twin: the allowance is `V_PAD_X_REM - V_BOX_LEFT_REM*4/3`
 // == 108.33rem (the backdrop's left bleed is an x-length and takes SIZE_XF; V_PAD_X_REM, like
 // PAD_REM, does NOT -- the ink it covers is rem-sized and rides the root font's SIZE_F alone),
@@ -343,17 +370,16 @@ const MARKUP =
 //     (root and track are the same 3x200rem box, so every percentage resolves identically either
 //     way; this only keeps the diff against the tuner readable).
 //   * the two axis-end ticks are mpv-bottom / mpv-top, not mp-left / mp-right.
-// capR's two groups are SWAPPED from the tuner's own stage (maintainer's call, ported here only --
-// the tuner is untouched, see MoEProgressVertical.css's HAND-EDIT 6/6): the eta-numeral+battles-icon
-// pair leads (flush against the row's growing left edge) and the requirement-numeral+mark-icon pair
-// trails, flush against the fixed right anchor -- so the row now reads [eta numeral][battles
-// glyph][requirement numeral][mark glyph], and it is the MARK icon, not the battles one, that is the
-// last in-flow child pinned to the digit-count-invariant anchor. The etaGap (4rem / 5.333rem Large)
-// rides .mpv-capR .mpv-v's own margin-left now, not .mpv-eta's -- it is still the gap BETWEEN the
-// two groups, just before the OTHER one. Because the mark icon is no longer capR's FIRST .mpv-ico,
-// setIco() below writes to a CACHED element captured at mount (capMkIco) rather than re-selecting a
-// positional first match; capV()/capEtaIco/capEta stay class-filtered as they always were and do not
-// care about order at all.
+// capR is now TWO STACKED ROWS, not one (maintainer's call: "move the ETA on top of the next mark
+// requirement"), ported here only -- the tuner's own stage keeps both numeral+icon groups on ONE
+// row, untouched (see MoEProgressVertical.css's HAND-EDIT 6/6). `.mpv-capEta` (the eta numeral +
+// battles glyph) sits directly ABOVE `.mpv-capR` (now JUST the requirement numeral + mark glyph),
+// both anchored by the SAME right:100% mechanism (copied verbatim: same padding-right/transform/
+// font-size/line-height) so both stay digit-count invariant independently. Because the mark icon
+// is capR's ONLY icon now (no positional ambiguity to guard against any more, but the cache stays
+// for the reason below), setIco() below still writes to a CACHED element captured at mount
+// (capMkIco) rather than re-selecting a positional first match; capV()/capEtaIco/capEta stay
+// class-filtered as they always were and do not care about which row they live in.
 const V_MARKUP =
         '<div class="mpv-backdrop"></div>' +
         '<div class="mpv-track">' +
@@ -365,8 +391,8 @@ const V_MARKUP =
         '  <div class="mpv-cap mpv-capP"><span class="mpv-v"></span>' +
         '<i class="mpv-ico dmgp"></i></div>' +
         '</div>' +
-        '<div class="mpv-cap mpv-capR"><span class="mpv-eta"></span><i class="mpv-ico battles"></i>' +
-        '<span class="mpv-v"></span><i class="mpv-ico none"></i></div>' +
+        '<div class="mpv-cap mpv-capEta"><span class="mpv-eta"></span><i class="mpv-ico battles"></i></div>' +
+        '<div class="mpv-cap mpv-capR"><span class="mpv-v"></span><i class="mpv-ico none"></i></div>' +
         '<div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num"></span>)</span>' +
         '<span class="mpv-v"></span><i class="mpv-ico dmgc"></i></div>';
 
@@ -432,8 +458,10 @@ function goVertical() {
     capR = root.querySelector(".mpv-capR");
     capD = capC.querySelector(".mpv-d");
     capDN = capC.querySelector(".mpv-d-num");
-    capEtaIco = capR.querySelector(".mpv-ico.battles");
-    capEta = capR.querySelector(".mpv-eta");
+    // capEtaIco/capEta now live in the SEPARATE .mpv-capEta row (stacked above capR), not inside
+    // capR itself -- scoped off `root`, since both classes are unique across the whole document.
+    capEtaIco = root.querySelector(".mpv-ico.battles");
+    capEta = root.querySelector(".mpv-eta");
     capMkIco = capR.querySelector(".mpv-ico.none");
 }
 

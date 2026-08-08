@@ -83,6 +83,16 @@ const MUTATIONS = {
     "p-axis-not-flipped": ["P", 'AX = "bottom";\n    GROW = "height";', 'AX = "left";\n    GROW = "height";'],
     "p-grow-not-flipped": ["P", 'AX = "bottom";\n    GROW = "height";', 'AX = "bottom";\n    GROW = "width";'],
     "p-capc-ax-not-nulled": ["P", "CAP_C_AX = null;", 'CAP_C_AX = "left";'],
+    // Kills the stacked-row layout outright: re-merges the eta group back into ONE row with the
+    // requirement group (the pre-split shape), so the DOM-order assertions above must catch it --
+    // proving they are the real gate on the split, not a stale check of a shape no longer built.
+    // The anchor is the RAW SOURCE of V_MARKUP's two adjacent string-literal lines (quote + ` +` +
+    // newline + indent between them), not their evaluated/concatenated runtime value.
+    "p-eta-row-not-split": ["P",
+        '\'<div class="mpv-cap mpv-capEta"><span class="mpv-eta"></span><i class="mpv-ico battles"></i></div>\' +\n' +
+        '        \'<div class="mpv-cap mpv-capR"><span class="mpv-v"></span><i class="mpv-ico none"></i></div>\' +',
+        '\'<div class="mpv-cap mpv-capR"><span class="mpv-eta"></span><i class="mpv-ico battles"></i>\' +\n' +
+        '        \'<span class="mpv-v"></span><i class="mpv-ico none"></i></div>\' +'],
 
     // ===== MoEEfficiency.js's own goVertical() half =============================================
     "e-markup-not-swapped": ["E", "root.innerHTML = V_MARKUP;\n    fill = root.querySelector(\".mev-fill\");",
@@ -187,21 +197,23 @@ function run(mutation) {
            s.root?.querySelector(".mp-fill") || null, null);
         ok(bar + ": the vertical scope class landed on the body", s.document.body.classList.contains(mpfx));
 
-        // P's capR swaps its two numeral+icon groups (eta+battles leads, requirement+mark trails --
-        // maintainer's call, ported here only; the horizontal .mp-capR and the E bar's own .mev-capR
-        // are untouched). Nothing else in this file or check_progress_js.js pins V_MARKUP's capR
-        // order, so a reorder here is otherwise invisible. FAMILY only (not the exact className --
-        // this mount already pushed BASE_P, so the mark icon and eta numeral carry live variant/sign
-        // classes, not their markup-literal ones).
+        // P's capR is now TWO STACKED ROWS, not one (maintainer's call: "move the ETA on top of
+        // the next mark requirement" -- ported here only; the horizontal .mp-capR and the E bar's
+        // own .mev-capR are untouched). Nothing else in this file or check_progress_js.js pins
+        // V_MARKUP's capR/capEta shape, so a re-merge or a reorder here is otherwise invisible.
+        // FAMILY only (not the exact className -- this mount already pushed BASE_P, so the mark
+        // icon and eta numeral carry live variant/sign classes, not their markup-literal ones).
         if (bar === "P") {
             const capR = s.root.querySelector(".mpv-capR");
+            const capEta = s.root.querySelector(".mpv-capEta");
             const family = (c) => c.classList.contains("mpv-eta") ? "eta"
                 : c.classList.contains("battles") ? "battles-icon"
                 : c.classList.contains("mpv-v") ? "v"
                 : c.classList.contains("mpv-ico") ? "other-icon" : "?";
-            eq(bar + ": .mpv-capR's DOM order is [eta][battles icon][requirement][mark icon]",
-               capR && capR.children.map(family).join("|"),
-               "eta|battles-icon|v|other-icon");
+            eq(bar + ": .mpv-capEta's DOM order is [eta][battles icon], stacked above capR",
+               capEta && capEta.children.map(family).join("|"), "eta|battles-icon");
+            eq(bar + ": .mpv-capR's DOM order is [requirement][mark icon], with NO eta group left",
+               capR && capR.children.map(family).join("|"), "v|other-icon");
         }
 
         section(bar + ": horizontal DOM build is unaffected (regression guard)");
