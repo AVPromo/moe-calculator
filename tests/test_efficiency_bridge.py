@@ -619,32 +619,13 @@ def test_a_battle_mount_seeds_bar_orientation_from_the_live_setting(monkeypatch,
     assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_HORIZONTAL
 
 
-def test_an_alignment_change_that_derives_an_orientation_flip_closes_and_reopens_once(
-        monkeypatch, windows):
-    # Rows 3/4 of the transition table (mod_settings._derive_layout) let an ALIGNMENT change
-    # derive an ORIENTATION change too -- both land in the SAME settled write and the SAME single
-    # _notify(), so apply_settings (wired here as the change listener, the real fan-out path) must
-    # see exactly ONE close/reopen, not two -- the risk a naive two-step derivation would carry.
-    saved = dict(mod_settings._settings)
-    try:
-        mod_settings._apply({
-            mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_HORIZONTAL,
-            mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_DAMAGE_LOG,
-            mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
-        monkeypatch.setattr(battle_bridge, "_bar_orientation",
-                            mod_settings.PROGRESS_ORIENT_HORIZONTAL)
-        monkeypatch.setattr(mod_settings, "_notify", battle_bridge.apply_settings)
-        monkeypatch.setattr(mod_settings, "_primary_api", lambda: None)   # no MSA -> apply only
-
-        mod_settings._on_changed(
-            mod_settings.LINKAGE,
-            {mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_MINIMAP})
-
-        assert mod_settings.progress_bar_orientation() == mod_settings.PROGRESS_ORIENT_VERTICAL
-        assert windows["progress"].log == ["close", "open"]
-        assert battle_bridge._bar_orientation == mod_settings.PROGRESS_ORIENT_VERTICAL
-    finally:
-        mod_settings._seed(saved)
+# DELETED (v23, the Fixed-alignment redesign): test_an_alignment_change_that_derives_an_
+# orientation_flip_closes_and_reopens_once. Alignment no longer derives Orientation at all (that
+# mutual auto-set is retired -- see mod_settings.py's SETTINGS_VERSION 22->23 comment and
+# _derive_layout), and Alignment can no longer even STORE the old "Minimap" value this test seeded
+# (clamp_variant's ceiling is PROGRESS_ALIGN_FREE == 1). The direct-orientation-flip case this test
+# also exercised (one close/reopen) is already covered by its sibling,
+# test_an_orientation_flip_closes_and_reopens_the_open_bar, above.
 
 
 # --- battleEpoch: the JS delta latch's battle-boundary signal -----------------

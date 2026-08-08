@@ -230,21 +230,25 @@ _ORIENTATION_OPTIONS = {
     u"tr": (u"Yatay", u"Dikey"),
 }
 
-# The alignment radio's OPTION LABELS (v21), in wire (index) order: 0 = Damage Log (the shipped
-# centred anchor, the default), 1 = Minimap, 2 = Free. Same table shape, same whole-tuple
-# fallback and the same STRUCTURAL-to-MSA gotcha as the three option tables above.
+# The alignment radio's OPTION LABELS, in wire (index) order: 0 = Fixed (the default; v23
+# COLLAPSED the old three options -- Damage Log / Minimap / Free -- into two, Fixed resolving
+# INTERNALLY by Orientation, see bar_window.BarHost._resolve), 1 = Free (unchanged). Same table
+# shape, same whole-tuple fallback and the same STRUCTURAL-to-MSA gotcha as the three option
+# tables above -- and the SAME reordering hazard the v13 variant flip hit, so this table's own
+# migration (mod_settings._migrate_pre_v23_alignment) maps the raw stored int explicitly rather
+# than trusting a relabel.
 _ALIGNMENT_OPTIONS = {
-    u"en": (u"Damage Log", u"Minimap", u"Free"),
-    u"de": (u"Schadensprotokoll", u"Minikarte", u"Frei"),
-    u"fr": (u"Journal des dégâts", u"Minicarte", u"Libre"),
-    u"es": (u"Registro de daños", u"Minimapa", u"Libre"),
-    u"it": (u"Registro danni", u"Minimappa", u"Libero"),
-    u"pl": (u"Dziennik obrażeń", u"Minimapa", u"Swobodne"),
-    u"cs": (u"Deník poškození", u"Minimapa", u"Volné"),
-    u"ru": (u"Журнал повреждений", u"Миникарта", u"Свободно"),
-    u"uk": (u"Журнал ушкоджень", u"Мінікарта", u"Вільно"),
-    u"hu": (u"Sérülésnapló", u"Minimap", u"Szabad"),
-    u"tr": (u"Hasar günlüğü", u"Minimap", u"Serbest"),
+    u"en": (u"Fixed", u"Free"),
+    u"de": (u"Fest", u"Frei"),
+    u"fr": (u"Fixe", u"Libre"),
+    u"es": (u"Fija", u"Libre"),
+    u"it": (u"Fisso", u"Libero"),
+    u"pl": (u"Stałe", u"Swobodne"),
+    u"cs": (u"Pevné", u"Volné"),
+    u"ru": (u"Фиксированная", u"Свободно"),
+    u"uk": (u"Фіксована", u"Вільно"),
+    u"hu": (u"Rögzített", u"Szabad"),
+    u"tr": (u"Sabit", u"Serbest"),
 }
 
 
@@ -322,10 +326,12 @@ _PANEL = {
             u"sized to sit beside the minimap. Takes effect the next time the bar comes up."),
         u"progressAlignment": _row(
             u"Alignment", u"Bar alignment",
-            u"Which anchor the position steppers below offset from. Damage Log: the bar's "
-            u"default centred spot. Minimap: pinned beside the minimap, matching the chosen "
-            u"orientation. Free: an unanchored position, set automatically once you drag the "
-            u"bar or edit a stepper."),
+            u"Which anchor the position steppers below offset from. Fixed: the bar's built-in "
+            u"spot, chosen automatically by orientation -- horizontal sits centred at the "
+            u"screen's bottom edge, above the damage log; vertical sits beside the minimap, near "
+            u"its bottom-left corner, following the minimap's current size. Free: an unanchored "
+            u"position, set automatically once you drag the bar or edit a stepper. Under Fixed "
+            u"the position is locked; dragging and the steppers below only work under Free."),
         # The Transitions CATEGORY header (its own category since the hold-duration slider joined
         # the group) + the master, its two children and the slider. The two children stay
         # label-only rows whose meaning the master's prose spells out (no tt* -> _render emits no
@@ -414,10 +420,13 @@ _PANEL = {
             u"sobald die Leiste das nächste Mal erscheint."),
         u"progressAlignment": _row(
             u"Verankerung", u"Verankerung der Leiste",
-            u"Von welchem Ankerpunkt aus die Positionsfelder unten wirken. Schadensprotokoll: "
-            u"die zentrierte Standardposition der Leiste. Minikarte: neben der Minikarte "
-            u"fixiert, passend zur gewählten Ausrichtung. Frei: eine unverankerte Position, "
-            u"automatisch gesetzt, sobald du die Leiste ziehst oder ein Feld änderst."),
+            u"Von welchem Ankerpunkt aus die Positionsfelder unten wirken. Fest: der eingebaute "
+            u"Platz der Leiste, automatisch anhand der Ausrichtung gewählt -- horizontal sitzt "
+            u"sie mittig am unteren Bildschirmrand, über dem Schadensprotokoll; vertikal sitzt "
+            u"sie neben der Minikarte, nahe ihrer unteren linken Ecke, passend zur aktuellen "
+            u"Größe der Minikarte. Frei: eine unverankerte Position, automatisch gesetzt, sobald "
+            u"du die Leiste ziehst oder ein Feld änderst. Unter Fest ist die Position gesperrt; "
+            u"Ziehen und die Felder unten wirken nur unter Frei."),
         u"garageWidget": _row(
             u"Aktiviert", u"Garage-Widget",
             u"Zeigt die Marken-Prozentanzeige in der Garage beim ausgewählten Fahrzeug. "
@@ -526,10 +535,13 @@ _PANEL = {
         u"progressAlignment": _row(
             u"Alignement", u"Alignement de la barre",
             u"Depuis quel point d'ancrage les compteurs de position ci-dessous se décalent. "
-            u"Journal des dégâts : la position centrée par défaut de la barre. Minicarte : "
-            u"épinglée à côté de la minicarte, selon l'orientation choisie. Libre : une "
+            u"Fixe : l'emplacement intégré de la barre, choisi automatiquement selon "
+            u"l'orientation -- horizontale, elle se centre en bas de l'écran, au-dessus du "
+            u"journal des dégâts ; verticale, elle se place à côté de la minicarte, près de son "
+            u"coin inférieur gauche, selon la taille actuelle de la minicarte. Libre : une "
             u"position non ancrée, définie automatiquement dès que vous faites glisser la "
-            u"barre ou modifiez un compteur."),
+            u"barre ou modifiez un compteur. Sous Fixe, la position est verrouillée ; le "
+            u"glisser et les compteurs ci-dessous ne fonctionnent que sous Libre."),
         u"garageWidget": _row(
             u"Activé", u"Widget du garage",
             u"Affiche la barre de centile des marques d'excellence dans le garage, sur le "
@@ -639,9 +651,13 @@ _PANEL = {
         u"progressAlignment": _row(
             u"Alineación", u"Alineación de la barra",
             u"Desde qué punto de anclaje se desplazan los contadores de posición de abajo. "
-            u"Registro de daños: la posición centrada predeterminada de la barra. Minimapa: "
-            u"fijada junto al minimapa, según la orientación elegida. Libre: una posición sin "
-            u"anclar, establecida automáticamente al arrastrar la barra o editar un contador."),
+            u"Fija: la posición integrada de la barra, elegida automáticamente según la "
+            u"orientación -- horizontal se centra en la parte inferior de la pantalla, sobre el "
+            u"registro de daños; vertical se coloca junto al minimapa, cerca de su esquina "
+            u"inferior izquierda, según el tamaño actual del minimapa. Libre: una posición sin "
+            u"anclar, establecida automáticamente al arrastrar la barra o editar un contador. "
+            u"Bajo Fija, la posición está bloqueada; arrastrar y los contadores de abajo solo "
+            u"funcionan bajo Libre."),
         u"garageWidget": _row(
             u"Activado", u"Widget del garaje",
             u"Muestra la barra de percentil de las marcas de excelencia en el garaje, en "
@@ -750,11 +766,14 @@ _PANEL = {
             u"volta che la barra appare."),
         u"progressAlignment": _row(
             u"Allineamento", u"Allineamento della barra",
-            u"Da quale punto di ancoraggio partono i contatori di posizione sotto. Registro "
-            u"danni: la posizione centrata predefinita della barra. Minimappa: fissata accanto "
-            u"alla minimappa, secondo l'orientamento scelto. Libero: una posizione non "
-            u"ancorata, impostata automaticamente trascinando la barra o modificando un "
-            u"contatore."),
+            u"Da quale punto di ancoraggio partono i contatori di posizione sotto. Fisso: la "
+            u"posizione predefinita della barra, scelta automaticamente in base "
+            u"all'orientamento -- orizzontale si centra in basso sullo schermo, sopra il "
+            u"registro danni; verticale si posiziona accanto alla minimappa, vicino al suo "
+            u"angolo inferiore sinistro, in base alla dimensione attuale della minimappa. "
+            u"Libero: una posizione non ancorata, impostata automaticamente trascinando la "
+            u"barra o modificando un contatore. Con Fisso la posizione è bloccata; il "
+            u"trascinamento e i contatori sotto funzionano solo con Libero."),
         u"garageWidget": _row(
             u"Abilitato", u"Widget del garage",
             u"Mostra la barra di percentile dei marchi di merito nel garage, sul veicolo "
@@ -864,11 +883,13 @@ _PANEL = {
             u"następnym pojawieniu się paska."),
         u"progressAlignment": _row(
             u"Zakotwiczenie", u"Zakotwiczenie paska",
-            u"Od którego punktu odniesienia liczą się liczniki pozycji poniżej. Dziennik "
-            u"obrażeń: domyślna wyśrodkowana pozycja paska. Minimapa: przypięty obok "
-            u"minimapy, zgodnie z wybraną orientacją. Swobodne: pozycja bez punktu "
-            u"odniesienia, ustawiana automatycznie po przeciągnięciu paska lub edycji "
-            u"licznika."),
+            u"Od którego punktu odniesienia liczą się liczniki pozycji poniżej. Stałe: "
+            u"wbudowane miejsce paska, wybierane automatycznie według orientacji -- pozioma "
+            u"ustawia się na środku dolnej krawędzi ekranu, nad dziennikiem obrażeń; pionowa "
+            u"ustawia się obok minimapy, blisko jej lewego dolnego rogu, zgodnie z aktualnym "
+            u"rozmiarem minimapy. Swobodne: pozycja bez punktu odniesienia, ustawiana "
+            u"automatycznie po przeciągnięciu paska lub edycji licznika. Przy Stałe pozycja "
+            u"jest zablokowana; przeciąganie i liczniki poniżej działają tylko przy Swobodne."),
         u"garageWidget": _row(
             u"Włączone", u"Widżet w garażu",
             u"Pokazuje pasek percentyla znaków doskonałości w garażu, na wybranym "
@@ -973,10 +994,13 @@ _PANEL = {
             u"pro umístění vedle minimapy. Projeví se při příštím zobrazení lišty."),
         u"progressAlignment": _row(
             u"Ukotvení", u"Ukotvení lišty",
-            u"Od kterého ukotvení se počítají čítače pozice níže. Deník poškození: výchozí "
-            u"vystředěná pozice lišty. Minimapa: ukotvena vedle minimapy, podle zvolené "
-            u"orientace. Volné: neukotvená pozice, nastavená automaticky po přetažení lišty "
-            u"nebo úpravě čítače."),
+            u"Od kterého ukotvení se počítají čítače pozice níže. Pevné: vestavěné místo "
+            u"lišty, vybrané automaticky podle orientace -- vodorovná se vystředí na spodním "
+            u"okraji obrazovky, nad deníkem poškození; svislá se umístí vedle minimapy, "
+            u"poblíž jejího levého dolního rohu, podle aktuální velikosti minimapy. Volné: "
+            u"neukotvená pozice, nastavená automaticky po přetažení lišty nebo úpravě "
+            u"čítače. V režimu Pevné je pozice uzamčená; tažení a čítače níže fungují jen v "
+            u"režimu Volné."),
         u"garageWidget": _row(
             u"Povoleno", u"Widget v garáži",
             u"Zobrazuje percentilovou lištu znaků cti v garáži u vybraného vozidla. "
@@ -1079,11 +1103,14 @@ _PANEL = {
             u"следующем появлении полосы."),
         u"progressAlignment": _row(
             u"Привязка", u"Привязка полосы",
-            u"От какой точки отсчитываются счётчики позиции ниже. Журнал повреждений: "
-            u"стандартная позиция полосы по центру. Миникарта: закреплена рядом с "
-            u"миникартой, в соответствии с выбранной ориентацией. Свободно: позиция без "
-            u"привязки, задаётся автоматически при перетаскивании полосы или изменении "
-            u"счётчика."),
+            u"От какой точки отсчитываются счётчики позиции ниже. Фиксированная: встроенное "
+            u"место полосы, выбираемое автоматически по ориентации -- горизонтальная "
+            u"располагается по центру нижнего края экрана, над журналом повреждений; "
+            u"вертикальная располагается рядом с миникартой, у её нижнего левого угла, в "
+            u"соответствии с текущим размером миникарты. Свободно: позиция без привязки, "
+            u"задаётся автоматически при перетаскивании полосы или изменении счётчика. В "
+            u"режиме Фиксированная позиция заблокирована; перетаскивание и счётчики ниже "
+            u"работают только в режиме Свободно."),
         u"garageWidget": _row(
             u"Включено", u"Виджет в ангаре",
             u"Показывает полосу процентиля отметок классности в ангаре на выбранной "
@@ -1189,10 +1216,14 @@ _PANEL = {
             u"під час наступної появи смуги."),
         u"progressAlignment": _row(
             u"Прив'язка", u"Прив'язка смуги",
-            u"Від якої точки відраховуються лічильники позиції нижче. Журнал ушкоджень: "
-            u"стандартна позиція смуги по центру. Мінікарта: закріплена поруч із мінікартою, "
-            u"відповідно до обраної орієнтації. Вільно: позиція без прив'язки, "
-            u"встановлюється автоматично після перетягування смуги чи зміни лічильника."),
+            u"Від якої точки відраховуються лічильники позиції нижче. Фіксована: вбудоване "
+            u"місце смуги, обране автоматично залежно від орієнтації -- горизонтальна "
+            u"розташовується по центру нижнього краю екрана, над журналом ушкоджень; "
+            u"вертикальна розташовується поруч із мінікартою, біля її нижнього лівого кута, "
+            u"відповідно до поточного розміру мінікарти. Вільно: позиція без прив'язки, "
+            u"встановлюється автоматично після перетягування смуги чи зміни лічильника. У "
+            u"режимі Фіксована позиція заблокована; перетягування і лічильники нижче "
+            u"працюють лише в режимі Вільно."),
         u"garageWidget": _row(
             u"Увімкнено", u"Віджет в ангарі",
             u"Показує смугу процентиля позначок класності в ангарі на вибраній машині. "
@@ -1298,10 +1329,13 @@ _PANEL = {
         u"progressAlignment": _row(
             u"Igazítás", u"Sáv igazítása",
             u"Melyik horgonyponthoz képest tolódnak el az alábbi pozíció-számlálók. "
-            u"Sérülésnapló: a sáv alapértelmezett, középre igazított helye. Minimap: a "
-            u"kistérkép mellé rögzítve, a választott tájolásnak megfelelően. Szabad: nem "
-            u"rögzített pozíció, automatikusan beáll, amint elhúzod a sávot vagy módosítasz "
-            u"egy számlálót."),
+            u"Rögzített: a sáv beépített helye, automatikusan a tájolás alapján kiválasztva "
+            u"-- vízszintesen a képernyő alján középre igazítva, a sérülésnapló fölött "
+            u"jelenik meg; függőlegesen a kistérkép mellett, annak bal alsó sarkánál, a "
+            u"kistérkép aktuális méretéhez igazodva. Szabad: nem rögzített pozíció, "
+            u"automatikusan beáll, amint elhúzod a sávot vagy módosítasz egy számlálót. "
+            u"Rögzített módban a pozíció zárolva van; a húzás és az alábbi számlálók csak "
+            u"Szabad módban működnek."),
         u"garageWidget": _row(
             u"Engedélyezve", u"Garázs-widget",
             u"Megjeleníti a kiválósági jelek percentilis sávját a garázsban, a "
@@ -1403,10 +1437,13 @@ _PANEL = {
             u"onu ayakta gösterir. Çubuğun bir sonraki görünüşünde etkili olur."),
         u"progressAlignment": _row(
             u"Hizalama", u"Çubuk hizalaması",
-            u"Aşağıdaki konum sayaçlarının hangi çıpa noktasına göre kaydığı. Hasar günlüğü: "
-            u"çubuğun varsayılan ortalanmış konumu. Minimap: seçilen yönelime uygun şekilde "
-            u"minimap'in yanına sabitlenmiş. Serbest: sürüklendiğinde veya bir sayaç "
-            u"düzenlendiğinde otomatik olarak ayarlanan, çıpasız bir konum."),
+            u"Aşağıdaki konum sayaçlarının hangi çıpa noktasına göre kaydığı. Sabit: çubuğun "
+            u"yerleşik konumu, yönelime göre otomatik seçilir -- yatayken ekranın alt "
+            u"kenarının ortasında, hasar günlüğünün üstünde durur; dikeyken minimap'in "
+            u"yanında, sol alt köşesine yakın, minimap'in mevcut boyutuna göre durur. "
+            u"Serbest: sürüklendiğinde veya bir sayaç düzenlendiğinde otomatik olarak "
+            u"ayarlanan, çıpasız bir konum. Sabit modda konum kilitlidir; sürükleme ve "
+            u"aşağıdaki sayaçlar yalnızca Serbest modda çalışır."),
         u"garageWidget": _row(
             u"Etkin", u"Garaj widget'ı",
             u"Seçili araçta, garajda üstünlük işaretleri yüzdelik çubuğunu gösterir. "

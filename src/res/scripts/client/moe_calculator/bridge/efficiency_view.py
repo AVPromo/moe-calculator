@@ -14,7 +14,7 @@ from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import EfficiencyVM
 from moe_calculator.domain.constants import (
-    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_X_SHIFT_LARGE, EFFICIENCY_ANCHOR_Y_FRAC,
+    EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC,
     EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM,
     EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
 
@@ -27,8 +27,7 @@ _host = BarHost(RES_MAP_ITEM_ID, EfficiencyVM,
                 EFFICIENCY_ANCHOR_Y_FRAC, EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT,
                 EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_TRACK_X,
                 EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[moe-eff]",
-                variant=mod_settings.PROGRESS_VARIANT_EFFICIENCY,
-                x_shift_large=EFFICIENCY_ANCHOR_X_SHIFT_LARGE)
+                variant=mod_settings.PROGRESS_VARIANT_EFFICIENCY)
 
 open_window = _host.open_window
 close_window = _host.close_window

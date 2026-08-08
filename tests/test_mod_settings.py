@@ -27,8 +27,8 @@ from moe_calculator.bridge.mod_settings import (
     clamp_pos, pos_x, pos_y, pos_w, pos_h, follow_carousel, set_position,
     bar_pos_x, bar_pos_y, set_bar_position,
     PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL,
-    PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP,
-    PROGRESS_ALIGN_FREE,
+    PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FIXED, PROGRESS_ALIGN_FREE,
+    PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP,
     progress_bar_orientation, progress_bar_alignment)
 from moe_calculator.adapter import settings_i18n
 
@@ -77,14 +77,21 @@ def test_defaults_when_empty_or_none():
                         FOLLOW_CAROUSEL_KEY: True}
     # v22: fresh installs start straight in the ANCHOR frame -- there is no legacy pair to carry.
     assert DEFAULTS[mod_settings.PROGRESS_POS_FRAME_KEY] == mod_settings.POS_FRAME_ANCHOR
-    # THE v21 RADIOS: an int 0 each (Horizontal / Damage Log), never a bool -- the same trap as the
-    # other two radios.
+    # THE ORIENTATION/ALIGNMENT RADIOS: an int 0 each (Horizontal / Fixed), never a bool -- the
+    # same trap as the two variant/size radios. Alignment is Fixed/Free only (v23) -- the old
+    # 3-option Damage Log/Minimap/Free domain is retired; PROGRESS_ALIGN_DAMAGE_LOG /
+    # PROGRESS_ALIGN_MINIMAP survive only as bar_window's INTERNAL anchor selectors, never a
+    # stored value.
     assert DEFAULTS[PROGRESS_ORIENTATION_KEY] is PROGRESS_ORIENT_HORIZONTAL
-    assert DEFAULTS[PROGRESS_ALIGNMENT_KEY] is PROGRESS_ALIGN_DAMAGE_LOG
+    assert DEFAULTS[PROGRESS_ALIGNMENT_KEY] is PROGRESS_ALIGN_FIXED
     for key in (PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY):
         assert not isinstance(DEFAULTS[key], bool)
     assert (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL) == (0, 1)
-    assert (PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP, PROGRESS_ALIGN_FREE) == (0, 1, 2)
+    assert (PROGRESS_ALIGN_FIXED, PROGRESS_ALIGN_FREE) == (0, 1)
+    # The internal anchor selectors keep their OLD numeric values (0/1) on purpose -- see
+    # mod_settings.py -- but they are a DIFFERENT vocabulary from the stored Fixed/Free pair and
+    # must never be compared against it (PROGRESS_ALIGN_MINIMAP == PROGRESS_ALIGN_FREE == 1).
+    assert (PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP) == (0, 1)
     # An INT, never a bool -- the same trap as the two radios: a bool here would poison every
     # _coerce round-trip and the panel would store True instead of a second count.
     assert DEFAULTS[PROGRESS_HOLD_SECONDS_KEY] is PROGRESS_HOLD_DEFAULT
@@ -359,61 +366,64 @@ def test_progress_bar_orientation_getter_reclamps_a_corrupt_store():
 # --- v21: the Alignment radio (the mod's FOURTH non-bool setting, max_index=2) ------------------
 
 def test_coerce_alignment_key_is_not_booled():
-    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 1) == PROGRESS_ALIGN_MINIMAP
-    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 2) == PROGRESS_ALIGN_FREE
+    # v23: TWO options now (Fixed / Free) -- the old Damage Log/Minimap/Free 3-option domain is
+    # retired.
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 1) == PROGRESS_ALIGN_FREE
     assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, 1) is not True
-    for good in (0, 1, 2):
+    for good in (0, 1):
         assert not isinstance(mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, good), bool)
-    # THE BOOL TRAP again: True must not pass through as the legal index 1 (Minimap).
-    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, True) == PROGRESS_ALIGN_DAMAGE_LOG
+    # THE BOOL TRAP again: True must not pass through as the legal index 1 (Free).
+    assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, True) == PROGRESS_ALIGN_FIXED
     assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, True) is not True
-    # THREE options this time (0, 1, 2) -- anything past Free is corrupt.
-    for bad in (True, False, PROGRESS_ALIGN_FREE + 1, -1, None, "abc", [1]):
-        assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, bad) == PROGRESS_ALIGN_DAMAGE_LOG, \
+    # Anything past Free (including the OLD raw index 2, the pre-v23 Free) is corrupt to a bare
+    # _coerce/merge_settings call -- only the dedicated migration (_migrate_pre_v23_alignment, run
+    # once at register()) may still interpret 2 as Free.
+    for bad in (True, False, 2, PROGRESS_ALIGN_FREE + 1, -1, None, "abc", [1]):
+        assert mod_settings._coerce(PROGRESS_ALIGNMENT_KEY, bad) == PROGRESS_ALIGN_FIXED, \
             "%r leaked through the alignment branch" % (bad,)
-    assert merge_settings({PROGRESS_ALIGNMENT_KEY: 2})[PROGRESS_ALIGNMENT_KEY] == \
+    assert merge_settings({PROGRESS_ALIGNMENT_KEY: 1})[PROGRESS_ALIGNMENT_KEY] == \
         PROGRESS_ALIGN_FREE
     assert merge_settings({PROGRESS_ALIGNMENT_KEY: True})[PROGRESS_ALIGNMENT_KEY] == \
-        PROGRESS_ALIGN_DAMAGE_LOG
+        PROGRESS_ALIGN_FIXED
 
 
 def test_progress_bar_alignment_getter_reclamps_a_corrupt_store():
     mod_settings._seed(dict(DEFAULTS))
-    assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
-    mod_settings._apply({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP})
-    assert progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+    assert progress_bar_alignment() == PROGRESS_ALIGN_FIXED
     mod_settings._apply({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE})
     assert progress_bar_alignment() == PROGRESS_ALIGN_FREE
     for junk in (True, 5, -2, None, "x"):
         mod_settings._settings[PROGRESS_ALIGNMENT_KEY] = junk
-        assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG, \
+        assert progress_bar_alignment() == PROGRESS_ALIGN_FIXED, \
             "%r leaked on read" % (junk,)
         assert not isinstance(progress_bar_alignment(), bool)
     del mod_settings._settings[PROGRESS_ALIGNMENT_KEY]
-    assert progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
+    assert progress_bar_alignment() == PROGRESS_ALIGN_FIXED
 
 
-# --- v21: set_bar_position() (the drag-end seam) also sets Alignment to Free -------------------
+# --- DELETED (this dispatch): set_bar_position() no longer touches Alignment at all -------------
+# It used to force Alignment := Free unconditionally (v21). That write is now provably a no-op on
+# every call: both callers (BarHost.drag's persist, BarHost._materialise's own conversion write)
+# already refuse to reach set_bar_position unless Alignment is ALREADY Free -- see
+# test_set_bar_position_leaves_alignment_untouched below, which pins the deletion directly.
 
-def test_set_bar_position_sets_alignment_free_at_persist_true(monkeypatch):
-    mod_settings._seed(_defaults_with({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP}))
-    fake = _FakeMsa({"enabled": True})
-    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
-    set_bar_position(120, 240, persist=True)
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
-    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
-
-
-def test_set_bar_position_sets_alignment_free_at_persist_false():
-    # THE DRAG-END SEAM fires on every mouse-move too (persist=False, the live drag), not just the
-    # gesture end -- Free is set unconditionally, before the persist check, so mid-drag reads
-    # already see the correct alignment.
-    mod_settings._seed(_defaults_with({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP}))
+def test_set_bar_position_leaves_alignment_untouched():
+    # The regression this dispatch's deletion owes: set_bar_position must NOT resurrect the
+    # retired "-> Free" write, even called directly (bypassing the callers' own gates) as a test
+    # would. Position still writes; Alignment (started Fixed here) must not move.
+    mod_settings._seed(_defaults_with({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FIXED}))
     set_bar_position(120, 240, persist=False)
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert (bar_pos_x(), bar_pos_y()) == (120, 240)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FIXED
 
 
-# --- v21: _on_changed's alignment auto-set state machine ----------------------------------------
+# --- v23: the Orientation<->Alignment mutual auto-set is RETIRED --------------------------------
+# _derive_layout keeps exactly ONE rule now (this dispatch deleted the second): an explicit
+# Orientation flip still zeroes the stored X/Y pair (the two orientations use different surface
+# geometries); the "a position change forces Alignment := Free" rule (v21) is GONE, because a
+# position can now only ever change while Alignment is ALREADY Free (the steppers are gated on it
+# and BarHost.drag() refuses the gesture otherwise -- see mod_settings.py's SETTINGS_VERSION 23
+# same-bump-follow-on comment and _derive_layout's own docstring).
 
 def _seed_live(orientation, alignment, x=0, y=0):
     mod_settings._seed(_defaults_with({
@@ -421,119 +431,64 @@ def _seed_live(orientation, alignment, x=0, y=0):
         BAR_POS_X_KEY: x, BAR_POS_Y_KEY: y}))
 
 
-def test_on_changed_orientation_switch_reanchors_horizontal_to_vertical():
-    # Horizontal -> Vertical, alignment NOT already Free -> re-anchors to Minimap.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+def test_on_changed_orientation_switch_leaves_alignment_untouched():
+    # DELETED-RULE REGRESSION: an Orientation flip must NOT re-anchor Alignment any more, in
+    # either direction, and regardless of whether Alignment started Fixed or Free.
+    for start_o, other_o in ((PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL),
+                             (PROGRESS_ORIENT_VERTICAL, PROGRESS_ORIENT_HORIZONTAL)):
+        for alignment in (PROGRESS_ALIGN_FIXED, PROGRESS_ALIGN_FREE):
+            _seed_live(start_o, alignment)
+            mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: other_o})
+            assert mod_settings.progress_bar_alignment() == alignment, \
+                "an Orientation flip touched Alignment (%r -> %r, started %r)" % (
+                    start_o, other_o, alignment)
 
 
-def test_on_changed_orientation_switch_reanchors_vertical_to_horizontal():
-    # Vertical -> Horizontal, alignment NOT already Free -> re-anchors to Damage Log.
-    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
+def test_on_changed_orientation_switch_zeroes_the_stored_position_pair():
+    # KEPT: the two orientations use different surface geometries, so a real pair must not carry
+    # across an Orientation flip -- regardless of Alignment (Fixed or Free).
+    for alignment in (PROGRESS_ALIGN_FIXED, PROGRESS_ALIGN_FREE):
+        _seed_live(PROGRESS_ORIENT_HORIZONTAL, alignment, x=900, y=500)
+        mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+                                           BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
+        assert (bar_pos_x(), bar_pos_y()) == (0, 0)
+
+        _seed_live(PROGRESS_ORIENT_VERTICAL, alignment, x=-120, y=640)
+        mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                                           BAR_POS_X_KEY: -120, BAR_POS_Y_KEY: 640})
+        assert (bar_pos_x(), bar_pos_y()) == (0, 0)
 
 
-def test_on_changed_free_alignment_is_reanchored_by_an_orientation_flip_both_directions():
-    # "Free is sticky" is SUPERSEDED (2026-08-08): an explicit Orientation flip now re-anchors
-    # Alignment to the matching resting state EVEN WHEN Alignment was already Free -- rows 1-2 of
-    # the transition table fire unconditionally, stickiness is dead. The position pair rides the
-    # SAME derivation (rows 1-2 also zero it), not a separate coordinate-only reset.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
-                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, x=900, y=500)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
-                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_DAMAGE_LOG
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-
-def test_on_changed_stepper_edit_sets_alignment_free():
-    # A CHANGED bar-position pair with an UNCHANGED orientation is a typed coordinate (a stepper
-    # edit), not a drag (set_bar_position already sets Free itself) and not an orientation switch
-    # -- so this is the one case _on_changed itself must recognise and re-anchor to Free.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
-                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 0})
+def test_on_changed_alignment_switch_does_not_touch_orientation_or_position():
+    # DELETED-RULE REGRESSION: Alignment no longer derives Orientation in either direction, and
+    # switching it alone must not zero the stored pair either -- both were rows the OLD design
+    # forced (Damage Log -> Horizontal, Minimap -> Vertical); v23 has no such rows left.
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FIXED, x=42, y=13)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE})
+    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_VERTICAL
     assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert (bar_pos_x(), bar_pos_y()) == (42, 13)
 
-
-def test_on_changed_simultaneous_orientation_and_position_change_lands_on_free():
-    # The rarer simultaneous case: both changed in one payload -- the position branch is checked
-    # AFTER the orientation branch, so the more explicit Free wins over a re-anchor.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
-                                       BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 0})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=7, y=8)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FIXED})
+    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FIXED
+    assert (bar_pos_x(), bar_pos_y()) == (7, 8)
 
 
 def test_on_changed_no_orientation_or_position_change_leaves_alignment_alone():
-    # Neither axis changed (some OTHER key in the payload changed, e.g. a checkbox) -> the
-    # alignment auto-set must not fire at all.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, x=0, y=0)
+    # Neither axis changed (some OTHER key in the payload changed, e.g. a checkbox) -> nothing
+    # must fire at all.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=0, y=0)
     mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
                                        BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
                                        BATTLE_KEY: False})
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
-
-
-# --- an EXPLICIT orientation OR alignment change also DROPS the stored coordinates --------------
-# The two orientations have different surface geometries, so carrying one's absolute pair over to
-# the other lands the bar somewhere it was never tuned for (observed live: the horizontal bar
-# inheriting the vertical one's placement landed over the minimap). Rows 1-4 of the transition
-# table all zero the pair -- an alignment change to Damage Log / Minimap zeroes it exactly like an
-# orientation flip does, because "Free is sticky" is SUPERSEDED and both directions now force the
-# SAME resting state together (orientation + alignment + position, in one _derive_layout call).
-
-def test_on_changed_orientation_switch_zeroes_the_stored_position_pair():
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=900, y=500)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
-                                       BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, x=-120, y=640)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
-                                       BAR_POS_X_KEY: -120, BAR_POS_Y_KEY: 640})
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-
-def test_on_changed_alignment_switch_to_damage_log_reanchors_orientation_and_zeroes_position():
-    # Row 3, NEW: no such derivation existed before this redesign. Alignment -> Damage Log now
-    # forces Horizontal too, even starting from Vertical, and zeroes the pair like an orientation
-    # flip would -- alignment beats orientation (DECISION 4).
-    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, x=-120, y=640)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_DAMAGE_LOG})
-    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_HORIZONTAL
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-
-def test_on_changed_alignment_switch_to_minimap_reanchors_orientation_and_zeroes_position():
-    # Row 4, NEW, the mirror of the above: Alignment -> Minimap forces Vertical.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=900, y=500)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP})
-    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_VERTICAL
-    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-
-
-def test_on_changed_alignment_switch_to_free_leaves_orientation_and_position_untouched():
-    # Row 5: "O explicitly untouched" -- picking Free must not flip Orientation, and the position
-    # pair is left exactly as it was (materialising the real on-screen point happens later, at the
-    # bar's next battle mount -- out of scope for this state-machine slice; see Trap 2).
-    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_DAMAGE_LOG, x=42, y=13)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE})
-    assert mod_settings.progress_bar_orientation() == PROGRESS_ORIENT_VERTICAL
-    assert (bar_pos_x(), bar_pos_y()) == (42, 13)
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
 
 
 def test_on_changed_orientation_switch_persists_the_zeroed_pair_through_msa(monkeypatch):
-    # The re-anchor and the zeroing are ONE derived write now (rows 1-2 land both together), so
-    # this stays a SINGLE updateModSettings/saveState pass even starting from Free -- "Free is
-    # sticky" is dead, the write reflects the FULL settled state (Alignment included).
+    # The zeroing is the ONLY derived write left on an Orientation flip: ONE
+    # updateModSettings/saveState pass, and Alignment rides through UNCHANGED (no re-anchor).
     _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
     fake = _FakeMsa({"enabled": True})
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
@@ -542,7 +497,7 @@ def test_on_changed_orientation_switch_persists_the_zeroed_pair_through_msa(monk
     assert fake.write_count == 1
     assert fake.save_count == 1
     assert fake.written[BAR_POS_X_KEY] == 0 and fake.written[BAR_POS_Y_KEY] == 0
-    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_MINIMAP
+    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE   # untouched
 
 
 def test_on_changed_stepper_edit_does_not_zero_the_pair():
@@ -554,21 +509,25 @@ def test_on_changed_stepper_edit_does_not_zero_the_pair():
     assert (bar_pos_x(), bar_pos_y()) == (250, 700)
 
 
-def test_on_changed_simultaneous_orientation_and_position_change_keeps_the_typed_pair():
-    # The rare both-in-one-payload case: the coordinate the user just typed wins over the reset,
-    # the same precedence the alignment branches already give the more explicit edit (that payload
-    # also lands on Free -- see the alignment test of the same name above).
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+def test_on_changed_orientation_change_zeroes_the_pair_even_with_a_typed_value_in_the_same_payload():
+    # DELETED-RULE REGRESSION, inverted: the old "position wins outright" precedence (v21) used to
+    # keep a typed pair when it rode in the SAME payload as an Orientation flip. That rule is gone
+    # -- an Orientation change zeroes the stored pair UNCONDITIONALLY now, even when the payload
+    # also carries a brand-new coordinate, because the two orientations use different surface
+    # geometries regardless of what value a stepper edit happened to arrive with.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=0, y=0)
     mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
                                        BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 700})
-    assert (bar_pos_x(), bar_pos_y()) == (250, 700)
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
 
 
-def test_on_changed_simultaneous_alignment_and_position_change_lands_on_free():
-    # Precedence 1 also beats an ALIGNMENT change carried in the same payload, not just
-    # orientation -- position wins outright regardless of which other key rode along.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
-    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP,
+def test_on_changed_alignment_and_position_set_together_in_one_payload():
+    # NOT a derivation any more (the old "position forces Alignment" rule is deleted) -- this is
+    # plain _apply overlay behaviour: both keys are explicitly present in the payload (as a real
+    # stepper edit under Free would send them), Orientation is unchanged so _derive_layout does not
+    # fire, and both values simply land as given.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=0, y=0)
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
                                        BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 700})
     assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
     assert (bar_pos_x(), bar_pos_y()) == (250, 700)
@@ -602,128 +561,58 @@ def test_a_foreign_mods_change_never_zeroes_the_pair(monkeypatch):
 
 
 def test_on_changed_loop_guard_does_not_refire_on_the_echoed_pass(monkeypatch):
-    # THE LOOP GUARD: the alignment write-back fires another onSettingsChanged of its own (MSA
+    # THE LOOP GUARD: the zeroing write-back fires another onSettingsChanged of its own (MSA
     # echoes the write), so a second _on_changed pass with the SAME already-updated values must
-    # NOT write through MSA again. A value-only assertion cannot see this (the value is equal
-    # either way) -- only the CALL COUNT proves the guard actually stopped the loop rather than
-    # merely writing the same thing twice.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG)
-    fake = _FakeMsa({"enabled": True})
-    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
-
-    payload = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
-              BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0}
-    # FIRST pass: orientation actually changed -> alignment re-anchors to Minimap -> ONE write.
-    mod_settings._on_changed(LINKAGE, payload)
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
-    assert fake.write_count == 1
-    assert fake.save_count == 1
-
-    # SECOND pass: MSA's echo of that same write. Orientation is now ALREADY Vertical (no change
-    # from the live cache's own perspective) and the position pair is unchanged too, so the
-    # handler must find nothing to update and must NOT call updateModSettings/saveState again.
-    mod_settings._on_changed(LINKAGE, payload)
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
-    assert fake.write_count == 1, "the echoed pass re-fired updateModSettings"
-    assert fake.save_count == 1, "the echoed pass re-fired saveState"
-
-
-def test_on_changed_loop_guard_covers_the_position_zeroing_too(monkeypatch):
-    # THE SAME loop guard covers the zeroing that rides an orientation-driven re-anchor. A
-    # value-only assertion is blind here (the pair reads (0, 0) after either one or two writes),
-    # so this is a CALL COUNT test by necessity. "Free is sticky" is SUPERSEDED: the re-anchor now
-    # fires unconditionally, landing Alignment on Minimap alongside the zeroed pair, both in the
-    # SAME single write -- assert the CALL COUNT == 1, not just the resulting value (memory
+    # NOT write through MSA again. A value-only assertion is blind here (the pair reads (0, 0)
+    # after either one or two writes), so this is a CALL COUNT test by necessity (memory
     # a-noop-mutation-and-a-fail-soft-branch-can-look-identical).
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=900, y=500)
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=900, y=500)
     fake = _FakeMsa({"enabled": True})
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
 
+    # FIRST pass: orientation actually changed -> the pair zeroes -> ONE write. Alignment is
+    # NOT part of the derived write any more (the retired rule used to land it on Minimap here).
     mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
                                        BAR_POS_X_KEY: 900, BAR_POS_Y_KEY: 500})
     assert (bar_pos_x(), bar_pos_y()) == (0, 0)
-    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_MINIMAP
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FIXED
     assert fake.write_count == 1
     assert fake.save_count == 1
 
-    # MSA's echo of that write: orientation already Vertical, alignment already Minimap, pair
-    # already zeroed -> nothing to do.
+    # SECOND pass: MSA's echo of that write -- orientation already Vertical, pair already zeroed
+    # -> nothing to do.
     mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
-                                       PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP,
                                        BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0})
     assert (bar_pos_x(), bar_pos_y()) == (0, 0)
     assert fake.write_count == 1, "the echoed pass re-fired updateModSettings"
     assert fake.save_count == 1, "the echoed pass re-fired saveState"
 
 
-# --- _derive_layout: the pure, table-driven state machine ---------------------------------------
+# --- _derive_layout: the pure state machine (this dispatch: ONE rule, not two) -------------------
+# The former "position change forces Alignment := Free" rule (v21) is DELETED along with every
+# table row that exercised it -- see mod_settings.py's SETTINGS_VERSION 23 same-bump-follow-on
+# comment. _derive_layout's signature dropped Alignment entirely (it never derives from anything
+# here any more), so the table below is (orientation, position) pairs, not three-tuples. What
+# remains: an Orientation change zeroes the position; everything else settles on `post` unchanged.
 
 _DERIVE_LAYOUT_TABLE = (
-    # (id, pre, post, expected) -- id names the transition-table row this exercises.
-    ("row1-orientation-to-horizontal",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0))),
-    ("row1-fires-even-from-free",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (12, 34)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (12, 34)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0))),
-    ("row2-orientation-to-vertical",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0))),
-    ("row2-fires-even-from-free",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (12, 34)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (12, 34)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0))),
-    ("row3-alignment-to-damage-log",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0))),
-    ("row4-alignment-to-minimap",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0))),
-    ("row5-alignment-to-free-horizontal",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (0, 0))),
-    ("row5-alignment-to-free-vertical-position-untouched",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (7, 9)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (7, 9))),
-    ("row6-stepper-edit-forces-free",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (250, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (250, 0))),
-    ("row7-drag-end-forces-free",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (10, 10)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (99, 42)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (99, 42))),
-    ("row9-size-change-is-a-no-op",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0))),
-    ("row10-variant-change-is-a-no-op",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (7, 8)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (7, 8)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (7, 8))),
-    ("row11-unrelated-key-is-a-no-op",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (3, 4)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (3, 4)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (3, 4))),
-    ("row13-echo-of-our-own-write-back-is-a-no-op",
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0))),
-    ("precedence-position-beats-alignment-in-one-payload",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_MINIMAP, (5, 5)),
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (5, 5))),
-    ("precedence-alignment-beats-orientation-in-one-payload",
-     (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-     (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0))),
+    # (id, pre, post, expected)
+    ("orientation-change-zeroes-a-real-pair",
+     (PROGRESS_ORIENT_HORIZONTAL, (12, 34)),
+     (PROGRESS_ORIENT_VERTICAL, (12, 34)),
+     (PROGRESS_ORIENT_VERTICAL, (0, 0))),
+    ("orientation-change-on-an-already-zero-pair-is-a-no-op",
+     (PROGRESS_ORIENT_VERTICAL, (0, 0)),
+     (PROGRESS_ORIENT_HORIZONTAL, (0, 0)),
+     (PROGRESS_ORIENT_HORIZONTAL, (0, 0))),
+    ("unrelated-key-is-a-no-op",
+     (PROGRESS_ORIENT_HORIZONTAL, (3, 4)),
+     (PROGRESS_ORIENT_HORIZONTAL, (3, 4)),
+     (PROGRESS_ORIENT_HORIZONTAL, (3, 4))),
+    ("echo-of-our-own-write-back-is-a-no-op",
+     (PROGRESS_ORIENT_VERTICAL, (0, 0)),
+     (PROGRESS_ORIENT_VERTICAL, (0, 0)),
+     (PROGRESS_ORIENT_VERTICAL, (0, 0))),
 )
 
 
@@ -735,36 +624,35 @@ def test_derive_layout_table(pre, post, expected):
 
 
 _RESTING_STATES = (
-    (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, (0, 0)),
-    (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_MINIMAP, (0, 0)),
-    (PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, (321, 654)),
-    (PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FREE, (-15, 200)),
+    (PROGRESS_ORIENT_HORIZONTAL, (0, 0)),
+    (PROGRESS_ORIENT_VERTICAL, (0, 0)),
+    (PROGRESS_ORIENT_HORIZONTAL, (321, 654)),
+    (PROGRESS_ORIENT_VERTICAL, (-15, 200)),
 )
 
 
 @pytest.mark.parametrize("state", _RESTING_STATES,
-                         ids=["H-DL", "V-MM", "H-FREE", "V-FREE"])
+                         ids=["horizontal-zero", "vertical-zero", "horizontal-pinned",
+                              "vertical-pinned"])
 def test_derive_layout_resting_states_are_fixed_points(state):
     # THE TERMINATION PROOF: every resting state must derive to itself, or the write-back's own
-    # echo would ping-pong forever (Trap 1(b)).
+    # echo would ping-pong forever. Trivially true now for ANY state (pre == post means
+    # `orientation_changed` cannot fire, so the function returns `post` verbatim) -- these four are
+    # kept as a representative, named regression set rather than asserting the property is vacuous.
     assert mod_settings._derive_layout(state, state) == state
 
 
 # --- single-pass settle: one user action, exactly one write, self-terminating echo --------------
 
-@pytest.mark.parametrize("payload,expected_alignment", [
-    ({PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL}, PROGRESS_ALIGN_MINIMAP),
-    ({PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_MINIMAP}, PROGRESS_ALIGN_MINIMAP),
-    ({BAR_POS_X_KEY: 250, BAR_POS_Y_KEY: 0}, PROGRESS_ALIGN_FREE),
-], ids=["orientation-flip", "alignment-flip", "stepper-edit"])
-def test_on_changed_settles_in_a_single_pass_and_the_echo_writes_nothing(
-        monkeypatch, payload, expected_alignment):
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+def test_on_changed_settles_in_a_single_pass_and_the_echo_writes_nothing(monkeypatch):
+    # Seeded with a REAL pre-existing pin (not 0/0): the orientation flip needs a non-zero pair
+    # already stored for its own derived write (the zeroing) to actually be dirty.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=900, y=500)
     fake = _FakeMsa({"enabled": True})
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
 
-    mod_settings._on_changed(LINKAGE, payload)
-    assert mod_settings.progress_bar_alignment() == expected_alignment
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL})
+    assert (bar_pos_x(), bar_pos_y()) == (0, 0)
     assert fake.write_count == 1
     assert fake.save_count == 1
 
@@ -773,6 +661,19 @@ def test_on_changed_settles_in_a_single_pass_and_the_echo_writes_nothing(
     mod_settings._on_changed(LINKAGE, echoed)
     assert fake.write_count == 1, "the echo of our own write-back re-fired updateModSettings"
     assert fake.save_count == 1, "the echo of our own write-back re-fired saveState"
+
+
+def test_on_changed_alignment_only_change_writes_nothing(monkeypatch):
+    # v23: an Alignment change ALONE (no position, no orientation change in the same payload) no
+    # longer derives anything -- it settles on `post` unchanged, so the pass must not be dirty.
+    _seed_live(PROGRESS_ORIENT_VERTICAL, PROGRESS_ALIGN_FIXED, x=0, y=0)
+    fake = _FakeMsa({"enabled": True})
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE})
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
+    assert fake.write_count == 0
+    assert fake.save_count == 0
 
 
 # --- the Transitions group: a master folded into its two children's getters -------------------
@@ -1237,7 +1138,26 @@ def test_template_settings_version_pins_the_current_layout():
     # (_migrate_pre_v22_pos_frame) is a LOOKUP, not a conversion: it seeds the marker but defers
     # the actual pair conversion to bar_window.BarHost._materialise, the same materialise-on-mount
     # path Free's initial pin (DECISION 1) already owes.
-    assert SETTINGS_VERSION == 22
+    # Bumped 22 -> 23 for the Fixed-alignment redesign: the Alignment radio COLLAPSES from three
+    # options (Damage Log / Minimap / Free) to two (Fixed / Free) -- an option reorder/removal is
+    # structural to Aslain's _settingsStructure, so only a forward bump reaches an existing
+    # install. The stored value is a 0-based INT INDEX, so this is ALSO a silent value migration:
+    # raw 1 meant Minimap pre-bump and means Free post-bump. _migrate_pre_v23_alignment maps it
+    # explicitly (old 0/1 -> Fixed, old 2 -> Free), running LAST in the chain, after
+    # _migrate_pre_v21_layout / _migrate_pre_v22_pos_frame (both of which still speak the OLD
+    # encoding). No varName was added, removed or renamed. This bump also retires the mutual
+    # Orientation<->Alignment auto-set (_derive_layout): neither setting derives the other any
+    # more, though an Orientation flip still zeroes the stored pair -- not part of the template.
+    #
+    # SAME-BUMP FOLLOW-ON (still v23 -- template-only / behaviour-only, no varName/control/option
+    # changed shape): the two position steppers (barPosX/barPosY) now carry an enableWhen-shaped
+    # gate on Alignment == Free (greyed under Fixed, not hidden -- a stepper that vanishes and
+    # reappears reflows the column), and BarHost.drag() refuses the whole Ctrl+drag gesture under
+    # Fixed. This ALSO retires the "position change forces Alignment := Free" rule (v21) from BOTH
+    # _derive_layout and set_bar_position: with the gate + the drag block in place, a stored
+    # position can only ever change while Alignment is ALREADY Free, so the rule has nothing left
+    # to fire on.
+    assert SETTINGS_VERSION == 23
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1304,10 +1224,11 @@ def test_template_column1_is_four_categories_each_a_label_then_its_group():
     assert col1[18] == {"type": "Empty"}
     assert col1[20] == {"type": "Empty"}
     assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13, 18, 20]
-    # The two v21 radios AND the two position steppers are all STANDALONE -- no masterVarName, no
-    # conditions -- so they stay readable and editable while the Progress Bar master is off, exactly
-    # like the column-2 pair.
-    for control in col1[22:]:
+    # The two v21 radios are STANDALONE -- no masterVarName, no conditions -- so they stay readable
+    # and editable while the Progress Bar master is off, exactly like the column-2 pair. The two
+    # position steppers are NOT standalone any more (this dispatch): see
+    # test_template_position_steppers_are_gated_on_alignment_free below.
+    for control in col1[22:24]:
         assert "masterVarName" not in control and "conditions" not in control
     # The two new radios sit directly between the "Layout" header and the two steppers.
     assert col1[22]["varName"] == PROGRESS_ORIENTATION_KEY
@@ -1545,6 +1466,27 @@ def test_template_steppers_are_bounded_manual_entry():
         assert s["maximum"] == POS_MAX
         assert s["canManualInput"] is True
         assert s["snapInterval"] == 1
+
+
+def test_template_position_steppers_are_gated_on_alignment_free():
+    # The lock this dispatch adds: since MSA has no way to assign a peer control's value (no
+    # "position change sets Alignment to Free" is expressible through the panel), the steppers
+    # are greyed out unless Alignment is ALREADY Free -- an enableWhen-shaped binding
+    # (masterVarName / masterValue / masterIndent / condition), keyed on the REAL Free value
+    # rather than a hardcoded 1, so a future renumbering of the radio can't silently desync the
+    # gate from the option it means to test.
+    col1 = mod_settings._template()["column1"]
+    x_stepper = _at(col1, mod_settings.BAR_POS_X_KEY)[0]
+    y_stepper = _at(col1, mod_settings.BAR_POS_Y_KEY)[0]
+    for stepper in (x_stepper, y_stepper):
+        assert stepper["masterVarName"] == PROGRESS_ALIGNMENT_KEY
+        assert stepper["masterValue"] == PROGRESS_ALIGN_FREE
+        assert stepper.get("condition", "==") == "=="
+        # NOT indented -- these are siblings, not sub-options of a createControlsGroup master.
+        assert stepper["masterIndent"] is False
+        # And NOT the multi-condition `conditions` form -- that shape would REPLACE this key
+        # (see _gate_and), so its presence here would mean the single-master binding never took.
+        assert "conditions" not in stepper
 
 
 def test_template_children_bind_to_their_own_master_only():
@@ -1928,11 +1870,12 @@ class _ReentrantFakeMsa(_FakeMsa):
 
 
 def test_on_changed_deriving_latch_survives_a_synchronous_reentrant_stale_echo(monkeypatch):
-    # Trap 1(c): a SYNCHRONOUS re-entrant onSettingsChanged fired from inside updateModSettings,
-    # carrying the user's STALE pre-derivation values, must not trigger a second derivation/write
-    # -- the _deriving latch must still settle on the user's actual intent (Vertical -> Minimap,
-    # position zeroed), and the call count -- not just the value -- proves the guard held.
-    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_DAMAGE_LOG, x=0, y=0)
+    # A SYNCHRONOUS re-entrant onSettingsChanged fired from inside updateModSettings, carrying
+    # the user's STALE pre-derivation values, must not trigger a second derivation/write -- the
+    # _deriving latch must still settle on the user's actual intent (Vertical, position zeroed,
+    # Alignment UNTOUCHED -- v23 retired the Orientation-forces-Alignment rule), and the call
+    # count -- not just the value -- proves the guard held.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=900, y=500)
     stale_payload = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
                      PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
                      BAR_POS_X_KEY: 777, BAR_POS_Y_KEY: 888}
@@ -1943,7 +1886,7 @@ def test_on_changed_deriving_latch_survives_a_synchronous_reentrant_stale_echo(m
 
     assert fake.write_count == 1, "the reentrant echo must not trigger a second write"
     assert fake.written[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_VERTICAL
-    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_MINIMAP
+    assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
     assert (fake.written[BAR_POS_X_KEY], fake.written[BAR_POS_Y_KEY]) == (0, 0)
     assert mod_settings._deriving is False, "the latch must be released after the write-back"
 
@@ -2101,9 +2044,10 @@ def test_set_bar_positions_echo_writes_nothing_through_on_changed(monkeypatch):
     # THE STEP 5 CONFIRMATION, done for real rather than assumed: whatever writes the anchor pair
     # back (a drag end, or BarHost._materialise's own conversion) is, from _on_changed's point of
     # view, indistinguishable from any other position write -- MSA's echo carries exactly what was
-    # just written, position_changed is True, _derive_layout returns (o, FREE, post_p) which
-    # equals `post` verbatim (alignment was ALREADY Free, set by set_bar_position itself), so
-    # nothing is dirty and the echoed pass writes NOTHING.
+    # just written, Orientation is UNCHANGED, so _derive_layout returns `post` verbatim and nothing
+    # is dirty; the echoed pass writes NOTHING. Alignment stays Free throughout -- set_bar_position
+    # no longer sets it at all (this dispatch); both its callers already gate on Alignment being
+    # Free before they ever get here.
     _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=0, y=0)
     fake = _FakeMsa({"enabled": True})
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
@@ -2383,10 +2327,14 @@ def test_migrate_pre_v21_layout_non_zero_position_means_free_alignment():
     # was an ABSOLUTE top-left, exactly what Alignment=Free means -- so it seeds Free and the
     # coordinates are left untouched (the caller's normal DEFAULTS overlay carries them across, not
     # this function). Orientation always seeds Horizontal (the only axis that existed pre-v21).
+    #
+    # ASSERTS THE OLD (PRE-v23) ENCODING -- literal 2, not the symbolic PROGRESS_ALIGN_FREE (now
+    # 1): this fixup runs BEFORE _migrate_pre_v23_alignment in register()'s chain and still writes
+    # the 3-option encoding that was live when it was written (see its own docstring).
     old = {BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640}
     mod_settings._migrate_pre_v21_layout(old)
     assert old[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_HORIZONTAL
-    assert old[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
+    assert old[PROGRESS_ALIGNMENT_KEY] == 2   # the pre-v23 Free index
     assert (old[BAR_POS_X_KEY], old[BAR_POS_Y_KEY]) == (810, 640)   # untouched, not re-derived
 
 
@@ -2419,12 +2367,16 @@ def test_migrate_pre_v22_pos_frame_marks_legacy_only_for_a_nonzero_free_pin():
     # ONLY a store that is ALREADY Alignment=Free with a non-(0, 0) pair has a legacy top-left to
     # convert -- everything else (any other alignment, or Free still at the (0, 0) "not yet
     # materialised" marker) has no legacy pair at all, so it seeds straight to "anchor".
-    free_pinned = {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
+    #
+    # ASSERTS THE OLD (PRE-v23) ENCODING -- literal 2 for Free, not the symbolic
+    # PROGRESS_ALIGN_FREE (now 1): this fixup runs BEFORE _migrate_pre_v23_alignment and still
+    # reads the 3-option encoding that was live when it was written (see its own docstring).
+    free_pinned = {PROGRESS_ALIGNMENT_KEY: 2,   # the pre-v23 Free index
                   BAR_POS_X_KEY: 810, BAR_POS_Y_KEY: 640}
     mod_settings._migrate_pre_v22_pos_frame(free_pinned)
     assert free_pinned[mod_settings.PROGRESS_POS_FRAME_KEY] == mod_settings.POS_FRAME_LEGACY
 
-    free_unmaterialised = {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
+    free_unmaterialised = {PROGRESS_ALIGNMENT_KEY: 2,   # the pre-v23 Free index
                            BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0}
     mod_settings._migrate_pre_v22_pos_frame(free_unmaterialised)
     assert free_unmaterialised[mod_settings.PROGRESS_POS_FRAME_KEY] == mod_settings.POS_FRAME_ANCHOR
@@ -2499,6 +2451,69 @@ def test_migrate_pre_v22_pos_frame_carries_every_default_key_when_driven_from_de
     assert mod_settings.PROGRESS_POS_FRAME_KEY in old
 
 
+# --- v23: _migrate_pre_v23_alignment -- the option-collapse value migration ----------------------
+
+def test_migrate_pre_v23_alignment_maps_all_three_old_values_explicitly():
+    # THE explicit map the task calls for: old 0 (Damage Log) -> 0 (Fixed); old 1 (Minimap) ->
+    # 0 (Fixed); old 2 (Free) -> 1 (Free). Driven off the LITERAL pre-v23 ints, not the (now
+    # renumbered) symbolic constants -- see the function's own docstring for why.
+    damage_log = {PROGRESS_ALIGNMENT_KEY: 0}
+    mod_settings._migrate_pre_v23_alignment(damage_log)
+    assert damage_log[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
+
+    minimap = {PROGRESS_ALIGNMENT_KEY: 1}
+    mod_settings._migrate_pre_v23_alignment(minimap)
+    assert minimap[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
+
+    free = {PROGRESS_ALIGNMENT_KEY: 2}
+    mod_settings._migrate_pre_v23_alignment(free)
+    assert free[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FREE
+
+
+def test_migrate_pre_v23_alignment_is_fail_soft():
+    # A missing / non-int / boolean / out-of-range value is left alone -- clamp_variant re-clamps
+    # it into the new domain when later read; this fixup only needs to not blow up on garbage.
+    no_key = {}
+    mod_settings._migrate_pre_v23_alignment(no_key)
+    assert PROGRESS_ALIGNMENT_KEY not in no_key
+
+    non_int = {PROGRESS_ALIGNMENT_KEY: "nonsense"}
+    mod_settings._migrate_pre_v23_alignment(non_int)
+    assert non_int[PROGRESS_ALIGNMENT_KEY] == "nonsense"
+
+    booly = {PROGRESS_ALIGNMENT_KEY: True}
+    mod_settings._migrate_pre_v23_alignment(booly)
+    assert booly[PROGRESS_ALIGNMENT_KEY] is True
+
+    out_of_range = {PROGRESS_ALIGNMENT_KEY: 7}
+    mod_settings._migrate_pre_v23_alignment(out_of_range)
+    assert out_of_range[PROGRESS_ALIGNMENT_KEY] == 7
+
+
+def test_migrate_pre_v23_alignment_carries_every_default_key_when_driven_from_defaults():
+    # ENUMERATED FROM DEFAULTS, not hand-listed (the task's own instruction): every OTHER key must
+    # survive this migration untouched -- only PROGRESS_ALIGNMENT_KEY's raw value is remapped.
+    old = {}
+    for key, default in DEFAULTS.items():
+        if key == PROGRESS_ALIGNMENT_KEY:
+            old[key] = 1   # the pre-v23 "Minimap" index -- must become Fixed (0), not stay 1
+            continue
+        if isinstance(default, bool):
+            old[key] = not default
+        elif isinstance(default, int) and key not in (
+                PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY, PROGRESS_ORIENTATION_KEY):
+            old[key] = default + 1
+        else:
+            old[key] = default
+    before = dict(old)
+    mod_settings._migrate_pre_v23_alignment(old)
+    for key, value in before.items():
+        if key == PROGRESS_ALIGNMENT_KEY:
+            continue
+        assert old[key] == value, "%s was touched by the alignment migration" % key
+    assert old[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
+
+
 def test_migrate_pre_v13_variant_flips_only_when_the_v13_marker_key_is_absent():
     # Pure unit test of the fixup: a store with no PROGRESS_SHOW_EVENTS_KEY (the v13-introduced
     # marker) is PRE-v13 and gets its raw variant int flipped 0<->1 in place; a store that already
@@ -2548,6 +2563,36 @@ def test_migration_flips_progress_bar_variant_for_a_pre_v13_store(_run_register)
     assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
     written = api.state["settings"][LINKAGE]
     assert written[PROGRESS_VARIANT_KEY] == 1
+    assert api.updated == 1
+    assert api.saved == 1
+
+
+def test_migration_collapses_pre_v23_alignment_across_every_default_key(_run_register):
+    # THE v23 index migration, end to end: a pre-v23 store with the OLD raw "Minimap" index (1)
+    # must land on Fixed (0), and every OTHER DEFAULTS key must survive the bump untouched --
+    # enumerated from DEFAULTS, not hand-listed, so this test cannot rot as new keys are added.
+    old = {"enabled": True}
+    for key, default in DEFAULTS.items():
+        if key == PROGRESS_ALIGNMENT_KEY:
+            old[key] = 1   # the pre-v23 "Minimap" index
+        elif key == mod_settings.PROGRESS_POS_FRAME_KEY:
+            continue   # genuinely absent pre-v22 too; seeded by its own migration
+        elif isinstance(default, bool):
+            old[key] = not default
+        elif isinstance(default, int):
+            old[key] = default + 1   # every radio's ceiling is 1, so default+1 is a legal index
+        else:
+            old[key] = default
+    api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
+    _run_register(api)
+
+    assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FIXED
+    for key, value in old.items():
+        if key in (PROGRESS_ALIGNMENT_KEY, "enabled"):
+            continue
+        assert mod_settings._settings[key] == value, "%s was wiped by the v23 bump" % key
+    written = api.state["settings"][LINKAGE]
+    assert written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
     assert api.updated == 1
     assert api.saved == 1
 

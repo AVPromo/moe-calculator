@@ -589,32 +589,14 @@ def test_reduced_matches_the_shipped_horizontal_placement_within_one_px():
         assert y_new - y_old == expected_at_1080[name]
 
 
-def test_reduced_x_shift_defaults_to_zero_and_is_pure_centring():
-    # x_shift's default (0) must be a true no-op: byte-identical to calling the function with the
-    # argument omitted entirely -- every horizontal/Minimap call site predates this argument and
-    # must see no change (TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix A).
-    for max_x in (0, 1, 100, 1664, 3584):
-        for max_y, space_y, frac, shift in ((824, 1904, 0.865, -90), (500, 1080, 0.5, 0)):
-            without = anchor_centred_reduced(max_x, max_y, space_y, frac, shift)
-            explicit_zero = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, 0)
-            explicit_kw = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, x_shift=0)
-            assert without == explicit_zero == explicit_kw
-
-
-def test_reduced_x_shift_moves_x_left_and_clamps_into_the_extent():
-    # A negative x_shift (the vertical + Damage Log right-pin, rule 5 / DECISION 3) pulls x LEFT
-    # of pure centring by exactly the shift, same as the Y shift's own clamp behaviour.
-    max_x, max_y, space_y, frac, shift = 1664, 824, 1904, 0.865, -90
-    centred_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift)
-    shifted_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, -40)
-    assert shifted_x == centred_x - 40
-    # A huge negative shift clamps to 0 (never off the left edge), and a huge positive shift
-    # clamps to max_x (never off the right edge) -- the same [0, max_x] clamp x already had.
-    lo_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, -999999)
-    assert lo_x == 0
-    hi_x, _ = anchor_centred_reduced(max_x, max_y, space_y, frac, shift, 999999)
-    assert hi_x == max_x
-
+# DELETED (v23, the Fixed-alignment redesign): test_reduced_x_shift_defaults_to_zero_and_is_pure_
+# centring / test_reduced_x_shift_moves_x_left_and_clamps_into_the_extent. anchor_centred_reduced's
+# `x_shift` parameter is gone -- it existed only for a VERTICAL bar resolving to the Damage Log
+# anchor under Large (rule 5's right-pin), a combination that is no longer reachable through the
+# UI or a stored value at all (Alignment only ever stores Fixed or Free; Fixed always resolves to
+# Minimap when vertical -- see bar_window._resolve and mod_settings.py's SETTINGS_VERSION 22->23
+# comment). Every remaining call site is horizontal, where pure `max_x // 2` centring was always
+# already size-invariant with no shift term at all.
 
 # --- Phase 2: new constants mirror the vertical CSS tuner's live defaults -----------------------
 

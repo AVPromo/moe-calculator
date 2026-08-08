@@ -176,17 +176,25 @@ flags/layer reasoning as the corner overlay (`moe-battle`'s hosting-model sectio
 `WINDOW_FULLSCREEN`, because a full-screen surface steals the whole-screen mouse hit-test
 whenever the cursor is raised.
 
-`_resolve()` (`bar_window.py:267-354`) picks one of 3 anchors per `progress_bar_alignment()`:
-**Damage Log** → `anchor_centred_reduced` (centred horizontally, proportionally down the
-viewport); **Minimap** → `anchor_minimap` (to the left of the minimap, measured to the visible
-TRACK box for a vertical bar, to the SURFACE edges for a horizontal one — no horizontal tuner
-has a minimap placement at all); **Free** → its OWN branch, not composed via `anchor_offset` at
-all. For the Damage Log / Minimap branches the stored X/Y stepper pair is composed on top via
-`anchor_offset`; offset (0,0) under Damage Log IS the shipped placement byte-for-byte, so those
-two branches need no sentinel.
+`_resolve()` (`bar_window.py:277-360`) has two live top-level branches now, `alignment` reduced
+(v23) to `PROGRESS_ALIGN_FIXED` (0, default) / `PROGRESS_ALIGN_FREE` (1) — see `moe-settings`'s
+"The Fixed-alignment redesign (v23)" section for the full collapse story and why it shipped.
+**Fixed** resolves internally, purely by Orientation: Horizontal → the Damage Log anchor
+(`anchor_centred_reduced`, centred horizontally, proportionally down the viewport), Vertical → the
+Minimap anchor (`anchor_minimap`, to the left of the minimap, measured to the visible TRACK box for
+a vertical bar — no horizontal tuner has a minimap placement at all, since Fixed+Horizontal never
+resolves there). `PROGRESS_ALIGN_DAMAGE_LOG` / `PROGRESS_ALIGN_MINIMAP` (both still `0`/`1`) are
+INTERNAL anchor selectors now, never a stored `progress_bar_alignment()` value — `_resolve`
+branches on `vertical` directly rather than re-testing a locally-assigned "resolved anchor"
+variable, because `PROGRESS_ALIGN_MINIMAP` and `PROGRESS_ALIGN_FREE` are BOTH `1` (two different,
+never-crossed vocabularies) and re-testing would wrongly match Minimap as Free. The stored X/Y
+stepper pair is composed on top of Fixed's anchor via `anchor_offset`; offset (0,0) IS the shipped
+placement byte-for-byte, so Fixed needs no sentinel. **Free** is its own third branch, unchanged in
+shape from v22 — not composed via `anchor_offset` at all.
 
 **Free's stored pair is an ANCHOR POINT, not a top-left (v22, `TASKS/in-battle-bar-layout-auto-set-redesign.md`
-Trap 3 Fix B / DECISION 2).** `domain/positioning.py`'s `free_top_left(pair, surface, vertical)`
+Trap 3 Fix B / DECISION 2 — kept as-is by the v23 redesign).** `domain/positioning.py`'s
+`free_top_left(pair, surface, vertical)`
 converts it at placement time — bottom-**centre** for horizontal (`pair - (surface_w // 2,
 surface_h)`), bottom-**right** for vertical (`pair - (surface_w, surface_h)`) — using THIS
 placement's live surface size, so a Default↔Large size flip re-anchors the bar instead of growing
@@ -199,11 +207,12 @@ literal top-left until the bar's next mount converts it once (`progress_bar_pos_
 POS_FRAME_LEGACY`, `mod_settings.py:698-710`) — no arithmetic migration at bump time, because no
 surface exists to convert against outside a live battle (same wall as materialise-on-mount below).
 
-**Free DOES have an auto sentinel (`bar_window.py:295-297`, corrected 2026-08-08).** Under
+**Free DOES have an auto sentinel (`bar_window.py:346-353`, corrected 2026-08-08).** Under
 `PROGRESS_ALIGN_FREE` the exact pair `(0, 0)` is rewritten to this ORIENTATION's default alignment
 before the branch runs (Horizontal → Damage Log, Vertical → Minimap) — it does NOT mean the screen
 corner. That is what lets an explicit Orientation flip zero the stored pair
-(`mod_settings._on_changed:1315-1318`) without moving the bar somewhere it was never tuned for.
+(`mod_settings._derive_layout` / `_on_changed`) without moving the bar somewhere it was never
+tuned for.
 The one lost capability is pinning a bar at exactly logical (0, 0) — accepted. This claim has
 flipped repeatedly; trust the code, and see
 `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]` plus
@@ -223,7 +232,14 @@ locals (which were overwritten in place by the AUTO rewrite).
 
 Ctrl+drag: `adapter/battle_input.py` samples Ctrl+LMB → `battle_bridge._on_drag(phase, cursor)`
 (battle_bridge.py:354) → `progress_view.drag(...)` / `efficiency_view.drag(...)` →
-`BarHost.drag()` (`bar_window.py:455-560`). Absolute placement via `cursor_top_left`
+`BarHost.drag()` (`bar_window.py:467-...`). **v23: `drag()` refuses the WHOLE gesture outright**
+— checked at the very top, before any cursor read or window move, on EVERY phase — while
+`progress_bar_alignment() != PROGRESS_ALIGN_FREE`. This is not a spatial gate (see
+`[[battle-bar-installdrag-has-no-spatial-gate-by-design]]` for the JS-side one that predates and
+is unrelated to this); it is an ALIGNMENT gate, and it exists precisely because MSA cannot make a
+peer control's edit flip Alignment to Free for us (see `moe-settings`'s gating vocabulary note) —
+so the gesture is blocked instead of letting the bar visibly follow the cursor and then snap back
+at gesture end. Absolute placement via `cursor_top_left`
 (`positioning.py`), gain exactly 1 (see `_space()`'s derivation), ownership gated by
 `cursor_in_rect` against the gesture's own window rect. **`window.move()` still takes the
 computed top-left, but what gets persisted (both the live per-move update and the gesture-end
@@ -247,30 +263,35 @@ correction — only one, unconfirmed hand-drag exists for this bar). Shared:
 `VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-170` (identical for both bars — both vertical
 compositions share the same backdrop geometry).
 
-**The `_LARGE` Y-shifts above were RE-DERIVED (rule 5 / DECISION 3, `-55→-65`, `-63→-77`,
-`-113→-170`)** to pin the composition's BOTTOM ink rather than the naive `shift * SIZE_F`
-algebraic identity, which pins neither ink edge — see memory
-`[[anchor-y-shift-large-pins-neither-ink-edge]]`. **The same rule's X term is WIRED and live**:
-`anchor_centred_reduced` (`domain/positioning.py:107`) gained an `x_shift=0` parameter, applied as
-`max_x // 2 + x_shift` — the default keeps every OTHER call (horizontal, Minimap, and the vertical
-branch under Default) byte-identical, since a vertical bar's natural alignment under rules 2/3 is
-Minimap (already compliant) and Damage Log is only reachable there as a stored-but-unselectable
-value (DECISION 5). `BarHost.__init__` gained `x_shift_large=0`
-(`bridge/bar_window.py:241-243`), and `_resolve`'s `elif vertical:` branch (`:361-365`) is the ONLY
-caller that passes a non-zero value: `self._x_shift_large if large else 0`. `progress_view.py` /
-`efficiency_view.py` thread `PROGRESS_ANCHOR_X_SHIFT_LARGE=-40` / `EFFICIENCY_ANCHOR_X_SHIFT_LARGE=-35`
-into their own `BarHost(...)` construction. Measured result: the vertical + Damage Log right edge
-holds across Default→Large — 0px drift on Progress, 1px on Efficiency, inside the module's
-accepted ±1 int-floor bound (memory `[[anchor-y-reduction-is-not-bit-exact]]`).
+**The `_LARGE` Y-shifts above were RE-DERIVED (rule 5, `-55→-65`, `-63→-77`, `-113→-170`)** to pin
+the composition's BOTTOM ink rather than the naive `shift * SIZE_F` algebraic identity, which pins
+neither ink edge — see memory `[[anchor-y-shift-large-pins-neither-ink-edge]]`. These stay live:
+rule 5's size-invariance still holds through `anchor_minimap` (Minimap/Fixed+vertical) and
+`free_top_left` (Free, either orientation).
+
+**DELETED at v23** (the Fixed-alignment redesign, not merely unreachable): `anchor_centred_
+reduced`'s `x_shift` parameter, `BarHost`'s `x_shift_large` constructor argument, and
+`PROGRESS_ANCHOR_X_SHIFT_LARGE` / `EFFICIENCY_ANCHOR_X_SHIFT_LARGE`. This machinery existed only
+to right-pin a VERTICAL bar resolving to the **Damage Log** anchor under Large (rule 5's X term for
+that one combination); it is now structurally unreachable, not just unused — Alignment only ever
+stores Fixed or Free (`clamp_variant`'s ceiling is `PROGRESS_ALIGN_FREE == 1`), and Fixed always
+resolves to Minimap when vertical (`_resolve`), which was already X-invariant by construction
+(`anchor_minimap` subtracts from the full space using per-size TRACK offsets). There is no stored
+value or UI path left that can select the old vertical+Damage-Log combination, so the constants,
+the parameter and the constructor argument were removed rather than left dead. `VERTICAL_ANCHOR_Y_
+SHIFT` / `_LARGE` (the −170 value) are KEPT even though placement no longer reads them for a
+centred vertical anchor — the JS files still cite them as a wire-contract record and tests still
+pin them against real geometry.
 
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
-`SETTINGS_VERSION=22`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
+`SETTINGS_VERSION=23`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
 `progress_bar_enabled()` (`mod_settings.py:516`). Variant `PROGRESS_VARIANT_KEY=
 "progress_bar_variant"` (:548, 0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
 "progress_bar_size"` (:559, 0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=
 "progress_bar_orientation"` (:640, 0=Horizontal/1=Vertical). Alignment `PROGRESS_ALIGNMENT_KEY=
-"progress_bar_alignment"` (:651, 0=Damage Log/1=Minimap/2=Free). Visibility children
+"progress_bar_alignment"` (:440, 0=Fixed/1=Free as of v23, collapsed from 0=Damage Log/1=Minimap/
+2=Free — see `moe-settings`). Visibility children
 `PROGRESS_SHOW_EVENTS_KEY`, `PROGRESS_SHOW_ALT_KEY`, `PROGRESS_SHOW_ALWAYS_KEY` (all default
 True/True/False), folded by `progress_show_events()` (:524) and `progress_alt_held(alt_held)`
 (:535 — "Always" IS a permanently-held Alt, no fourth code path). Transitions

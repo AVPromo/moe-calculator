@@ -296,33 +296,17 @@ MM_TICK_OVERHANG_LARGE = 5
 VERTICAL_ANCHOR_Y_SHIFT = -90
 VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 
-# THE VERTICAL + DAMAGE LOG X SHIFT -- did not exist before rule 5 (DECISION 3), because
-# anchor_centred_reduced's X term is pure `max_x // 2` with NO offset (see its docstring): that
-# self-calibrates for a HORIZONTAL bar (the composition is symmetric about its own centre, so
-# centring the surface centres the bar with no Python term at all), but a VERTICAL bar's natural
-# resting alignment is bottom-RIGHT, and right-pinning a centred anchor is not free -- a size-up
-# widens the surface and `max_x // 2` moves BOTH edges outward by half the width delta, so the
-# right edge drifts right unless something pulls it back.
-#
-# ONE PER BAR (unlike the shared Y shift above): each vertical surface's own width differs
-# (V_VIEW_W_REM == V_BOX_W_REM + 2*V_PAD_X_REM), and LARGE scales the two terms by DIFFERENT
-# factors -- V_BOX_W_REM is the composition's own physical width, an x-length, so it carries
-# SIZE_F * SIZE_XF == 1.25 * 4/3 == 5/3 (memory `mp-lg-x-lengths-are-pure-sizexf-not-sizef`);
-# V_PAD_X_REM (like PAD_REM) is NOT an x-length -- the ink it covers is rem-sized and rides SIZE_F
-# alone. So the width delta, and hence the shift that cancels it, is per-bar:
-#   Moving Average:    width 72 + 2*63 == 198  -> large 72*5/3 + 2*63*1.25 == 120 + 157.5 == 277.5
-#                       Dw/2 == (277.5 - 198) / 2 == 39.75 -> -40 (half-away rounding)
-#   Damage Efficiency: width 96 + 2*10 == 116  -> large 96*5/3 + 2*10*1.25 == 160 + 25 == 185
-#                       Dw/2 == (185 - 116) / 2 == 34.5 -> -35 (half-away rounding)
-# WIRED via domain.positioning.anchor_centred_reduced's `x_shift` argument (default 0, a no-op for
-# every other alignment/orientation) and bar_window.BarHost's `x_shift_large` constructor argument,
-# read by _resolve's `elif vertical:` branch only, under Large only (Default needs no term -- see
-# above). progress_view.py / efficiency_view.py thread each bar's own constant through at
-# construction. Still unreachable through the UI under rules 2/3 (a vertical bar's natural
-# alignment is Minimap, already compliant) but a stored (V, DL) stays placeable (DECISION 5), so
-# this had to be correct even with nobody able to select it.
-PROGRESS_ANCHOR_X_SHIFT_LARGE = -40
-EFFICIENCY_ANCHOR_X_SHIFT_LARGE = -35
+# DELETED (v23, the Fixed-alignment redesign): PROGRESS_ANCHOR_X_SHIFT_LARGE /
+# EFFICIENCY_ANCHOR_X_SHIFT_LARGE, rule 5's vertical + Damage Log right-pin term, wired through
+# domain.positioning.anchor_centred_reduced's `x_shift` argument and bar_window.BarHost's
+# `x_shift_large` constructor argument. It existed to hold the composition's right edge still on a
+# Default<->Large size flip for a VERTICAL bar resolving to the Damage Log anchor -- a combination
+# that was already unreachable through the UI (a vertical bar's natural Alignment was Minimap) but
+# stayed storable pre-v23. As of v23 the Alignment radio only ever stores Fixed or Free
+# (clamp_variant's ceiling is PROGRESS_ALIGN_FREE == 1) and Fixed always resolves to Minimap when
+# vertical (bar_window._resolve) -- there is no stored value or UI path left that can select
+# Damage Log while vertical, so the term is genuinely dead rather than merely unreachable. See
+# mod_settings.py's SETTINGS_VERSION 22->23 comment.
 
 # WHERE THE VERTICAL COMPOSITION'S TRACK SITS INSIDE ITS OWN SURFACE -- positioning.anchor_minimap's
 # `edge_x` / `edge_y`, i.e. the offset from the surface's top-LEFT corner to the two edges the

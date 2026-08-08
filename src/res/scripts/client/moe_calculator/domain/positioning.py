@@ -104,7 +104,7 @@ def anchor_centred(max_x, max_y, y_frac, x_offset=0, y_offset=0):
     return x, y
 
 
-def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift, x_shift=0):
+def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift):
     """Top-left (x, y) in logical GUI space for a HORIZONTALLY CENTRED window -- the COMPUTED
     successor to anchor_centred above, and what bridge/bar_window.py._resolve now places the
     Damage-Log-aligned bar with (see TASKS/in-battle-vertical-bar-PLAN.md "Phase 2 approach: the
@@ -113,19 +113,15 @@ def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift, x_shift=0):
     movable extent `max_y` for the Y fraction, and a single PURE shift term (`y_shift`) in place
     of a baked two-term composite.
 
-    `x_shift` (DEFAULT 0, i.e. pure `max_x // 2` centring, byte-identical to every call site that
-    predates it) is rule 5's vertical + Damage Log right-pin (TASKS/in-battle-bar-layout-auto-set-
-    redesign.md Trap 3 Fix A / DECISION 3): a horizontal bar's composition is symmetric about its
-    own centre, so `max_x // 2` alone already keeps the bottom-CENTRE's x fixed across a size
-    change and must stay a no-op there. A VERTICAL bar's natural anchor is bottom-RIGHT instead,
-    and centring is not a right-pin -- a size-up widens the surface and `max_x // 2` moves BOTH
-    edges outward by half the width delta, so the caller passes a per-size, per-bar NEGATIVE
-    `x_shift` (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE, 0 at Default) that cancels
-    exactly that outward drift and holds the right edge -- see those constants' derivation. This
-    moves the WINDOW's top-left only; the composition inside the surface is untouched, so the
-    vertical bar's surface stays concentric with its own track (memory `vertical-bar-surface-
-    must-stay-concentric-with-track` is about anchor_minimap, not this anchor, but the same
-    window-vs-composition distinction applies here).
+    DELETED (v23, the Fixed-alignment redesign): the `x_shift` parameter, rule 5's vertical +
+    Damage Log right-pin term. It existed only to hold a VERTICAL bar's right edge still across a
+    Default<->Large size flip while it was resolving to THIS (Damage Log) anchor -- a combination
+    that is no longer reachable through the UI or a stored value at all, since Alignment now only
+    ever stores Fixed or Free and Fixed always resolves to the Minimap anchor when vertical (see
+    bar_window._resolve and mod_settings.py's SETTINGS_VERSION 22->23 comment). Every call site is
+    horizontal now, where `max_x // 2` alone was always the whole story: the composition is
+    symmetric about its own centre, so centring the surface centres the bar with no Python term at
+    all, size-invariant already.
 
     WHY THE REDUCTION IS VALID. anchor_centred's `y_offset` sums two terms: -shift (cancelling
     the composition's intra-surface offset) and +round(y_frac * surface_h) (converting the
@@ -164,8 +160,7 @@ def anchor_centred_reduced(max_x, max_y, space_y, y_frac, y_shift, x_shift=0):
     space_y = _int(space_y)
     frac = _float(y_frac)
     shift = _int(y_shift)
-    xshift = _int(x_shift)
-    x = min(max(0, max_x // 2 + xshift), max_x)
+    x = min(max(0, max_x // 2), max_x)
     y = min(max(0, int(space_y * frac) + shift), max_y)
     return x, y
 

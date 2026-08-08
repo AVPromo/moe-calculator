@@ -17,7 +17,7 @@ Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `
 
 ## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair in column 1)
 
-`SETTINGS_VERSION = 22`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
+`SETTINGS_VERSION = 23`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
 migration branch carries the user's values across) — localizing plain label/tooltip text is
@@ -58,24 +58,27 @@ Built in `_template()`:
      Position" at v21 — the key is unchanged, a rename buys nothing since it's positional in
      `COL1_KEYS`), then two more **standalone `inline` radios** — "Orientation"
      (`progress_bar_orientation`: Horizontal `0` default / Vertical `1`) and "Alignment"
-     (`progress_bar_alignment`: Damage Log `0` default / Minimap `1` / Free `2`) — followed by the
-     two **standalone** `NumericStepper`s, `progress_bar_pos_x` / `progress_bar_pos_y`, mirroring
-     the in-battle bar's Ctrl+drag reposition (see `moe-battle`). All four are standalone like the
-     Mode/Scale radios above (no master, no condition): a bar's shape/anchor and a coordinate
-     should all stay readable/editable while the feature is off. **One shared radio pair and one
-     shared stepper pair serve BOTH bar variants** (they're mutually exclusive at runtime); the
-     steppers store LOGICAL GUI px (interface-scale invariant, no `posW`/`posH` viewport pinning
-     like the garage pair below). **As of v21 the steppers are anchor-relative OFFSETS, not an
-     absolute top-left. The old *universal* `0/0 == auto` sentinel is gone, but Free keeps its own:
-     under Alignment = Free the exact pair `(0, 0)` still resolves to the orientation's default
-     anchor** (`bar_window.py:295-297`) — see `anchor_offset()` /
-     `progress_bar_alignment()` below. Both this pair's steppers and the garage `posX`/`posY` pair
-     below run **`-POS_MAX .. POS_MAX`** (was `0 .. POS_MAX` before v20) — the on-screen edge
-     clamp was removed so a bar may be dragged past any screen edge; see the memory
-     `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]`. All three Alignment
-     options stay always-selectable regardless of Orientation (MSA gates whole controls, not
-     individual radio options) — a per-orientation restriction was rejected as a second stored key
-     for no behavioural gain.
+     (`progress_bar_alignment`: **Fixed `0` default / Free `1`** — collapsed from three options
+     [Damage Log `0` / Minimap `1` / Free `2`] to two at v23, see "The Fixed-alignment redesign
+     (v23)" below) — followed by the two `NumericStepper`s, `progress_bar_pos_x` /
+     `progress_bar_pos_y`, mirroring the in-battle bar's Ctrl+drag reposition (see `moe-battle`).
+     Orientation is standalone (no master, no condition), like Mode/Scale, so a bar's shape stays
+     readable/editable while the feature is off. **The position steppers are NOT standalone as of
+     v23** — they carry a hand-built `enableWhen`-shaped gate (`_gate_enable`,
+     `mod_settings.py:1031`) against `progress_bar_alignment == PROGRESS_ALIGN_FREE`, so they grey
+     out (never hide — a stepper that vanishes would reflow the rest of column 1, and MSA stores +
+     pushes a greyed control's value regardless) whenever Alignment is Fixed. **One shared radio
+     pair and one shared stepper pair serve BOTH bar variants** (they're mutually exclusive at
+     runtime); the steppers store LOGICAL GUI px (interface-scale invariant, no `posW`/`posH`
+     viewport pinning like the garage pair below). Under **Fixed** the pair is still an
+     anchor-relative OFFSET composed via `anchor_offset` on top of whichever internal anchor
+     Orientation selects (see "The Fixed-alignment redesign (v23)"); under **Free** the pair is an
+     **anchor point**, not an offset, and the exact pair `(0, 0)` under Free still resolves to the
+     orientation's default anchor (`bar_window.py:346-353`) — see `progress_bar_alignment()` below.
+     Both this pair's steppers and the garage `posX`/`posY` pair below run
+     **`-POS_MAX .. POS_MAX`** (was `0 .. POS_MAX` before v20) — the on-screen edge clamp was
+     removed so a bar may be dragged past any screen edge; see the memory
+     `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]`.
 - **column2 = `Label` "Garage Widget", the standalone `garage_widget_enabled` master, an
   `_empty()`, then the "Layout" group** — a `Label` header, the posX / posY `NumericStepper`s, and
   the "Follow Carousel Mode" checkbox.
@@ -105,8 +108,8 @@ it does. Don't conflate them.
 | ↳ Hold Duration (s) | `progress_hold_seconds` | column1 group-3 child, `Slider` (1-30, int) | `5` | `progress_hold_seconds()` — **NOT** master-folded (a duration, not a flag) | both bars' `MoEBarTransient` hold timer |
 | *Layout* (header, **bold**, v18, header text renamed from "Bar Position" at v21, key `catBarPosition` unchanged) | — | column1 `Label` | — | — | — |
 | Orientation — Horizontal / Vertical | `progress_bar_orientation` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21) | `0` = Horizontal | `progress_bar_orientation()` | `bar_window.BarHost._resolve` (orientation branch), front-end DOM build branch |
-| Alignment — Damage Log / Minimap / Free | `progress_bar_alignment` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21) | `0` = Damage Log | `progress_bar_alignment()` | `bar_window.BarHost._resolve` (alignment branch picks `anchor_centred_reduced` / `anchor_minimap` / origin) |
-| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 **standalone** `NumericStepper`s, range `-POS_MAX..POS_MAX` (v20) | 0 = anchor-relative offset under Damage Log / Minimap; under **Free**, the exact pair 0/0 means AUTO (the orientation's default anchor) | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
+| Alignment — Fixed / Free | `progress_bar_alignment` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21; collapsed 3→2 options at v23) | `0` = Fixed | `progress_bar_alignment()` | `bar_window.BarHost._resolve` (Fixed resolves internally by Orientation to the Damage-Log or Minimap anchor; Free is its own branch), `bar_window.BarHost.drag` (refuses the gesture outright unless Free) |
+| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 `NumericStepper`s, range `-POS_MAX..POS_MAX` (v20); **`enableWhen`-gated on Alignment==Free as of v23** (`_gate_enable`) | 0 = anchor-relative offset under Fixed; under **Free**, the pair is an anchor point and the exact 0/0 means AUTO (the orientation's default anchor) | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
 | *Layout* (header, **bold**) | — | column2 `Label` | — | — | — |
 | Follow Carousel Mode | `followCarousel` | column2 (sits ABOVE the steppers as of v14) | ON | `follow_carousel()` | garage widget carousel nudge |
 | *Position* (sub-label, **not bold** — deliberately excluded from `HEADER_KEYS`) | — | column2 `Label` | — | — | — |
@@ -131,10 +134,11 @@ COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarous
              None, u"positionSub", u"posX", u"posY")                                    # 9 slots
 ```
 
-**Both counts are UNCHANGED at v22** (still 26 / 9, `tipless == 8`, `spacers == 7`): the v22 bump's
+**Both counts are UNCHANGED at v23** (still 26 / 9, `tipless == 8`, `spacers == 7`) — the v22 bump's
 only new key, `progress_bar_pos_frame`, is a hidden marker with no MSA control and so no
-`COL1_KEYS`/`COL2_KEYS` slot at all — see the "Placement model" section below for why the bump is
-still owed despite the layout not moving.
+`COL1_KEYS`/`COL2_KEYS` slot at all; the v23 bump only shrinks the Alignment radio's *option list*
+(3 → 2), a fixed row that costs no slot either way — see the "The Fixed-alignment redesign (v23)"
+section below for why each bump is still owed despite the layout not moving.
 
 **v14 grew `COL2_KEYS` 7 → 8**: Follow Carousel moved to sit right under the (now bold) "Layout"
 header, and a new varName-less `"positionSub"` (**"Position"**) sub-label was inserted ahead of the
@@ -217,11 +221,11 @@ SENTINEL slot**, never a skip: `panel_text().get(None)` is falsy, so the sync wa
 consume the component *without* consuming its key and desync every control after it.
 **Appending** to the end shifts nothing and is the safe move; inserting is not.
 
-### Gating: two grouped masters, one AND gate, four ungated radios
+### Gating: two grouped masters, one AND gate, four ungated radios, and (v23) one peer-value gate
 
 `createControlsGroup` sets exactly **one** `masterVarName` per child, so a master-under-a-master is
-not expressible **through it**. But **MSA 1.6.4 has real conditional gating** (capability section
-below), so three shapes are available:
+not expressible **through it**. **MSA 1.6.4 has real conditional gating** (capability section
+below), so four shapes are in play:
 
 1. **`_grouped_column1(master, children)`** — the default. One `masterVarName` per child.
 2. **`_gate_and(control, ((var, value), …))`** — MSA's multi-condition form (`conditions` +
@@ -231,15 +235,23 @@ below), so three shapes are available:
    conditions. `show_events` / `show_alt` are grouped under `PROGRESS_BAR_KEY` and then re-gated on
    `(PROGRESS_BAR_KEY == True) AND (PROGRESS_SHOW_ALWAYS_KEY == False)`, because they are also
    meaningless while "Always" is on.
-3. **standalone** — no master, no condition. All four radios — Mode, Scale, and the v21
-   Orientation / Alignment pair — describe the bar itself rather than when it shows, they cost
-   one row each because they are `inline`, and leaving them ungated keeps them readable while the
-   feature is off (the same call already made for the column-2 steppers). All three Alignment
-   options stay always-selectable regardless of Orientation — MSA gates whole controls, not
-   individual radio options, so a per-orientation restriction would need a second stored key for
-   no behavioural gain, and was rejected. The v18 "Layout" (`catBarPosition`) `barPosX` /
-   `barPosY` steppers are standalone for the identical reason — a saved coordinate should stay
-   readable/editable even with the bar off.
+3. **standalone** — no master, no condition. Mode, Scale and Orientation describe the bar itself
+   rather than when it shows, they cost one row each because they are `inline`, and leaving them
+   ungated keeps them readable while the feature is off (the same call already made for the
+   column-2 steppers).
+4. **`_gate_enable(control, master_var, value, condition="==")`** (v23, `mod_settings.py:1031`) —
+   a single-condition `enableWhen`-shaped gate built by hand like `_gate_and`, used for exactly
+   ONE pair: the position steppers `barPosX`/`barPosY` grey out (never hide — a hidden-then-shown
+   stepper reflows the rest of column 1, and MSA stores + pushes a greyed control's value
+   regardless) whenever `progress_bar_alignment != PROGRESS_ALIGN_FREE`. This is the *only*
+   mechanism available to express "control B only makes sense once control A picks a specific
+   value" — MSA's whole gating vocabulary is enable-or-hide only, it never assigns a peer's
+   stored value (`[[msa-gating-is-enable-or-hide-only]]`), so a peer control cannot programmatically
+   flip Alignment to Free when the user edits a stepper; the steppers are simply disabled until it
+   already is. The Orientation/Alignment radios themselves stay standalone — the v18 "Layout"
+   (`catBarPosition`) steppers used to be standalone for the identical "stay readable while the
+   bar is off" reason, but v23 traded that for the gate above because an editable-but-meaningless
+   stepper under Fixed was the worse of the two costs.
 
 "Transitions under Progress Bar" is still a **third `_grouped_column1(...)` splice inside the same
 category** — visually part of the Battle Progress block, with the accepted cost that **the
@@ -297,65 +309,85 @@ behaviour) — see `wotmod-gameface-widget` and the memory note on new VM bools.
 row rather than a duplicated pair per variant. `bar_pos_x()` / `bar_pos_y()` re-clamp on read
 (`clamp_pos`, same `_POS_KEYS` branch of `_coerce` as the garage `posX`/`posY`).
 
-**Placement model as of v22 (Orientation + Alignment + the Free anchor-point frame) —
-`anchor_pinned` and its blanket `0/0 == auto` sentinel are GONE.** Placement is now
-`anchor_offset(base, off_x, off_y)` for the Damage Log / Minimap branches, where `base` is
-whichever of those two `progress_bar_alignment()` selects — `anchor_centred_reduced` (Damage
-Log) or `anchor_minimap` (Minimap) — and `off_x`/`off_y` are these same two steppers, **anchor-relative
-offsets**, not an absolute top-left. Free is its own third branch and does **not** go through
-`anchor_offset` at all: as of the v22 bump the stored pair is an **ANCHOR POINT**, not a top-left
-(bottom-centre for horizontal, bottom-right for vertical — `domain/positioning.py`'s
-`free_top_left(pair, surface, vertical)`, converted at placement time only, never written back —
-see `moe-progress` for the full math and why a Default↔Large size flip must not move the anchor).
-Before the Free branch runs, `_resolve` (`bar_window.py:326-335`) still rewrites the exact pair
-`(0, 0)` under Free to this orientation's default alignment (Horizontal → Damage Log, Vertical →
-Minimap), so Free+0/0 is AUTO, **not** the screen corner — this is now the "not yet materialised"
-marker too (see `progress_bar_pos_frame` below). This is load-bearing: it is what lets an
-Orientation/Alignment change zero the stored pair without carrying the other orientation's
-coordinates across, and what lets Free be picked in the garage panel (no bar surface exists there
-to compute a real anchor point from) without jumping the bar. (Earlier revisions of this file and
-of `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]` claimed the opposite; the
-claim has flipped several times — read `_resolve`.) `anchor_centred` itself is retained
-byte-for-byte in `domain/positioning.py` as the pre-reduction oracle `anchor_centred_reduced`'s
-`abs(delta) <= 1` bound is tested against, though nothing in `src/` calls it anymore.
+### The Fixed-alignment redesign (v23) — Alignment collapses to Fixed/Free, all auto-set is deleted
 
-**The v21→22 bump exists ONLY for the Free anchor-point frame migration**, not for any new panel
-row: it adds a single hidden marker key, `PROGRESS_POS_FRAME_KEY = "progress_bar_pos_frame"`
-(values `POS_FRAME_ANCHOR` / `POS_FRAME_LEGACY`, `mod_settings.py:365-367`), whose sole job is to
-be absent on a pre-v22 store so `_migrate_pre_v22_pos_frame` can key on that absence (the same
-lookup-not-arithmetic trick `_migrate_pre_v21_layout` already uses). It never becomes an MSA
-control — no `COL1_KEYS`/`COL2_KEYS` slot, no template row — because a `DEFAULTS` key needs
-neither to persist through `merge_settings`/`_apply`; a bump is still owed because the key itself
-is structural (a new varName), not because the layout changed. A pre-v22 Free pin is left as a
-literal top-left (`POS_FRAME_LEGACY`) and converted into the anchor-point frame lazily, the first
-time that bar mounts with a real surface (`bar_window.BarHost._materialise`) — not at migration
-time, for the same reason Free's materialise-on-mount exists at all: no surface size is readable
-in the settings panel.
+**As of v23, `progress_bar_alignment` stores only two values: `PROGRESS_ALIGN_FIXED = 0` (default)
+or `PROGRESS_ALIGN_FREE = 1`.** The old three-way radio (Damage Log `0` / Minimap `1` / Free `2`)
+is gone from the panel. `PROGRESS_ALIGN_DAMAGE_LOG = 0` / `PROGRESS_ALIGN_MINIMAP = 1` survive in
+`mod_settings.py` as **INTERNAL anchor selectors only** — nothing ever stores them any more, and
+`clamp_variant`'s ceiling for `PROGRESS_ALIGNMENT_KEY` is `PROGRESS_ALIGN_FREE == 1`, so no legal
+stored value can select the old Minimap-under-Fixed combination. **Fixed resolves purely by
+Orientation** (`bar_window.BarHost._resolve`, `bar_window.py:277-360`): Horizontal → the Damage
+Log anchor (`anchor_centred_reduced`), Vertical → the Minimap anchor (`anchor_minimap`) — the same
+placement math as before, just no longer independently selectable. **`_resolve` branches on
+`vertical` directly, never on a locally-reassigned "resolved anchor" variable** — `PROGRESS_ALIGN_
+MINIMAP` and `PROGRESS_ALIGN_FREE` are BOTH `1` (two different, never-crossed vocabularies: stored
+alignment vs. internal anchor selector), so re-testing a variable just set to `PROGRESS_ALIGN_
+MINIMAP` against `== PROGRESS_ALIGN_FREE` would wrongly match
+(`[[internal-constant-shares-value-with-different-stored-vocabulary]]`). Free is its
+own third branch, unchanged from v22: the stored pair is an **anchor point** (bottom-centre
+horizontal / bottom-right vertical — `domain/positioning.py`'s `free_top_left(pair, surface,
+vertical)`, converted at placement time only, never written back), and the exact pair `(0, 0)`
+under Free is still rewritten to Fixed's own mapping first — Free+0/0 is AUTO, not the screen
+corner, and is also the "not yet materialised" marker (see `progress_bar_pos_frame` above).
 
-**`_migrate_pre_v21_layout`** runs in `mod_settings`, keyed on the same `_on_changed` machinery: a
-pre-v21 store is migrated by **lookup, not arithmetic** — keyed on the absence of
-`progress_bar_orientation` (same trick `_flip_pre_v13_variant` already uses) — a non-zero
-pre-bump `(pos_x, pos_y)` implies the old absolute placement, so it becomes Alignment = Free with
-the coordinates carried verbatim; a zero pair implies the shipped centred placement, so it
-becomes Alignment = Damage Log, still `(0, 0)`. Nobody's bar moves on upgrade.
+**All Orientation↔Alignment auto-set is DELETED.** The maintainer tested in-client and found
+flipping Orientation never visibly updated the Alignment radio; the root cause was NOT a broken
+derivation — MSA's Aslain panel simply never subscribes to `onSettingsChanged` and only pushes
+control values once, at panel open (`[[msa-panel-never-repaints-on-a-write-back]]`) — but rather
+than build a repaint path, the maintainer restructured the feature so nothing needs to derive a
+peer control's value at all. Neither radio derives the other any more. `_derive_layout(pre, post)`
+(`mod_settings.py:1502`) keeps **exactly one rule**: an Orientation flip zeroes the stored X/Y
+pair, because the two orientations use different surface geometries. Its signature dropped from
+`(orientation, alignment, position)` to **`(orientation, position)`** — Alignment is no longer
+part of it at all, in either direction. The `_deriving` re-entrancy latch is KEPT (a stale echo
+racing the zeroing rule could still misread a settled `(newO, (0, 0))` as the user re-typing the
+old coordinates), even though the mutual-derivation ping-pong hazard it was originally built for
+is gone. `_derive_layout(s, s) == s` for any `(orientation, position)` pair remains the fixed-point
+termination proof `_on_changed` relies on for a single write-back pass.
 
-**"Free is sticky" is SUPERSEDED (2026-08-08) — do not re-derive it.** Orientation and Alignment
-are now two views of ONE choice, fully mutually derived by a pure module-level
-`_derive_layout(pre, post)` (`mod_settings.py`, next to `_on_changed`): an Orientation flip
-re-anchors Alignment **even from Free**, and an Alignment change to Damage Log / Minimap
-re-anchors Orientation the same way — neither direction is sticky anymore. Precedence when one
-payload carries several changes: **position > alignment > orientation** — a position edit
-(stepper or drag) always wins outright and forces Alignment = Free, Orientation untouched; failing
-that, alignment beats orientation. `_on_changed` shrank to snapshot → `_apply` overlay → one
-`_derive_layout` call → write-if-changed. A **`_deriving` re-entrancy latch** (module-level bool,
-true only while the write-back is in flight) guards a synchronous re-entrant `onSettingsChanged`
-carrying a stale pre-derivation snapshot — while set, `_on_changed` still `_apply`s + `_notify`s
-but skips derivation. See `TASKS/in-battle-bar-layout-auto-set-redesign.md` for the full
-transition table and why every settled state is a fixed point (`_derive_layout(s, s) == s`), which
-is what makes the write-back's own echo terminate in one pass — no ping-pong, no recursion — the
-same self-terminating shape the pre-v13 migration already relies on (see the memory
-`[[a-noop-mutation-and-a-fail-soft-branch-can-look-identical]]` for why a test of this guard must
-assert the **call count**, not just the resulting value).
+**Position is locked unless Alignment is Free — rule 4 (position-change forces Alignment := Free)
+is deleted, not merely inert.** The X/Y steppers carry MSA's native `enableWhen`-shaped gate
+(`_gate_enable`, greyed under Fixed, never hidden) and `bar_window.BarHost.drag()` refuses the
+WHOLE gesture, checked at the very top before any cursor read or window move, on every phase,
+while `progress_bar_alignment() != PROGRESS_ALIGN_FREE`. With both paths blocked, a stored
+position can now only ever change while Alignment is *already* Free, by construction — so the old
+rule has no reachable input left to fire on and was deleted from both `_derive_layout` and
+`set_bar_position` (which no longer touches `PROGRESS_ALIGNMENT_KEY` at all).
+
+**Deleted as provably dead** (v23): `PROGRESS_ANCHOR_X_SHIFT_LARGE` / `EFFICIENCY_ANCHOR_X_SHIFT_
+LARGE`, `anchor_centred_reduced`'s `x_shift` parameter, `BarHost`'s `x_shift_large` constructor
+argument and the view-construction threading, and `_resolve`'s horizontal+Minimap-under-vertical
+sub-case. This machinery existed only to right-pin a VERTICAL bar resolving to the Damage Log
+anchor under Large; that combination is now unreachable through the UI or any legal stored value
+(Alignment only ever stores Fixed or Free, and Fixed always picks Minimap when vertical), so
+`clamp_variant`'s ceiling of `1` for the alignment key structurally forecloses it — not just
+"currently unused". `VERTICAL_ANCHOR_Y_SHIFT` / `_LARGE` (the −170 value) and the re-derived
+horizontal `PROGRESS_ANCHOR_Y_SHIFT_LARGE`/`EFFICIENCY_ANCHOR_Y_SHIFT_LARGE` (−65/−77) are KEPT —
+rule 5's size-invariance still holds through `anchor_minimap` and `free_top_left`, and the JS files
+cite the vertical shift constants as a wire-contract record even though placement no longer reads
+them for a centred anchor.
+
+**`SETTINGS_VERSION` 22 → 23** carries both the radio collapse and the stepper gate in one bump
+(`mod_settings.py:232-288`, the fullest comment block in the file — read it before touching any of
+this again). The Alignment index migration (`_migrate_pre_v23_alignment`, last in the migration
+chain, after `_migrate_pre_v21_layout` / `_migrate_pre_v22_pos_frame`, both of which still read/
+write the OLD 3-option encoding) maps the raw int explicitly: old `0` (Damage Log) → new `0`
+(Fixed); old `1` (Minimap) → new `0` (Fixed); old `2` (Free) → new `1` (Free) — a genuine
+collision, not a relabel, since the old raw `1` (Minimap) and the new raw `1` (Free) would
+otherwise silently swap meaning.
+
+**`_migrate_pre_v21_layout`** (unchanged by v23, runs first in the chain) is keyed on the absence
+of `progress_bar_orientation`: a non-zero pre-v21 `(pos_x, pos_y)` implies the old absolute
+placement, so it becomes (pre-v23) Alignment = Free with the coordinates carried verbatim; a zero
+pair implies the shipped centred placement, so it becomes (pre-v23) Alignment = Damage Log, still
+`(0, 0)`. `_migrate_pre_v23_alignment` then remaps whatever that produced onto the new 2-option
+domain, so a chained pre-v21 install ends up in the right place after all three migrations run.
+
+**Do NOT re-derive "Free is sticky" or the mutual auto-set from any older prose** —
+`TASKS/in-battle-bar-layout-auto-set-redesign.md`'s rules 2/3, its 13-row transition table, and
+DECISION 4/5 are SUPERSEDED (see that note's own updated status section). Rule 5
+(size-invariance) DID ship and still holds.
 
 `set_bar_position(x, y, persist=True)` is the write path, called from `bar_window.BarHost.drag`
 on gesture end (`phase == "end"`). **The gesture itself has no JS and no wire protocol at
@@ -411,7 +443,10 @@ them without a cycle. Live state seeds from MSA in `register()`; defaults until 
   keyed on the old order would be indistinguishable from a fresh `0`);
 - `PROGRESS_SIZE_DEFAULT = 0` (the shipped size), `PROGRESS_SIZE_LARGE = 1`;
 - `PROGRESS_ORIENT_HORIZONTAL = 0` (the default — every existing user keeps it), `PROGRESS_ORIENT_VERTICAL = 1` (v21);
-- `PROGRESS_ALIGN_DAMAGE_LOG = 0` (the default — every existing user keeps it), `PROGRESS_ALIGN_MINIMAP = 1`, `PROGRESS_ALIGN_FREE = 2` (v21).
+- `PROGRESS_ALIGN_FIXED = 0` (the default — every existing user keeps it), `PROGRESS_ALIGN_FREE = 1`
+  (v21, **renumbered from `2` to `1` at v23** when the radio collapsed from three options to two —
+  see "The Fixed-alignment redesign (v23)" above). `PROGRESS_ALIGN_DAMAGE_LOG = 0` /
+  `PROGRESS_ALIGN_MINIMAP = 1` still exist as internal, never-stored anchor selectors.
 
 `clamp_variant(v, max_index=PROGRESS_VARIANT_MOVING_AVERAGE)` is **shared** by all four radios;
 each passes its own ceiling. `_coerce(key, value)` is a **six-way branch**, and the order matters:
@@ -445,8 +480,8 @@ can never leak a bool or a stray index into the window picker or the widget.
 - **`inline: True` is emitted as a plain KEY, never through the helper's `inline` KWARG.** The
   kwarg raises `TypeError` on MSA < 1.6.1; an unknown *key* just rides through, because MSA does
   no descriptor validation at all. So the repo gets the one-horizontal-row layout — which is what
-  lets each standalone radio (2-option or, for Alignment, 3-option) cost one row instead of one
-  stacked row per option — with the version floor structurally impossible.
+  lets each radio (all four are 2-option as of v23; Alignment used to be 3-option pre-v23) cost
+  one row instead of one stacked row per option — with the version floor structurally impossible.
 
 An API that doesn't know `RadioButtonGroup` (the izeberg fallback) simply skips the control; the
 `progress_bar_enabled` master above it is a plain `CheckBox` and keeps working, with
@@ -486,7 +521,8 @@ the gating section above for why (they describe the bar, not when it shows).
   "Orientation", "Alignment"). v10 had blanked the variant radio's label (`_row(u"")`) so its
   options read as direct children of the Progress Bar checkbox; v13 made Mode/Scale standalone
   `inline` controls, so each needed its own name back, and Orientation/Alignment were introduced
-  standalone from the start at v21. `build()` no longer synthesises a blank entry for `VARIANT_KEY`
+  standalone from the start at v21 (Alignment's own option TUPLE shrank 3→2 at v23, still fetched
+  the same way). `build()` no longer synthesises a blank entry for `VARIANT_KEY`
   — it only bolts the option tuple onto the rendered row. **All four radios now carry a real
   tooltip** (a later maintainer override waived the "options say it all, so leave it tipless"
   invariant a prior test pass had protected) — Mode/Scale explain something the option words don't

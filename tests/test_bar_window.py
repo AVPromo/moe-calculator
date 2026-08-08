@@ -95,7 +95,7 @@ def _reset_settings():
     mod_settings._seed(dict(mod_settings.DEFAULTS))
 
 
-def _host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT):
+def _host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT, align=None):
     """An open, ALREADY-PLACED host: _place is what _onReady runs, so a live window always has a
     real .position by the time a drag can reach it. Placing here matters because the drag's
     ownership gate tests the cursor against that .position -- an unplaced fake window sitting at
@@ -106,10 +106,17 @@ def _host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT):
     new anchor_centred_reduced call site: it is no longer -shift+round(frac*surface_h), it is
     -shift alone, and the two are not interchangeable at the same call-site position).
 
+    `align`, when given, is written into the live settings cache BEFORE the host is built --
+    every DRAG test needs Alignment=Free now that BarHost.drag() refuses to move the bar at all
+    otherwise (see test_drag_is_a_noop_under_fixed_alignment below); the _resolve-focused tests
+    further down leave it None and keep exercising the DEFAULT (Fixed), which is what they test.
+
     The placement's own moves are then cleared so each test still reads its own from index 0. The
     extent memo is left WARM, as it is live: _place always repopulates it, which is what keeps the
     far-sentinel measurement out of the drag path (and why drag() reads .position BEFORE _extent --
     a cold read would teleport the window to the sentinel and the ownership rect would be there)."""
+    if align is not None:
+        mod_settings._settings[mod_settings.PROGRESS_ALIGNMENT_KEY] = align
     host = bar_window.BarHost("test.item", lambda: object(), y_frac, x_off, y_shift, y_shift,
                               PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                               PROGRESS_MM_GAP_BOTTOM, "[test]")
@@ -120,12 +127,14 @@ def _host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT):
     return host, window
 
 
-def _cold_host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT):
+def _cold_host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT, align=None):
     """Like `_host`, but the extent memo is left COLD (never placed) -- the reachable-in-practice
     case `test_the_ownership_rect_is_read_against_the_real_position_not_a_cold_far_sentinel` pins:
     open_window() publishes `_active` BEFORE window.load() resolves, so a drag can arrive before
     _onReady's first _place() ever warms the cache, with the window still at its untouched native
-    position (0, 0)."""
+    position (0, 0). `align` -- see `_host`."""
+    if align is not None:
+        mod_settings._settings[mod_settings.PROGRESS_ALIGNMENT_KEY] = align
     host = bar_window.BarHost("test.item", lambda: object(), y_frac, x_off, y_shift, y_shift,
                               PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                               PROGRESS_MM_GAP_BOTTOM, "[test]")
@@ -169,10 +178,52 @@ _GRAB_PX = (960, 800)                # a point inside the centred 256x92 bar at 
 _GRAB = (0.0, 1 - 2.0 * _GRAB_PX[1] / _SPACE[1])   # ...the same point in CLIP space
 
 
+# --- BLOCKED OUTRIGHT UNDER FIXED: the gate at the very top of drag() ---------------------------
+# Every OTHER drag test below runs with Alignment=Free (via _host(..., align=...)); these two pin
+# the opposite case -- the window must never move AND nothing must be persisted through MSA, for
+# every phase of the gesture, not just "start".
+
+def test_drag_is_a_noop_under_fixed_alignment(monkeypatch):
+    # Fixed is _host's own default (align=None leaves DEFAULTS' PROGRESS_ALIGN_FIXED in place).
+    host, window = _host(1664, 824)
+    _at(monkeypatch, _GRAB)
+    host.drag("start")
+    host.drag("move")
+    host.drag("end")
+    assert window.moves == [], "the window moved despite Alignment=Fixed"
+    assert host._grab is None and host._drag_pos is None
+
+
+def test_drag_under_fixed_alignment_never_calls_set_bar_position(monkeypatch):
+    # THE CALL COUNT is the real assertion (memory a-noop-mutation-and-a-fail-soft-branch-can-
+    # look-identical): a value-only check could pass even if the gate ran the gesture and then
+    # happened to persist the SAME coordinates back.
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda *a, **k: calls.append((a, k)))
+    host, window = _host(1664, 824)
+    _at(monkeypatch, _GRAB)
+    host.drag("start")
+    host.drag("move")
+    host.drag("end")
+    assert calls == [], "set_bar_position was called even though Alignment is Fixed"
+
+
+def test_drag_works_normally_under_free_alignment(monkeypatch):
+    # The sibling positive case: with Alignment=Free (as every other drag test in this file uses),
+    # the gesture is NOT gated and behaves exactly as the rest of this section pins.
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
+    _at(monkeypatch, _GRAB)
+    host.drag("start")
+    assert window.moves == []          # start never moves the bar either way
+    host.drag("move")
+    assert window.moves != [], "a move under Free must reposition the bar"
+
+
 def test_drag_start_moves_nothing_and_records_the_grab_offset(monkeypatch):
     # THE DIFFERENCE BETWEEN "picks up where you grabbed it" AND "snaps": the gesture's first event
     # must leave the bar exactly where it was, however far the cursor is from its top-left corner.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     assert window.moves == [], "start must not re-place the bar"
@@ -182,7 +233,7 @@ def test_drag_start_moves_nothing_and_records_the_grab_offset(monkeypatch):
 def test_a_move_at_the_grab_point_keeps_the_bar_put(monkeypatch):
     # The grab offset, proven end to end: mapping the SAME cursor again must reproduce the
     # placement the bar was grabbed at, NOT put its corner under the cursor.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     host.drag("move")
@@ -190,7 +241,7 @@ def test_a_move_at_the_grab_point_keeps_the_bar_put(monkeypatch):
 
 
 def test_a_move_repositions_absolutely_and_preserves_the_grab_offset(monkeypatch):
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)                            # grabbed on the bar
     host.drag("start")
     base = _centred(1664, 824)
@@ -205,7 +256,7 @@ def test_a_move_with_no_start_records_the_grab_instead_of_snapping(monkeypatch):
     # Defensive, and reachable: battle_input's MOUSE wrap can latch the gesture on the first
     # movement (with the cursor raised, the button press may never reach the key dispatcher), so a
     # "move" is allowed to be the first event this host sees. It must behave like a start.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("move")
     assert window.moves == []                          # ...i.e. it recorded the grab and moved nothing
@@ -214,7 +265,7 @@ def test_a_move_with_no_start_records_the_grab_instead_of_snapping(monkeypatch):
 
 
 def test_a_live_move_updates_the_position_without_persisting(monkeypatch):
-    host, _window = _host(1664, 824)
+    host, _window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     calls = []
     monkeypatch.setattr(mod_settings, "set_bar_position",
                         lambda x, y, persist: calls.append((x, y, persist)))
@@ -231,7 +282,7 @@ def test_the_gesture_end_persists_the_last_applied_position(monkeypatch):
     # value handed to set_bar_position converts.
     from moe_calculator.domain.positioning import free_anchor_point
 
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     calls = []
     monkeypatch.setattr(mod_settings, "set_bar_position",
                         lambda x, y, persist: calls.append((x, y, persist)))
@@ -248,7 +299,7 @@ def test_a_gesture_that_never_moved_persists_nothing(monkeypatch):
     # A stray Ctrl+click must not convert the AUTO anchor (0/0) into an explicit pin at whatever
     # the bar is currently placed at -- that would be a silent opt-out of every future anchor
     # change (a Large-mode retune, a new default) and is invisible on the day it happens.
-    host, _window = _host(1664, 824)
+    host, _window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     calls = []
     monkeypatch.setattr(mod_settings, "set_bar_position",
                         lambda x, y, persist: calls.append((x, y, persist)))
@@ -261,7 +312,7 @@ def test_a_gesture_that_never_moved_persists_nothing(monkeypatch):
 def test_the_gesture_state_does_not_leak_into_the_next_one(monkeypatch):
     # The end must drop BOTH the grab offset and the "we moved" record, or the next gesture would
     # pick up the previous one's offset (and a click-only gesture would persist its position).
-    host, _window = _host(1664, 824)
+    host, _window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     host.drag("move")
@@ -273,7 +324,7 @@ def test_drag_past_the_top_left_edge_goes_negative_and_is_not_clamped(monkeypatc
     # THERE IS NO SAFEZONE: a bar dragged off the left/top edge keeps going into negative logical
     # coordinates. The old [1, max] clamp stopped the corner at the screen edge, which made the last
     # part of the drag silently ignore the cursor.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     _at(monkeypatch, (-1.0, 1.0))                      # cursor to the screen's top-left corner
@@ -286,7 +337,7 @@ def test_drag_past_the_top_left_edge_goes_negative_and_is_not_clamped(monkeypatc
 
 
 def test_drag_past_the_bottom_right_edge_is_not_clamped_to_the_extent(monkeypatch):
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     _at(monkeypatch, (1.0, -1.0))                      # cursor to the screen's bottom-right corner
@@ -302,7 +353,7 @@ def test_drag_past_the_bottom_right_edge_is_not_clamped_to_the_extent(monkeypatc
 def test_drag_handles_a_pixel_space_cursor_too(monkeypatch):
     # The units of GUI.mcursor().position are not settled in the decompiled client, so the mapping
     # is unit-agnostic -- and this is the OTHER convention, end to end through the host.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB_PX)
     host.drag("start")
     _at(monkeypatch, (_GRAB_PX[0] + 480, _GRAB_PX[1]))  # a quarter-screen right, in device px
@@ -317,7 +368,7 @@ def test_the_drag_gain_is_exactly_one_through_the_host(monkeypatch):
     # Window.size, = self.proxy.windowSize) is what turns _extent's `space - surface` back into
     # `space`; without it the mapping scales by (space - surface) / space -- 1664/1920 = 0.867 here,
     # ~0.74 with the real Large surface -- and the bar visibly trails the cursor.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB_PX)
     host.drag("start")
     host.drag("move")
@@ -330,7 +381,7 @@ def test_the_drag_gain_is_exactly_one_through_the_host(monkeypatch):
 def test_an_unreadable_surface_size_fails_soft_and_declines_the_gesture(monkeypatch):
     # FAIL SOFT, not a raise: Wulf itself hands back (0.0, 0.0) for a window with no proxy (which
     # cannot be moved either), so _space degrades to the extent alone...
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     window.size = None                                 # unpacking this raises inside _space
     assert host._space(window) == (1664, 824)
     # ...and with no surface size the OWNERSHIP RECT collapses to a point, so this host simply does
@@ -346,7 +397,7 @@ def test_the_reporting_events_own_cursor_position_is_preferred(monkeypatch):
     # gui.g_mouseEventHandlers hands the drag `event.cursorPosition` -- the position the engine
     # itself measured -- which makes GUI.mcursor() a FALLBACK. Proven by pointing the fallback
     # somewhere else entirely: the passed cursor is what places the bar.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, (-1.0, 1.0))                      # the fallback read says "top-left corner"
     host.drag("start", _GRAB)
     host.drag("move", _GRAB)
@@ -357,7 +408,7 @@ def test_a_gesture_that_began_off_the_bar_is_not_claimed(monkeypatch):
     # THE OWNERSHIP GATE. battle_bridge hands every drag event to BOTH bars unconditionally and
     # battle_input samples Ctrl+LMB globally, so before this a Ctrl+drag ANYWHERE grabbed whichever
     # bar was open -- dragging another mod's UI dragged ours with it.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, (0.0, 0.0))                          # the screen centre: ABOVE the bar's box
     host.drag("start")
     host.drag("move")
@@ -373,7 +424,7 @@ def test_the_ownership_rect_is_read_against_the_real_position_not_a_cold_far_sen
     # window.load() resolves, so a drag can arrive before _onReady's first _place() has ever warmed
     # the memo -- i.e. exactly the cold-cache case, with the window still sitting at its untouched
     # native position.
-    host, window = _cold_host(1664, 824)        # UNPLACED: position stays (0, 0), cache cold
+    host, window = _cold_host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)        # UNPLACED: position stays (0, 0), cache cold
     _at(monkeypatch, (-1.0, 1.0))               # clip-space top-left -> logical (0, 0), on the window
     host.drag("start")
     assert host._grab is not None and host._declined is False, (
@@ -383,7 +434,7 @@ def test_the_ownership_rect_is_read_against_the_real_position_not_a_cold_far_sen
 def test_a_declined_gesture_is_never_reconsidered_mid_flight(monkeypatch):
     # ...and the refusal LATCHES for the whole gesture: a foreign drag that happens to sweep the
     # cursor across our bar must not hijack it halfway (which would snap the bar to the cursor).
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, (0.0, 0.0))
     host.drag("start")
     _at(monkeypatch, _GRAB)                               # ...the cursor now passes over the bar
@@ -402,7 +453,7 @@ def test_a_declined_gesture_is_never_reconsidered_mid_flight(monkeypatch):
 def test_a_claimed_gesture_keeps_the_bar_once_the_cursor_leaves_the_box(monkeypatch):
     # The mirror image, and why only the START tests the rect: a bar is 256px wide and the cursor
     # leaves it within the first few px of any real drag. Re-testing per move would drop the bar.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     _at(monkeypatch, (100, 100))                          # far outside the bar's own box
@@ -426,7 +477,7 @@ def test_drag_is_a_noop_when_no_window_is_open(monkeypatch):
 def test_drag_leaves_the_bar_alone_when_the_cursor_cannot_be_read(monkeypatch):
     # FAIL SOFT: an unreadable cursor (or resolution) must leave the window exactly where it is,
     # never move it to a guessed position and never raise into the engine's input path.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, None)
     host.drag("start")
     host.drag("move")
@@ -435,7 +486,7 @@ def test_drag_leaves_the_bar_alone_when_the_cursor_cannot_be_read(monkeypatch):
 
 
 def test_drag_never_raises_on_a_broken_engine_read(monkeypatch):
-    host, _window = _host(1664, 824)
+    host, _window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
 
     def _boom():
         raise RuntimeError("boom")
@@ -457,7 +508,7 @@ def test_a_drag_measures_the_movable_extent_only_once(monkeypatch):
     # That is a one-shot calibration -- doing it per movement event costs a second native move()
     # per pointer event and made the bar visibly jump around the cursor. The extent is a function
     # of the surface size and the screen, neither of which changes mid-drag, so N events = 1 measure.
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     for i in range(8):
@@ -475,17 +526,20 @@ def test_a_size_change_re_measures_the_movable_extent(monkeypatch):
     # movable extent SHRINKS. _place is what onSizeChanged runs, and it must invalidate the memo.
     # Nothing CLAMPS to the extent any more (no safezone), so what a stale extent would corrupt now
     # is the Damage-Log anchor and the logical space the cursor maps onto (extent + surface).
-    host, window = _host(1664, 824)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
     _at(monkeypatch, _GRAB)
     host.drag("start")
     host.drag("move")
     assert window.moves[-1] == _centred(1664, 824)
 
     window._max = (1600, 760)                             # Large surface -> smaller extent
-    # That live move PINNED Alignment to Free (every drag move persists one -- see set_bar_position's
-    # own docstring), so the retired 0/0-means-auto sentinel is not what undoes it any more: reset
-    # the whole settings cache back to the shipped Damage-Log default instead.
-    mod_settings._seed(dict(mod_settings.DEFAULTS))
+    # That live move stored a real Free anchor point (every drag move persists one in-memory --
+    # see set_bar_position's own docstring): reset the whole settings cache back to the shipped
+    # Damage-Log-equivalent default (position 0/0), keeping Alignment=Free so the SECOND drag
+    # below is still allowed to run at all -- BarHost.drag() now refuses to move the bar under
+    # Fixed (see test_drag_is_a_noop_under_fixed_alignment).
+    mod_settings._seed(dict(mod_settings.DEFAULTS,
+                            **{mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE}))
     host._place(window)
     _at(monkeypatch, _GRAB)
     host.drag("start")
@@ -523,11 +577,31 @@ def _resolved(host, window):
     return host._resolve(max_x, max_y, space_x, space_y)
 
 
-def test_resolve_damage_log_alignment_uses_the_centred_reduced_anchor():
-    # The shipped default: unaffected by the Alignment/Orientation wiring, so it must still match
-    # _centred (== anchor_centred_reduced) byte-for-byte.
+def test_fixed_alignment_resolves_to_damage_log_anchor_when_horizontal():
+    # The shipped default (Fixed + Horizontal, v23): must still match _centred
+    # (== anchor_centred_reduced) byte-for-byte -- Fixed resolves the SAME anchor Damage Log
+    # always did, just picked internally by Orientation now instead of being its own stored value.
     host, window = _host(1664, 824)
     assert _resolved(host, window) == _centred(1664, 824)
+
+
+def test_fixed_alignment_resolves_to_minimap_anchor_when_vertical(monkeypatch):
+    # The other half of the v23 behavioural contract: Fixed + Vertical must resolve to the SAME
+    # Minimap anchor the old, directly-selectable "Minimap" option always did -- composed through
+    # the real _resolve (never a reimplementation of anchor_minimap).
+    from moe_calculator.domain.constants import (
+        MINIMAP_SIZES, MM_GAP, MM_TICK_OVERHANG, MM_TRACK_Y)
+    from moe_calculator.domain.positioning import anchor_minimap
+
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 0)
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL})
+    host, window = _host(1664, 824)
+    space_x, space_y = host._space(window)
+    expected = anchor_minimap(space_x, space_y, PROGRESS_MM_TRACK_X, MM_TRACK_Y,
+                              MINIMAP_SIZES[0], MM_GAP, PROGRESS_MM_GAP_BOTTOM, MM_TICK_OVERHANG)
+    assert _resolved(host, window) == expected
+    assert _resolved(host, window) != _centred(1664, 824), \
+        "vertical must resolve to Minimap, not Damage Log"
 
 
 def test_resolve_free_alignment_converts_the_stored_pair_as_an_anchor_point():
@@ -786,23 +860,6 @@ def test_materialise_converts_a_legacy_pre_v22_pin_exactly_once(monkeypatch):
     assert len(calls) == 1   # not converted a second time
 
 
-def test_resolve_minimap_alignment_uses_the_minimap_anchor(monkeypatch):
-    from moe_calculator.domain.constants import MINIMAP_SIZES, MM_GAP, PROGRESS_MM_GAP_BOTTOM
-    from moe_calculator.domain.positioning import anchor_minimap
-
-    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 0)
-    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_MINIMAP})
-    host, window = _host(1664, 824)
-    max_x, max_y = host._extent(window)
-    space_x, space_y = host._space(window)
-    # Horizontal (the DEFAULT orientation) passes the SURFACE's own edges (space - extent) and
-    # overhang=0 -- see the orientation-gate section; no horizontal tuner ever placed this
-    # composition beside the minimap, so there is no tuned track-inside-surface term to convert.
-    expected = anchor_minimap(space_x, space_y, space_x - max_x, space_y - max_y,
-                              MINIMAP_SIZES[0], MM_GAP, PROGRESS_MM_GAP_BOTTOM, 0)
-    assert host._resolve(max_x, max_y, space_x, space_y) == expected
-
-
 def test_resolve_stored_offset_composes_on_top_of_every_alignment():
     # anchor_offset applies uniformly regardless of which base anchor was selected -- proven here
     # against the Damage-Log branch (the other two are exercised at (0, 0) offset above).
@@ -812,51 +869,18 @@ def test_resolve_stored_offset_composes_on_top_of_every_alignment():
     assert _resolved(host, window) == (base[0] + 10, base[1] - 5)
 
 
-# --- the minimap alignment's OVERHANG ORIENTATION GATE ----------------------------------------
-# anchor_minimap's overhang term is passed as 0 when horizontal and MM_TICK_OVERHANG(_LARGE) when
-# vertical: it is a CROSS-AXIS length, and only a VERTICAL bar's cross axis is the x axis the
-# minimap gap is measured along (a horizontal bar's ticks overhang in y instead, which the minimap
-# gap does not touch). This is the implementer's own ruling on a gap the plan left open, so it
-# needs an explicit test stating the intent -- not just a value equality that a mutation swapping
-# the branches could still satisfy by accident at one particular size.
+# --- the minimap alignment's OVERHANG under Large ----------------------------------------------
+# anchor_minimap's overhang term is MM_TICK_OVERHANG(_LARGE) for a vertical bar (a CROSS-AXIS
+# length). Fixed always resolves to Minimap when vertical (v23), so there is no horizontal case
+# left to gate here any more -- see test_fixed_alignment_resolves_to_minimap_anchor_when_vertical
+# for the Default-size, overhang=MM_TICK_OVERHANG case this test's sibling covers.
 
 def _minimap_x(monkeypatch, orientation, size):
     monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 0)
-    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_MINIMAP,
-                        mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
                         mod_settings.PROGRESS_SIZE_KEY: size})
     host, window = _host(1664, 824)
     return _resolved(host, window)
-
-
-def test_minimap_overhang_is_zero_when_horizontal(monkeypatch):
-    # Horizontal passes overhang=0 and the SURFACE's own edges (space - extent); vertical passes
-    # MM_TICK_OVERHANG and the per-bar TRACK edges (PROGRESS_MM_TRACK_X / MM_TRACK_Y) instead --
-    # both the overhang AND the edge frame differ, so this pins each branch against its own
-    # from-scratch anchor_minimap call rather than diffing the two results against each other
-    # (which no longer isolates a single term now that the edge frame differs too).
-    from moe_calculator.domain.constants import (
-        MINIMAP_SIZES, MM_GAP, MM_TICK_OVERHANG, PROGRESS_MM_TRACK_X, MM_TRACK_Y,
-        PROGRESS_MM_GAP_BOTTOM)
-    from moe_calculator.domain.positioning import anchor_minimap
-
-    host, window = _host(1664, 824)
-    max_x, max_y = host._extent(window)
-    space_x, space_y = host._space(window)
-
-    horiz = _minimap_x(monkeypatch, mod_settings.PROGRESS_ORIENT_HORIZONTAL,
-                       mod_settings.PROGRESS_SIZE_DEFAULT)
-    expected_horiz = anchor_minimap(space_x, space_y, space_x - max_x, space_y - max_y,
-                                    MINIMAP_SIZES[0], MM_GAP, PROGRESS_MM_GAP_BOTTOM, 0)
-    assert horiz == expected_horiz
-
-    vert = _minimap_x(monkeypatch, mod_settings.PROGRESS_ORIENT_VERTICAL,
-                      mod_settings.PROGRESS_SIZE_DEFAULT)
-    expected_vert = anchor_minimap(space_x, space_y, PROGRESS_MM_TRACK_X, MM_TRACK_Y,
-                                   MINIMAP_SIZES[0], MM_GAP, PROGRESS_MM_GAP_BOTTOM,
-                                   MM_TICK_OVERHANG)
-    assert vert == expected_vert
-    assert MM_TICK_OVERHANG != 0, "a zero overhang constant would make this assertion vacuous"
 
 
 def test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large(monkeypatch):
@@ -906,22 +930,16 @@ _EFF_MAX = (_EFF_SPACE[0] - _EFF_SURFACE[0], _EFF_SPACE[1] - _EFF_SURFACE[1])
 
 
 def _efficiency_host(max_xy=_EFF_MAX, surface=_EFF_SURFACE):
-    """The REAL Damage Efficiency host's constants against a real-sized fake surface.
-
-    `max_xy` / `surface` default to the Default-size fixture but accept the Large-size pair too
-    (see the rule-5 right-edge invariance test below), which is why `x_shift_large` (the bar's own
-    EFFICIENCY_ANCHOR_X_SHIFT_LARGE) is threaded through exactly as efficiency_view.py's real
-    BarHost construction does -- omitting it would silently test a host that ISN'T the shipped one."""
+    """The REAL Damage Efficiency host's constants against a real-sized fake surface."""
     from moe_calculator.domain.constants import (
-        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_X_SHIFT_LARGE, EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC,
         EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM,
         EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
 
     host = bar_window.BarHost(
         "MoEEfficiencyView", lambda: object(), EFFICIENCY_ANCHOR_Y_FRAC,
         EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE,
-        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-eff]",
-        x_shift_large=EFFICIENCY_ANCHOR_X_SHIFT_LARGE)
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-eff]")
     window = _FakeWindow(max_xy[0], max_xy[1], size=surface)
     host._active = (window, object())
     return host, window
@@ -929,8 +947,7 @@ def _efficiency_host(max_xy=_EFF_MAX, surface=_EFF_SURFACE):
 
 def test_the_vertical_efficiency_bar_lands_on_the_derived_position(monkeypatch):
     monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
-    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_MINIMAP,
-                        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
                         mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_DEFAULT,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
     host, window = _efficiency_host()
@@ -962,19 +979,15 @@ _PROG_V_MAX = (_PROG_V_SPACE[0] - _PROG_V_SURFACE[0], _PROG_V_SPACE[1] - _PROG_V
 
 def _progress_vertical_host(max_xy=_PROG_V_MAX, surface=_PROG_V_SURFACE):
     """The REAL Moving Average host's constants against its real vertical surface, sized to share
-    _efficiency_host's SAME logical screen (1920x1080) -- see the invariant test below.
-
-    `max_xy` / `surface` default to the Default-size fixture but accept the Large-size pair too;
-    `x_shift_large` is threaded exactly as progress_view.py's real BarHost construction does."""
+    _efficiency_host's SAME logical screen (1920x1080)."""
     from moe_calculator.domain.constants import (
-        PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_X_SHIFT_LARGE, PROGRESS_ANCHOR_Y_FRAC,
+        PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC,
         PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE)
 
     host = bar_window.BarHost(
         "MoEProgressView", lambda: object(), PROGRESS_ANCHOR_Y_FRAC,
         PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[test-prog]",
-        x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[test-prog]")
     window = _FakeWindow(max_xy[0], max_xy[1], size=surface)
     host._active = (window, object())
     return host, window
@@ -991,8 +1004,7 @@ def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monk
     # recorded in-game measurement (see constants.py), NOT a bug to loosen into a tolerance or
     # revert back to equality.
     monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
-    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_MINIMAP,
-                        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
                         mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_DEFAULT,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
     eff_host, eff_window = _efficiency_host()
@@ -1005,114 +1017,12 @@ def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monk
         "to equality")
 
 
-# --- RULE 5, vertical + Damage Log: the composition's RIGHT EDGE must not walk on a size flip ---
-# TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix A / DECISION 3: `x_shift_large`
-# (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE) exists solely to hold this edge still.
-# The maintainer's own arithmetic (constants.py's header comment) MEASURES the residual drift as
-# 0px for the Moving Average bar and 1px for Damage Efficiency (independently-rounded half-away
-# terms landing a half-pixel apart) -- so this asserts a BOUND, never a fixed delta, per memory
-# `anchor-y-reduction-is-not-bit-exact` / the note's own Task 1 instruction. Real surface sizes
-# throughout (198x320 / 278x400 progress vertical, 116x318 / 185x398 efficiency vertical -- see
-# test_progress_surface_mirror.py / test_efficiency_surface_mirror.py), never the fixture's
-# unrealistic default, because the drift is a function of the REAL width delta.
+# DELETED (v23, the Fixed-alignment redesign): the RULE 5 vertical + Damage Log right-edge
+# invariance tests (`_dl_vertical`, `_right_edge`, `_PROG_V_SURFACE_LARGE`, `_EFF_V_SURFACE_LARGE`,
+# and `test_x_shift_large_default_is_a_pure_no_op_for_horizontal_and_minimap`). A vertical bar
+# resolving to the Damage Log anchor is no longer reachable through the UI OR a stored value at
+# all (Alignment only ever stores Fixed or Free; Fixed always resolves to Minimap when vertical --
+# see bar_window._resolve and mod_settings.py's SETTINGS_VERSION 22->23 comment), and the
+# `x_shift_large` machinery those tests protected is deleted with it (constants.py,
+# domain/positioning.py, bar_window.BarHost, progress_view.py, efficiency_view.py).
 
-_PROG_V_SURFACE_LARGE = (278, 400)
-_EFF_V_SURFACE_LARGE = (185, 398)
-
-
-def _right_edge(host, window):
-    x, _ = _resolved(host, window)
-    return x + window.size[0]
-
-
-def _dl_vertical(seed_size):
-    mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_DAMAGE_LOG,
-                        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
-                        mod_settings.PROGRESS_SIZE_KEY: seed_size})
-
-
-def test_vertical_damage_log_right_edge_is_size_invariant_within_one_px_progress():
-    space = _PROG_V_SPACE
-    default_max = (space[0] - _PROG_V_SURFACE[0], space[1] - _PROG_V_SURFACE[1])
-    large_max = (space[0] - _PROG_V_SURFACE_LARGE[0], space[1] - _PROG_V_SURFACE_LARGE[1])
-
-    _dl_vertical(mod_settings.PROGRESS_SIZE_DEFAULT)
-    right_default = _right_edge(*_progress_vertical_host(default_max, _PROG_V_SURFACE))
-    _dl_vertical(mod_settings.PROGRESS_SIZE_LARGE)
-    right_large = _right_edge(*_progress_vertical_host(large_max, _PROG_V_SURFACE_LARGE))
-
-    drift = right_large - right_default
-    assert abs(drift) <= 1, (
-        "Moving Average vertical bar's right edge walked by %d px on Default->Large" % drift)
-
-
-def test_vertical_damage_log_right_edge_is_size_invariant_within_one_px_efficiency():
-    space = _EFF_SPACE
-    default_max = (space[0] - _EFF_SURFACE[0], space[1] - _EFF_SURFACE[1])
-    large_max = (space[0] - _EFF_V_SURFACE_LARGE[0], space[1] - _EFF_V_SURFACE_LARGE[1])
-
-    _dl_vertical(mod_settings.PROGRESS_SIZE_DEFAULT)
-    right_default = _right_edge(*_efficiency_host(default_max, _EFF_SURFACE))
-    _dl_vertical(mod_settings.PROGRESS_SIZE_LARGE)
-    right_large = _right_edge(*_efficiency_host(large_max, _EFF_V_SURFACE_LARGE))
-
-    drift = right_large - right_default
-    assert abs(drift) <= 1, (
-        "Damage Efficiency vertical bar's right edge walked by %d px on Default->Large" % drift)
-    # The measured, not-assumed residual (constants.py's own derivation): 34.5 rounds to -35, a
-    # half-pixel OVER-correction, which pulls the Large right edge 1px LEFT of Default -- so a
-    # passing run here that saw drift == 0 would actually be UNDER-testing (the bound would never
-    # have caught a widened drift). Fail loud if the sweep environment ever stops reproducing that
-    # reported 1px residual.
-    assert drift == -1, (
-        "expected the recorded 1px residual on the efficiency bar; got %d -- re-derive "
-        "EFFICIENCY_ANCHOR_X_SHIFT_LARGE if the surface sizes changed" % drift)
-
-
-def test_x_shift_large_default_is_a_pure_no_op_for_horizontal_and_minimap(monkeypatch):
-    # Task 1's regression guard: the defaulted `x_shift_large=0` (BarHost.__init__) and the
-    # defaulted `x_shift=0` (anchor_centred_reduced) must make every OTHER branch -- horizontal,
-    # and Minimap on either orientation -- byte-identical whether or not x_shift_large is passed.
-    # This must fail if either default is ever changed to something non-zero.
-    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 2)
-    from moe_calculator.domain.constants import PROGRESS_ANCHOR_X_SHIFT_LARGE
-
-    host_default_arg = bar_window.BarHost(
-        "t1", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t1]")
-    host_explicit_zero = bar_window.BarHost(
-        "t2", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t2]",
-        x_shift_large=0)
-    host_nonzero = bar_window.BarHost(
-        "t3", lambda: object(), 0.865, 0, PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, PROGRESS_MM_GAP_BOTTOM, "[t3]",
-        x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
-
-    for orientation in (mod_settings.PROGRESS_ORIENT_HORIZONTAL, mod_settings.PROGRESS_ORIENT_VERTICAL):
-        for alignment in (mod_settings.PROGRESS_ALIGN_DAMAGE_LOG, mod_settings.PROGRESS_ALIGN_MINIMAP):
-            for size in (mod_settings.PROGRESS_SIZE_DEFAULT, mod_settings.PROGRESS_SIZE_LARGE):
-                mod_settings._seed({mod_settings.PROGRESS_ALIGNMENT_KEY: alignment,
-                                    mod_settings.PROGRESS_ORIENTATION_KEY: orientation,
-                                    mod_settings.PROGRESS_SIZE_KEY: size})
-                window_a = _FakeWindow(*_MAX)
-                window_b = _FakeWindow(*_MAX)
-                window_c = _FakeWindow(*_MAX)
-                host_default_arg._active = (window_a, object())
-                host_explicit_zero._active = (window_b, object())
-                host_nonzero._active = (window_c, object())
-                r_a = _resolved(host_default_arg, window_a)
-                r_b = _resolved(host_explicit_zero, window_b)
-                r_c = _resolved(host_nonzero, window_c)
-                is_vertical_dl = (orientation == mod_settings.PROGRESS_ORIENT_VERTICAL and
-                                  alignment == mod_settings.PROGRESS_ALIGN_DAMAGE_LOG and
-                                  size == mod_settings.PROGRESS_SIZE_LARGE)
-                if is_vertical_dl:
-                    # The ONE branch where a non-zero x_shift_large is even read: confirm it
-                    # actually diverges here, so the "no-op everywhere else" claim isn't vacuous.
-                    assert r_a == r_b
-                    assert r_c != r_a
-                else:
-                    assert r_a == r_b == r_c, (
-                        "x_shift_large leaked into orientation=%r alignment=%r size=%r" %
-                        (orientation, alignment, size))

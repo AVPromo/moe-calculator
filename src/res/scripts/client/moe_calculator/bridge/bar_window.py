@@ -26,16 +26,20 @@ registered window and not a garage-style inject; why WindowLayer.WINDOW and not 
 WINDOW_FULLSCREEN -- a full-screen Coherent surface steals the whole-screen mouse hit-test whenever
 the cursor is raised, and pointer-events:none does NOT make the window rectangle click-through).
 Read that first. The difference here is placement: a bar is placed off whichever ANCHOR the
-Alignment setting selects -- centred horizontally and proportionally down the screen (Damage Log,
-the shipped default), to the left of the minimap (Minimap), with the stored X/Y stepper pair
-composed on top of either as an anchor-relative offset (domain.anchor_offset) -- or, under Free,
+Alignment setting resolves to -- Fixed (the shipped default) picks one of the two INTERNALLY, by
+Orientation: centred horizontally and proportionally down the screen when Horizontal (the old
+"Damage Log" anchor), to the left of the minimap when Vertical (the old "Minimap" anchor) -- with
+the stored X/Y stepper pair composed on top of either as an anchor-relative offset
+(domain.anchor_offset) -- or, under Free,
 AT the stored pair itself, read as an ANCHOR POINT (bottom-centre horizontal / bottom-right
 vertical, domain.free_top_left) rather than a top-left, so a Default<->Large size flip re-anchors
 the bar instead of growing it off to one side (TASKS/in-battle-bar-layout-auto-set-redesign.md
 Trap 3 Fix B). A Ctrl+DRAG writes that same pair (converted into the anchor-point frame -- see
-BarHost.drag) and flips Alignment to Free; the exact pair (0, 0) under Free is its own AUTO
-sentinel meaning "not yet materialised" (BarHost._materialise), not the screen origin -- see
-_resolve.
+BarHost.drag); the gesture no longer FLIPS Alignment to Free -- it now only ever RUNS while
+Alignment is ALREADY Free, since MSA has no way to assign a peer control's value, so the lock is
+the gesture refusing to start at all under Fixed (see BarHost.drag's own docstring). The exact
+pair (0, 0) under Free is its own AUTO sentinel meaning "not yet materialised"
+(BarHost._materialise), not the screen origin -- see _resolve.
 
 THE DRAG IS ENTIRELY PYTHON'S NOW, AND ABSOLUTE. adapter/battle_input samples Ctrl + the left mouse
 button off WG's own input dispatchers plus its g_mouseEventHandlers registry, and reports the gesture
@@ -76,9 +80,7 @@ from openwg_gameface import ModDynAccessor
 from moe_calculator.bridge import mod_settings
 from moe_calculator.domain.constants import (MINIMAP_SIZES, MM_GAP,
                                              MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
-                                             MM_TRACK_Y, MM_TRACK_Y_LARGE,
-                                             VERTICAL_ANCHOR_Y_SHIFT,
-                                             VERTICAL_ANCHOR_Y_SHIFT_LARGE)
+                                             MM_TRACK_Y, MM_TRACK_Y_LARGE)
 from moe_calculator.domain.positioning import (anchor_centred_reduced, anchor_minimap,
                                                anchor_offset, cursor_in_rect, cursor_logical,
                                                cursor_top_left, free_anchor_point, free_top_left)
@@ -230,17 +232,18 @@ class BarHost(object):
     it, since both hosts share ONE stored Free pair and a live variant flip mid-battle can briefly
     have both open (see the module docstring). Defaults to None, which never equals a real variant
     index, so a host built without one (e.g. a test fixture) simply never materialises.
-    ``x_shift_large`` is the VERTICAL + Damage Log alignment's own rule-5 right-pin term
-    (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE -- TASKS/in-battle-bar-layout-auto-set-
-    redesign.md Trap 3 Fix A / DECISION 3), read by _resolve's `elif vertical:` branch ONLY, and
-    only under the Large size mode (Default needs none -- see the constants' note). Defaults to 0,
-    a no-op, so a caller that omits it (every existing test fixture, and the horizontal branch,
-    which never reads this attribute at all) is byte-identical to before this argument existed.
+
+    DELETED (v23, the Fixed-alignment redesign): ``x_shift_large`` and its rule-5 right-pin math
+    (constants.PROGRESS_/EFFICIENCY_ANCHOR_X_SHIFT_LARGE, anchor_centred_reduced's ``x_shift``
+    argument). It existed solely for a VERTICAL bar resolving to the Damage Log anchor under
+    Large, and that combination is not merely rare now, it is UNREACHABLE: Alignment only ever
+    stores Fixed or Free (clamp_variant's ceiling is PROGRESS_ALIGN_FREE == 1), and Fixed always
+    picks Minimap when vertical (see _resolve) -- there is no stored value or UI path left that
+    can select Damage Log while vertical.
     """
 
     def __init__(self, item_id, vm_factory, y_frac, x_off, y_shift, y_shift_large,
-                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag, variant=None,
-                 x_shift_large=0):
+                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag, variant=None):
         self.item_id = item_id
         self._vm_factory = vm_factory
         self._y_frac = y_frac
@@ -252,7 +255,6 @@ class BarHost(object):
         self._mm_gap_bottom = mm_gap_bottom
         self._tag = tag
         self._variant = variant
-        self._x_shift_large = x_shift_large
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
         self._active = None                         # (window, view) while open
         self._extent_cache = None                   # memoized movable extent; see _extent
@@ -282,48 +284,45 @@ class BarHost(object):
         needs no engine call the caller has not already made (see _space, and the drag's ownership
         gate, which recovers the surface the same way).
 
-        THREE BRANCHES, and offset (0, 0) needs no fourth: under Damage Log alignment the base IS
-        the shipped placement byte-for-byte, and under Free it now falls through to the
-        orientation's own default anchor (see the Free bullet), so no branch has to special-case it.
+        THREE BRANCHES, same shape as before v23's Fixed-alignment redesign -- only WHERE the
+        dispatch comes from changed. Alignment only ever STORES Fixed or Free now (clamp_variant's
+        ceiling is PROGRESS_ALIGN_FREE == 1); Fixed resolves to one of the two INTERNAL anchor
+        selectors (mod_settings.PROGRESS_ALIGN_DAMAGE_LOG / PROGRESS_ALIGN_MINIMAP -- see that
+        module for why they survive) PURELY by Orientation -- Horizontal -> Damage Log,
+        Vertical -> Minimap. Dispatch below branches on `vertical` DIRECTLY rather than on a
+        locally-assigned "resolved anchor" value: PROGRESS_ALIGN_MINIMAP and PROGRESS_ALIGN_FREE
+        are BOTH 1 (two different, never-crossed vocabularies -- stored alignment vs. internal
+        anchor selector), so re-testing a variable that was just SET to PROGRESS_ALIGN_MINIMAP
+        against `== PROGRESS_ALIGN_FREE` would wrongly match. Neither Damage Log nor Minimap is a
+        separately stored choice any more, but the placement math for each is otherwise UNCHANGED:
           * Damage Log -- centred horizontally, PROPORTIONALLY down the viewport
             (anchor_centred_reduced). Its `y_shift` cancels the composition's intra-surface top
             offset (the JS shifts the whole bar into positive document coordinates); the fraction's
             extent-to-viewport conversion is computed by passing `space_y`, not baked into the
-            constant -- see the constants' derivations and anchor_centred_reduced's docstring. A
-            VERTICAL bar additionally passes `x_shift_large` under Large (0 at Default, needing no
-            term) -- rule 5's right-pin (Trap 3 Fix A / DECISION 3): `max_x // 2` alone would move
-            BOTH edges outward on a size-up, so this cancels the outward half and holds the right
-            edge. Unreachable through the UI under rules 2/3 (a vertical bar's natural alignment is
-            Minimap, already compliant) but a stored (V, DL) stays placeable (DECISION 5), so this
-            must still be correct with nobody able to select it.
+            constant -- see the constants' derivations and anchor_centred_reduced's docstring.
+            Reachable only when Horizontal now (Fixed+Vertical always resolves to Minimap instead
+            -- see mod_settings' SETTINGS_VERSION 22->23 comment for the `x_shift_large` rule-5
+            right-pin machinery this retired: it existed ONLY for a vertical bar resolving to this
+            anchor, which is no longer possible through the UI or a stored value at all).
           * Minimap -- to the LEFT of the minimap, whose measured logical width comes from the live
             settingsCore size INDEX (_minimap_size_index). The tick overhang term applies only to a
             VERTICAL bar: it is a CROSS-axis length, and only a vertical bar's cross axis is the x
-            axis the minimap gap is measured on (a horizontal bar's ticks overhang in y instead).
-            WHAT THE TWO GAPS ARE MEASURED TO IS ALSO ORIENTATION-SPLIT, and getting it wrong was
-            the shipped bug (the bar landed 45-63px too far left and 90 too high). Both tuners
-            measure them to the visible TRACK box, so a VERTICAL bar passes where its track sits
-            inside its surface (*_MM_TRACK_X / MM_TRACK_Y) as anchor_minimap's `edge_x` / `edge_y`.
-            A HORIZONTAL bar keeps passing the SURFACE's own edges (space - extent, the shipped
-            behaviour): neither horizontal tuner has a minimap placement at all, so there is no
-            tuned reference to convert into and nothing to reproduce -- see the constants' note.
+            axis the minimap gap is measured on (a horizontal bar's ticks overhang in y instead) --
+            reachable only when Vertical now, for the same reason as above. Both tuners measure the
+            gaps to the visible TRACK box, so a VERTICAL bar passes where its track sits inside its
+            surface (*_MM_TRACK_X / MM_TRACK_Y) as anchor_minimap's `edge_x` / `edge_y`.
           * Free -- the stored pair as an ANCHOR POINT (bottom-centre horizontal / bottom-right
             vertical -- domain.positioning.free_top_left, Trap 3 Fix B), converted into a top-left
             using THIS placement's own live surface size, which is what makes a Default<->Large
             size flip re-anchor the bar instead of growing it off to one side or the other --
             EXCEPT at the pair (0, 0), which under Free means AUTO and defers to whichever anchor
-            this ORIENTATION defaults to (Horizontal -> Damage Log, Vertical -> Minimap, the same
-            mapping mod_settings._derive_layout's rows 1-2 use). NOTE: this branch is NOT here to
-            protect a "Free is sticky" rule -- that rule is SUPERSEDED (an explicit
-            Orientation/Alignment change now re-anchors Alignment away from Free unconditionally,
-            see _derive_layout). It survives for two other, still-live reasons: (1) picking
-            Alignment = Free leaves the pair at (0, 0) until the bar's next battle mount computes
-            the real on-screen point (no surface exists in the settings panel to compute it from --
-            the bar must not jump), so (0, 0) is Free's "not yet materialised" marker
-            (BarHost._materialise), and (2) a user who types 0 / 0 into the steppers gets AUTO
-            rather than the screen origin, a deliberately accepted lost capability (DECISION 6).
-            Both routes need this exact fallback; neither is about Orientation-change safety
-            anymore. A NON-zero pair still carrying the PRE-v22 frame (mod_settings.
+            this ORIENTATION defaults to (Horizontal -> Damage Log, Vertical -> Minimap, the SAME
+            mapping computed below). This is Free's "not yet materialised" marker
+            (BarHost._materialise): picking Alignment = Free leaves the pair at (0, 0) until the
+            bar's next battle mount computes the real on-screen point (no surface exists in the
+            settings panel to compute it from -- the bar must not jump), and a user who types 0 / 0
+            into the steppers gets AUTO rather than the screen origin, a deliberately accepted lost
+            capability. A NON-zero pair still carrying the PRE-v22 frame (mod_settings.
             progress_bar_pos_frame() == POS_FRAME_LEGACY -- see the SETTINGS_VERSION 21->22
             comment) is honoured as the literal top-left it always was instead, until
             _materialise converts it the first time this bar mounts with a real surface.
@@ -337,32 +336,30 @@ class BarHost(object):
                     == mod_settings.PROGRESS_ORIENT_VERTICAL)
         alignment = mod_settings.progress_bar_alignment()
         off_x, off_y = mod_settings.bar_pos_x(), mod_settings.bar_pos_y()
-        if alignment == mod_settings.PROGRESS_ALIGN_FREE and (off_x, off_y) == (0, 0):
-            alignment = (mod_settings.PROGRESS_ALIGN_MINIMAP if vertical
-                         else mod_settings.PROGRESS_ALIGN_DAMAGE_LOG)
-        if alignment == mod_settings.PROGRESS_ALIGN_FREE:
+        # Free is real (not the (0, 0) AUTO marker, which falls through to Fixed's own mapping
+        # below) only when BOTH the stored value is Free AND the pair is non-zero. Decided here,
+        # against the ORIGINAL stored value, and never re-tested against a locally-computed
+        # internal anchor selector below: PROGRESS_ALIGN_MINIMAP and PROGRESS_ALIGN_FREE are BOTH
+        # 1 (two different, never-confused vocabularies -- see mod_settings), so comparing a
+        # freshly-assigned "internal anchor" variable back against PROGRESS_ALIGN_FREE would
+        # wrongly match Minimap.
+        is_free = (alignment == mod_settings.PROGRESS_ALIGN_FREE and (off_x, off_y) != (0, 0))
+        if is_free:
             if mod_settings.progress_bar_pos_frame() == mod_settings.POS_FRAME_LEGACY:
                 # A pre-v22 pair is still a literal top-left (Fix B has not converted it yet, see
                 # BarHost._materialise) -- honour it verbatim, exactly as pre-v22 did.
                 return anchor_offset((0, 0), off_x + self._x_off, off_y)
             surface = (space_x - max_x, space_y - max_y)
             return free_top_left((off_x, off_y), surface, vertical)
-        elif alignment == mod_settings.PROGRESS_ALIGN_MINIMAP:
-            if vertical:
-                overhang = MM_TICK_OVERHANG_LARGE if large else MM_TICK_OVERHANG
-                edge_x = self._mm_track_x_large if large else self._mm_track_x
-                edge_y = MM_TRACK_Y_LARGE if large else MM_TRACK_Y
-            else:
-                overhang = 0
-                edge_x, edge_y = space_x - max_x, space_y - max_y
+        # Fixed, or Free still at its own (0, 0) AUTO marker: resolve to the internal anchor
+        # Fixed's own mapping selects -- Vertical -> Minimap, Horizontal -> Damage Log.
+        if vertical:
+            overhang = MM_TICK_OVERHANG_LARGE if large else MM_TICK_OVERHANG
+            edge_x = self._mm_track_x_large if large else self._mm_track_x
+            edge_y = MM_TRACK_Y_LARGE if large else MM_TRACK_Y
             base = anchor_minimap(space_x, space_y, edge_x, edge_y,
                                   MINIMAP_SIZES[_minimap_size_index()], MM_GAP,
                                   self._mm_gap_bottom, overhang)
-        elif vertical:
-            base = anchor_centred_reduced(
-                max_x, max_y, space_y, self._y_frac,
-                VERTICAL_ANCHOR_Y_SHIFT_LARGE if large else VERTICAL_ANCHOR_Y_SHIFT,
-                self._x_shift_large if large else 0)
         else:
             base = anchor_centred_reduced(max_x, max_y, space_y, self._y_frac,
                                           self._y_shift_large if large else self._y_shift)
@@ -498,10 +495,11 @@ class BarHost(object):
         ONLY THE END PERSISTS, and only if the gesture actually MOVED. A live move writes the
         in-memory value alone -- that is all _resolve reads -- because a settings write per movement
         would mean an MSA updateModSettings + saveState at pointer rate. And a gesture that never
-        moved writes nothing at all: `_drag_pos` stays None, so no set_bar_position runs -- which
-        matters MORE now than under the retired 0/0 sentinel, because that call also flips Alignment
-        to Free. A stray Ctrl+click on the bar must not silently opt the user out of the anchored
-        alignment (and of every future change to that anchor) without moving anything.
+        moved writes nothing at all: `_drag_pos` stays None, so no set_bar_position runs, sparing a
+        stray Ctrl+click on the bar a needless MSA write. (set_bar_position no longer touches
+        Alignment at all -- see its own docstring -- so a no-move gesture has nothing further to
+        protect against there; the gesture could not have started here in the first place unless
+        Alignment was already Free.)
 
         EVERY MOVE ALSO CONVERTS INTO THE STORED FRAME (Trap 3 Fix B): `window.move()` still takes
         the TOP-LEFT `pos` computed above, but what gets handed to set_bar_position (both the live,
@@ -511,9 +509,19 @@ class BarHost(object):
         size-invariance the same way a materialised or panel-set Free pin does. The GRAB offset
         above stays in top-left space throughout; only the value actually persisted is converted.
 
+        BLOCKED OUTRIGHT UNDER FIXED (v23 follow-on): dragging only ever makes sense once the bar
+        HAS a free-floating position to write, so the gate sits here, at the very top, before any
+        cursor read or window move -- the bar must never visibly follow the cursor and then snap
+        back once the gesture ends, which is what letting the gesture run and discarding the
+        result at "end" would look like. Checked on EVERY phase (not just "start"), since the
+        setting could in principle change mid-gesture and a half-finished drag must not leave
+        `_grab`/`_drag_pos` in a state a later phase could act on.
+
         Fail-soft throughout: an unreadable cursor leaves the window exactly where it is, and nothing
         raises into the engine's input path."""
         if self._active is None:
+            return
+        if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
             return
         try:
             if phase == "end":

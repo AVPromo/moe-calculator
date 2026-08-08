@@ -14,7 +14,7 @@ from moe_calculator.bridge import mod_settings
 from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import ProgressVM
 from moe_calculator.domain.constants import (
-    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_X_SHIFT_LARGE, PROGRESS_ANCHOR_Y_FRAC,
+    PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC,
     PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_GAP_BOTTOM,
     PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
 
@@ -27,8 +27,7 @@ _host = BarHost(RES_MAP_ITEM_ID, ProgressVM,
                 PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT,
                 PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                 PROGRESS_MM_GAP_BOTTOM, "[moe-bar]",
-                variant=mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE,
-                x_shift_large=PROGRESS_ANCHOR_X_SHIFT_LARGE)
+                variant=mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE)
 
 open_window = _host.open_window
 close_window = _host.close_window
