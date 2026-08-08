@@ -199,8 +199,8 @@ function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
 // one and goVertical replaces it). Markup shape is the tuner's stage verbatim
 // (eff_bar_tuner.html:333-351): backdrop, then the track carrying the fill, the four FIXED
 // requirement ticks, the one moving current tick, the four requirement captions (three marksOnGun
-// glyphs + the barrel_mark at 100 %) and the current caption with its BARE signed delta -- no
-// parens on this bar, unlike the Moving Average one. The .mp-d / .mp-d-num split stays anyway: the
+// glyphs + the barrel_mark at 100 %) and the current caption with its BARE signed delta -- no bar
+// renders parens around a delta any more. The .mp-d / .mp-d-num split stays anyway: the
 // wrapper carries the gap, size and fade, the inner numeral is what JS writes the digits into (see
 // the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.

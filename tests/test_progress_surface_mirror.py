@@ -233,10 +233,9 @@ def _advances(js):
                     (Decimal(g) for g in match.groups())))
 
 
-def _ink(adv, size, digits=0, commas=0, parens=0, signs=0):
+def _ink(adv, size, digits=0, commas=0, signs=0):
     """One numeral's rendered width in rem, at `size` rem and letter-spacing 0."""
-    return size * (digits * adv["digit"] + commas * adv["comma"]
-                   + parens * adv["paren"] + signs * adv["sign"])
+    return size * (digits * adv["digit"] + commas * adv["comma"] + signs * adv["sign"])
 
 
 def test_the_vertical_captions_fit_inside_the_surface():
@@ -257,7 +256,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
     advance out of MoEProgress.js's own hmtx note, so a retune of a gap, a font-size or an icon box
     moves BOTH sides of the comparison together and only a real overflow fails.
 
-    THE BUDGET IS THE 4-DIGIT DELTA (maintainer's call), not the 3-digit one: "(+2,970)" needs a
+    THE BUDGET IS THE 4-DIGIT DELTA (maintainer's call), not the 3-digit one: "+2,970" needs a
     combined damage around 150,000 but costs nothing to cover, and the margin left over is small.
     """
     css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
@@ -283,10 +282,14 @@ def test_the_vertical_captions_fit_inside_the_surface():
         return max(Decimal(b) for b in blurs)
 
     ico_gap = rem(".mpv-cap .mpv-ico", "margin-left")
-    # The mark icon's own margin OVERRIDES the shared 1rem gap outright (a more-specific rule, not
-    # an addition to it -- Job 2's own correction closing the residual its box shrink alone could
-    # not reach). Read the override's OWN value, never `ico_gap` plus it.
+    # Four icons now carry their OWN margin-left override instead of the shared 1rem -- each one
+    # REPLACES the base rule outright (a more-specific compound selector, not an addition to it),
+    # so read each override's own value, never `ico_gap` plus it. Only .mpv-ico.dmgc has no
+    # override (the reference the others are calibrated against) and still reads `ico_gap`.
+    dmgp_gap = rem(".mpv-cap .mpv-ico.dmgp", "margin-left")
+    moe_gap = rem(".mpv-cap .mpv-ico.moe", "margin-left")
     mk_gap = rem(".mpv-cap .mpv-ico.mk", "margin-left")
+    battles_gap = rem(".mpv-cap .mpv-ico.battles", "margin-left")
     drop = shadow(".mpv-cap .mpv-v,\n.mpv-cap .mpv-eta,\n.mpv-cap .mpv-d")   # the base dark drop
     glow = shadow(".mpv-v.mpv-up,\n.mpv-d-num.mpv-up,\n.mpv-eta.mpv-up")     # the sign colour glow
     d_size = rem(".mpv-cap .mpv-d", "font-size")
@@ -302,28 +305,38 @@ def test_the_vertical_captions_fit_inside_the_surface():
 
     r_size, c_size, p_size = (rem(s, "font-size") for s in (".mpv-capR", ".mpv-capC", ".mpv-capP"))
     eta_size = rem(".mpv-capEta", "font-size")
+    # capR shows EITHER the mark icon or .moe (the 3-marks achievement glyph) -- they no longer
+    # share the box+margin combination that made them interchangeable pre-039a58c (same box, same
+    # shared 1rem margin), since each now carries its OWN margin correction. Take whichever
+    # combination reaches further, so this row's "worst case" is actually the worst case.
+    mk_total = mk_gap + rem(".mpv-ico.mk", "width")
+    moe_total = moe_gap + rem(".mpv-ico.moe", "width")
+    r_icon_gap, r_icon_total = (
+        (moe_gap, moe_total) if moe_total >= mk_total else (mk_gap, mk_total))
     rows = {
-        # [requirement numeral][mark glyph] -- capR no longer carries the eta group at all (Job 1:
-        # the ETA row now STACKS ABOVE capR instead of sharing its row -- see .mpv-capEta below).
+        # [requirement numeral][mark-or-moe glyph] -- capR no longer carries the eta group at all
+        # (Job 1: the ETA row now STACKS ABOVE capR instead of sharing its row -- see .mpv-capEta
+        # below).
         ".mpv-capR": (r_size,
-                      [numeral(r_size), mk_gap, rem(".mpv-ico.mk", "width")],
-                      drop, mk_gap),
+                      [numeral(r_size), r_icon_total],
+                      drop, r_icon_gap),
         # [eta numeral][battles glyph] -- capEta's OWN row, the same right-anchor mechanism as
         # capR (padding-right/transform copied verbatim -- see MoEProgressVertical.css).
         ".mpv-capEta": (eta_size,
                         [_ink(adv, eta_size, digits=2),   # "99", the PROGRESS_ETA_CAP
-                         ico_gap, rem(".mpv-ico", "width")],   # battles takes the BASE box
-                        drop, ico_gap),
+                         battles_gap, rem(".mpv-ico", "width")],   # battles takes the BASE box
+                        drop, battles_gap),
         # [delta][proj numeral][damage glyph] -- the delta is the leftmost child, so its SIGN GLOW
         # (the widest shadow in the file) is what the surface has to clear, not the base drop.
+        # dmgc has no margin override (the reference), so this row still reads the shared `ico_gap`.
         ".mpv-capC": (c_size,
-                      [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
+                      [_ink(adv, d_size, digits=4, commas=1, signs=1), d_gap,
                        numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
                       glow, ico_gap + d_gap),
         # [pre numeral][damage-projection glyph]
         ".mpv-capP": (p_size,
-                      [numeral(p_size), ico_gap, rem(".mpv-ico.dmgp", "width")],
-                      drop, ico_gap),
+                      [numeral(p_size), dmgp_gap, rem(".mpv-ico.dmgp", "width")],
+                      drop, dmgp_gap),
     }
 
     allowance = Decimal(_v_shift_x(js))

@@ -473,20 +473,20 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
   needed for it — the base rule *is* the neutral). Two things not to "tidy": these stay at
   specificity **(0,3,0)** so the (1,2,0) `.mp-full` rule still wins, and they emit
   **declaration-only** — restating `transition` would re-arm the base `left` transition. The bottom caption's
-  `(+N)` is a separate `.mp-d` element carrying the shipped sign convention — for **text** a
+  `+N` is a separate `.mp-d` element carrying the shipped sign convention — for **text** a
   green/red **glow, never a fill** (`#7BEC37` / `#D3443F` @ 0.9, wide + tight pass); zero delta
   gets neither class. **The preview classifies on the ROUNDED delta**, mirroring the shipped
   `showVal` — `Math.round(Math.abs(d)) !== 0`, tested on the magnitude exactly as `fmt()` rounds it
-  (`Math.round(d)` is `-0` at `d == -0.5` while the text already reads `(-1)`). The displayed glyphs
-  are untouched, so a `d` of `+0.4` still renders `(+0)` but now glows **nothing**; unrounded, it
-  glowed green on a displayed `(+0)`.
+  (`Math.round(d)` is `-0` at `d == -0.5` while the text already reads `-1`). The displayed glyphs
+  are untouched, so a `d` of `+0.4` still renders `+0` but now glows **nothing**; unrounded, it
+  glowed green on a displayed `+0`.
   **The cold-entry window CARRIES the previous committed sign, it does not reset to neutral**:
   `showVal(false)` returns *before* the toggles and so removes nothing, leaving whatever the last
   `showVal(true)` applied on all four elements (fill, main numeral, delta number, `.mp-proj` tick).
   A bar that was red and then earns damage reads **red through the entry and turns green at the
   swap**; a bar that was and stays red never blinks. Only `showVal(true)` ever clears — and it
   **must**, because a rounded-zero commit has to wipe the carried colour or a stale red survives
-  into the neutral `(+0)` state. Only the very first show has nothing committed, and that is the
+  into the neutral `+0` state. Only the very first show has nothing committed, and that is the
   one place the cream `fillCol` neutral shows. This is a **sequence** behaviour, so a single-call
   check cannot see it — assert it as an ordered call sequence in the node DOM shim.
   **`.mp-fill` is the one exception**: the bar takes the same up/down colour
@@ -494,7 +494,7 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
   still naming only `width`. The bottom numeral shows `pre_avg` during the entry and **swaps to
   `proj_avg` on `tickDelay`** — delta, sign glow and fill colour all arrive with it
   (`valueSwapMs` in the emitted timings JSON tracks `tickDelayMs`).
-  **The `(+N)` delta FADES in** at that swap rather than snapping: `opacity` 0 → 1 with
+  **The `+N` delta FADES in** at that swap rather than snapping: `opacity` 0 → 1 with
   `transition: opacity <dFadeMs>ms <dFadeEase>` on `.mp-d` (defaults **600ms / `cubic-bezier(.2,.8,.2,1)`**
   = the tick move's own duration and curve, so the delta finishes appearing exactly when the fill and
   tick finish moving; both are in the timings JSON as `deltaFadeMs` / `deltaFadeEasing`). `opacity`,

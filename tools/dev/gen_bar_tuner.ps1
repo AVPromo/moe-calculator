@@ -287,9 +287,10 @@ $tpl = @'
      Zero delta gets neither class -> white + the dark drop only.
      WHO glows (exactly the shipped set, one row up): the bottom-centre caption's MAIN NUMBER
      (.mp-capC's .mp-v == the shipped .mb-value.mb-up) AND the delta's NUMBER child
-     (.mp-d-num == .mb-delta-num) -- NOT the delta's parens, which are static text nodes on the
-     .mp-d wrapper and keep the plain white treatment, and NOT the other three captions (the two
-     requirement ends + pre_avg carry no sign, so JS never puts the class on them). */
+     (.mp-d-num == .mb-delta-num) -- NOT the .mp-d wrapper itself, which carries no text of its
+     own (a bare positioning box, per the maintainer's "remove the parens" call) and keeps the
+     plain white treatment, and NOT the other three captions (the two requirement ends + pre_avg
+     carry no sign, so JS never puts the class on them). */
   /* ~= the shipped .mb-delta 4.5rem @14rem. font-size + translateY are the EFFICIENCY bar's delta
      values (12rem / the 2.5rem half of its translate(4.2rem, 2.5rem)), carried over after a live
      pass; HARDCODED like the .35em gap beside them -- no knob, so a re-emit keeps them. Its X half
@@ -489,10 +490,11 @@ $tpl = @'
            carries a SECOND icon+value pair (the remaining-battles count) after the mark pair,
            because setIco()/capV() in the shipped JS both take the FIRST match. -->
       <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i><span class="mp-v">2,905</span></div>
-      <!-- Shipped .mb-delta > .mb-delta-num split verbatim: the PARENS are static text nodes on
-           the .mp-d wrapper (plain white, dark drop only) and only the signed NUMBER child
-           .mp-d-num takes the sign glow. The main .mp-v glows too (bottom caption only). -->
-      <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v">2,913</span><span class="mp-d">(<span class="mp-d-num">+8</span>)</span></div>
+      <!-- Shipped .mb-delta > .mb-delta-num split verbatim: the .mp-d wrapper carries no text of
+           its own (a bare positioning box, plain white, dark drop only) and only the signed
+           NUMBER child .mp-d-num takes the sign glow. The main .mp-v glows too (bottom caption
+           only). -->
+      <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v">2,913</span><span class="mp-d"><span class="mp-d-num">+8</span></span></div>
       <div class="mp-cap side mp-capR"><i class="mp-ico mk mk2"></i><span class="mp-v">3,050</span><i class="mp-ico battles"></i><span class="mp-eta">18</span></div>
     </div>
   </div></div>
@@ -879,7 +881,7 @@ $tpl = @'
       bd=root.querySelector(".mp-backdrop"), ribs=document.getElementById("ribbons"),
       dyn=document.createElement("style");
   document.head.appendChild(dyn);
-  // The signed NUMBER inside the delta's parens -- the only part of "(+8)" that glows.
+  // The signed NUMBER inside the delta wrapper -- the only part of "+8" that glows.
   var capDN=capC.querySelector(".mp-d-num");
   function capV(c){return c.querySelector(".mp-v");}
   function capI(c){return c.querySelector(".mp-ico");}
@@ -957,12 +959,12 @@ $tpl = @'
     if(!sw)return;
     // THE CLASSES KEY OFF THE ROUNDED VALUE SO GLYPH AND GLOW CAN NEVER DISAGREE. `d` is a raw
     // float but the text above is rounded by fmt(), so an unrounded test glowed GREEN on a
-    // displayed "(+0)" (any 0 < d < 0.5) and RED on "(-0)". Tested on the MAGNITUDE exactly as
-    // fmt() rounds it -- NOT Math.round(d), which is -0 at d == -0.5 while the text reads "(-1)".
+    // displayed "+0" (any 0 < d < 0.5) and RED on "-0". Tested on the MAGNITUDE exactly as
+    // fmt() rounds it -- NOT Math.round(d), which is -0 at d == -0.5 while the text reads "-1".
     // Zero -> NEITHER class, on the numerals, the fill AND the current tick alike: each falls back
     // to its neutral (white + dark drop / --fillbg / --projsh). This is the ONE path that still
     // CLEARS, and it must: a rounded-zero commit has to wipe the carried-over sign colour, or a
-    // stale red survives into the neutral "(+0)" state.
+    // stale red survives into the neutral "+0" state.
     var glows=Math.round(Math.abs(d))!==0;
     [cv,capDN,fill,tProj].forEach(function(e){
       e.classList.toggle("mp-up",glows&&d>0);e.classList.toggle("mp-down",glows&&d<0);});
@@ -1051,8 +1053,9 @@ $tpl = @'
     capV(capP).textContent=fmt(st.preAvg);
     // The sign lands on THREE elements, all off the same proj_avg - pre_avg: the bottom caption's
     // main number and its delta's NUMBER child (as a GLOW), plus the fill (as a real background).
-    // The parens stay on the .mp-d wrapper (untouched, plain white) and the other three captions
-    // never get the class -- same split as the shipped .mb-value.mb-up + .mb-delta-num.mb-up.
+    // The .mp-d wrapper itself never gets the class (untouched, plain white, no text of its own)
+    // and the other three captions never get it either -- same split as the shipped
+    // .mb-value.mb-up + .mb-delta-num.mb-up.
     // Which phase is rendered is showVal's job (pre until the swap); apply() only re-renders it.
     showVal(swapped);
     tPre.style.left=pct(st.preAvg).toFixed(3)+"%";
@@ -1358,9 +1361,9 @@ $tpl = @'
       "   Text glows, bar fills, both off the same upCol/dnCol -- do not \"unify\" them either way.)\n"+
       "   Triple shadow: dark drop, WIDE pass, TIGHT core pass.\n"+
       "   THE SPLIT (verbatim from MoEBattle.css's .mb-delta > .mb-delta-num): the delta wrapper\n"+
-      "   .mp-d holds the PARENS as static text nodes and keeps the plain white treatment; only\n"+
-      "   its .mp-d-num child carries the signed digits and the glow -- so \"(\" and \")\" never glow.\n"+
-      "   Markup: <span class=\"mp-d\">(<span class=\"mp-d-num\">+8</span>)</span>.\n"+
+      "   .mp-d carries no text of its own (a bare positioning box) and keeps the plain white\n"+
+      "   treatment; only its .mp-d-num child carries the signed digits and the glow.\n"+
+      "   Markup: <span class=\"mp-d\"><span class=\"mp-d-num\">+8</span></span> (no parens, maintainer's call).\n"+
       "   WHO GLOWS: the BOTTOM-CENTRE caption only -- its main number (.mp-capC .mp-v) and the\n"+
       "   delta number, both off the SAME proj_avg - pre_avg sign. The two requirement captions and\n"+
       "   the top-centre pre_avg caption are plain white: JS must never put .mp-up/.mp-down on\n"+

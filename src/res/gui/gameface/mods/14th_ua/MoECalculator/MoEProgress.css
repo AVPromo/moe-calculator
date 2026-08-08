@@ -412,9 +412,9 @@ body { margin: 0; }
    Text glows, bar fills, both off the same upCol/dnCol -- do not "unify" them either way.)
    Triple shadow: dark drop, WIDE pass, TIGHT core pass.
    THE SPLIT (verbatim from MoEBattle.css's .mb-delta > .mb-delta-num): the delta wrapper
-   .mp-d holds the PARENS as static text nodes and keeps the plain white treatment; only
-   its .mp-d-num child carries the signed digits and the glow -- so "(" and ")" never glow.
-   Markup: <span class="mp-d">(<span class="mp-d-num">+8</span>)</span>.
+   .mp-d carries no text of its own (a bare positioning box) and keeps the plain white
+   treatment; only its .mp-d-num child carries the signed digits and the glow.
+   Markup: <span class="mp-d"><span class="mp-d-num">+8</span></span> (no parens, maintainer's call).
    WHO GLOWS: the BOTTOM-CENTRE caption only -- its main number (.mp-capC .mp-v) and the
    delta number, both off the SAME proj_avg - pre_avg sign. The two requirement captions and
    the top-centre pre_avg caption are plain white: JS must never put .mp-up/.mp-down on

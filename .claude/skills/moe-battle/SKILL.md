@@ -137,7 +137,8 @@ and append; the backlog notes' "spare slot 7/8/9" assumption is obsolete.
 - **Colour by sign (`colourBySign`)** — sign carried by a **coloured text-shadow glow, not a fill**
   (numerals stay white): `.mb-up` green, `.mb-down` red, neutral = white + dark drop only. Row 1
   live damage vs projected avg; row 2 delta vs pre-battle standing. Only the delta **number**
-  (`.mb-delta-num`) is coloured — the parens stay white.
+  (`.mb-delta-num`) is coloured — the delta renders with no surrounding parentheses (the `.mb-delta`
+  wrapper carries no text of its own).
 - **Colours (live `MoEBattle.css`, canonical):** green **`#7BEC37`** `rgba(123,236,55,.9)`, red
   **`#D3443F`** `rgba(211,68,63,.9)`, gold bloom `#FFCD5A`, white `#ffffff`. (A stale note says
   `#61bf22`/`#c81400` — ignore it; the CSS above is what ships.)

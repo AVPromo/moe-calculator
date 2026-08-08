@@ -109,11 +109,12 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 //     pins exactly that. Any asymmetry slides the bar half the error sideways at every resolution
 //     until that constant -- plus a Large twin for it, since it is logical px and the block's
 //     x-lengths carry SIZE_XF -- follows. That is a positioning change, not a CSS one.
-//   CENTRE (.mp-capC) RIGHT -- back down, now that the "/NN" suffix is off the delta:
+//   CENTRE (.mp-capC) RIGHT -- back down, now that the "/NN" suffix is off the delta and the
+//     delta itself no longer carries parens:
 //     17.76 (half of "3,050" at the .dn 16rem == 35.52) + 4.20 (.mp-d's 0.35em gap of its OWN 12rem
-//     font) + 30.89 ("(+297)" at 12rem) + 6.00 (.mp-d-num's sign-glow text-shadow radius)
-//     == 58.85rem, i.e. 21.15rem SPARE. That reproduces the pre-count figure exactly, as it must.
-//     A 4-digit delta ("(+2,970)" == 39.78) still only reaches 67.74rem, and needs cd ~ 150,000.
+//     font) + 23.67 ("+297" at 12rem) + 6.00 (.mp-d-num's sign-glow text-shadow radius)
+//     == 51.63rem, i.e. 28.37rem SPARE.
+//     A 4-digit delta ("+2,970" == 32.56) still only reaches 60.52rem, and needs cd ~ 150,000.
 //   LEFT -- .mp-capC at 0% is the ONLY candidate left, and its ICON path beats its numeral's glow:
 //     17.76 (the same half-numeral) + 17.00 (.mp-capC .mp-ico's negative-margin overhang)
 //     + 0.48 (that icon's ::before glow, 3% of its 16rem box) == 35.24rem, against the numeral's
@@ -238,30 +239,38 @@ const PAD_REM = 10;
 // viewW by -- the X axis still collapses to zero width either way, and the Y axis (which this
 // widening never touches) is untouched. The input rect does not move. Do NOT "reclaim" the right
 // side.
-// THE WORST-CASE REACH, RE-DERIVED for the row split + Job 2's icon resize (mk/moe 17->13rem,
-// dmgp 14->16rem -- see MoEProgressVertical.css's own notes), from the shipped CSS and
-// MoEBattle.ttf's own advances (digit 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the
-// same figures the horizontal extremes above use). Each row's ink starts at
-// `-padding-right + translateX` off the track's left edge and grows leftward; the design is
-// digit-count INVARIANT at the anchor (see the CSS's own note), so a static worst case is sound:
-//   .mpv-capC (bottom) IS STILL THE EXTREME, untouched by either job, and only with a 4-DIGIT
-//     delta -- which is what is budgeted for, per the maintainer, not the 3-digit case:
-//     (-6 + 16) - [ 39.78 ("(+2,970)" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
+// THE WORST-CASE REACH, RE-DERIVED for the row split with Job 2's icon BOXES reverted (maintainer:
+// "icon sizes must stay the same, adjust paddings individually" -- dmgp/mk/moe are back at their
+// pre-039a58c 14/17/17rem, only per-icon margin-left differs from the shared 1rem now; see
+// MoEProgressVertical.css's own notes), from the shipped CSS and MoEBattle.ttf's own advances
+// (digit 0.4932em, comma 0.2471, paren 0.3008, sign 0.4932 -- the same figures the horizontal
+// extremes above use). Each row's ink starts at `-padding-right + translateX` off the track's left
+// edge and grows leftward; the design is digit-count INVARIANT at the anchor (see the CSS's own
+// note), so a static worst case is sound:
+//   .mpv-capC (bottom) IS STILL THE EXTREME, untouched by any of this (.mpv-ico.dmgc keeps its
+//     base 1rem margin, "the reference"), and only with a 4-DIGIT delta -- which is what is
+//     budgeted for, per the maintainer, not the 3-digit case:
+//     (-6 + 16) - [ 32.56 ("+2,970" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
 //     12rem) + 35.52 ("3,050" at 16rem) + 1.00 (the shared icon gap) + 16.00 (.mpv-ico.dmgc) ]
-//     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -92.49rem.
-//     A 3-digit delta ("(+297)" == 30.89) reaches only -83.61.
-//   .mpv-capR (now JUST the requirement group -- the eta group moved to its own row below):
-//     (-6 + 14) - [ 31.08 ("3,050" at 14rem) + 1 + 13 (.mpv-ico.mk, WAS 17) ] - 1.00 (the base
-//     dark drop) == -38.08rem -- well short of its old -73.89rem now the eta group is gone and
-//     the mark icon shrank.
-//   .mpv-capEta (NEW, stacked above capR): (-6 + 14) - [ 13.81 ("99" at 14rem, the
-//     PROGRESS_ETA_CAP ceiling) + 1 + 13 (.mpv-ico's base box, the battles glyph) ] - 1.00 ==
-//     -20.81rem -- the SLACKEST row in the file by a wide margin.
-//   .mpv-capP (moving, dmgp WAS 14, now 16rem): (-6 + 0) - [ 31.08 + 1 + 16 (.mpv-ico.dmgp) ]
-//     - 1.00 == -55.08rem (up 2rem from the old -53.08, exactly dmgp's own box growth).
-// capC is STILL the extreme after both jobs (92.49 > 55.08 > 38.08 > 20.81), so the surface's left
-// edge stays exactly where it was:
-//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63   (UNCHANGED -- neither job moves this)
+//     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -85.28rem.
+//     A 3-digit delta ("+297" == 23.67) reaches only -76.39.
+//   .mpv-capR (now JUST the requirement group -- the eta group moved to its own row below): the
+//     mark icon's own margin correction (-1.25rem) makes IT the shorter reach; the icon that
+//     actually binds is .moe (the achievement glyph that REPLACES .mk once 3 marks are earned),
+//     whose margin correction (+0.885rem) is now the LARGER combined offset -- the two are no
+//     longer interchangeable the way they were pre-039a58c (same box, same shared margin, same
+//     18-total either way):
+//     mk:  (-6 + 14) - [ 31.08 ("3,050" at 14rem) + (-1.25) + 17 (.mpv-ico.mk) ] - 1.00 == -39.83
+//     moe: (-6 + 14) - [ 31.08 + 0.885 + 17 (.mpv-ico.moe) ] - 1.00 == -41.97rem (the WORSE case)
+//   .mpv-capEta (stacked above capR): (-6 + 14) - [ 13.81 ("99" at 14rem, the PROGRESS_ETA_CAP
+//     ceiling) + 1.038 (.mpv-ico.battles's own margin correction, not the shared 1rem) + 13
+//     (.mpv-ico's base box, the battles glyph) ] - 1.00 == -20.85rem -- still the SLACKEST row in
+//     the file by a wide margin.
+//   .mpv-capP (moving, dmgp back at 14rem, margin corrected to 1.253rem): (-6 + 0) -
+//     [ 31.08 + 1.253 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.33rem.
+// capC is STILL the extreme (85.28 > 53.33 > 41.97 > 20.85), so the surface's left edge stays
+// exactly where it was:
+//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63   (UNCHANGED -- neither job moved this)
 // tests/test_progress_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is the
 // GATE on all of the above -- it re-derives every row from the stylesheet and the advances rather
 // than trusting this note, and goes red the moment V_PAD_X_REM is trimmed. Splitting capR into
@@ -330,7 +339,7 @@ function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
 // four ticks, then THREE captions -- the tuner's fourth, .mp-capL, carried the axis FLOOR numeral
 // and is gone (axisLo is the battle's starting projection, not a requirement, and the label said
 // nothing the moving caption does not). Each caption is ONE flex row -- icon, value, and on capC the
-// delta, whose PARENS are static text on the wrapper so they never glow (see the .mp-d / .mp-d-num
+// delta, whose wrapper carries no text of its own and so never glows (see the .mp-d / .mp-d-num
 // split in the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
 const MARKUP =
@@ -344,7 +353,7 @@ const MARKUP =
         '  <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i>' +
         '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>' +
-        '<span class="mp-d">(<span class="mp-d-num"></span>)</span></div>' +
+        '<span class="mp-d"><span class="mp-d-num"></span></span></div>' +
         // THE MARK PAIR MUST COME FIRST IN THIS ROW: capV() does a querySelector for the FIRST
         // .mp-v, so reordering these four nodes repoints the requirement writer at the count -- with
         // no error to catch it. The mark GLYPH no longer cares (setIco writes to the mount-cached
@@ -393,7 +402,7 @@ const V_MARKUP =
         '</div>' +
         '<div class="mpv-cap mpv-capEta"><span class="mpv-eta"></span><i class="mpv-ico battles"></i></div>' +
         '<div class="mpv-cap mpv-capR"><span class="mpv-v"></span><i class="mpv-ico none"></i></div>' +
-        '<div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num"></span>)</span>' +
+        '<div class="mpv-cap mpv-capC"><span class="mpv-d"><span class="mpv-d-num"></span></span>' +
         '<span class="mpv-v"></span><i class="mpv-ico dmgc"></i></div>';
 
 function ensureRoot() {
@@ -589,10 +598,10 @@ function showVal(sw) {
     if (!sw) return;         // the entry window keeps the PREVIOUS committed sign -- see above
     // THE CLASSES KEY OFF THE ROUNDED VALUE, PRECISELY SO GLYPH AND GLOW CAN NEVER DISAGREE. `d`
     // is a raw float but the text above is rounded by fmt(), so an unrounded test glowed GREEN on
-    // a displayed "(+0)" (any 0 < d < 0.5 -- routine at EWMA_K, and the "(-0)"-shows-red twin
+    // a displayed "+0" (any 0 < d < 0.5 -- routine at EWMA_K, and the "-0"-shows-red twin
     // equally so). The CSS says the intent outright: "a sub-precision change never reads as a
     // win". Tested on the MAGNITUDE, exactly as fmt() rounds it (half away from zero) -- NOT
-    // Math.round(d), which is -0 for d == -0.5 while the text already reads "(-1)".
+    // Math.round(d), which is -0 for d == -0.5 while the text already reads "-1".
     const glows = Math.round(Math.abs(d)) !== 0;
     // capEta rides the SAME test as the delta -- no inversion. d > 0 is a better-than-average
     // battle, which LOWERS battles_to_axis_hi (fewer repeats still needed), so "d > 0 -> green"

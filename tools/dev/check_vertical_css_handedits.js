@@ -177,32 +177,35 @@ const PROGRESS_EDITS = [
      '.mpv-capEta .mpv-ico { transform: translate(0rem, 0.5rem); }\n' +
      '.mpv-capEta .mpv-eta { transform: translateY(-0.5rem); }',
      '6b/6 per-row Y-nudge split'],
-    // 6c: Job 2's box lever, dmgp -- widened to match dmgc's already-correct ink gap.
-    ['.mpv-ico.dmgp { width: 14rem; height: 14rem; }',
-     '.mpv-ico.dmgp { width: 16rem; height: 16rem; }', '6c/6 dmgp box 14->16'],
-    // 6d + 6e: Job 2's box lever, the two "achievement glyph" icons (moe replaces mk at 3 marks).
-    ['.mpv-ico.moe { width: 17rem; height: 17rem; }',
-     '.mpv-ico.moe { width: 13rem; height: 13rem; }', '6d/6 moe box 17->13'],
-    ['.mpv-ico.mk { width: 17rem; height: 17rem; }',
-     '.mpv-ico.mk { width: 13rem; height: 13rem; }', '6e/6 mk box 17->13'],
-    // 6f: the old etaGap rule/comment retargeted into the mark icon's own margin correction (Job
-    // 2's margin lever -- the box shrink above alone cannot reach the other rows' ~3rem gap
-    // because the marksOnGun asset's ink-to-box ratio is not the fixed icoFill(0.75) the OTHER
-    // icons get).
+    // 6c: NO box lever any more (2026-08-08 correction: the maintainer reverted Job 2's box resize
+    // outright, "icon sizes must stay the same, adjust paddings individually") -- dmgp/moe/mk are
+    // back at the tuner's own 14/17/17rem, so nothing needs editing at their box declarations at
+    // all; they pass through the fresh emit untouched. The old etaGap rule/comment (the tuner's own
+    // capR still emits it, unaffected -- its capR markup is untouched) is instead retargeted into
+    // FOUR per-icon margin corrections (margin lever only): dmgp/moe/mk/battles each get their own
+    // override, re-measured against the RESTORED boxes off the real PNGs' alpha>32 bbox (see the
+    // shipped file's own note above `.mpv-cap .mpv-ico.dmgp` for the full derivation).
     ['.mpv-capR .mpv-eta { margin-left: 4rem; }',
-     '.mpv-cap .mpv-ico.mk { margin-left: -0.25rem; }', '6f/6 mk margin correction (Default)'],
-    // 6g + 6h: the Large twins -- the new capEta row's own Large positioning (byte-identical to
-    // capR's), and the mark icon margin's own 4/3 twin, replacing the OLD eta-gap retarget's Large
-    // twin outright.
-    // NOTE: these two anchor on `.mp-lg`, not `.mpv-lg` -- edit 4/6+5/6 above (the rename) has
-    // ALREADY run on this same text by the time these apply.
+     '.mpv-cap .mpv-ico.dmgp { margin-left: 1.253rem; }\n' +
+     '.mpv-cap .mpv-ico.moe { margin-left: 0.885rem; }\n' +
+     '.mpv-cap .mpv-ico.mk { margin-left: -1.25rem; }\n' +
+     '.mpv-cap .mpv-ico.battles { margin-left: 1.038rem; }',
+     '6c/6 four-icon margin corrections (Default)'],
+    // 6d: the new capEta row's own Large positioning (byte-identical to capR's).
+    // NOTE: anchors on `.mp-lg`, not `.mpv-lg` -- edit 4/6+5/6 above (the rename) has ALREADY run
+    // on this same text by the time this applies.
     ['.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }',
      '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }\n' +
      '.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(18.667rem); }',
-     '6g/6 capEta Large twin'],
+     '6d/6 capEta Large twin'],
+    // 6e: the four margin corrections' own Large twins (SIZE_XF == 4/3, replacing the OLD eta-gap
+    // retarget's Large twin outright).
     ['.mp-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
-     '.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -0.333rem; }',
-     '6h/6 mk margin correction (Large)'],
+     '.mp-lg .mpv-cap .mpv-ico.dmgp { margin-left: 1.671rem; }\n' +
+     '.mp-lg .mpv-cap .mpv-ico.moe { margin-left: 1.180rem; }\n' +
+     '.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -1.667rem; }\n' +
+     '.mp-lg .mpv-cap .mpv-ico.battles { margin-left: 1.384rem; }',
+     '6e/6 four-icon margin corrections (Large)'],
 ];
 
 const EFFICIENCY_EDITS = [

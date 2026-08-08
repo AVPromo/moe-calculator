@@ -29,9 +29,12 @@
      4  `.mpv-lg` becomes `.mp-lg` -- the body class MoEBarTransient.applySize actually writes.
      5  the two Large rules whose subject is #moe-bar-root / #moe-bar-box are scoped `body.mpv.mp-lg`.
      6  THE ETA ROW SPLIT (maintainer's call, ported here only -- the tuner's own capR markup keeps
-        both numeral+icon groups on ONE row, untouched) plus the marks/battles icon box-and-gap
-        parity pass. Replaces the old "eta-gap retarget" hand-edit outright (a single-row concept
-        that the split makes moot, not something to carry alongside a new #7):
+        both numeral+icon groups on ONE row, untouched) plus a per-icon MARGIN-ONLY ink-gap parity
+        pass (corrected 2026-08-08: an earlier version of this edit also resized the icon BOXES --
+        the maintainer reverted that outright, "icon sizes must stay the same, adjust paddings
+        individually", so every box below is back at its pre-split size and only margin-left
+        differs from the shared 1rem). Replaces the old "eta-gap retarget" hand-edit outright (a
+        single-row concept the split makes moot, not something to carry alongside a new #7):
           * a NEW `.mpv-capEta` rule (eta numeral + battles icon) is inserted right after
             `.mpv-capR` (now JUST the requirement numeral + mark icon), stacked directly above it
             via `bottom: 100%; padding-bottom: 30rem` -- 30 == capR's own box height (18rem
@@ -42,13 +45,14 @@
           * the old combined `.mpv-capR .mpv-ico` / `.mpv-capR .mpv-v, .mpv-capR .mpv-eta`
             Y-nudge rules split into their own per-row copies (capR keeps the mark icon + `.mpv-v`
             nudge; capEta gets an identical copy for the battles icon + `.mpv-eta` nudge -- same
-            row line-height, same nudge value, so the SAME quantisation holds for both).
-          * `.mpv-ico.dmgp` grows 14rem -> 16rem and `.mpv-ico.mk` / `.mpv-ico.moe` shrink
-            17rem -> 13rem (Job 2, box lever, both legal under the (rowHeight-box)/2+nudge parity);
-            `.mpv-ico.mk` also gets a `-0.25rem` margin-left override (Job 2, margin lever, closing
-            the residual `contain`-sizing leaves at the parity-legal floor). See
-            MoEProgress.js's V_PAD_X_REM note and this file's own note above `.mpv-ico.mk` for the
-            full ink-gap derivation.
+            row line-height, same nudge value, so the SAME quantisation holds for both). This part
+            is UNAFFECTED by the box revert (margin never touches this Y quantisation at all).
+          * FOUR per-icon margin-left overrides close the ink-gap residual the shared 1rem base
+            leaves, measured live off the real PNGs' alpha>32 bounding box (not estimated): dmgp
+            +0.253rem, moe -0.115rem, mk -2.25rem, battles +0.038rem off the base 1rem -- see each
+            rule's own note below for the derivation. `.mpv-ico.dmgc` is the UNTOUCHED reference
+            (16rem box, base 1rem margin already lands ~3.006rem of ink gap) that every other row
+            is calibrated against; nothing about it moves.
         The old #6 retarget (`.mpv-capR .mpv-eta` margin-left -> `.mpv-v`) no longer applies: with
         the groups on separate rows there is no single shared row left to retarget the gap onto.
    Anything else diverging from a fresh emit is drift, not intent. */
@@ -308,13 +312,7 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
   background-repeat: no-repeat;
   background-position: center;
 }
-/* JOB 2 (ink-gap parity): dmgp's box widened 14rem -> 16rem, box-lever only, no margin needed --
-   dmgp is framed by the SAME icoFill(0.75) formula as dmgc/moe/battles (background-size derived
-   from the measured alpha>32 bbox), so its ink is EXACTLY 0.75*box at any box, and (18-16)/2+0 ==
-   1.0 keeps the row's Y-quantisation whole. Ink gap (margin 1rem + inset (16-12)/2 == 2rem) == 3rem,
-   matching dmgc's own (untouched) 3rem exactly. See MoEProgress.js's V_PAD_X_REM note for the
-   worst-case reach this feeds. */
-.mpv-ico.dmgp { width: 16rem; height: 16rem; }
+.mpv-ico.dmgp { width: 14rem; height: 14rem; }
 .mpv-ico.dmgc { width: 16rem; height: 16rem; }
 .mpv-ico.dmgp::after {
   background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png);
@@ -326,43 +324,57 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
   background-size: 342.5%;
   filter: brightness(3);
 }
-/* JOB 2: box 17rem -> 13rem, matching the mark icon's own shrink below (both are this row's
-   "achievement glyph", one replacing the other at 3 marks) -- box-lever only, no margin needed.
-   .moe is icoFill-framed like dmgp/dmgc/battles (bb == its own X-max-dimension fraction, 0.2734),
-   so ink is 0.75*box at any box: ink gap == margin(1) + inset((13-9.75)/2 == 1.625) == 2.625rem,
-   a documented ~0.375rem residual against the 3rem target (moe is the rare 3-marks edge state;
-   NOT worth a dedicated margin override for -- left as-is, mirroring how .mpv-capC's own
-   quarter-rem drift is documented and left alone elsewhere in this file). */
-.mpv-ico.moe { width: 13rem; height: 13rem; }
+.mpv-ico.moe { width: 17rem; height: 17rem; }
 .mpv-ico.moe::after {
   background-image: url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_top.png);
   background-size: 274.7%;
   filter: brightness(3);
 }
-/* JOB 2 (ink-gap parity, the maintainer's actual ask): box 17rem -> 13rem, the smallest legal
-   ODD box under this row's (18-box)/2+0.5 quantisation (13/15/17 are legal; 13 gets closest to
-   the OTHER icons' ~3rem gap with the smallest margin correction). UNLIKE the icoFill-framed
-   icons above, `contain` on this 24x24-canvas asset scales the WHOLE canvas by box/24 uniformly
-   (box==canvas aspect, so `contain` here IS `background-size:100%`), and the pip ink's OWN width
-   varies by mark count (measured alpha>32 bbox, 24x24 canvas: mark_1 6px, mark_2 12px, mark_3
-   18px, all centred) -- so its ink-to-box ratio is NOT the fixed icoFill(0.75) the other icons
-   get, and cannot be equalised for every mark count by ANY static box/margin pair (the code
-   already forbids re-zooming per count: "do NOT trim per count", above). Calibrated to mark_2
-   (12/24 == 0.5, the tuner's own default preview state): ink == 13*0.5 == 6.5rem, inset ==
-   (13-6.5)/2 == 3.25rem, gap-before-margin == 1+3.25 == 4.25rem -- 1.25rem short of the ~3rem
-   target even at the smallest legal box, closed below via margin-left. mark_1/mark_3 land
-   further off (~4.6 / ~1.4rem) -- an accepted, inherent residual of the count-dependent asset,
-   not a bug this margin can chase away. */
-.mpv-ico.mk { width: 13rem; height: 13rem; }
+.mpv-ico.mk { width: 17rem; height: 17rem; }
 .mpv-ico.mk::after { background-size: contain; }
 .mpv-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
 .mpv-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
 .mpv-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
-/* THE MARK ICON'S OWN GAP CORRECTION (Job 2's margin lever, closing the residual the box shrink
-   above could not): -0.25rem at mark_2, bringing its gap to 4.25-0.25 == 3.00rem, matching the
-   OTHER rows' ~3rem target. Compound selector (three classes, specificity (0,3,0)) so it beats
-   the shared `.mpv-cap .mpv-ico { margin-left: 1rem; }` base rule OUTRIGHT rather than by source
-   order.
+/* PER-ICON MARGIN CORRECTIONS (2026-08-08 redo of the HAND-EDIT 6/6 ink-gap pass -- boxes are back
+   at their pre-039a58c sizes above: "icon sizes must stay the same, adjust paddings individually").
+   Every icon here is framed by a FIXED background-size, so its ink WIDTH is a fixed fraction of
+   its own box, independent of margin -- re-measured live off the real PNGs' alpha>32 bbox
+   (gui-part*.pkg), not estimated or carried over from the box-lever version:
+     dmgp    box 14, ink == 0.75*box (icoFill) == 10.505rem, inset (14-10.505)/2 == 1.747rem
+     dmgc    box 16 (REFERENCE, untouched), ink == 0.75*box == 11.988rem, inset == 2.006rem --
+             base 1rem margin already lands ~3.006rem; every other row targets this exactly
+     moe     box 17, ink == 0.75*box (icoFill, calibrated on its own wider X dimension) ==
+             12.769rem, inset (17-12.769)/2 == 2.115rem
+     mk      box 17, `background-size: contain` on a 24x24 canvas scales the WHOLE canvas by
+             box/24 (box == canvas aspect), and the pip ink's OWN width varies by mark count
+             (measured alpha>32 bbox: mark_1 6px, mark_2 12px, mark_3 18px, all of 24) -- NOT the
+             fixed icoFill ratio the other icons get, so no static margin equalises every count
+             (the code already forbids re-zooming per count above). Calibrated to mark_2
+             (12/24 == 0.5, the tuner's own default preview state): ink == 17*0.5 == 8.5rem,
+             inset (17-8.5)/2 == 4.25rem
+     battles box 13 (base .mpv-ico box, UNCHANGED), calibrated on its own TALLER dimension
+             (measured bbox 27x29 of a 128px canvas -- height, not width, hits icoFill 0.75), so
+             its WIDTH ink fraction is NOT 0.75 like the others: (27/128)*331.0% == 0.6982*box ==
+             9.077rem, inset (13-9.077)/2 == 1.962rem
+   Target ink gap == 3.00rem (dmgc's own reference) on every row; margin-left == target - inset,
+   replacing the shared 1rem outright (not adding to it):
+     dmgp    3.00 - 1.747 == 1.253rem
+     moe     3.00 - 2.115 == 0.885rem   (LESS than the shared 1rem -- moe's own ink is already
+             wide enough that less margin than the base gets it to 3.00)
+     mk      3.00 - 4.25  == -1.25rem   (mark_2's inset alone overshoots the target, so the
+             correction is NEGATIVE; mark_1/mark_3 land off this at ~5.125rem / ~0.875rem, an
+             accepted residual of the count-dependent asset -- calibrating on any one count always
+             leaves the other two off, "do NOT trim per count" above still holds)
+     battles 3.00 - 1.962 == 1.038rem
+   Kept to 3 decimal places (matching this file's existing 4/3 twins elsewhere); margin is a plain
+   horizontal length with no (rowHeight-box)/2 quantisation to land on, so unlike a BOX these
+   values carry no whole-rem/whole-device-pixel requirement -- they are calibrated off a
+   continuously-measured asset bbox, so at least one of the two interface/size modes will always
+   land on a sub-device-pixel offset regardless of rounding; the residual is well under a rem and
+   is the same class of accepted drift as .mpv-capC's own quarter-rem residual elsewhere in this
+   file. Compound three-class selectors (`.mpv-cap .mpv-ico.<class>`, specificity (0,3,0)) beat the
+   shared `.mpv-cap .mpv-ico { margin-left: 1rem; }` base rule (0,2,0) OUTRIGHT, the same
+   convention the mark icon's own correction already used here -- not by source order.
    SOURCE ORDER IS STILL LOAD-BEARING for the ::before pair below, though the row split retires
    part of the old hazard: `.mpv-capR .mpv-ico::before` (above) no longer matches the battles
    glyph at all now that it lives in `.mpv-capEta`, not `.mpv-capR` -- so the dark-drop/gold race
@@ -370,7 +382,10 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
    stays (it still governs the MARK icon, which is still inside `.mpv-capR`) and the horizontal
    sheet's OWN identical pair (`.mp-capR .mp-ico::before` / `.mp-ico.battles::before`,
    MoEProgress.css) is UNCHANGED and still order-dependent exactly as before. */
-.mpv-cap .mpv-ico.mk { margin-left: -0.25rem; }
+.mpv-cap .mpv-ico.dmgp { margin-left: 1.253rem; }
+.mpv-cap .mpv-ico.moe { margin-left: 0.885rem; }
+.mpv-cap .mpv-ico.mk { margin-left: -1.25rem; }
+.mpv-cap .mpv-ico.battles { margin-left: 1.038rem; }
 .mpv-ico.battles::before {
   background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
 }
@@ -458,8 +473,13 @@ body.mpv.mp-lg #moe-bar-box { width: 222rem; }
   transform: translateY(50%) translateX(0rem); }
 .mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }
 .mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }
-/* HAND-EDIT 6/6's Large twin of the mark icon's own margin correction: -0.25 * 4/3 == -0.333rem. */
-.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -0.333rem; }
+/* HAND-EDIT 6/6's Large twins of the four per-icon margin corrections above -- SIZE_XF (4/3), same
+   as the shared base's own 1rem -> 1.333rem twin, NOT SIZE_F (1.25): margin is a screen-x length
+   on this bar, same as every other x-length in this .mp-lg block. */
+.mp-lg .mpv-cap .mpv-ico.dmgp { margin-left: 1.671rem; }    /* 1.253 * 4/3 */
+.mp-lg .mpv-cap .mpv-ico.moe { margin-left: 1.180rem; }     /* 0.885 * 4/3 */
+.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -1.667rem; }     /* -1.25 * 4/3 */
+.mp-lg .mpv-cap .mpv-ico.battles { margin-left: 1.384rem; } /* 1.038 * 4/3 */
 
 /* Animation timings for the JS (mirrored in MoEBarTransient.js -- the VERTICAL keyframes are
    identically tuned to the horizontal ones, which is why one set of constants serves both):

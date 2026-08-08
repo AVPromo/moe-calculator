@@ -312,9 +312,9 @@ $tpl = @'
     var cd=document.querySelector(".mb-cd"),d=document.querySelector(".mb-delta");
     cd.className="mb-value mb-cd";d.className="mb-delta";
     var avg=document.querySelector(".mb-avg");
-    if(casev==="above"){cd.classList.add("mb-up");cd.textContent="3,141";d.classList.add("mb-up");d.textContent="(+1.5%)";}
-    else if(casev==="below"){cd.classList.add("mb-down");cd.textContent="2,100";d.classList.add("mb-down");d.textContent="(-1.2%)";}
-    else{cd.textContent="2,718";d.textContent="(0%)";}
+    if(casev==="above"){cd.classList.add("mb-up");cd.textContent="3,141";d.classList.add("mb-up");d.textContent="+1.5%";}
+    else if(casev==="below"){cd.classList.add("mb-down");cd.textContent="2,100";d.classList.add("mb-down");d.textContent="-1.2%";}
+    else{cd.textContent="2,718";d.textContent="0%";}
     // "5-digit values": preview the overlay's own numbers at 5 digits (the state that co-occurs
     // with WG's widened panel), so the box width you're clearing is realistic.
     if(st._wide){cd.textContent="1"+cd.textContent;avg.textContent="12,718";}else{avg.textContent="2,718";}
