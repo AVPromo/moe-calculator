@@ -469,10 +469,41 @@ let last = null;
 let swapped = true;
 let swapT = null;
 
+// PRE_AXIS_STOP_PCT -- the bar-width % the career pre-battle average (`preAvg`) is remapped onto.
+// Same piecewise-linear equal-quarters trick MoECalculator.js's barX() spreads PCT_STOPS over
+// BAR_STOPS with (and battle_builder.efficiency_bar_x mirrors again for the Damage Efficiency
+// bar): there the stops are a fixed table; here they are per-battle [axisLo, preAvg, axisHi] --
+// but preAvg is FIXED for the whole battle (the career average does not move mid-battle), so it
+// is just as good a stop as any of barX's percentiles, and only `cd` (via projAvg) travels
+// through the remap.
+//
+// WHY: at EWMA_K, the raw proportional share of the [axisLo, preAvg] segment is
+// k*preAvg/(axisHi-axisLo) -- ~1.42% for a realistic tank, indistinguishable from the width of
+// the preAvg tick itself, so the pre/cur markers overlap at battle start and the bar barely moves
+// early. A .mp-tick is 2rem wide with a `0 0 6rem` glow, ~14rem of footprint on the 200rem track
+// (~7%), so 8% is the smallest slice that clears the glow overlap. Tune by eye.
+const PRE_AXIS_STOP_PCT = 8;
+
 function axisPct(v) {
     const w = cur.axisHi - cur.axisLo;
     if (w <= 0) return 0;
-    return Math.max(0, Math.min(1, (v - cur.axisLo) / w)) * 100;
+    const val = Math.max(cur.axisLo, Math.min(cur.axisHi, v));
+    const pre = cur.preAvg;
+    // Degenerate preAvg (missing/0, at or below the floor, at or above the ceiling) leaves no
+    // usable middle stop -- collapse to the plain single-segment map rather than divide by a
+    // zero-width segment or invert the axis.
+    if (!(pre > cur.axisLo && pre < cur.axisHi)) {
+        return (val - cur.axisLo) / w * 100;
+    }
+    const V_STOPS = [cur.axisLo, pre, cur.axisHi];
+    const P_STOPS = [0, PRE_AXIS_STOP_PCT, 100];
+    for (let i = 1; i < V_STOPS.length; i++) {
+        if (val <= V_STOPS[i]) {
+            const t = (val - V_STOPS[i - 1]) / (V_STOPS[i] - V_STOPS[i - 1]);
+            return P_STOPS[i - 1] + t * (P_STOPS[i] - P_STOPS[i - 1]);
+        }
+    }
+    return 100;
 }
 
 // Position the fill, the moving tick and its caption. anim=false SNAPS (transition:none) -- used

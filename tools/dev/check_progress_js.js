@@ -244,6 +244,10 @@ const MUTATIONS = {
     "endrun-does-not-snap-the-fill": ["B",
         "    clearTimeout(swapT);\n    setPos(cur.projAvg, false);\n    swapped = true;",
         "    clearTimeout(swapT);\n    swapped = true;"],
+    // THE PRE-AXIS REMAP (PRE_AXIS_STOP_PCT): forcing the degenerate-fallback branch unconditionally
+    // disables the piecewise remap entirely, so preAvg goes back to its raw proportional share of the
+    // axis instead of the fixed 8% stop -- exactly the crowding this remap exists to fix.
+    "no-pre-axis-remap": ["B", "    if (!(pre > cur.axisLo && pre < cur.axisHi)) {", "    if (true) {"],
     // The remaining paintStatic writes, each of which had an assertion and no probe.
     "no-mp-full-class": ["B",
         'root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);',
@@ -415,6 +419,9 @@ const HIT_PAD = Math.ceil(Math.max(SURFACE[0], SURFACE[1]) / 2);
 const SHIFT = [PAD - BOX_LEFT + "rem",
                PAD - jsConst(B_SRC, "BOX_TOP_REM", "MoEProgress.js") + "rem"];
 const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
+// The pre-axis remap's own tuned stop (see MoEProgress.js's PRE_AXIS_STOP_PCT derivation) --
+// scraped, not hardcoded, so a future by-eye retune moves this shim's expectations with it.
+const PRE_STOP = jsConst(B_SRC, "PRE_AXIS_STOP_PCT", "MoEProgress.js");
 // THE LARGE SIZE MODE (VM `barSize` == 1). Both factors are scraped, and every large expectation is
 // DERIVED here exactly as MoEBarTransient.applySize derives it -- x-lengths take BOTH factors, the
 // y/uniform half only SIZE_F, and each surface arg is Math.round()ed because 4/3 is not
@@ -529,8 +536,10 @@ function mount(srcs, unsettled, unsized) {
     };
 }
 
-// A model with round axis arithmetic: lo 2450, hi 3050 -> width 600, so preAvg 2700 = 41.667% and
-// projAvg 2750 = 50.000%. delta +50.
+// A model with round axis arithmetic: lo 2450, hi 3050, preAvg 2700 (a real middle stop, strictly
+// between the two ends). Under the PRE_AXIS_STOP_PCT remap (MoEProgress.js) preAvg maps to a fixed
+// 8.000%, not its raw proportional share (41.667% pre-remap), and projAvg 2750 -- 1/7 of the way
+// from preAvg to axisHi -- lands at 8 + (1/7)*92 = 21.143%. delta +50.
 const BASE = { visible: true, hasData: true, marks: 1, axisLo: 2450, axisHi: 3050,
                preAvg: 2700, projAvg: 2750, altHeld: false };
 const M = (extra) => Object.assign({}, BASE, extra);
@@ -573,7 +582,7 @@ function run(mutation) {
     s = mount(srcs, true);                      // still pre-re-assert
     s.push(M());
     eq("the suppressed window still runs the silent baseline: the fill settles", s.fill.style.width,
-       "50.000%");
+       "21.143%");
     eq("...and the numeral commits, so the baseline is captured", s.capCV.textContent, "2,750");
     eq("...while showing nothing", s.run(), null);
     s.push(M({ projAvg: 2900 }));
@@ -586,7 +595,7 @@ function run(mutation) {
     eq("a STILL-HELD Alt shows the instant the flag flips, with no fresh model push", s.run(),
        RUN_CLASSES[0]);
     eq("...as a peek entry already committed at proj_avg (not a pre->proj climb)",
-       [s.fill.style.width, s.capCV.textContent], ["75.000%", "2,900"]);
+       [s.fill.style.width, s.capCV.textContent], ["60.571%", "2,900"]);
     s.clock.advance(FADE_IN);
     eq("...and it pauses at the plateau like any other peek", s.root.style.animationPlayState,
        "paused");
@@ -601,15 +610,15 @@ function run(mutation) {
     s.push(M());
     eq("shown", s.root.style.display, "");
     eq("no run armed -- the bar must not appear at battle start", s.run(), null);
-    eq("settled straight at projAvg", s.fill.style.width, "50.000%");
-    eq("the static pre_avg tick is painted", s.pre.style.left, "41.667%");
-    eq("...and its caption with it", s.capP.style.left, "41.667%");
+    eq("settled straight at projAvg", s.fill.style.width, "21.143%");
+    eq("the static pre_avg tick is painted at its remapped stop", s.pre.style.left, "8.000%");
+    eq("...and its caption with it", s.capP.style.left, "8.000%");
     // setPos writes THREE lefts and only two were ever asserted. The bottom caption's is the one
     // the numeral-centring in the CSS is about (.mp-capP/.mp-capC .mp-ico cancel the icon's width
     // and .mp-cap .mp-d hangs the delta out of flow, so translateX(-50%) halves the DIGITS' box):
     // the percentage below is the tick the digits must sit on.
     eq("the moving caption rides proj_avg, like the fill and the tick", s.capC.style.left,
-       "50.000%");
+       "21.143%");
     eq("the bottom numeral already shows projAvg", s.capCV.textContent, "2,750");
     eq("the next-mark caption carries the requirement value",
        s.capR.querySelector(".mp-v").textContent, "3,050");
@@ -617,6 +626,33 @@ function run(mutation) {
        s.capR.querySelector(".mp-ico").className, "mp-ico mk mk2");
     ok("the battles glyph keeps its static family class",
        s.capEtaIco.classList.contains("battles"));
+
+    // --- THE ACTUAL COMPLAINT: preAvg and cd must not overlap at battle start ------------------
+    // Realistic tank-shaped numbers (EWMA_K == 2/101), not the round test fixture above: preAvg well
+    // below axisHi, so the RAW (pre-remap) share of [axisLo, preAvg] is a few percent -- crowded
+    // against the .mp-tick's own ~7% footprint (see PRE_AXIS_STOP_PCT's derivation) -- yet the remap
+    // still pushes preAvg out to the tuned stop, clear of where cd opens.
+    section("pre-axis remap fixes battle-start crowding");
+    const K = 2 / 101;                          // EWMA_K, mirrored from domain/constants.py
+    const PRE = 2000, HI = 3050;
+    // battle_builder.progress_axis_lo, below its min_window clamp: the floor IS
+    // ewma_project_raw(pre_avg, 0) -- where the projection lands after a zero-damage battle, i.e.
+    // exactly where `cd` (and so the fill/proj tick) sits at battle start.
+    const LO = PRE * (1 - K);
+    const rawSharePct = (PRE - LO) / (HI - LO) * 100;
+    ok("precondition: the raw pre-remap share is well under the remapped stop -- this IS the "
+       + "crowding the remap exists to fix (~" + rawSharePct.toFixed(2) + "%)",
+       rawSharePct < PRE_STOP);
+    s = mount(srcs);
+    s.push(M({ axisLo: LO, axisHi: HI, preAvg: PRE, projAvg: LO }));   // cd == 0 at battle start
+    eq("cd (the fill/proj tick) sits at the axis floor", s.fill.style.width, "0.000%");
+    eq("preAvg is pushed out to the tuned stop, not its raw ~" + rawSharePct.toFixed(2) + "% share",
+       s.capP.style.left, PRE_STOP.toFixed(3) + "%");
+    // Read back the two PAINTED (independently toFixed(3)-rounded) percentages rather than trust the
+    // constant alone, and assert a BOUND (a tiny epsilon for the rounding), not bit-exact equality.
+    const fillPct = parseFloat(s.fill.style.width), prePct = parseFloat(s.capP.style.left);
+    ok("the two markers are separated by at least PRE_AXIS_STOP_PCT (" + PRE_STOP + " pts) -- no "
+       + "more overlap at battle start", prePct - fillPct >= PRE_STOP - 0.001);
 
     // --- THE REMAINING-BATTLES COUNT (etaBattles), on the NEXT-MARK caption ------------------
     section("eta battles pair");
@@ -655,13 +691,13 @@ function run(mutation) {
     eq("the delta is faded out until the swap", s.capD.style.opacity, "0");
     // THE REWIND IDIOM (this bar's onRewind hook): a cold show snaps the fill back to pre_avg with
     // transitions off, then aims it at the target in a LATER frame (the cold-only rAF in onCommit)
-    // so the transition actually runs. The baseline above rests at projAvg 2750 == 50%, NOT at
-    // preAvg -- otherwise a missing rewind would be invisible.
+    // so the transition actually runs. The baseline above rests at projAvg 2750 == 21.143%, NOT at
+    // preAvg's remapped 8.000% -- otherwise a missing rewind would be invisible.
     eq("the fill was rewound to pre_avg...", [s.fill.style.width, s.fill.style.transition],
-       ["41.667%", "none"]);
+       ["8.000%", "none"]);
     s.clock.flushFrames();
     eq("...and re-aimed at the target in the next frame, with the transition handed back",
-       [s.fill.style.width, s.fill.style.transition], ["75.000%", ""]);
+       [s.fill.style.width, s.fill.style.transition], ["60.571%", ""]);
     s.clock.advance(FADE_IN);
     eq("at the swap the numeral commits to proj_avg", s.capCV.textContent, "2,900");
     eq("...the delta appears", [s.capD.style.opacity, s.capDN.textContent], ["1", "+200"]);
@@ -714,15 +750,15 @@ function run(mutation) {
     // down: an assertion coincidentally satisfied by a value someone else already wrote.)
     section("force-settle");
     s = mount(srcs);
-    s.push(M());                                // baseline rests at projAvg 2750 == 50%
+    s.push(M());                                // baseline rests at projAvg 2750 == 21.143%
     s.push(M({ projAvg: 2900 }));               // cold entry -- rAF deliberately NOT flushed
     eq("precondition: mid-entry the numeral still reads pre_avg", s.capCV.textContent, "2,700");
     eq("precondition: ...and the fill is still at the rewind, not the target",
-       s.fill.style.width, "41.667%");
+       s.fill.style.width, "8.000%");
     s.animEnd(RUN_NAMES[0]);                    // ends at ~0ms, well before VALUE_SWAP_MS
     eq("endRun force-settles the numeral to proj_avg", s.capCV.textContent, "2,900");
     eq("...and SNAPS the fill there, with the transition suppressed",
-       [s.fill.style.width, s.fill.style.transition], ["75.000%", "none"]);
+       [s.fill.style.width, s.fill.style.transition], ["60.571%", "none"]);
 
     // --- the H2 fallback: animationend never arrives ---------------------------------------
     section("end-timer fallback");
@@ -1219,15 +1255,15 @@ function run(mutation) {
 
     section("transitions: events ON");
     s = mount(srcs);
-    s.push(F(EV_ON));                                 // silent baseline, resting at projAvg == 50%
+    s.push(F(EV_ON));                                 // silent baseline, resting at projAvg == 21.143%
     armAt = s.clock.now();
     s.push(F(EV_ON, { projAvg: 2900 }));
     eq("an explicit events:true entry still plays from the top", s.root.style.animationDelay, "0ms");
     eq("...opening on pre_avg (onRewind(false)), NOT snapped to the target",
-       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity], ["41.667%", "2,700", "0"]);
+       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity], ["8.000%", "2,700", "0"]);
     s.clock.flushFrames();
     eq("...and onCommit(true) re-aims it in a LATER frame, with the transition handed back",
-       [s.fill.style.width, s.fill.style.transition], ["75.000%", ""]);
+       [s.fill.style.width, s.fill.style.transition], ["60.571%", ""]);
     at(s, armAt + TOTAL);
     eq("...and it is still armed all the way through the fade-out", s.run(), RUN_CLASSES[0]);
     at(s, armAt + TOTAL + MARGIN - 1);
@@ -1245,10 +1281,10 @@ function run(mutation) {
     eq("...and SNAPS the values through the Alt entry's rewind (onRewind(atCurrent=true)): numeral, "
        + "delta and fill are already committed",
        [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity, s.capDN.textContent],
-       ["75.000%", "2,900", "1", "+200"]);
+       ["60.571%", "2,900", "1", "+200"]);
     s.clock.flushFrames();
     eq("...with NO onCommit at all -- nothing re-aims the fill, so the snap's transition:none stands",
-       [s.fill.style.width, s.fill.style.transition], ["75.000%", "none"]);
+       [s.fill.style.width, s.fill.style.transition], ["60.571%", "none"]);
     at(s, armAt + HOLD - 1);
     eq("still armed one tick short of the hold's own end", s.run(), RUN_CLASSES[0]);
     at(s, armAt + HOLD);
@@ -1322,7 +1358,7 @@ function run(mutation) {
     s.push(F(NONE));
     s.push(F(NONE, { projAvg: 2900 }));
     eq("T.anim(undefined, undefined) leaves the EVENT half animated: a full entry from pre_avg",
-       [s.root.style.animationDelay, s.fill.style.width], ["0ms", "41.667%"]);
+       [s.root.style.animationDelay, s.fill.style.width], ["0ms", "8.000%"]);
     s.clock.advance(TOTAL + MARGIN);
     eq("precondition: that run is over (so the peek below is a cold entry)", s.run(), null);
     s.push(F(NONE, { projAvg: 2900, altHeld: true }));

@@ -164,14 +164,35 @@ class _BarView(ViewImpl):
 
 
 class _BarWindow(WindowImpl):
-    """Content-sized, input-transparent window hosting a _BarView over the HUD. Same flags and
-    layer as MoEBattleWindow, for the same reasons (read its docstring): WindowFlags.WINDOW (NOT
-    full-screen -- the Ctrl+click hit-test steal), layer WINDOW (7) so the modal in-battle menu at
-    TOP_WINDOW (10) keeps its input, shown without focus."""
+    """Content-sized window hosting a _BarView over the HUD. Same layer as MoEBattleWindow, for
+    the same reasons (read its docstring): NOT full-screen (a full-screen Coherent surface steals
+    the whole-screen mouse hit-test whenever the cursor is raised), layer WINDOW (7) so the modal
+    in-battle menu at TOP_WINDOW (10) keeps its input, shown without focus.
+
+    EXPERIMENTAL, needs live confirmation: typeFlag is WindowFlags.TOOLTIP (48 | WINDOW), not
+    WindowFlags.WINDOW, to fix a pre-existing bug where Ctrl-clicking the bar (a gesture that
+    already needs zero hit-testing -- see the module docstring) steals autofocus from the
+    Scaleform battle chat input even though pushHitArea collapses the JS hit rect to nothing; the
+    native Wulf window rect still captures the click regardless. WG's own non-interactive
+    overlays (gui/impl/pub/tooltip_window.py's ToolTipWindow, gui/impl/backport/backport_tooltip.py's
+    BackportTooltipWindow) use WindowFlags.TOOLTIP for exactly "never grabs input". WindowFlags has
+    no click-through/non-focusable bit of its own (frameworks/wulf/gui_constants.py's WindowFlags
+    is exhaustive), so TOOLTIP -- documented as never grabbing input -- is the closest lever.
+    Checked before shipping this: `layer` is a separate WindowSettings field (independent of
+    wndFlags at the Python API level), so it is UNCHANGED here; WG's own
+    gui/Scaleform/daapi/view/lobby/hangar/hangar.py explicitly special-cases a TOOLTIP-typeFlag
+    window AT WindowLayer.WINDOW (excluding it from `_HELP_LAYOUT_RESTRICTED_LAYERS` gating),
+    which is direct precedent that this exact (layer=WINDOW, typeFlag=TOOLTIP) combination is one
+    the engine already expects and handles. No Python-visible auto-dismiss/timeout/focus-manager
+    logic keys off typeFlag anywhere in the decompiled client; that arbitration is native C++ and
+    has no Python-visible seam, so this cannot be proven headless -- it needs an in-client Ctrl+
+    click + Enter-to-chat check under both alignments before being treated as done. If it
+    regresses (bar disappears, renders under the HUD, or the reposition gesture misbehaves),
+    revert to WindowFlags.WINDOW here first."""
 
     def __init__(self, content, place, host):
         super(_BarWindow, self).__init__(
-            WindowFlags.WINDOW, content=content, layer=WindowLayer.WINDOW)
+            WindowFlags.TOOLTIP, content=content, layer=WindowLayer.WINDOW)
         self._place = place
         self._host = host
 

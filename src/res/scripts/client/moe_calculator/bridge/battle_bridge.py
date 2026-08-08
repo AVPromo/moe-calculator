@@ -338,10 +338,12 @@ def _on_scoreboard_toggled(event):
 def _set_alt_held(alt_down, ctrl_down=False):
     # battle_input's transition callback: Alt and/or Ctrl was pressed / released. Store BOTH and
     # re-push so the overlay reveals/hides live under the "Battle Widget on Alt Key" peek mode and
-    # the bars open/collapse their drag hit rect. refresh() is cheap and no-ops when no window is
-    # open (always-on off + peek off), so it's safe to fire on every transition regardless of
-    # which mode is active. `ctrl_down` defaults False so an older single-arg caller (a dev reload
-    # against a stale battle_input) degrades to the shipped Alt-only behaviour rather than raising.
+    # the bars replay their peek fade-in/hold/fade-out animation while the key is held (their drag
+    # hit rect is a separate, permanently-collapsed concern -- see MoEBarTransient.js pushHitArea).
+    # refresh() is cheap and no-ops when no window is open (always-on off + peek off), so it's safe
+    # to fire on every transition regardless of which mode is active. `ctrl_down` defaults False so
+    # an older single-arg caller (a dev reload against a stale battle_input) degrades to the
+    # shipped Alt-only behaviour rather than raising.
     global _alt_held, _ctrl_held
     try:
         _alt_held = bool(alt_down)
