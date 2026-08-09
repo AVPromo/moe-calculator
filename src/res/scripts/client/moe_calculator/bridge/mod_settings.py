@@ -1253,7 +1253,16 @@ def _sync_template_text(api):
     template text, so a language change would otherwise never show. This walks the stored
     template in lockstep with settings_i18n's column key order and overwrites each entry's
     text/tooltip from panel_text(), saving only if something changed. Idempotent: a no-op on
-    a fresh install (text already matches). Guarded; text-only, no settingsVersion bump."""
+    a fresh install (text already matches). Guarded; text-only, no settingsVersion bump.
+
+    Also rewrites each option-bearing radio's ``options[].label`` -- the four standalone
+    inline radios (Mode/Scale/Orientation/Alignment) -- IN PLACE, index-for-index against the
+    freshly rendered option tuple. This is still a text-only refresh (the stored 0-based
+    option INDEX / varName / value never move), so it does not need a SETTINGS_VERSION bump
+    either. Guarded by a strict COUNT match: if the stored options list is a different length
+    than the rendered tuple, that component is left untouched entirely -- a count/order change
+    is a structural migration (a stored index would suddenly name a different option) and must
+    go through a forward bump, never be smuggled through this sync."""
     try:
         tmpl = (getattr(api, "state", None) or {}).get("templates", {}).get(LINKAGE)
         if not isinstance(tmpl, dict):
@@ -1273,6 +1282,14 @@ def _sync_template_text(api):
                 if tip is not None and comp.get("tooltip") != tip:
                     comp["tooltip"] = tip
                     changed = True
+                opts = rendered.get("options")
+                stored_opts = comp.get("options")
+                if (opts is not None and isinstance(stored_opts, list)
+                        and len(stored_opts) == len(opts)):
+                    for opt, label in zip(stored_opts, opts):
+                        if isinstance(opt, dict) and opt.get("label") != label:
+                            opt["label"] = label
+                            changed = True
         if changed and hasattr(api, "saveState"):
             api.saveState()
             LOG_DEBUG("[moe] synced settings template text to client language")

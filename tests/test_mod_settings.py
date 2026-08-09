@@ -1767,6 +1767,163 @@ def test_build_then_sync_preserves_header_bold():
             assert control.get("useHTML") is True
 
 
+# --- _sync_template_text also rewrites options[].label (the four standalone radios' option
+# words), not just text/tooltip -- REGRESSION for a real bug: an existing install kept its
+# stored radio options in English forever after a client-language change, because nothing
+# had ever rewritten options[] before this fix. ------------------------------------------
+
+def _find_by_varname(tmpl, var_key):
+    """The one control across every column carrying this varName -- scoping helper so each
+    assertion below targets the SPECIFIC radio under test, not a shared/leaked value."""
+    for col in tmpl:
+        if not re.match(r"^column\d+$", col):
+            continue
+        for c in tmpl[col]:
+            if isinstance(c, dict) and c.get("varName") == var_key:
+                return c
+    raise AssertionError("%s not found in the built template" % var_key)
+
+
+_RADIO_KEYS = ((PROGRESS_VARIANT_KEY, settings_i18n.VARIANT_KEY),
+               (PROGRESS_SIZE_KEY, u"progressSize"),
+               (PROGRESS_ORIENTATION_KEY, u"progressOrientation"),
+               (PROGRESS_ALIGNMENT_KEY, u"progressAlignment"))
+
+
+def test_sync_template_text_rewrites_option_labels_on_language_change(monkeypatch):
+    # A stored template built at English, re-synced while the client resolves to German, must
+    # end with the GERMAN option labels on all four radios (Mode/Scale/Orientation/Alignment)
+    # -- this is the exact upgrade-path fix: MSA never rewrote options[] on its own.
+    tmpl = mod_settings._template()  # built at the default (English) language
+    monkeypatch.setattr(settings_i18n, "client_language", lambda: u"de")
+    de_text = settings_i18n.build(u"de")
+
+    class _FakeApi(object):
+        state = {"templates": {LINKAGE: tmpl}}
+
+        def __init__(self):
+            self.calls = 0
+
+        def saveState(self):
+            self.calls += 1
+
+    api = _FakeApi()
+    mod_settings._sync_template_text(api)
+
+    for var_key, text_key in _RADIO_KEYS:
+        comp = _find_by_varname(tmpl, var_key)
+        expected = list(de_text[text_key]["options"])
+        assert [o["label"] for o in comp["options"]] == expected, (
+            "%s options were not rewritten to the German labels" % var_key)
+        # item 4: the stored value/index itself must never move -- only the label text changes.
+        assert comp["value"] == DEFAULTS[var_key]
+    assert api.calls == 1, "a real change must call saveState()"
+
+
+def test_sync_template_text_options_no_op_on_second_sync(monkeypatch):
+    # A second sync with nothing left to change must rewrite nothing and must NOT call
+    # saveState() again -- assert the CALL COUNT, not just the value, since a no-op mutation
+    # and a fail-soft branch look identical from the value alone.
+    tmpl = mod_settings._template()
+    monkeypatch.setattr(settings_i18n, "client_language", lambda: u"de")
+
+    class _FakeApi(object):
+        state = {"templates": {LINKAGE: tmpl}}
+
+        def __init__(self):
+            self.calls = 0
+
+        def saveState(self):
+            self.calls += 1
+
+    api = _FakeApi()
+    mod_settings._sync_template_text(api)          # first pass: real rewrite, one save
+    assert api.calls == 1
+    snapshot = {var_key: [dict(o) for o in _find_by_varname(tmpl, var_key)["options"]]
+                for var_key, _tk in _RADIO_KEYS}
+
+    mod_settings._sync_template_text(api)          # second pass: already in sync
+
+    assert api.calls == 1, "a no-op sync must not call saveState() a second time"
+    for var_key, _tk in _RADIO_KEYS:
+        assert _find_by_varname(tmpl, var_key)["options"] == snapshot[var_key]
+
+
+def test_sync_template_text_skips_options_on_count_mismatch(monkeypatch):
+    # THE safety guard: a stored options list whose length disagrees with the freshly rendered
+    # tuple (a structural drift that only a SETTINGS_VERSION bump may fix -- a stored index
+    # would otherwise suddenly name a different option) must be left BYTE-FOR-BYTE untouched,
+    # not partially patched.
+    tmpl = mod_settings._template()
+    monkeypatch.setattr(settings_i18n, "client_language", lambda: u"de")
+
+    drifted = _find_by_varname(tmpl, PROGRESS_ALIGNMENT_KEY)
+    drifted["options"].append({"label": u"EXTRA"})   # simulate a stale, mismatched store
+    before_options = [dict(o) for o in drifted["options"]]
+    before_value = drifted["value"]
+
+    other = _find_by_varname(tmpl, PROGRESS_ORIENTATION_KEY)
+    before_other_options = [dict(o) for o in other["options"]]
+
+    class _FakeApi(object):
+        state = {"templates": {LINKAGE: tmpl}}
+
+        def saveState(self):
+            pass
+
+    mod_settings._sync_template_text(_FakeApi())
+
+    assert drifted["options"] == before_options, (
+        "a count mismatch must leave that component's options untouched")
+    assert drifted["value"] == before_value        # item 4: value never touched either
+    # the mismatch must be scoped to the ONE drifted component -- a sibling radio with a
+    # matching count still gets rewritten normally.
+    de_text = settings_i18n.build(u"de")
+    assert [o["label"] for o in other["options"]] == list(
+        de_text[u"progressOrientation"]["options"])
+    assert other["options"] != before_other_options
+
+
+def test_sync_template_text_options_fail_soft(monkeypatch):
+    # A missing/None `options` key, a non-dict option entry, and a rendered row with no
+    # options of its own must never raise -- the count-match guard alone isn't enough if the
+    # shapes themselves are unexpected.
+    monkeypatch.setattr(settings_i18n, "client_language", lambda: u"de")
+    variant_opts = settings_i18n.build(u"de")[settings_i18n.VARIANT_KEY]["options"]
+
+    tmpl = {
+        "column1": [
+            {"type": "RadioButtonGroup", "varName": PROGRESS_VARIANT_KEY,
+             "text": u"stale", "value": 0},                        # no "options" key at all
+            {"type": "RadioButtonGroup", "varName": PROGRESS_SIZE_KEY,
+             "text": u"stale", "value": 0, "options": None},        # options explicitly None
+            {"type": "RadioButtonGroup", "varName": PROGRESS_ORIENTATION_KEY,
+             "text": u"stale", "value": 0,
+             "options": ["not-a-dict"] * len(variant_opts)},        # non-dict option entries
+            {"type": "Label", "text": u"stale",                     # a rendered row with no
+             "options": [{"label": u"leftover"}]},                  # options of its own
+        ],
+        "column2": [],
+    }
+    keys = (settings_i18n.VARIANT_KEY, u"progressSize", u"progressOrientation",
+            u"catBattleCalc")
+    monkeypatch.setattr(settings_i18n, "COL1_KEYS", keys)
+    monkeypatch.setattr(settings_i18n, "COL2_KEYS", ())
+
+    class _FakeApi(object):
+        state = {"templates": {LINKAGE: tmpl}}
+
+        def saveState(self):
+            pass
+
+    mod_settings._sync_template_text(_FakeApi())   # must not raise
+
+    assert "options" not in tmpl["column1"][0]                       # never invented
+    assert tmpl["column1"][1]["options"] is None                     # left exactly as-is
+    assert tmpl["column1"][2]["options"] == ["not-a-dict"] * len(variant_opts)
+    assert tmpl["column1"][3]["options"] == [{"label": u"leftover"}]
+
+
 # --- drag-to-reposition: clamp_pos, accessors, set_position, follow_carousel, reset --------
 
 def test_clamp_pos_bounds():
