@@ -751,9 +751,9 @@ def test_the_eta_gap_separates_the_requirement_numeral_from_the_battles_glyph():
     assert default and Decimal(default.group(1)) == 4, \
         "gen_bar_tuner.ps1's etaGap default is %s, not 4 -- the next -EmitCss would revert the gap" \
         % (default and default.group(1))
-    assert tuner.count('".mp-ico.battles { margin-left: "+st.etaGap+"rem; }\\n"+') == 1, \
+    assert tuner.count('".mp-ico.battles { margin-left: "+st.etaGap+"rem; margin-right: 1.038rem; }\\n"+') == 1, \
         "gen_bar_tuner.ps1 -EmitCss no longer emits the eta gap from st.etaGap"
-    assert tuner.count(".mp-ico.battles{margin-left:var(--etagap)}") == 1, \
+    assert tuner.count(".mp-ico.battles{margin-left:var(--etagap);margin-right:1.038rem}") == 1, \
         "the tuner's live preview no longer takes the eta gap from --etagap"
     assert tuner.count('S.setProperty("--etagap",rem(st.etaGap))') == 1, \
         "the tuner's live preview no longer writes --etagap from the st.etaGap knob"
@@ -823,15 +823,17 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
 
     Both siblings therefore have to leave that box, and each needs its own mechanism:
 
-    THE ICON stays in flow and cancels its own outer width with margin-left == -(its box + the
-    gap), so -box-gap + box + gap == 0 and the numeral starts at the caption's origin. In flow
-    because it must keep .mp-capP/.mp-capC's per-role translateY -- which is also the stacking
-    context scoping the ::before glow's z-index:-1 -- and because an abspos icon would need a
-    top:50% that, on .up, resolves against a PADDING box carrying the 6rem gap and drops the glyph
-    half of it. RE-DERIVED here from the box + gap the emit computes the margin from (dmgPBox /
-    dmgCBox / icoGap), never from the emitted literal: a genuine retune moves all of them together
-    and still passes, while drift in one alone fails. Decimal, not float -- the gap slider steps in
-    0.5 and IEEE754 makes such sums compare unequal.
+    THE ICON stays in flow and cancels its own outer width with margin-left == -(its box + ITS
+    OWN margin-right gap), so -box-gap + box + gap == 0 and the numeral starts at the caption's
+    origin. In flow because it must keep .mp-capP/.mp-capC's per-role translateY -- which is also
+    the stacking context scoping the ::before glow's z-index:-1 -- and because an abspos icon would
+    need a top:50% that, on .up, resolves against a PADDING box carrying the 6rem gap and drops the
+    glyph half of it. RE-DERIVED here from the box + gap the emit computes the margin from
+    (dmgPBox / dmgCBox, each against its OWN gap -- dmgC still reads the shared icoGap, the
+    untouched reference; dmgP reads its own ink-gap-parity override instead, see below), never
+    from the emitted literal: a genuine retune moves all of them together and still passes, while
+    drift in one alone fails. Decimal, not float -- the gap slider steps in 0.5 and IEEE754 makes
+    such sums compare unequal.
 
     THE DELTA cannot use a margin: its text width changes, so any fixed negative would leave the
     centring drifting with the digits. It goes out of flow off the numeral's right edge instead,
@@ -840,11 +842,34 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
 
     The .side captions must NOT be cancelled: they are not centred on anything, they hang off the
     axis ends by their own gap, so a negative margin there would slide the whole label inwards.
+
+    THE PER-ICON INK-GAP OVERRIDES (dmgp/moe/mk/battles), added alongside the centring above,
+    equalise each icon's INK gap rather than its box-edge gap -- mirroring MoEProgressVertical.css's
+    identical pass byte-for-byte (same boxes, same assets, same numbers). Box sizes are UNTOUCHED
+    (the maintainer's explicit call), so this only asserts the new margin-right overrides and their
+    coupling into the centring cancel above -- a reverted override, or a cancel that silently goes
+    back to reading the shared icoGap, fails this test directly.
     """
     css = _read("MoEProgress.css")
-    gap = _rem(_sole_rule_decls(css, ".mp-cap .mp-ico", "MoEProgress.css"), "margin-right",
-               "MoEProgress.css")
-    for cap, glyph in ((".mp-capP", ".mp-ico.dmgp"), (".mp-capC", ".mp-ico.dmgc")):
+    shared_gap = _rem(_sole_rule_decls(css, ".mp-cap .mp-ico", "MoEProgress.css"), "margin-right",
+                      "MoEProgress.css")
+    assert shared_gap == 1, "the shared box-edge gap moved -- re-check every per-icon override below"
+    # Each override REPLACES the shared gap outright (a more-specific compound selector, not an
+    # addition to it) -- read each one's own value, never `shared_gap` plus it. Only dmgc has no
+    # override (the untouched reference) and still reads `shared_gap`.
+    own_gap = {
+        "dmgp": _rem(_sole_rule_decls(css, ".mp-cap .mp-ico.dmgp", "MoEProgress.css"),
+                     "margin-right", "MoEProgress.css"),
+        "moe": _rem(_sole_rule_decls(css, ".mp-cap .mp-ico.moe", "MoEProgress.css"),
+                    "margin-right", "MoEProgress.css"),
+        "mk": _rem(_sole_rule_decls(css, ".mp-cap .mp-ico.mk", "MoEProgress.css"),
+                   "margin-right", "MoEProgress.css"),
+    }
+    assert own_gap == {"dmgp": Decimal("1.253"), "moe": Decimal("0.885"), "mk": Decimal("-1.250")}
+    battles_decls = _sole_rule_decls(css, ".mp-ico.battles", "MoEProgress.css")
+    assert _rem(battles_decls, "margin-right", "MoEProgress.css") == Decimal("1.038")
+    for cap, glyph, gap in ((".mp-capP", ".mp-ico.dmgp", own_gap["dmgp"]),
+                            (".mp-capC", ".mp-ico.dmgc", shared_gap)):
         box = _rem(_sole_rule_decls(css, glyph, "MoEProgress.css"), "width", "MoEProgress.css")
         decls = _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css")
         assert _rem(decls, "margin-left", "MoEProgress.css") == -(box + gap), \
@@ -876,11 +901,12 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
                        'margin-left: "+') == 1, \
         "gen_bar_tuner.ps1 -EmitCss no longer cancels the BOTTOM caption's icon width"
     # TWICE each, once per half: the preview's --dmgpml / --dmgcml custom property and the emitted
-    # literal. Both must DERIVE the margin from the same sliders -- a literal in either half means a
-    # retune of the icon box or the gap silently de-centres that caption.
-    assert tuner.count("(-(st.dmgPBox+st.icoGap))") == 2 and \
+    # literal. dmgC still derives from the box + shared icoGap slider; dmgP derives from the box +
+    # its OWN calibrated 1.253 addend (no slider owns the ink-gap overrides, same as the vertical
+    # pass) -- a literal 15/17 anywhere here means a retune of the box would silently de-centre it.
+    assert tuner.count("(-(st.dmgPBox+1.253))") == 2 and \
         tuner.count("(-(st.dmgCBox+st.icoGap))") == 2, \
-        "the negative margins must stay DERIVED from the box + gap sliders in BOTH tuner halves"
+        "the negative margins must stay DERIVED from the box sliders in BOTH tuner halves"
     assert tuner.count("margin-left:var(--dmgpml)") == 1 and \
         tuner.count("margin-left:var(--dmgcml)") == 1, \
         "the tuner's live preview no longer cancels the centre captions' icon width"
@@ -889,6 +915,18 @@ def test_the_two_centre_captions_are_centred_on_the_numeral_not_the_row():
         "gen_bar_tuner.ps1 -EmitCss no longer hangs the delta out of flow"
     assert tuner.count(".mp-cap .mp-d{position:absolute;left:100%;margin-left:.35em;") == 1, \
         "the tuner's live preview still lays the delta out in the flex row"
+    # THE PER-ICON OVERRIDES THEMSELVES, both tuner halves -- a re-emit or a live-preview edit that
+    # drops any one of these silently reverts that icon to the shared (uneven) gap.
+    for cls, val in (("dmgp", "1.253"), ("moe", "0.885"), ("mk", "-1.250")):
+        assert tuner.count('".mp-cap .mp-ico.%s { margin-right: %srem; }\\n"' % (cls, val)) == 1, \
+            "gen_bar_tuner.ps1 -EmitCss no longer emits the %s ink-gap override" % cls
+    for cls, val in (("dmgp", "1.253"), ("moe", ".885"), ("mk", "-1.25")):
+        assert tuner.count(".mp-cap .mp-ico.%s{margin-right:%srem}" % (cls, val)) == 1, \
+            "the tuner's live preview no longer shows the %s ink-gap override" % cls
+    assert tuner.count('".mp-ico.battles { margin-left: "+st.etaGap+"rem; margin-right: 1.038rem; }\\n"') == 1, \
+        "gen_bar_tuner.ps1 -EmitCss no longer emits the battles ink-gap override"
+    assert tuner.count(".mp-ico.battles{margin-left:var(--etagap);margin-right:1.038rem}") == 1, \
+        "the tuner's live preview no longer shows the battles ink-gap override"
 
 
 def _read_tuner():
@@ -1184,18 +1222,21 @@ def test_the_large_sizing_box_is_the_scaled_surface_not_the_scaled_box():
 
 def test_the_large_centre_caption_icon_cancels_scale_only_their_gap():
     # RE-DERIVED EXCEPTION 2 + 3, and the sharpest thing in this section. The centre captions'
-    # negative margin cancels -(this caption's own icon BOX + the gap) so translateX(-50%) halves
-    # the digits, not icon+numeral (see the 1x centring test above). The icon box is a SQUARE,
-    # uniform length the root font scales on its own -- only the GAP is an x-length. So the large
-    # margins are -(14 + 1.333) and -(16 + 1.333), NOT -15*4/3 / -17*4/3; multiply them and the
-    # numeral stops sitting on its tick. Re-derived from the same three base rules the 1x test uses,
-    # so a genuine retune of the box or the gap moves all of them together and still passes.
+    # negative margin cancels -(this caption's own icon BOX + ITS OWN gap) so translateX(-50%)
+    # halves the digits, not icon+numeral (see the 1x centring test above). The icon box is a
+    # SQUARE, uniform length the root font scales on its own -- only the GAP is an x-length. dmgC
+    # still reads the shared icoGap (-(16 + 1.333), unchanged); dmgP now reads its OWN 1.253rem
+    # ink-gap override instead (-(14 + 1.253*4/3)), NOT -15*4/3 / -17*4/3 either way -- multiply the
+    # BOX and the numeral stops sitting on its tick. Re-derived from the same base rules the 1x test
+    # uses, so a genuine retune of the box or either gap moves all of them together and still passes.
     css = _read("MoEProgress.css")
     _base, large = _cascade("MoEProgress.css")
-    gap = _rem(_sole_rule_decls(css, ".mp-cap .mp-ico", "MoEProgress.css"), "margin-right",
-               "MoEProgress.css")
-    large_gap = _xnum(gap)
-    for cap, glyph in ((".mp-capP", ".mp-ico.dmgp"), (".mp-capC", ".mp-ico.dmgc")):
+    shared_gap = _xnum(_rem(_sole_rule_decls(css, ".mp-cap .mp-ico", "MoEProgress.css"),
+                            "margin-right", "MoEProgress.css"))
+    dmgp_gap = _xnum(_rem(_sole_rule_decls(css, ".mp-cap .mp-ico.dmgp", "MoEProgress.css"),
+                          "margin-right", "MoEProgress.css"))
+    for cap, glyph, large_gap in ((".mp-capP", ".mp-ico.dmgp", dmgp_gap),
+                                  (".mp-capC", ".mp-ico.dmgc", shared_gap)):
         box = _rem(_sole_rule_decls(css, glyph, "MoEProgress.css"), "width", "MoEProgress.css")
         got = _rem(large[_LG + cap + " .mp-ico"], "margin-left", "MoEProgress.css")
         assert got == -(box + large_gap), (

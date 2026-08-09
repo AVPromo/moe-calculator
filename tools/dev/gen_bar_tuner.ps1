@@ -277,6 +277,14 @@ $tpl = @'
   /* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
      width with a negative margin-left -- see the .mp-capP / .mp-capC rules below. */
   .mp-cap .mp-ico{margin-right:var(--icogap)}
+  /* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): the box-edge gap above is a
+     uniform --icogap, but each art asset's own zoom leaves a different INK gap, so these three
+     override it outright (compound selectors, (0,3,0), beat the shared (0,2,0) rule on
+     specificity). Literal, not slider-driven -- calibrated once off the real PNGs' alpha>32 bbox,
+     same numbers as the vertical composition's identical pass (same boxes, same assets). */
+  .mp-cap .mp-ico.dmgp{margin-right:1.253rem}
+  .mp-cap .mp-ico.moe{margin-right:.885rem}
+  .mp-cap .mp-ico.mk{margin-right:-1.25rem}
   .mp-cap .mp-v,.mp-cap .mp-eta,.mp-cap .mp-d{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
   /* SHIPPED CONVENTION (MoEBattle.css .mb-up/.mb-down): FOR TEXT the sign is a coloured GLOW,
      never a fill -- the numerals stay WHITE, because a coloured glyph loses legibility over a
@@ -406,7 +414,7 @@ $tpl = @'
      as the centre damage pair, off the SAME icoGlowCol/icoGlowA knob -- one gold in this file.
      Equal specificity (0,2,1) to that override, so it wins purely on SOURCE ORDER: it must stay
      textually after `.mp-capR .mp-ico::before` or the dark override wins back silently. */
-  .mp-ico.battles{margin-left:var(--etagap)}
+  .mp-ico.battles{margin-left:var(--etagap);margin-right:1.038rem}
   .mp-ico.battles::before{background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
   .mp-ico.battles::after{background-image:var(--battlesimg);background-size:var(--battlessz);filter:brightness(3)}
 
@@ -1017,8 +1025,10 @@ $tpl = @'
     S.setProperty("--dmgpbox",rem(st.dmgPBox));S.setProperty("--dmgcbox",rem(st.dmgCBox));
     // ...and the negative margin that cancels each of those boxes out of the caption's width, so
     // translateX(-50%) centres the NUMERAL on the tick (see .mp-capP/.mp-capC .mp-ico). Derived
-    // from the SAME two sliders + icoGap -- never a literal, or a retune breaks the centring.
-    S.setProperty("--dmgpml",rem(-(st.dmgPBox+st.icoGap)));S.setProperty("--dmgcml",rem(-(st.dmgCBox+st.icoGap)));
+    // from the SAME box slider + its own gap -- never a literal box, or a retune breaks the
+    // centring. dmgC still reads the shared icoGap (the untouched reference); dmgP reads its OWN
+    // 1.253rem ink-gap correction (the .mp-ico.dmgp override above), not icoGap any more.
+    S.setProperty("--dmgpml",rem(-(st.dmgPBox+1.253)));S.setProperty("--dmgcml",rem(-(st.dmgCBox+st.icoGap)));
     S.setProperty("--dmgpimg","url("+DMG[st.dmgPIco].u+")");S.setProperty("--dmgpsz",icoSz(DMG[st.dmgPIco].bb));
     S.setProperty("--dmgcimg","url("+DMG[st.dmgCIco].u+")");S.setProperty("--dmgcsz",icoSz(DMG[st.dmgCIco].bb));
     S.setProperty("--moeimg","url("+MOEURI+")");S.setProperty("--moesz",icoSz(MOEBB));
@@ -1344,9 +1354,19 @@ $tpl = @'
       "   on this caption at the same font-size and pinned line box, so the ink offset is identical. */\n"+
       ".mp-cap.side .mp-v,\n.mp-cap.side .mp-eta { transform: translateY("+st.numY+"rem); }\n"+
       ".mp-cap.side.mp-capR { left: 100%; margin-left: "+st.gapEndR+"rem; }\n"+
-      "/* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer\n"+
-      "   width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */\n"+
+      "/* The box-edge gap above is a uniform "+st.icoGap+"rem, but each art asset's own zoom leaves a\n"+
+      "   different INK gap -- the three overrides below equalise it instead (ink-gap parity,\n"+
+      "   maintainer's ask, box sizes untouched), calibrated once off the real PNGs' alpha>32 bbox,\n"+
+      "   IDENTICAL to the vertical composition's own pass (same boxes, same assets): dmgp 1.253rem,\n"+
+      "   moe 0.885rem, mk -1.250rem, battles 1.038rem (added to its own rule further down). Compound\n"+
+      "   selectors, (0,3,0), beat this (0,2,0) base rule on specificity, not source order. The two\n"+
+      "   CENTRE captions then cancel their icon's whole outer width with a negative margin-left\n"+
+      "   further down -- see the .mp-capP / .mp-capC rules; dmgp's cancel reads its OWN 1.253rem gap\n"+
+      "   there, not this shared one. */\n"+
       ".mp-cap .mp-ico { margin-right: "+st.icoGap+"rem; }\n"+
+      ".mp-cap .mp-ico.dmgp { margin-right: 1.253rem; }\n"+
+      ".mp-cap .mp-ico.moe { margin-right: 0.885rem; }\n"+
+      ".mp-cap .mp-ico.mk { margin-right: -1.250rem; }\n"+
       ".mp-cap .mp-v,\n.mp-cap .mp-eta,\n.mp-cap .mp-d {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
       "  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n}\n"+
@@ -1449,13 +1469,14 @@ $tpl = @'
       "   position:absolute precisely so the icon stays IN FLOW -- it keeps the transform above (both\n"+
       "   the Y and the stacking context), and out of flow it would need a top:50% that, on .up,\n"+
       "   resolves against a PADDING box carrying "+st.gapReq+"rem and would drop the glyph half that gap.\n"+
-      "   PER CAPTION because the box is per caption (dmgP / dmgC are independent sliders), and\n"+
-      "   DERIVED from those sliders + icoGap -- a literal would break the centring on the next\n"+
-      "   retune. NOT on the two .side captions: they are not centred on anything, they are pushed\n"+
-      "   off the axis ends by their own gap, so cancelling their icon would just slide the label\n"+
-      "   inwards over the track. */\n"+
+      "   PER CAPTION because the box AND the gap are both per caption (dmgP / dmgC are independent\n"+
+      "   sliders, and dmgP's own 1.253rem ink-gap override above replaces its slice of icoGap) --\n"+
+      "   DERIVED from those, never a literal, or a retune breaks the centring. dmgC still reads\n"+
+      "   icoGap (the untouched reference). NOT on the two .side captions: they are not centred on\n"+
+      "   anything, they are pushed off the axis ends by their own gap, so cancelling their icon\n"+
+      "   would just slide the label inwards over the track. */\n"+
       ".mp-capP .mp-ico { transform: translate(0rem, "+st.icoYP+"rem); margin-left: "+
-      (-(st.dmgPBox+st.icoGap))+"rem; }\n"+
+      (-(st.dmgPBox+1.253))+"rem; }\n"+
       ".mp-capC .mp-ico { transform: translate(0rem, "+st.icoYC+"rem); margin-left: "+
       (-(st.dmgCBox+st.icoGap))+"rem; }\n"+
       ".mp-capR .mp-ico { transform: translate(0rem, "+st.icoYR+"rem); }\n"+
@@ -1508,14 +1529,17 @@ $tpl = @'
       "   caption, mark AND battles alike -- but the battles glyph reads better with the same gold\n"+
       "   halo as the centre damage pair, off the SAME icoGlowCol/icoGlowA knob (one gold in this\n"+
       "   file). Equal specificity (0,2,1) to that override, so it wins purely on SOURCE ORDER: it\n"+
-      "   must stay textually after `.mp-capR .mp-ico::before` or the dark override silently wins. */\n"+
-      ".mp-ico.battles { margin-left: "+st.etaGap+"rem; }\n"+
+      "   must stay textually after `.mp-capR .mp-ico::before` or the dark override silently wins.\n"+
+      "   margin-right 1.038rem is this icon's OWN ink-gap parity correction (see the base\n"+
+      "   `.mp-cap .mp-ico` rule's note) -- equal (0,2,0) specificity to that base rule, so it wins\n"+
+      "   purely on SOURCE ORDER too; reordering the file would revert it to the shared gap. */\n"+
+      ".mp-ico.battles { margin-left: "+st.etaGap+"rem; margin-right: 1.038rem; }\n"+
       ".mp-ico.battles::before {\n  background: radial-gradient(circle at 50% 50%, "+hexA(st.icoGlowCol,st.icoGlowA)+" 0%, transparent 73%);\n}\n"+
       ".mp-ico.battles::after {\n  background-image: url("+IMG.battles+");\n"+
       "  background-size: "+icoSz(BATTLESBB)+";\n  filter: brightness(3);\n}\n"+
       "/* THE SUPPRESSION VARIANT: `display: none` collapses the flex item's whole box (its square\n"+
-      "   AND the shared "+st.icoGap+"rem margin-right), so a suppressed glyph leaves no hole in the row.\n"+
-      "   marks=0 -> the general-MoE/mark slot carries NO icon at all either. */\n"+
+      "   AND its own margin-right, whichever icon's), so a suppressed glyph leaves no hole in the\n"+
+      "   row. marks=0 -> the general-MoE/mark slot carries NO icon at all either. */\n"+
       ".mp-ico.none { display: none; }\n"+
       "/* proj_avg >= thresholds[m+1] -> the WHOLE bar takes the gold glow. */\n"+
       "#moe-bar-root.mp-full .mp-track,\n#moe-bar-root.mp-full .mp-fill,\n#moe-bar-root.mp-full .mp-tick {\n"+
@@ -1701,7 +1725,8 @@ const El = () => { const sm = {}; const e = {
   querySelectorAll() { return []; } }; return e; };
 const byId = {};
 let COPIED = null;
-const ctx = { document: { head: El(), body: El(), createElement: El, querySelectorAll: () => [],
+const ctx = { document: { head: El(), body: El(), documentElement: El(), createElement: El,
+    querySelectorAll: () => [],
     getElementById: id => byId[id] || (byId[id] = El()) },
   navigator: { clipboard: { writeText: t => { COPIED = t; } } },
   requestAnimationFrame: f => f(), setTimeout: () => 0, clearTimeout: () => { },

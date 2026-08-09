@@ -384,10 +384,45 @@ body { margin: 0; }
 .mp-cap.side .mp-v,
 .mp-cap.side .mp-eta { transform: translateY(-0.5rem); }
 .mp-cap.side.mp-capR { left: 100%; margin-left: 3rem; }
-/* The ONE gap, on every caption AND on every icon in it -- .mp-capR carries TWO (the mark and the
-   battles glyph) and both take this same 1rem. The two CENTRE captions then cancel their icon's
-   whole outer width with a negative margin-left further down -- see the .mp-capP / .mp-capC rules. */
+/* THE BOX-EDGE GAP is a uniform 1rem on every icon -- but each art asset carries its OWN
+   background-size zoom (icoFill 0.75 of a DIFFERENT box, per icon), so the box-edge gap alone
+   left the rows reading unevenly: each icon's actual INK stops a different distance short of its
+   own box edge. PER-ICON MARGIN-RIGHT OVERRIDES below equalise the INK gap instead, box sizes
+   left untouched (maintainer's call: "icon sizes must stay the same, adjust paddings
+   individually") -- mirroring the vertical composition's identical pass byte-for-byte (see
+   MoEProgressVertical.css's own note above `.mpv-ico.dmgp`; the numbers below are IDENTICAL to
+   that pass's, because both bars share the same box sizes and the same icon assets). Measured
+   live off the real PNGs' alpha>32 bbox (gui-part*.pkg), not estimated:
+     dmgp    box 14, ink_x == (42/128)*2.287*14 == 10.506rem, inset (14-10.506)/2 == 1.747rem
+     dmgc    box 16 (REFERENCE, untouched), ink_x == (28/128)*3.425*16 == 11.988rem,
+             inset == 2.006rem -- base 1rem margin already lands ~3.006rem; every other row is
+             calibrated to a flat 3.000rem target against it, same convention as the vertical pass
+     moe     box 17, ink_x == (35/128)*2.747*17 == 12.769rem, inset (17-12.769)/2 == 2.115rem
+     mk      box 17, `background-size: contain` on a 24x24 canvas scales the WHOLE canvas by
+             box/24; calibrated to mark_2 (its ink WIDTH 12 of 24, the tuner's own default
+             preview state): ink_x == 17*0.5 == 8.5rem, inset (17-8.5)/2 == 4.25rem. mark_1/
+             mark_3 land off this (see .mp-ico.mk's own note) -- an accepted residual, same as
+             the vertical bar's identical mark-icon correction
+     battles box 13 (base .mp-ico box, unchanged), calibrated on its OWN X-width (27 of a 128px
+             canvas -- NOT the maxdim(29) icoSz() zooms it by): ink_x == (27/128)*3.31*13 ==
+             9.077rem, inset (13-9.077)/2 == 1.962rem -- see .mp-ico.battles's own rule
+   margin-right == 3.00 - inset, REPLACING the shared 1rem outright: dmgp 1.253rem, moe 0.885rem
+   (LESS than the shared 1rem: moe's ink is already wide enough that less margin gets it to
+   3.00), mk -1.250rem (mark_2's inset alone overshoots the target, so the correction is
+   NEGATIVE), battles 1.038rem (added to its existing rule below, alongside margin-left). Compound
+   selectors below beat this base rule on SPECIFICITY, not source order (three classes vs two --
+   the same convention the vertical pass's per-icon overrides use). The two CENTRE captions
+   (dmgp, dmgc) additionally cancel their icon's whole outer width with a negative margin-left
+   further down -- see the .mp-capP / .mp-capC rules; dmgp's cancel now reads its OWN 1.253rem
+   gap, never the shared one, while dmgc's stays untouched (it never moves). Kept to 3 decimal
+   places, matching the vertical composition's own twins -- margin is a plain horizontal length
+   with no (rowHeight-box)/2-style quantisation to land on, so unlike a box these carry no
+   whole-rem/whole-device-pixel requirement; the residual is well under a rem, the same accepted
+   class of drift as this file's own .mp-cap .mp-d gap. */
 .mp-cap .mp-ico { margin-right: 1rem; }
+.mp-cap .mp-ico.dmgp { margin-right: 1.253rem; }
+.mp-cap .mp-ico.moe { margin-right: 0.885rem; }
+.mp-cap .mp-ico.mk { margin-right: -1.250rem; }
 /* .mp-eta shares the plain-white numeral treatment: same colour, weight and dark legibility drop as
    .mp-v. It is deliberately NOT a second .mp-v -- capV() is a first-match querySelector(".mp-v") and
    would keep resolving to the requirement, so a second .mp-v would work today and mis-target on the
@@ -524,16 +559,18 @@ body { margin: 0; }
    transformed box (left/top 50% + its OWN translate(-50%,-50%)), so the glow travels with
    the glyph and its centring is unaffected at any Y.
    ...AND, ON THE TWO CENTRE CAPTIONS ONLY, THE ICON'S WIDTH CANCELLED -- the first half of the
-   numeral-centring in .mp-cap's note. margin-left is -(this caption's own icon box + the gap),
-   so the icon's OUTER width is exactly 0 (-box-gap + box + gap): the numeral starts at the
-   caption's origin and the glyph still paints 1rem to its left, unmoved. A MARGIN and not
-   position:absolute precisely so the icon stays IN FLOW -- it keeps the transform above (both
-   the Y and the stacking context), and out of flow it would need a top:50% that, on .up,
-   resolves against a PADDING box carrying 6rem and would drop the glyph half that gap.
-   PER CAPTION because the box is per caption (dmgP / dmgC are independent sliders), and
-   DERIVED from those sliders + icoGap -- a literal would break the centring on the next
-   retune. NOT on the .side caption: it is not centred on anything, it is pushed off the axis
-   end by its own gap, so cancelling its icon would just slide the label inwards over the track.
+   numeral-centring in .mp-cap's note. margin-left is -(this caption's own icon box + ITS OWN
+   margin-right gap), so the icon's OUTER width is exactly 0 (-box-gap + box + gap): the numeral
+   starts at the caption's origin and the glyph still paints its own gap to its left, unmoved. A
+   MARGIN and not position:absolute precisely so the icon stays IN FLOW -- it keeps the transform
+   above (both the Y and the stacking context), and out of flow it would need a top:50% that, on
+   .up, resolves against a PADDING box carrying 6rem and would drop the glyph half that gap.
+   PER CAPTION because the box AND the gap are both per caption now (dmgP / dmgC are independent
+   sliders, and dmgP's ink-gap correction above replaces its slice of the shared icoGap) -- DERIVED
+   from those, never a literal, or a retune breaks the centring. dmgC still reads the shared
+   icoGap (it is the untouched reference), so its cancel is unchanged. NOT on the .side caption:
+   it is not centred on anything, it is pushed off the axis end by its own gap, so cancelling its
+   icon would just slide the label inwards over the track.
    .mp-capR NOW CARRIES TWO ICONS AND THIS ONE RULE NUDGES BOTH -- the mark glyph and the battles
    glyph. That is deliberate, and it is arithmetic rather than luck: the 0.5rem was tuned to push
    the marksOnGun cuts' ink (y 5..17 of a 24px canvas, ink centre 0.458 of the box) back onto the
@@ -543,7 +580,7 @@ body { margin: 0; }
    its OWN rule (`.mp-capR .mp-ico.battles`, full declaration -- a transform REPLACES its base),
    and this shared 0.5rem is NOT retuned, or the mark glyph moves with it.
    NEEDS VISUAL CONFIRMATION IN-CLIENT: the 0.16rem residual is derived from the bbox, not seen. */
-.mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15rem; }
+.mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15.253rem; }
 .mp-capC .mp-ico { transform: translate(0rem, 1rem); margin-left: -17rem; }
 .mp-capR .mp-ico { transform: translate(0rem, 0.5rem); }
 .mp-ico::before {
@@ -630,8 +667,16 @@ body { margin: 0; }
    canvas -> max dim 29 -> bb = 29/128 = 0.226563 -> 100/0.226563*0.75 = 331.03 -> 331.0%. Same
    convention that produced 342.5 / 228.7 / 274.7 for damage / barrel_mark / top; all three
    re-verified against it here. brightness(3) for the same reason as those three: the quest_type
-   line art ships as a flat grey #d1d1d1. */
-.mp-ico.battles { margin-left: 4rem; }
+   line art ships as a flat grey #d1d1d1.
+   margin-right: 1.038rem BELOW is the ink-gap parity correction (see the base `.mp-cap .mp-ico`
+   rule's note): unlike this icon's bbox above, the WIDTH that matters for a horizontal gap is 27
+   of the 128px canvas (NOT the maxdim 29 icoSz() zooms against), so ink_x == (27/128)*3.31*13 ==
+   9.077rem, inset (13-9.077)/2 == 1.962rem, margin-right == 3.00-1.962 == 1.038rem. EQUAL
+   SPECIFICITY to the base rule's (0,2,0) -- `.mp-ico.battles` is two classes too, not three -- so
+   this wins purely on SOURCE ORDER (it sits after the base rule); reordering the file would
+   silently revert this icon to the shared 1rem gap, the same species of race the ::before pair
+   right below already documents. */
+.mp-ico.battles { margin-left: 4rem; margin-right: 1.038rem; }
 /* GOLD, NOT THE SIDE CAPTION'S DARK DROP: same-specificity override of .mp-capR .mp-ico::before
    (above, ~:581) by SOURCE ORDER alone -- both are two classes plus a pseudo-element, so the
    cascade has no specificity tiebreaker here and falls through to "last rule wins". This rule
@@ -646,10 +691,11 @@ body { margin: 0; }
   filter: brightness(3);
 }
 /* THE SUPPRESSION VARIANT, and `display: none` is load-bearing rather than incidental: it COLLAPSES
-   the flex item's whole box -- its square AND the shared 1rem margin-right -- so a suppressed glyph
-   leaves no hole in the row. A background-only blank would have left the battles glyph's 13rem + gap
-   as dead space beside an empty count. JS toggles this class on the battles icon
-   (MoEProgress.js paintStatic) and setIco() writes it for a 0 mark count. */
+   the flex item's whole box -- its square AND its own margin-right, whatever that icon's is (the
+   shared 1rem for the mark/moe slot, or the battles icon's own 1.038rem override) -- so a
+   suppressed glyph leaves no hole in the row. A background-only blank would have left the battles
+   glyph's 13rem + gap as dead space beside an empty count. JS toggles this class on the battles
+   icon (MoEProgress.js paintStatic) and setIco() writes it for a 0 mark count. */
 .mp-ico.none { display: none; }
 /* proj_avg >= thresholds[m+1] -> the WHOLE bar takes the gold glow. */
 #moe-bar-root.mp-full .mp-track,
@@ -781,12 +827,20 @@ body { margin: 0; }
    Coherent honours). 1 -> 1.333, 3 -> 4. The tuner's gapEndL twin
    (`.mp-lg .mp-cap.side.mp-capL { padding-right: 10.667rem; }`) went with the caption. */
 .mp-lg .mp-cap .mp-ico { margin-right: 1.333rem; }
+/* THE PER-ICON INK-GAP CORRECTIONS' TWINS (see the base `.mp-cap .mp-ico` rule's note) -- plain
+   x4/3 of the base rem values, same as the shared gap just above: margin-right is a horizontal
+   length wherever it lives, so it owes SIZE_XF like any other. 1.253 -> 1.671, 0.885 -> 1.180,
+   -1.250 -> -1.667. */
+.mp-lg .mp-cap .mp-ico.dmgp { margin-right: 1.671rem; }
+.mp-lg .mp-cap .mp-ico.moe { margin-right: 1.18rem; }  /* 0.885 * 4/3, trailing zero dropped */
+.mp-lg .mp-cap .mp-ico.mk { margin-right: -1.667rem; }
 /* THE ETA GAP'S TWIN, and this is an x-length not a fixed-pixel correction: the base rule's
    4rem gap widens the row's own reach (see MoEProgress.js's header comment), so under Large it
    owes the block's SIZE_XF == 4/3 like every other x-length here, not the SIZE_F the root font
    already carries. 4 * 4/3 == 5.333, to the block's 3dp -- same precision as the icon-width
-   cancels below (1rem -> 1.333, -11.5rem -> -15.333). */
-.mp-lg .mp-ico.battles { margin-left: 5.333rem; }
+   cancels below (1rem -> 1.333, -11.5rem -> -15.333). margin-right is the battles icon's OWN
+   ink-gap twin, 1.038 * 4/3 == 1.384, same lever as the three rules just above. */
+.mp-lg .mp-ico.battles { margin-left: 5.333rem; margin-right: 1.384rem; }
 .mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }
 /* THE DELTA'S GAP, and the ONE x-length here dialled in `em` rather than rem -- which is exactly why
    it was missing until now: 0.35em of the delta's OWN font-size already rides SIZE_F (the root font
@@ -797,12 +851,15 @@ body { margin: 0; }
    a plain rem Y needs no twin, the root font scales it. */
 .mp-lg .mp-cap .mp-d { margin-left: 0.467em; }
 /* THE TWO CENTRE CAPTIONS' ICON-WIDTH CANCELS ARE RE-DERIVED, NOT MULTIPLIED: the margin is
-   -(this caption's own icon box + the gap), and the icon BOX is a uniform y-ish length that the root
-   font scales on its own -- only the gap takes the x factor. So -(14 + 1.333) and -(16 + 1.333),
-   NOT -15*4/3 / -17*4/3, or the numeral stops sitting on its tick. Declaration-only overrides: the
-   per-role translateY (and with it the stacking context scoping the glow's z-index:-1) still comes
-   from the base rules. */
-.mp-lg .mp-capP .mp-ico { margin-left: -15.333rem; }
+   -(this caption's own icon box + ITS OWN gap), and the icon BOX is a uniform y-ish length that
+   the root font scales on its own -- only the gap takes the x factor. dmgC still reads the shared
+   icoGap (untouched reference): -(16 + 1.333) == -17.333, unchanged. dmgP now reads its OWN
+   1.253rem ink-gap correction, not the shared icoGap, so its twin is -(14 + 1.253*4/3) ==
+   -(14 + 1.671) == -15.671 -- NOT -15.333 (that would be the shared gap's twin) and NOT
+   -15.253*4/3 (that would double-apply SIZE_XF to the box). Declaration-only overrides: the
+   per-role translateY (and with it the stacking context scoping the glow's z-index:-1) still
+   comes from the base rules. */
+.mp-lg .mp-capP .mp-ico { margin-left: -15.671rem; }
 .mp-lg .mp-capC .mp-ico { margin-left: -17.333rem; }
 /* ===== END APPENDED HAND-ADDED BLOCK ===== */
 
