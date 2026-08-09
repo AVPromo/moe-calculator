@@ -215,6 +215,14 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
   height: 13rem;
 }
 .mev-cap .mev-ico { margin-left: 1rem; }
+/* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): IDENTICAL literals to the
+   horizontal sibling's .mp-ico.bm/.mp-ico.mk overrides -- same boxes, same assets, the axis
+   rotation changes nothing about the ink. Calibrated off the real PNGs' alpha>32 bbox to a flat
+   3.000rem target (dmg, untouched, naturally lands ~3.006rem); mk is calibrated to mark_2 alone,
+   mark_1/mark_3 land off it by +-2rem -- an accepted residual, same class as MoEProgress.css's
+   own mark correction. Literal, not slider-driven. */
+.mev-cap .mev-ico.bm { margin-left: 1.253rem; }
+.mev-cap .mev-ico.mk { margin-left: -1rem; }
 .mev-cap.lf .mev-ico { transform: translateY(0.25rem); }
 .mev-cap.tp .mev-ico { transform: translateY(-0.25rem); }
 .mev-cap.bt .mev-ico { transform: translateY(0.5rem); }
@@ -351,6 +359,10 @@ body.mev.mp-lg #moe-bar-box { width: 148rem; }
 .mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(14.667rem); }
 .mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }
 .mp-lg .mev-cap .mev-ico { margin-left: 1.333rem; }
+/* The Large twins of the per-icon ink-gap-parity overrides above: literal, SIZE_XF (4/3)
+   applied by hand to the Default literal, never re-derived from the shared margin-left knob. */
+.mp-lg .mev-cap .mev-ico.bm { margin-left: 1.671rem; }
+.mp-lg .mev-cap .mev-ico.mk { margin-left: -1.333rem; }
 .mp-lg .mev-cap.bt .mev-d { transform: translate(-5.6rem, 2.5rem); }
 
 /* Axis + timings for the JS (mirrored in MoEBarTransient.js / MoEEfficiency.js -- the VERTICAL

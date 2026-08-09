@@ -279,7 +279,19 @@ body { margin: 0; }
 /* The 100% cap's glyph is a DIFFERENT family from the three marks beside it, so it takes its
    own Y. (0,4,0) beats the rule above, and it stays on the same transform -- that transform is
    the stacking context that scopes the ::before glow's z-index:-1. */
-.mp-cap.dn .mp-ico.bm { transform: translate(-1rem, -50%) translateY(-0.25rem); }
+.mp-cap.dn .mp-ico.bm { transform: translate(-1.253rem, -50%) translateY(-0.25rem); }
+/* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): the box-edge gap above is a
+   uniform --icoGap, but each art asset's own zoom/canvas leaves a different INK gap, so these
+   two literal X overrides equalise it instead, calibrated off the real PNGs' alpha>32 bbox to a
+   flat 3.000rem target (this bar's own dmg/current icon -- untouched -- naturally lands
+   ~3.006rem; every other row is calibrated to the flat 3.000rem target against it, same
+   convention both MA passes used, and this bm literal is IDENTICAL to MoEProgress.css's dmgp --
+   same box (14rem), same asset (barrel_mark, 228.7%)). mk is calibrated to mark_2 ALONE
+   (contain-scaled on a 24x24 canvas, box 16rem); mark_1/mark_3 land off it by +-2rem -- an
+   accepted residual, same class as MoEProgress.css's own mark correction. Literal, not
+   slider-driven: a box-size retune here would need these re-measured by hand, same as the
+   horizontal Moving Average bar's own pass. */
+.mp-cap.dn .mp-ico.mk { transform: translate(1rem, -50%) translateY(0.25rem); }
 .mp-ico::before {
   content: "";
   position: absolute;
@@ -446,6 +458,9 @@ body { margin: 0; }
    JS-created root. Every selector is its base rule plus one class, so it out-specifies it (the .bm
    glyph needs its own line: without it the .mp-cap.dn .mp-ico rule below, being LATER in the file at
    equal specificity, would swallow that glyph's own Y).
+   The .bm and .mk lines below are the Large twins of the emit's own per-icon ink-gap-parity
+   overrides (see the emit's own comment above .mp-cap.dn .mp-ico.bm/.mk): literal, SIZE_XF (4/3)
+   applied by hand to the Default literal, never re-derived from the shared --icoGap knob.
 ===== */
 .mp-lg #moe-bar-box { width: 613.333rem; }
 .mp-lg #moe-bar-root { width: 400rem; }
@@ -460,7 +475,8 @@ body { margin: 0; }
 .mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
 .mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.5rem); }
-.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.333rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.mk { transform: translate(1.333rem, -50%) translateY(0.25rem); }
 /* ===== END HAND-ADDED BLOCK 3 ===== */
 
 /* ===== HAND-ADDED BLOCK 4 OF 4 -- THE INTERFACE-SCALE CAPTION CORRECTIONS. The tuner has no notion

@@ -244,6 +244,11 @@
      separate knobs, never merged. */
   .mev-ico{position:relative;display:block;flex:none;width:var(--icobox);height:var(--icobox)}
   .mev-cap .mev-ico{margin-left:var(--icogapp)}
+  /* PER-ICON INK-GAP PARITY -- see eff_bar_tuner.html's identical note (.mp-ico.bm/.mp-ico.mk):
+     SAME literals, same boxes, same assets -- the axis rotation changes nothing about the ink.
+     Compound selectors beat the shared rule above on specificity. Literal, not slider-driven. */
+  .mev-cap .mev-ico.bm{margin-left:1.253rem}
+  .mev-cap .mev-ico.mk{margin-left:-1rem}
   .mev-cap.lf .mev-ico{transform:translateY(var(--icoyreq))}
   .mev-cap.tp .mev-ico{transform:translateY(var(--icoybm))}
   .mev-cap.bt .mev-ico{transform:translateY(var(--icoycur))}
@@ -689,6 +694,10 @@
       ".mev-lg .mev-cap.tp { transform: "+clr+" translateX("+X43(st.capxR4)+"rem); }\n"+
       ".mev-lg .mev-cap.bt { transform: "+clr+" translateX("+X43(st.capxCur)+"rem); }\n"+
       ".mev-lg .mev-cap .mev-ico { margin-left: "+X43(st.icoGap)+"rem; }\n"+
+      // The Large twins of the per-icon ink-gap-parity overrides above: literal, SIZE_XF (4/3)
+      // applied by hand to the Default literal, never re-derived from the shared icoGap knob.
+      ".mev-lg .mev-cap .mev-ico.bm { margin-left: 1.671rem; }\n"+
+      ".mev-lg .mev-cap .mev-ico.mk { margin-left: -1.333rem; }\n"+
       ".mev-lg .mev-cap.bt .mev-d { transform: translate("+
         X43(-Math.round(st.dGap*st.dFS*100)/100)+"rem, "+st.dY+"rem); }\n";
   }
@@ -995,6 +1004,14 @@
 ".mev-ico { position: relative; display: block; flex: none;\n"+
 "  width: "+st.icoBox+"rem;\n  height: "+st.icoBox+"rem;\n}\n"+
 ".mev-cap .mev-ico { margin-left: "+REM(st.icoGap)+"; }\n"+
+"/* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): IDENTICAL literals to the\n"+
+"   horizontal sibling's .mp-ico.bm/.mp-ico.mk overrides -- same boxes, same assets, the axis\n"+
+"   rotation changes nothing about the ink. Calibrated off the real PNGs' alpha>32 bbox to a flat\n"+
+"   3.000rem target (dmg, untouched, naturally lands ~3.006rem); mk is calibrated to mark_2 alone,\n"+
+"   mark_1/mark_3 land off it by +-2rem -- an accepted residual, same class as MoEProgress.css's\n"+
+"   own mark correction. Literal, not slider-driven. */\n"+
+".mev-cap .mev-ico.bm { margin-left: 1.253rem; }\n"+
+".mev-cap .mev-ico.mk { margin-left: -1rem; }\n"+
 ".mev-cap.lf .mev-ico { transform: translateY("+st.icoyReq+"rem); }\n"+
 ".mev-cap.tp .mev-ico { transform: translateY("+st.icoyBm+"rem); }\n"+
 ".mev-cap.bt .mev-ico { transform: translateY("+st.icoyCur+"rem); }\n"+

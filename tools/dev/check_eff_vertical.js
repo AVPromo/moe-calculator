@@ -391,6 +391,13 @@ assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its 
         "the current caption scales both x terms and gains no y term");
     assert.strictEqual(ruleOf(".mev-lg .mev-cap .mev-ico"), "margin-left: " + x(s.icoGap) + "rem;",
         "the icon gap is an x-length");
+    // The Large twins of the per-icon ink-gap-parity overrides, pinned as LITERALS (not re-derived
+    // from x()/icoGap): they are their own hand-calibrated correction, same as the horizontal
+    // sibling's .mp-lg .mp-cap.dn .mp-ico.bm/.mk twins.
+    assert.strictEqual(ruleOf(".mev-lg .mev-cap .mev-ico.bm"), "margin-left: 1.671rem;",
+        "the bm ink-gap-parity Large twin must be the literal 1.671rem");
+    assert.strictEqual(ruleOf(".mev-lg .mev-cap .mev-ico.mk"), "margin-left: -1.333rem;",
+        "the mk ink-gap-parity Large twin must be the literal -1.333rem");
     // The delta's transform mixes an x gap with a y nudge: the x scales, the y is restated VERBATIM
     // (the root font already has it). Same shape as the shipped MoEEfficiency.css:459 twin, whose
     // x term is this very 4.2 -> 5.6.
@@ -401,10 +408,11 @@ assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its 
     // --- 5. NOTHING y/uniform may appear under .mev-lg -- the root font already scales it, so a
     // rule here would DOUBLE-APPLY SIZE_F.
     const lgRules = emit.match(/\.mev-lg [^{}]*\{[^{}]*\}/g) || [];
-    // Exactly 10, and pinned: root, track, backdrop, the two ticks, the three captions, the icon
-    // gap, the delta gap. A rule appearing or vanishing must be deliberate.
-    assert.strictEqual(lgRules.length, 10,
-        "the .mev-lg block must declare exactly 10 rules, found " + lgRules.length);
+    // Exactly 12, and pinned: root, track, backdrop, the two ticks, the three captions, the icon
+    // gap, its two per-icon ink-gap-parity twins (bm/mk), the delta gap. A rule appearing or
+    // vanishing must be deliberate.
+    assert.strictEqual(lgRules.length, 12,
+        "the .mev-lg block must declare exactly 12 rules, found " + lgRules.length);
     const lgDecls = lgRules.join("");
     assert.ok(!/(font-size|line-height|height:|padding|margin-top|margin-bottom|animation|background|translateY\(-?[0-9.]+rem\))/
         .test(lgDecls),

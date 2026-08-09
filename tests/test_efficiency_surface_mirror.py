@@ -452,6 +452,41 @@ def test_the_current_rows_delta_and_icon_sit_at_their_tuned_y():
         "0.5rem" % (_knob("icoyCur"),)
 
 
+def test_the_per_icon_ink_gap_parity_overrides_are_pinned():
+    """The maintainer's ink-gap-parity pass (mirroring MoEProgress.css's identical one): every
+    icon but dmg/current (the untouched reference) gets its own literal X/margin correction so its
+    real ink -- not its box edge -- lands ~3.000rem short of the numeral. Box sizes are untouched
+    (only these two literals moved), so there is no formula to re-derive here -- same as
+    `icoyCur`/`dY` above, the literal IS the pin, and it is what refuses a reversion back to the
+    shared -1rem/1rem default. Pinned on BOTH orientations (identical numbers -- same boxes, same
+    assets, the axis rotation changes nothing about the ink) and BOTH size modes (the Large twin is
+    its own hand-placed literal, SIZE_XF == 4/3 off the Default one, never re-derived from it here).
+    """
+    css = _css()
+    assert _decl(css, ".mp-cap.dn .mp-ico.bm", "transform") == \
+        "translate(-1.253rem, -50%) translateY(-0.25rem)", \
+        "bm's ink-gap-parity correction drifted off its tuned -1.253rem"
+    assert _decl(css, ".mp-cap.dn .mp-ico.mk", "transform") == \
+        "translate(1rem, -50%) translateY(0.25rem)", \
+        "mk's ink-gap-parity correction (calibrated to mark_2) drifted off its tuned 1rem"
+    assert _decl(css, ".mp-lg .mp-cap.dn .mp-ico.bm", "transform") == \
+        "translate(-1.671rem, -50%) translateY(-0.25rem)", \
+        "bm's Large ink-gap-parity twin drifted off its tuned -1.671rem"
+    assert _decl(css, ".mp-lg .mp-cap.dn .mp-ico.mk", "transform") == \
+        "translate(1.333rem, -50%) translateY(0.25rem)", \
+        "mk's Large ink-gap-parity twin drifted off its tuned 1.333rem"
+
+    v_css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    assert _decl(v_css, ".mev-cap .mev-ico.bm", "margin-left") == "1.253rem", \
+        "the vertical bar's bm ink-gap-parity correction must be IDENTICAL to the horizontal one"
+    assert _decl(v_css, ".mev-cap .mev-ico.mk", "margin-left") == "-1rem", \
+        "the vertical bar's mk ink-gap-parity correction must be IDENTICAL to the horizontal one"
+    assert _decl(v_css, ".mp-lg .mev-cap .mev-ico.bm", "margin-left") == "1.671rem", \
+        "the vertical bar's bm Large twin must be IDENTICAL to the horizontal one"
+    assert _decl(v_css, ".mp-lg .mev-cap .mev-ico.mk", "margin-left") == "-1.333rem", \
+        "the vertical bar's mk Large twin must be IDENTICAL to the horizontal one"
+
+
 def test_the_sizing_boxs_height_is_the_emits_own_five_term_derivation():
     # THE HEIGHT IS DERIVED, AND meta CARRIES NO COPY OF IT (only boxWRem), so before this test it
     # was the one emitted number with ZERO test signal -- it went 51 -> 55 on a re-tune of tickH /
@@ -1052,7 +1087,7 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
                 "%s { %s: %s } is not the base `%s` times 4/3" % (selector, prop, value,
                                                                   base_decls[prop])
             checked += 1
-    assert checked == 13, "expected 13 x4/3 declarations, checked %d" % checked
+    assert checked == 14, "expected 14 x4/3 declarations, checked %d" % checked
 
 
 def test_the_large_block_carries_no_keyframe_and_no_vertical_length():

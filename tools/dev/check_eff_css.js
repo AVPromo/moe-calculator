@@ -74,7 +74,8 @@ const ruleIn = (text, sel) => {
     [".mp-lg .mp-ico", "transform: translate(-1.333rem, -50%);"],
     [".mp-lg .mp-cap.dn .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.25rem);"],
     [".mp-lg .mp-cap.up .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.5rem);"],
-    [".mp-lg .mp-cap.dn .mp-ico.bm", "transform: translate(-1.333rem, -50%) translateY(-0.25rem);"],
+    [".mp-lg .mp-cap.dn .mp-ico.bm", "transform: translate(-1.671rem, -50%) translateY(-0.25rem);"],
+    [".mp-lg .mp-cap.dn .mp-ico.mk", "transform: translate(1.333rem, -50%) translateY(0.25rem);"],
 ].forEach(([sel, expected]) => assert.strictEqual(ruleIn(block3Decl, sel), expected,
     "HAND-ADDED BLOCK 3 rule drifted: " + sel));
 

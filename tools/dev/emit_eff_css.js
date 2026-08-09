@@ -268,6 +268,9 @@ const LARGE = `
    JS-created root. Every selector is its base rule plus one class, so it out-specifies it (the .bm
    glyph needs its own line: without it the .mp-cap.dn .mp-ico rule below, being LATER in the file at
    equal specificity, would swallow that glyph's own Y).
+   The .bm and .mk lines below are the Large twins of the emit's own per-icon ink-gap-parity
+   overrides (see the emit's own comment above .mp-cap.dn .mp-ico.bm/.mk): literal, SIZE_XF (4/3)
+   applied by hand to the Default literal, never re-derived from the shared --icoGap knob.
 ===== */
 .mp-lg #moe-bar-box { width: 613.333rem; }
 .mp-lg #moe-bar-root { width: 400rem; }
@@ -282,7 +285,8 @@ const LARGE = `
 .mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
 .mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.5rem); }
-.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.333rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.mk { transform: translate(1.333rem, -50%) translateY(0.25rem); }
 /* ===== END HAND-ADDED BLOCK 3 ===== */
 `;
 
