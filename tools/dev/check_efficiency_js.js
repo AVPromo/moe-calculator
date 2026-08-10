@@ -59,14 +59,15 @@ const MUTATIONS = {
     "no-hit-collapse": ["T",
         "        if (!viewEnv.setHitAreaPaddingsRem) return;", "        return;"],
     "hit-rect-not-collapsed": ["T",
-        "            viewEnv.setHitAreaPaddingsRem(hitPadY, hitPadX, hitPadY, hitPadX, HIT_MAGIC);",
+        "            viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad, HIT_MAGIC);",
         "            viewEnv.setHitAreaPaddingsRem(0, 0, 0, 0, HIT_MAGIC);"],
-    // The per-axis regression: revert both axes back to the single shared "half the LARGER
-    // dimension" pad this bar shipped with before the fix -- see MoEBarTransient.js's own header
-    // note on why that over-pads the smaller axis into a negative extent instead of collapsing it.
-    "hit-pad-shared-not-per-axis": ["T",
-        "    let hitPadX = Math.ceil(viewW / 2);\n    let hitPadY = Math.ceil(viewH / 2);",
-        "    let hitPadX = Math.ceil(Math.max(viewW, viewH) / 2);\n    let hitPadY = hitPadX;"],
+    // The per-axis regression: WG's own confirmed wrapper usage (gui-part3.pkg) passes FOUR EQUAL
+    // values, always, and an oversized pad is accepted, not rejected -- so ONE shared value off
+    // `Math.max(viewW, viewH)` is the recorded design, immune to argument order and to which
+    // axis's size the pad happens to be derived from.
+    "hit-pad-split-per-axis": ["T",
+        "    let hitPad = Math.ceil(Math.max(viewW, viewH) / 2);",
+        "    let hitPadX = Math.ceil(viewW / 2), hitPadY = Math.ceil(viewH / 2);"],
     "no-shift": ["T",
         '            root.style.left = shiftX + "rem";', '            root.style.left = "0rem";'],
     "no-texture-freeze": ["T",
@@ -326,13 +327,13 @@ const MUTATIONS = {
         '(baseFont * SIZE_F) + "px"', 'SIZE_F + "px"'],
     "size-no-body-class": ["T", 'document.body.classList.toggle("mp-lg", large);', "void 0;"],
     "size-surface-loses-the-x-factor": ["T",
-        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);",
-        "viewW = Math.round((cfg.boxW + 2 * cfg.padX) * f);"],
+        "viewW = Math.round((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);",
+        "viewW = Math.round((cfg.boxW + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);"],
     // THE 4/3 REPRESENTABILITY TRAP, on the bar that actually hits it: (460*4/3 + 20)*1.5 evaluates
     // to 949.9999999999999, so a floor hands the engine a 1px-narrow surface.
     "size-surface-floored-not-rounded": ["T",
-        "viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);",
-        "viewW = Math.floor((cfg.boxW * xf + 2 * cfg.padX) * f);"],
+        "viewW = Math.round((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);",
+        "viewW = Math.floor((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);"],
     "size-shift-not-re-derived": ["T",
         "shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
     "size-no-surface-repush": ["T",
@@ -411,10 +412,10 @@ const BOX_W = jsConst(B_SRC, "BOX_W_REM", "MoEEfficiency.js");
 const BOX_H = jsConst(B_SRC, "BOX_H_REM", "MoEEfficiency.js");
 const BOX_LEFT = jsConst(B_SRC, "BOX_LEFT_REM", "MoEEfficiency.js");
 const SURFACE = [BOX_W + 2 * PAD, BOX_H + 2 * PAD];
-// PER-AXIS (see MoEBarTransient.js's header note): X takes half the surface WIDTH, Y half the
-// surface HEIGHT -- never one shared value off whichever axis is larger.
-const HIT_PAD_X = Math.ceil(SURFACE[0] / 2);
-const HIT_PAD_Y = Math.ceil(SURFACE[1] / 2);
+// ONE SHARED VALUE (see MoEBarTransient.js's header note): half the LARGER of the two surface
+// dimensions, on all four sides -- WG's own confirmed usage (four equal args, an oversized pad
+// accepted not rejected), not a per-axis pair.
+const HIT_PAD = Math.ceil(Math.max(SURFACE[0], SURFACE[1]) / 2);
 const SHIFT = [PAD - BOX_LEFT + "rem",
                PAD - jsConst(B_SRC, "BOX_TOP_REM", "MoEEfficiency.js") + "rem"];
 const HIT_MAGIC = jsConst(T_SRC, "HIT_MAGIC", "MoEBarTransient.js");
@@ -433,8 +434,7 @@ const ROOT_FONT_PX = 2;
 const UA_FONT_PX = 16;
 const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
                     Math.round((BOX_H + 2 * PAD) * SIZE_F)];
-const LG_HIT_PAD_X = Math.ceil(LG_SURFACE[0] / 2);
-const LG_HIT_PAD_Y = Math.ceil(LG_SURFACE[1] / 2);
+const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
 const LG_SHIFT_X = Math.round((PAD - BOX_LEFT * SIZE_XF) * 1000) / 1000 + "rem";
 const REASSERT = jsConst(T_SRC, "SURFACE_REASSERT_MS", "MoEBarTransient.js");
 const SETTLE = REASSERT + jsConst(T_SRC, "SURFACE_SETTLE_MS", "MoEBarTransient.js");
@@ -563,7 +563,7 @@ function run(mutation) {
     eq("resizeViewRem called once at mount with the surface size", s.calls.resize, [SURFACE]);
     eq("hit rect collapsed per axis (top/bottom = half height, left/right = half width) + WG's "
        + "magic 5th arg",
-       s.calls.hit, [[HIT_PAD_Y, HIT_PAD_X, HIT_PAD_Y, HIT_PAD_X, HIT_MAGIC]]);
+       s.calls.hit, [[HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]]);
     eq("texture frozen before the resize (WG's pattern)", s.calls.freeze, 1);
     eq("the composition is shifted into positive document coords",
        [s.root.style.left, s.root.style.top], SHIFT);
@@ -1114,7 +1114,7 @@ function run(mutation) {
        "x term is 949.9999999999999 in float)", s.calls.resize.slice(resizes), [LG_SURFACE]);
     eq("...and re-collapses the hit rect per axis off the new (larger) surface",
        s.calls.hit.slice(hits),
-       [[LG_HIT_PAD_Y, LG_HIT_PAD_X, LG_HIT_PAD_Y, LG_HIT_PAD_X, HIT_MAGIC]]);
+       [[LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, LG_HIT_PAD, HIT_MAGIC]]);
     eq("...and re-derives the rigid shift in document rem (3dp, matching the .mp-lg block)",
        s.root.style.left, LG_SHIFT_X);
     eq("...while the vertical shift is untouched -- it is a rem the root font already scaled",
@@ -1387,13 +1387,13 @@ function run(mutation) {
     s = mount(srcs);
     s.push(M(VM()));
     eq("the input rect is collapsed at mount", lastHit(s),
-       [HIT_PAD_Y, HIT_PAD_X, HIT_PAD_Y, HIT_PAD_X, HIT_MAGIC]);
+       [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
     s.push(M(VM({ ctrlHeld: true })));
     eq("a held Ctrl no longer opens the input rect -- the HUD-input-steal hazard is retired",
-       lastHit(s), [HIT_PAD_Y, HIT_PAD_X, HIT_PAD_Y, HIT_PAD_X, HIT_MAGIC]);
+       lastHit(s), [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
     s.push(M(VM({ ctrlHeld: false })));
     eq("...and releasing it changes nothing either", lastHit(s),
-       [HIT_PAD_Y, HIT_PAD_X, HIT_PAD_Y, HIT_PAD_X, HIT_MAGIC]);
+       [HIT_PAD, HIT_PAD, HIT_PAD, HIT_PAD, HIT_MAGIC]);
 
     // (b) CTRL RIDES THE PEEK: held -> the bar comes up and pauses at the hold plateau; released ->
     // it leaves. This is the one behaviour the flag still drives, and it is what `T.ctrl(...)` being

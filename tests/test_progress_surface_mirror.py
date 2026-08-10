@@ -47,6 +47,14 @@ def _js_const(src, name):
     return int(match.group(1))
 
 
+def _js_decimal_const(src, name):
+    """Like `_js_const`, but for a FRACTIONAL const (V_PAD_XR_REM_LARGE, -8.133) -- `_js_const`'s
+    integer-only regex refuses those."""
+    match = re.search(r"^const %s = (-?[\d.]+);" % name, src, re.M)
+    assert match, "MoEProgress.js: const %s not found" % name
+    return Decimal(match.group(1))
+
+
 def _size_factor(name):
     """One of the LARGE size mode's two factors, out of the SHARED MoEBarTransient.js.
 
@@ -108,15 +116,15 @@ def _css_rect(src, selector):
 
 
 def _v_surface_wh(js):
-    """The vertical surface the JS pushes to the engine -- V_BOX_W_REM + 2*V_PAD_X_REM on the
-    width (MoEBarTransient's `viewW = cfg.boxW + 2 * cfg.padX;`), V_BOX_H_REM + 2*PAD_REM -
-    V_CLIP_B_REM on the height (`viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;`). NEITHER axis is the
-    uniform PAD_REM, and each departure is its own deliberate thing: the height CLIPS the backdrop's
-    own bottom bleed (V_CLIP_B_REM) and the width reaches far PAST the backdrop on both sides to
-    cover the right-anchored captions' leftward ink (V_PAD_X_REM). Both carry their derivation in
-    the JS's own notes."""
+    """The vertical surface the JS pushes to the engine -- V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM
+    on the width (MoEBarTransient's `viewW = cfg.boxW + cfg.padX + cfg.padXR;`), V_BOX_H_REM +
+    2*PAD_REM - V_CLIP_B_REM on the height (`viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;`). The X
+    pad is a SPLIT pair now, not the uniform PAD_REM nor a symmetric V_PAD_X_REM: V_PAD_X_REM on the
+    LEFT reaches past the backdrop to cover the right-anchored captions' leftward ink; V_PAD_XR_REM
+    on the RIGHT (minimap-facing) side CLIPS the backdrop's own bleed down to just past the track's
+    tick overhang -- see MoEProgress.js's own notes on both."""
     pad = _js_const(js, "PAD_REM")
-    return (_js_const(js, "V_BOX_W_REM") + 2 * _js_const(js, "V_PAD_X_REM"),
+    return (_js_const(js, "V_BOX_W_REM") + _js_const(js, "V_PAD_X_REM") + _js_const(js, "V_PAD_XR_REM"),
             _js_const(js, "V_BOX_H_REM") + 2 * pad - _js_const(js, "V_CLIP_B_REM"))
 
 
@@ -143,7 +151,7 @@ def test_the_vertical_box_consts_quote_the_backdrop_rule():
             _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == \
         _css_rect(css, ".mpv-backdrop")
     assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
-            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-34, -80, 72, 360)
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-34, -80, 46, 360)
 
 
 def test_the_vertical_clip_is_fed_from_its_own_constant():
@@ -159,16 +167,20 @@ def test_the_vertical_clip_is_fed_from_its_own_constant():
 def test_the_vertical_css_sizing_box_matches_the_js_surface():
     # body.mpv #moe-bar-box mirrors the surface _v_surface_wh derives, exactly as the horizontal
     # #moe-bar-box mirrors BOX_W/H_REM + 2*PAD_REM in test_css_sizing_box_matches_the_js_surface.
-    # The width is NOT box + 2*PAD_REM any more: V_PAD_X_REM widens BOTH sides so the surface covers
-    # the right-anchored captions' leftward ink (the backdrop deliberately does not -- see
-    # test_the_vertical_captions_fit_inside_the_surface, the gate on the value itself) while staying
-    # concentric with the track (test_the_wider_vertical_surface_does_not_move_the_centred_track).
+    # The width is a SPLIT pad now, NOT box + 2*PAD_REM nor a symmetric box + 2*V_PAD_X_REM:
+    # V_PAD_X_REM widens the LEFT side so the surface covers the right-anchored captions' leftward
+    # ink (the backdrop deliberately does not -- see test_the_vertical_captions_fit_inside_the_
+    # surface, the gate on the value itself), while V_PAD_XR_REM shrinks the RIGHT (minimap-facing)
+    # side down to just past the track's own tick overhang, plus a small margin -- the fix for the
+    # invisible surface reaching into the minimap (see MoEProgress.js's own five-point note;
+    # test_the_reachable_minimap_gap_equals_surface_h_minus_track_y is this axis's sibling gate on
+    # the Y side).
     css = _read("MoEProgressVertical.css")
     match = re.search(r"body\.mpv #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*height:\s*(\d+)rem;\s*\}",
                        css)
     assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_read("MoEProgress.js")) == (198, 320)
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (112, 320)
 
 
 def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
@@ -200,24 +212,35 @@ def test_the_vertical_large_shift_pins_the_bottom_ink_within_a_pixel():
 
 def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
     # body.mpv.mp-lg #moe-bar-box restates ONLY the width, in DOCUMENT REM, at V_BOX_W_REM*SIZE_XF +
-    # 2*V_PAD_X_REM (the root font's SIZE_F is layered on top of every rem for free, including this
-    # one and the unrestated height) -- so the LOGICAL PX surface under Large is this rem value times
-    # SIZE_F for width, and the default height times SIZE_F alone. DO NOT write the logical-px number
-    # into the shim: 222 * 1.25 == 277.5 -> 278, and a 278rem shim would push a 347px surface.
-    # ONLY THE BACKDROP HALF TAKES SIZE_XF. The pad is rem-space slack for rem-sized ink (the caption
-    # glyphs and the shadow bleed), which the root font already grows by SIZE_F -- giving it the x
-    # factor too would over-pad by 25%, the same rule PAD_REM has always followed.
-    # Pinned: progress vertical Large -> 278 x 400.
+    # V_PAD_X_REM + V_PAD_XR_REM_LARGE -- a SPLIT pad now, its RIGHT half its OWN Large literal (not
+    # scaled by SIZE_XF, exactly like V_PAD_XR_REM's own Default value -- see both constants' notes)
+    # -- (the root font's SIZE_F is layered on top of every rem for free, including this one and the
+    # unrestated height) -- so the LOGICAL PX surface under Large is this rem value times SIZE_F for
+    # width, and the default height times SIZE_F alone. DO NOT write the logical-px number into the
+    # shim: 125.333 * 1.25 == 157 (rounded), and a 157rem shim would push a wrong (1.25x too wide)
+    # surface.
+    # ONLY THE BACKDROP HALF TAKES SIZE_XF. The pad is rem-space slack (ink allowance on the left, a
+    # bleed CLIP on the right), which the root font already grows/shrinks by SIZE_F -- giving it the
+    # x factor too would over/under-shoot by 25%, the same rule PAD_REM has always followed.
+    # Pinned: progress vertical Large -> 157 x 400 (was 295 before this pad was split -- the OLD
+    # symmetric V_PAD_X_REM(70) on BOTH sides reached the surface 70+px past the minimap's own edge,
+    # live-measured; see MoEProgress.js's own five-point note. 157, not the flush 154 an earlier pass
+    # of this fix used: that used PROGRESS_MM_TRACK_X_LARGE's hand-CORRECTED placement value as if it
+    # were this bar's own local tick position, understating the tick's real reach and clipping it --
+    # see fact 5). NOTE this SHIM width formula is unrelated to the backdrop's OWN Large width, which
+    # is a literal 90rem (kept, live-measurement-confirmed correct), not V_BOX_W_REM*SIZE_XF
+    # (61.333) -- see test_the_backdrops_right_edge_clears_the_minimap.
     css, js = _read("MoEProgressVertical.css"), _read("MoEProgress.js")
-    match = re.search(r"body\.mpv\.mp-lg #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*\}", css)
+    match = re.search(r"body\.mpv\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
     assert match, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
-    large_w_rem = int(match.group(1))
+    large_w_rem = Decimal(match.group(1))
     xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
-    assert large_w_rem == (_js_const(js, "V_BOX_W_REM") * xf
-                           + 2 * _js_const(js, "V_PAD_X_REM"))
+    assert large_w_rem == (Decimal(_js_const(js, "V_BOX_W_REM")) * xf
+                           + _js_const(js, "V_PAD_X_REM")
+                           + _js_decimal_const(js, "V_PAD_XR_REM_LARGE")).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
-    assert (iround_half_away(Decimal(large_w_rem) * f),
-            iround_half_away(Decimal(default_h) * f)) == (278, 400)
+    assert (iround_half_away(large_w_rem * f),
+            iround_half_away(Decimal(default_h) * f)) == (157, 400)
 
 
 def _advances(js):
@@ -435,74 +458,174 @@ def test_the_stacked_eta_row_fits_above_the_track_without_clipping():
             allowance - worst_reach))
 
 
-# The vertical MA surface as it shipped BEFORE V_PAD_X_REM existed: (width, shiftX) == box + 2*10
-# and 10 - (-34). Frozen here on purpose -- these two ARE the reference the widening promised not to
-# move, and the test below is the promise. They are the ONLY historical literals in this file and
-# they must never be "updated to match": updating them is exactly the regression.
-_PRE_PAD_X_SURFACE = (92, 44)
+# REMOVED: test_the_wider_vertical_surface_does_not_move_the_centred_track (and its
+# _PRE_PAD_X_SURFACE fixture). It protected the vertical composition against `anchor_centred_
+# reduced` (the Damage Log anchor) sliding the track sideways when the surface widens
+# asymmetrically -- valid while V_PAD_X_REM was the vertical surface's ONLY X pad and applying it
+# symmetrically was what bought this test's exact equality. As of the minimap-surface fix the RIGHT
+# pad is a SEPARATE, deliberately smaller knob (V_PAD_XR_REM) than the LEFT one (V_PAD_X_REM) -- an
+# asymmetry this test would now correctly flag as "the track moved". But `anchor_centred_reduced`
+# is UNREACHABLE for a vertical bar under the current Alignment model: bar_window._resolve always
+# routes Fixed+Vertical through `anchor_minimap` instead (Horizontal -> Damage Log, Vertical ->
+# Minimap, no stored value or UI path selects the other combination -- see mod_settings.py's
+# SETTINGS_VERSION 22->23 comment and MoEProgress.js's fact 2). Asserting an invariant for an anchor
+# the vertical composition can never actually resolve through is not a regression guard any more; it
+# is exactly the invariant the asymmetric right-pad fix is DELIBERATELY, sanctionedly breaking (see
+# MoEProgress.js's V_PAD_XR_REM note and domain/positioning.anchor_minimap's own docstring on why the
+# vertical bar has no backdrop/surface symmetry contract at all). Keeping it would mean either
+# loosening it until green (masking a real, if unreachable, asymmetry) or leaving it red forever.
 
 
-@pytest.mark.parametrize("space_w", [1920, 2560, 3440])
-def test_the_wider_vertical_surface_does_not_move_the_centred_track(space_w):
-    """The Damage Log (centred) alignment must land the vertical track EXACTLY where the
-    pre-V_PAD_X_REM surface did, at every viewport width.
+def test_the_backdrops_right_edge_clears_the_minimap():
+    """THE GATE THAT WAS MISSING. No test asserted the backdrop's right edge stayed clear of the
+    minimap, which is exactly how a 26rem (Default) / 6rem (Large) overlap shipped invisibly --
+    the dark panel visibly covering the minimap's first column, at both scales, unrelated to any
+    hit-test mechanics (setHitAreaPaddingsRem's collapse is real; the backdrop is drawn regardless
+    of it). See MoEProgress.js's own three-point note for the full narrative.
 
-    WHY THIS IS THE LOAD-BEARING TEST OF THE WHOLE CHANGE. `anchor_centred_reduced` puts the window
-    at `max_x // 2` with NO x compensation term anywhere in Python (PROGRESS_ANCHOR_X_OFFSET is 0),
-    so it centres the SURFACE and only centres the BAR while the surface brackets the track evenly
-    -- the same invariant test_the_large_backdrop_stays_symmetric_about_the_track guards for the
-    horizontal composition. Widening the surface on the LEFT ALONE (the obvious way to stop the
-    caption clip) silently slides this alignment right by half the asymmetry: 26 logical px at
-    Default, 33 at Large, at every resolution, with every other assertion in this file still green.
-    Applying V_PAD_X_REM to BOTH sides is what buys the exact equality below, and paying ~53rem of
-    surface on a side nobody looks at is free (the rect is never drawn and the hit rect is collapsed
-    per axis -- see the hitPadX/hitPadY assertion at the end).
-
-    COMPOSED THROUGH THE REAL FUNCTIONS, not re-derived arithmetic: the same
-    anchor_centred_reduced -> anchor_offset chain bar_window.BarHost._resolve runs, so the `// 2`
-    floor and its parity are exercised rather than modelled.
+    TWO BOUNDS, both re-derived from the shipped constants, never hardcoded:
+      * the backdrop's right edge (relative to #moe-bar-box: V_PAD_X_REM + the backdrop's own
+        width) must not PASS the minimap's own left edge (PROGRESS_MM_TRACK_X + MM_GAP +
+        MM_TICK_OVERHANG) -- the overlap this test exists to catch;
+      * it must not fall SHORT of the track's own right edge (PROGRESS_MM_TRACK_X) either, or the
+        track's own tick ink loses its dark backing -- the mistake a naive symmetric trim, or an
+        over-eager asymmetric one, would make instead.
+    Prove it red by setting V_BOX_W_REM back to 72 (Default) or restoring the Large backdrop's
+    width to its old V_BOX_W_REM*SIZE_XF twin (96) -- either reintroduces the exact overlap this
+    gate now refuses.
     """
+    from moe_calculator.domain.constants import (
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, MM_GAP, MM_TICK_OVERHANG,
+        MM_TICK_OVERHANG_LARGE)
+
     js = _read("MoEProgress.js")
-    surface_w, _surface_h = _v_surface_wh(js)
+    css = _read("MoEProgressVertical.css")
+    pad_x = _js_const(js, "V_PAD_X_REM")
+    box_w = _js_const(js, "V_BOX_W_REM")
+
+    backdrop_right = pad_x + box_w
+    minimap_left = PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG
+    assert backdrop_right <= minimap_left, (
+        "the Default backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
+        "pass PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG (%srem)" % (
+            backdrop_right, backdrop_right - minimap_left, minimap_left))
+    assert backdrop_right >= PROGRESS_MM_TRACK_X, (
+        "the Default backdrop's right edge (%srem) falls %srem SHORT of the track's own right "
+        "edge (PROGRESS_MM_TRACK_X, %srem) -- the track's tick ink would lose its backing" % (
+            backdrop_right, PROGRESS_MM_TRACK_X - backdrop_right, PROGRESS_MM_TRACK_X))
+
+    match = re.search(r"\.mp-lg \.mpv-backdrop \{ left: -?[\d.]+rem; width: ([\d.]+)rem; \}", css)
+    assert match, "MoEProgressVertical.css: .mp-lg .mpv-backdrop rule not found"
+    large_backdrop_right = pad_x + Decimal(match.group(1))
+    large_minimap_left = PROGRESS_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE
+    assert large_backdrop_right <= large_minimap_left, (
+        "the Large backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
+        "pass PROGRESS_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE (%srem)" % (
+            large_backdrop_right, large_backdrop_right - large_minimap_left, large_minimap_left))
+    assert large_backdrop_right >= PROGRESS_MM_TRACK_X_LARGE, (
+        "the Large backdrop's right edge (%srem) falls %srem SHORT of the track's own right edge "
+        "(PROGRESS_MM_TRACK_X_LARGE, %srem) -- the track's tick ink would lose its backing" % (
+            large_backdrop_right, PROGRESS_MM_TRACK_X_LARGE - large_backdrop_right,
+            PROGRESS_MM_TRACK_X_LARGE))
+
+
+def test_the_surface_clears_the_minimap_at_every_size_index():
+    """THE GATE ON THE SURFACE ITSELF, not the backdrop. test_the_backdrops_right_edge_clears_the_
+    minimap above proves the DRAWN rect stays clear, but the invisible SURFACE (the actual
+    mouse-hit-blocking rect -- the native Wulf window rect captures a click regardless of the JS
+    hit-area collapse, see bridge/bar_window.py's own note) is a SEPARATE rectangle with its own,
+    independently-tuned right pad (V_PAD_XR_REM/_LARGE), which a backdrop-only gate cannot see.
+    That is exactly how this shipped TWICE with the backdrop gate green throughout -- live-measured:
+    window size (186,320) == V_BOX_W_REM(46) + V_PAD_X_REM(70) + V_PAD_X_REM(70), the OLD symmetric
+    right pad past an ALREADY-TRIMMED backdrop, 70 logical px inside the minimap.
+
+    `anchor_minimap`'s `x = space_x - mm_size - gap - overhang - edge_x` makes the gap between the
+    TRACK and the minimap's own left edge INDEPENDENT of `mm_size` by construction (`mm_size`
+    cancels out of `minimap_left - surface_left - edge_x`) -- so if the surface clears the minimap
+    at one size index it clears it at every index. Checked at all six anyway, so a future change to
+    that construction cannot silently narrow the check to one lucky index.
+
+    A REAL MARGIN, not zero-clearance: this bug shipped twice at a non-negative (or negative)
+    margin, so the bound below requires real daylight, not merely `<=`.
+
+    Prove it red by restoring V_PAD_XR_REM(_LARGE) to V_PAD_X_REM(_LARGE)'s own value (the
+    asymmetric right pad deleted, reproducing the live-measured overlap) -- every index goes red at
+    both sizes.
+    """
+    from moe_calculator.domain.constants import (
+        MINIMAP_SIZES, MM_GAP, MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
+        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
+    from moe_calculator.domain.positioning import anchor_minimap
+
+    js = _read("MoEProgress.js")
+    css = _read("MoEProgressVertical.css")
+    view_w, _view_h = _v_surface_wh(js)
+    match = re.search(r"body\.mpv\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
+    assert match, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
+    large_view_w = iround_half_away(Decimal(match.group(1)) * _size_factor("SIZE_F"))
+
+    _MARGIN_PX = 3   # the smaller of this bar's two achieved margins (Large) -- see
+                     # test_the_surface_does_not_clip_the_tick for the OTHER edge this same surface
+                     # must clear; the two trade off against a single, small total slack (fact 5)
+    _SPACE_X = 3000  # arbitrary: anchor_minimap's x does not depend on space_y/edge_y at all
+
+    for idx, mm_size in enumerate(MINIMAP_SIZES):
+        for large, view, edge_x, overhang in (
+                (False, view_w, PROGRESS_MM_TRACK_X, MM_TICK_OVERHANG),
+                (True, large_view_w, PROGRESS_MM_TRACK_X_LARGE, MM_TICK_OVERHANG_LARGE)):
+            x, _y = anchor_minimap(_SPACE_X, 2000, edge_x, 0, mm_size, MM_GAP, 0, overhang)
+            margin = (_SPACE_X - mm_size) - (x + view)
+            assert margin >= _MARGIN_PX, (
+                "minimap size index %d (mmSize=%d), %s: the surface's right edge clears the "
+                "minimap by only %spx, need >= %spx" % (
+                    idx, mm_size, "Large" if large else "Default", margin, _MARGIN_PX))
+
+
+def test_the_surface_does_not_clip_the_tick():
+    """THE OTHER EDGE test_the_surface_clears_the_minimap_at_every_size_index's surface must clear:
+    its own TRACK's tick. A tick clip is not cosmetic like a clipped backdrop bleed -- the tick marks
+    a real requirement position, so losing even its outermost pixel is a functional regression.
+
+    THIS BAR'S OWN edge_x CARRIES A HAND PLACEMENT CORRECTION (PROGRESS_MM_TRACK_X, -2 off the pure
+    derivation -- see MoEProgress.js's fact 5) that describes where the WINDOW lands in SPACE, not
+    where the tick renders INSIDE its own surface -- a purely local JS/CSS fact, computed here from
+    shiftX + trackW + MM_TICK_OVERHANG directly, never from the Python placement constant. An
+    earlier pass of the minimap-surface fix conflated the two and shipped a real (if small) clip.
+
+    Prove it red by widening V_PAD_XR_REM(_LARGE) back toward the flush value the derivation
+    comments name (-8 / -8.133) -- the margin below goes negative at both sizes.
+    """
+    from moe_calculator.domain.constants import MM_TICK_OVERHANG
+
+    js = _read("MoEProgress.js")
+    css = _read("MoEProgressVertical.css")
+    xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
+
+    # trackW is #moe-bar-root's own width (3rem) -- scraped, not hardcoded, so a tuner retune of the
+    # track's cross-section propagates here too.
+    match = re.search(r"body\.mpv #moe-bar-root\s*\{[^}]*?width:\s*(\d+)rem;", css)
+    assert match, "MoEProgressVertical.css: body.mpv #moe-bar-root width not found"
+    track_w = Decimal(match.group(1))
+
+    view_w, _view_h = _v_surface_wh(js)
     shift_x = _v_shift_x(js)
-    old_w, old_shift = _PRE_PAD_X_SURFACE
+    tick_right_default = shift_x + track_w + MM_TICK_OVERHANG
+    margin_default = view_w - tick_right_default
+    assert margin_default >= 2, (
+        "Default: the surface clears the tick's own right edge (%s) by only %spx" % (
+            tick_right_default, margin_default))
 
-    def track_x(width, shift):
-        # Only x matters here; the y arguments are _resolve's real ones and do not affect it.
-        base = anchor_centred_reduced(space_w - width, 1080 - 320, 1080,
-                                      PROGRESS_ANCHOR_Y_FRAC, VERTICAL_ANCHOR_Y_SHIFT)
-        x, _y = anchor_offset(base, PROGRESS_ANCHOR_X_OFFSET, 0)
-        return x + shift
-
-    assert track_x(surface_w, shift_x) == track_x(old_w, old_shift), (
-        "the centred vertical track moved from %s to %s at %spx wide -- the surface is no longer "
-        "concentric with the track" % (track_x(old_w, old_shift), track_x(surface_w, shift_x),
-                                       space_w))
-
-    # ...AND THE LARGE TWIN, which can only be bounded, not equal. Both the old and the new Large
-    # surface are half-away rounded off a fractional intermediate and `max_x // 2` floors a result
-    # whose parity differs between them, so the two land up to a pixel apart by construction -- the
-    # same species of jitter memory `anchor-y-reduction-is-not-bit-exact` names on the Y axis.
-    # Measured at exactly 0.25px here; a whole pixel is the ceiling worth failing on.
-    f, xf = _size_factor("SIZE_F"), _size_factor("SIZE_XF")
-    box_w, pad_x = _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_PAD_X_REM")
-    box_left, pad = _js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "PAD_REM")
-    large_w = iround_half_away((Decimal(box_w) * xf + 2 * pad_x) * f)
-    large_shift = (pad_x - Decimal(box_left) * xf) * f
-    old_large_w = iround_half_away((Decimal(box_w) * xf + 2 * pad) * f)
-    old_large_shift = (pad - Decimal(box_left) * xf) * f
-    drift = track_x(large_w, large_shift) - track_x(old_large_w, old_large_shift)
-    assert abs(drift) < 1, (
-        "the centred vertical track moved %s logical px under Large -- that is a real move, not "
-        "the sub-pixel `// 2` parity jitter" % drift)
-
-    # THE INPUT RECT IS STILL FULLY COLLAPSED, and that is why the extra surface is free rather
-    # than a trade-off: MoEBarTransient.js pads the X axis by `Math.ceil(viewW / 2)` and the Y
-    # axis by `Math.ceil(viewH / 2)` independently (see its header note and the shared-formula pin
-    # in test_efficiency_surface_mirror.py::test_the_hit_rect_is_collapsed_on_all_four_sides), so
-    # widening V_PAD_X_REM only grows the X pad by exactly what it grows viewW by -- the X axis
-    # still collapses to (near-)zero either way, and the Y axis (untouched by V_PAD_X_REM) does
-    # not move at all.
+    css_lg = re.search(r"body\.mpv\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
+    assert css_lg, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
+    large_view_w_px = Decimal(iround_half_away(Decimal(css_lg.group(1)) * f))
+    box_left = _js_const(js, "V_BOX_LEFT_REM")
+    shift_x_large_pre_f = Decimal(_js_const(js, "V_PAD_X_REM")) - Decimal(box_left) * xf
+    tick_right_large_pre_f = shift_x_large_pre_f + track_w * xf + Decimal(MM_TICK_OVERHANG) * xf
+    tick_right_large_px = tick_right_large_pre_f * f   # rendered continuously -- NOT rounded
+    margin_large = large_view_w_px - tick_right_large_px
+    assert margin_large >= 2, (
+        "Large: the surface (%s) clears the tick's own true right edge (%s) by only %spx" % (
+            large_view_w_px, tick_right_large_px, margin_large))
 
 
 def test_the_reachable_minimap_gap_equals_surface_h_minus_track_y():
@@ -799,7 +922,7 @@ def test_the_two_centre_captions_icons_sit_at_their_tuned_y():
     hole, and 0 is the value where a DROPPED translateY would look identical.
     """
     css, tuner = _read("MoEProgress.css"), _read_tuner()
-    for cap, knob, prop, want in ((".mp-capP", "icoYP", "--icoyp", "0"),
+    for cap, knob, prop, want in ((".mp-capP", "icoYP", "--icoyp", "0.5"),
                                   (".mp-capC", "icoYC", "--icoyc", "1")):
         decls = _sole_rule_decls(css, cap + " .mp-ico", "MoEProgress.css")
         got = re.search(r"\btransform:\s*translate\(0rem,\s*(-?[\d.]+)rem\)\s*;", decls)
@@ -1146,13 +1269,95 @@ def _lg_completeness(name):
             {(s[len(_LG):], p) for s, body in large.items() for p, _v in _decls(body)})
 
 
+# PER-MARK TUNED LEVERS -- the maintainer's explicit scope call (see MoEProgress.css's own note
+# above `.mp-cap .mp-ico.mk1`/`.mp-cap.side.mp-capR.mk1`): the requirement caption's icon<->number
+# gap (margin-right on `.mp-cap .mp-ico.mkN`) and its block<->bar gap (margin-left on
+# `.mp-cap.side.mp-capR.mkN`), for N in 1/2/3, are LITERAL per-mark values out of
+# tools/dev/icon_gap_tuner.html, not the base row times 4/3 -- and mk1's icon lever / mk2's capR
+# lever have no PER-SELECTOR base rule at all (they ride the shared `.mk` / `.mp-capR` rule
+# instead), which is what fails the completeness check below on top of the value check. NARROW:
+# only these six (selector, prop) pairs -- the shared, unsuffixed `.mk` base rule and every other
+# declaration in the file stay under the full x4/3 invariant.
+_MARK_EXEMPT = {(".mp-cap .mp-ico.mk1", "margin-right"),
+                (".mp-cap .mp-ico.mk2", "margin-right"),
+                (".mp-cap .mp-ico.mk3", "margin-right"),
+                (".mp-cap.side.mp-capR.mk1", "margin-left"),
+                (".mp-cap.side.mp-capR.mk2", "margin-left"),
+                (".mp-cap.side.mp-capR.mk3", "margin-left")}
+
+
 def test_the_large_block_twins_exactly_the_base_cascades_x_lengths():
-    # COMPLETE, both directions and per DECLARATION. A base x-length with no twin renders
-    # half-scaled horizontally under the large mode; a twin with no base x-length is a rule scaling
-    # something the root font already handled (or a selector typo that silently styles nothing).
+    # COMPLETE, both directions and per DECLARATION -- MODULO _MARK_EXEMPT, whose two structurally
+    # baseless twins (mk1 icon, mk2 capR -- see its docstring) are the maintainer's deliberate
+    # per-mark tuning, not a missing-twin bug. Any OTHER twin with no base x-length, or any missing
+    # twin at all (even a mark one), still fails here.
     want, got = _lg_completeness("MoEProgress.css")
-    assert got == want, "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
-        sorted(want - got), sorted(got - want))
+    assert got - _MARK_EXEMPT == want - _MARK_EXEMPT, \
+        "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
+            sorted(want - got), sorted((got - want) - _MARK_EXEMPT))
+    assert _MARK_EXEMPT & got == _MARK_EXEMPT, \
+        "a per-mark tuned twin vanished: %s" % sorted(_MARK_EXEMPT - got)
+
+
+def test_the_per_mark_tuned_levers_are_pinned_to_their_hand_measured_values():
+    # _MARK_EXEMPT above removed the ONLY test that touched these nine numbers -- they are
+    # hand-tuned by eye in tools/dev/icon_gap_tuner.html and cannot be re-derived from any
+    # formula, so a value regression (e.g. a future MoEEfficiency-style generator edit) needs its
+    # own tripwire. Each assertion is scoped to the EXACT (selector, property) tuple the value
+    # lives on -- mk1's Default icon lever lives on the SHARED `.mk` rule (mark_1 coincides with
+    # it), mk2's Default block gap lives on the SHARED base `.mp-cap.side.mp-capR` rule (mark_2
+    # coincides with it too) -- everything else has its own per-mark selector. Decimal, not float:
+    # this file compares CSS lengths for exact equality throughout.
+    css = _read("MoEProgress.css")
+
+    def rem(selector, prop):
+        return _rem(_sole_rule_decls(css, selector, "MoEProgress.css"), prop, "MoEProgress.css")
+
+    # mark_1 / mark_2 / mark_3, Default (base) row.
+    assert (rem(".mp-cap .mp-ico.mk", "margin-right"),
+            rem(".mp-cap .mp-ico.mk2", "margin-right"),
+            rem(".mp-cap .mp-ico.mk3", "margin-right")) == \
+        (Decimal("-1.250"), Decimal("1.000"), Decimal("4.000")), \
+        "the Default icon<->number lever drifted from its hand-tuned -1.250/1.000/4.000rem"
+    assert (rem(".mp-cap.side.mp-capR.mk1", "margin-left"),
+            rem(".mp-cap.side.mp-capR", "margin-left"),
+            rem(".mp-cap.side.mp-capR.mk3", "margin-left")) == \
+        (Decimal("1.000"), Decimal("3.000"), Decimal("5.000")), \
+        "the Default block<->bar gap drifted from its hand-tuned 1.000/3.000/5.000rem"
+
+    # mark_1 / mark_2 / mark_3, Large (.mp-lg) row -- every one of these six has its OWN per-mark
+    # selector (see the block's own note), none rides a shared rule.
+    assert (rem(".mp-lg .mp-cap .mp-ico.mk1", "margin-right"),
+            rem(".mp-lg .mp-cap .mp-ico.mk2", "margin-right"),
+            rem(".mp-lg .mp-cap .mp-ico.mk3", "margin-right")) == \
+        (Decimal("-1.250"), Decimal("1.000"), Decimal("3.000")), \
+        "the Large icon<->number lever drifted from its hand-tuned -1.250/1.000/3.000rem"
+    assert (rem(".mp-lg .mp-cap.side.mp-capR.mk1", "margin-left"),
+            rem(".mp-lg .mp-cap.side.mp-capR.mk2", "margin-left"),
+            rem(".mp-lg .mp-cap.side.mp-capR.mk3", "margin-left")) == \
+        (Decimal("1.000"), Decimal("3.000"), Decimal("5.000")), \
+        "the Large block<->bar gap drifted from its hand-tuned 1.000/3.000/5.000rem"
+
+
+def test_the_top_row_icons_device_px_nudge_is_pinned_both_sizes():
+    # .mp-capP .mp-ico's translate() Y arg, the maintainer's "lower the top-row icon 0.5 device
+    # px" nudge. UNLIKE the sibling Damage Efficiency bar's .mp-cap.up .mp-ico, this one gets NO
+    # Large-specific override -- it rides SIZE_F like every other untouched Y-length on this bar
+    # (.mp-capC's own icon Y does the same), landing on 0.625 device px under Large rather than an
+    # exact 0.5 -- a known, accepted drift (see MoEProgress.css's own note above the interface-
+    # scale correction it also needed). Only the Default value is a literal to pin.
+    css = _read("MoEProgress.css")
+
+    def translate_y(selector):
+        decls = _sole_rule_decls(css, selector, "MoEProgress.css")
+        match = re.search(r"translate\(\s*-?[\d.]+rem\s*,\s*(-?[\d.]+)rem\s*\)", decls)
+        assert match, "MoEProgress.css: %s has no two-arg translate()" % selector
+        return Decimal(match.group(1))
+
+    assert translate_y(".mp-capP .mp-ico") == Decimal("0.5"), \
+        "the Default top-row icon Y drifted from its hand-measured 0.5rem"
+    assert "transform" not in _sole_rule_decls(css, ".mp-lg .mp-capP .mp-ico", "MoEProgress.css"), \
+        "no Large-specific transform is expected on .mp-capP .mp-ico -- it rides SIZE_F alone"
 
 
 # The three declarations that are NOT the base times 4/3 -- each mixes in a term that does NOT take
@@ -1172,9 +1377,15 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
     checked = 0
     for selector, body in large.items():
         bare = selector[len(_LG):]
-        assert bare in base, "%s overrides a rule that does not exist" % selector
-        base_decls = dict(_decls(base[bare]))
         for prop, value in _decls(body):
+            if (bare, prop) in _MARK_EXEMPT:
+                # The per-mark tuned lever: SKIPPED before `bare in base` on purpose -- mk1's icon
+                # and mk2's capR twin have no per-selector base rule at all (see _MARK_EXEMPT's
+                # docstring), so asserting that would fail for a reason this test is not about.
+                # Its presence is already proven by the completeness test above.
+                continue
+            assert bare in base, "%s overrides a rule that does not exist" % selector
+            base_decls = dict(_decls(base[bare]))
             assert prop in _X_SCALE, \
                 "%s { %s } is not an x-length -- the root font already scales it, so a .mp-lg " \
                 "rule DOUBLE-applies SIZE_F" % (selector, prop)
@@ -1186,15 +1397,16 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
                                                                   base_decls[prop])
             checked += 1
     # RE-DERIVED, not transcribed: the twinned x-lengths (`want`, proven COMPLETE by
-    # test_the_large_block_twins_exactly_the_base_cascades_x_lengths above) minus the three
-    # RE_DERIVED exceptions this loop `continue`s past without incrementing `checked`. A blind
+    # test_the_large_block_twins_exactly_the_base_cascades_x_lengths above) minus the RE_DERIVED
+    # and MARK_EXEMPT exceptions this loop `continue`s past without incrementing `checked`. A blind
     # literal bump here is exactly how a mutated twin count would go unnoticed -- this fails if
     # either set drifts, not just if a twin is missing.
     want, _got = _lg_completeness("MoEProgress.css")
-    expected = len(want) - len(_RE_DERIVED & want)
+    expected = len(want) - len(_RE_DERIVED & want) - len(_MARK_EXEMPT & want)
     assert checked == expected, (
-        "expected %d straight x4/3 declarations (%d twinned x-lengths minus %d re-derived "
-        "exceptions), checked %d" % (expected, len(want), len(_RE_DERIVED & want), checked))
+        "expected %d straight x4/3 declarations (%d twinned x-lengths minus %d re-derived minus "
+        "%d per-mark exceptions), checked %d" % (expected, len(want), len(_RE_DERIVED & want),
+                                                  len(_MARK_EXEMPT & want), checked))
 
 
 def test_the_large_block_carries_no_keyframe_and_no_vertical_length():

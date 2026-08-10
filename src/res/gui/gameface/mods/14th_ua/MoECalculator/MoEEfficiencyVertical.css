@@ -67,13 +67,31 @@ body.mev #moe-bar-root {
    MoEEfficiency.js's V_CLIP_B_REM note, and its sibling MoEProgress.js's, for the derivation). This
    rule only keeps describing whatever the surface actually is, and it stays a plain rem box either
    way, so it cannot reflow the composition when the surface shrinks past it. */
-body.mev #moe-bar-box { width: 116rem; height: 318rem; }
+/* WIDTH IS V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM (54 + 52 + -6), a SPLIT pad now, NOT + 2*PAD_REM
+   -- see MoEEfficiency.js's V_PAD_X_REM note: this bar's own extreme is `.mev-cap.bt` (the
+   current-damage + delta row), not the mark rows -- an earlier pass only checked the mark rows and
+   undersized this at 124rem, which is why the LEFT pad grew to 52. Height is untouched -- V_PAD_X_REM
+   only ever widens X.
+   V_BOX_W_REM ITSELF IS 54, NOT 96 -- a SEPARATE, asymmetric trim of `.mev-backdrop`'s own drawn
+   width (right edge only, V_BOX_LEFT_REM below untouched), live-measured correct: 52+54==106 lands
+   exactly on the minimap's own edge (EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG ==
+   95+8+3==106) -- keep it, see MoEEfficiency.js's fact 3.
+   THE RIGHT PAD (V_PAD_XR_REM, -6) IS A SEPARATE, SMALLER KNOB -- it CLIPS `.mev-backdrop`'s own
+   (already trimmed) drawn width a little further short of its own right edge, down to just past the
+   track's own tick overhang PLUS a 2px margin (EFFICIENCY_MM_TRACK_X carries no hand correction, so
+   the tick's own true position needs no re-derivation the way the sibling bar's does -- but a flush,
+   zero-margin boundary is still the "rounding could shave a px and eat the ink" risk the margin
+   heads off), leaving a real 6px clearance to the minimap too. This is the fix for the invisible
+   SURFACE reaching into the minimap's first column (see MoEEfficiency.js's own four-point note for
+   the full derivation); it costs nothing visible, since no caption ink reaches that far right
+   (every caption here is anchored to the LEFT). */
+body.mev #moe-bar-box { width: 100rem; height: 318rem; }
 .mev-backdrop {
   position: absolute;
   top: -80rem;
   left: -40rem;
   height: 360rem;
-  width: 96rem;
+  width: 54rem;
   z-index: 0;
 }
 .mev-backdrop::before {
@@ -169,6 +187,16 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
   font-size: 12rem;
   line-height: 15.5rem;
 }
+/* PER-MARK block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 already exist
+   as three CONCURRENT rows (unlike the Moving Average bar's single reused capR), each with its
+   own static class, so no new plumbing is needed here -- unlike the horizontal Moving Average
+   bar (see MoEProgress.js's setIco()), which had none until this pass. Compound selectors here
+   are (0,3,0), CLEANLY beating the (0,2,0) base rule above on specificity -- no source-order
+   tie. Each collapses the base rule's two separate translateX() calls (the shared tick-overhang
+   clearance and the per-row residual) into the ONE combined value the tuner reports. */
+.mev-cap.lf.r1 { transform: translateY(50%) translateX(-2.000rem); }
+.mev-cap.lf.r2 { transform: translateY(50%) translateX(-4.000rem); }
+.mev-cap.lf.r3 { transform: translateY(50%) translateX(-6.000rem); }
 .mev-cap.r1 { bottom: 25%; }
 .mev-cap.r2 { bottom: 50%; }
 .mev-cap.r3 { bottom: 75%; }
@@ -178,6 +206,14 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
    r4 sits above the track's END, not beside a tick, so it needs a DIFFERENT constant push than
    r1-r3's --capxreq to land back over the track -- still a fixed constant, never a function of
    the numeral's own width. */
+/* NUDGE FULLY CANCELLED (2026-08-10, three corrections): a LEFT nudge landed here, then got wrongly
+   halved on Large too, then the maintainer asked for the SAME magnitude back RIGHT on Large -- which
+   cancels the un-halved LEFT nudge exactly (verified with Decimal, see .mp-lg .mev-cap.tp's own
+   note). Default carries no nudge and never did past the first correction; Large now carries none
+   either. Both sit at the tuner's own pre-nudge residual, 11 (the shared -3rem tick-overhang
+   clearance is untouched). Mind the clip: this caption is right-anchored, so "left" is the overflow
+   direction -- see MoEEfficiency.js's V_PAD_X_REM note, which re-derives this row as part of the
+   surface's own worst-case budget. */
 .mev-cap.tp {
   bottom: 100%; padding-bottom: 4rem;
   transform: translateX(-3rem) translateX(11rem);
@@ -188,7 +224,14 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
    no moving marker element; only the CURRENT TICK (above) still tracks the fill, which is why
    MoEEfficiency.js's capClampPct corridor is horizontal-only and is skipped entirely here.
    top:100% is the one side Coherent's margin drop does NOT apply to (see r4 above), so margin-top
-   here is fine as written. */
+   here is fine as written.
+   NUDGE FULLY CANCELLED (2026-08-10, three corrections) -- see .mev-cap.tp's own note above for the
+   full history; the maintainer's final "7px RIGHT on Large" request cancels the un-halved "7px
+   LEFT" nudge exactly (11.733+5.6==17.333, verified with Decimal). Default and Large both sit back
+   at the tuner's own pre-nudge residual, 13. This row (numeral + BARE signed delta, no parens) is
+   THIS FILE'S OWN EXTREME, exactly as .mpv-capC is for the Moving Average bar's sibling sheet -- see
+   MoEEfficiency.js's V_PAD_X_REM note for the full re-derivation; it is what actually sizes the
+   surface, not the mark rows. */
 .mev-cap.bt {
   top: 100%; margin-top: 3rem;
   transform: translateX(-3rem) translateX(13rem);
@@ -223,7 +266,12 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
    own mark correction. Literal, not slider-driven. */
 .mev-cap .mev-ico.bm { margin-left: 1.253rem; }
 .mev-cap .mev-ico.mk { margin-left: -1rem; }
-.mev-cap.lf .mev-ico { transform: translateY(0.25rem); }
+/* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: mark_1 keeps the shared -1rem above
+   unchanged (it happens to coincide); mark_2/mark_3 get their own. Same (0,3,0)-tie-by-source-
+   order convention as the horizontal sibling's identical split. */
+.mev-cap .mev-ico.mk2 { margin-left: 0.500rem; }
+.mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }
+.mev-cap.lf .mev-ico { transform: translateY(1rem); }
 .mev-cap.tp .mev-ico { transform: translateY(-0.25rem); }
 .mev-cap.bt .mev-ico { transform: translateY(0.5rem); }
 .mev-ico::before {
@@ -344,18 +392,50 @@ body.mev #moe-bar-box { width: 116rem; height: 318rem; }
    notice the horizontal bar's twin creeping back in. */
 /* HAND-EDIT 5/5: the emit's `.mev-lg #mev-bar-root` plus the shim rule the tuner never emits, both
    scoped `body.mev.mp-lg` (1,2,1) so they out-specify the horizontal sheet's own
-   `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is
-   V_BOX_W_REM*SIZE_XF + 2*PAD_REM == 128 + 20; its HEIGHT is unchanged (the root font carries
-   SIZE_F on a y-length), exactly as the horizontal block's own twin restates width only. */
+   `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is the
+   PRE-SIZE_F quantity MoEBarTransient.applySize computes before its own final `* f`:
+   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 72 + 52 + -8.667 == 115.333
+   (V_PAD_XR_REM_LARGE is its own literal, -8.667, NOT V_PAD_XR_REM*SIZE_XF -- see
+   MoEEfficiency.js's own note); its HEIGHT is unchanged (the root font carries SIZE_F on a
+   y-length), exactly as the horizontal block's own twin restates width only. THIS SHIM IS
+   DOCUMENT REM, NOT LOGICAL PX -- the root font (1.25 under Large) supplies the SIZE_F when the
+   DOCUMENT renders this box, so 115.333rem here reproduces the same round(115.333*1.25)==144
+   logical px MoEBarTransient.applySize pushes via resizeViewRem -- do not write 144 here, that
+   would double the factor.
+   THE BACKDROP'S OWN LARGE WIDTH BELOW IS A LITERAL 98rem, NOT V_BOX_W_REM*SIZE_XF (72, the naive
+   *4/3 twin of the tuned Default 54) -- see MoEEfficiency.js's fact 3: 98 lands the backdrop's own
+   right edge exactly on the minimap's edge (52+98==150==edge_x(137)+MM_GAP(8)+
+   MM_TICK_OVERHANG_LARGE(5)), keep it. The surface above is narrower still than even the trimmed
+   backdrop (115.333 < 52+98==150, the SAME pre-SIZE_F rem space) -- that is the SEPARATE surface
+   fix (fact 4): the surface clips a little more of the backdrop's own right-side bleed, to leave a
+   real margin (6px to the minimap, ~2.3px to the tick's own true right edge) instead of the
+   backdrop's own flush zero-clearance edge. */
 body.mev.mp-lg #moe-bar-root { width: 4rem; }
-body.mev.mp-lg #moe-bar-box { width: 148rem; }
+body.mev.mp-lg #moe-bar-box { width: 115.333rem; }
 .mp-lg .mev-track { width: 4rem; }
-.mp-lg .mev-backdrop { left: -53.333rem; width: 128rem; }
+.mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }
 .mp-lg .mev-tick.mev-req { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-tick.mev-cur { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-cap.lf { transform: translateY(50%) translateX(-4rem) translateX(-2.667rem); }
+/* Large's per-row block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html -- LITERAL, not
+   the Default row's *4/3 (-2/-4/-6 * 4/3 would be -2.667/-5.333/-8), same convention as the
+   horizontal Moving Average bar's Large block-gap. (0,4,0), cleanly beating the base .mp-lg rule
+   above (also (0,3,0) once .mp-lg is added -- still no tie, one extra class each). */
+.mp-lg .mev-cap.lf.r1 { transform: translateY(50%) translateX(-3.000rem); }
+.mp-lg .mev-cap.lf.r2 { transform: translateY(50%) translateX(-5.000rem); }
+.mp-lg .mev-cap.lf.r3 { transform: translateY(50%) translateX(-7.000rem); }
+/* NUDGE CANCELLED, LARGE INCLUDED (2026-08-10, third correction): the maintainer's follow-up
+   request -- "top block 4px RIGHT, bottom block 7px RIGHT" on Large -- is the EXACT opposite of
+   the un-halved LEFT nudge this file carried a moment ago (4px / 7px LEFT, restored two corrections
+   back). Verified with Decimal, not assumed: the un-halved Large values were 11.467 (.tp) /
+   11.733 (.bt); a same-magnitude RIGHT move, expressed the same way the original nudge was (device
+   px / SIZE_F(1.25) == logical rem: 4/1.25==3.2, 7/1.25==5.6), lands EXACTLY back on the pre-nudge
+   HEAD literals: 11.467+3.200==14.667 and 11.733+5.600==17.333, both exact in Decimal, no residue.
+   So this is a full cancellation, not a delta application -- Large now carries NO nudge either,
+   byte-identical to both HEAD and the tuner's own fresh emit (X43(11)==14.667, X43(13)==17.333).
+   Default already carries none (see above). */
 .mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(14.667rem); }
 .mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }
 .mp-lg .mev-cap .mev-ico { margin-left: 1.333rem; }
@@ -363,6 +443,12 @@ body.mev.mp-lg #moe-bar-box { width: 148rem; }
    applied by hand to the Default literal, never re-derived from the shared margin-left knob. */
 .mp-lg .mev-cap .mev-ico.bm { margin-left: 1.671rem; }
 .mp-lg .mev-cap .mev-ico.mk { margin-left: -1.333rem; }
+/* PER-MARK Large levers, hand-tuned in tools/dev/icon_gap_tuner.html -- LITERAL, not the Default
+   row's *4/3 (-1/0.5/3 * 4/3 would be -1.333/0.667/4), and mark_1 needs its OWN override here
+   even though it didn't at Default (the shared Large .mk above is -1.333, not -1). */
+.mp-lg .mev-cap .mev-ico.mk1 { margin-left: -1.000rem; }
+.mp-lg .mev-cap .mev-ico.mk2 { margin-left: 1.000rem; }
+.mp-lg .mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }
 .mp-lg .mev-cap.bt .mev-d { transform: translate(-5.6rem, 2.5rem); }
 
 /* Axis + timings for the JS (mirrored in MoEBarTransient.js / MoEEfficiency.js -- the VERTICAL

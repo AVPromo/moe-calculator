@@ -170,6 +170,21 @@ def test_the_push_keeps_no_state_between_calls(epoch):
         "push_efficiency grew module state again -- the delta latch lives in the JS now"
 
 
+def test_push_gates_ctrl_held_on_free_alignment_same_as_progress_bar(monkeypatch):
+    # This bar shares `_ctrl_relevant()` with push_progress (see test_progress_bridge.py for the
+    # full report/matrix); this is the guard that the WIRING here actually calls it too, rather
+    # than the raw `_ctrl_held` global -- the two bars' pushes are independent call sites and a
+    # fix landing in one is not automatically wired into the other.
+    for alignment, ctrl_down, expected in (
+        (mod_settings.PROGRESS_ALIGN_FIXED, True, False),   # the reported repro
+        (mod_settings.PROGRESS_ALIGN_FREE, True, True),      # Free must keep working
+        (mod_settings.PROGRESS_ALIGN_FREE, False, False),
+    ):
+        monkeypatch.setattr(battle_bridge, "_ctrl_held", ctrl_down)
+        monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_ALIGNMENT_KEY, alignment)
+        assert _push(2000)["ctrlHeld"] is expected, (alignment, ctrl_down)
+
+
 # --- the hasData false path ---------------------------------------------------
 
 def test_an_unusable_axis_pushes_zero_for_every_stop():

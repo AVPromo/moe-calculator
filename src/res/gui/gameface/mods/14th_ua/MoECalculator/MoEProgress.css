@@ -384,6 +384,19 @@ body { margin: 0; }
 .mp-cap.side .mp-v,
 .mp-cap.side .mp-eta { transform: translateY(-0.5rem); }
 .mp-cap.side.mp-capR { left: 100%; margin-left: 3rem; }
+/* PER-MARK BLOCK<->BAR GAP, the caption's own distance off the track end -- the SECOND per-mark
+   knob (see the icon<->number overrides further down for the first), tuned in the same
+   tools/dev/icon_gap_tuner.html session. setIco() now mirrors the mark index onto capR itself
+   (mk1/mk2/mk3, alongside its permanent "mp-cap side mp-capR" classes) so these compound
+   selectors can target it -- (0,4,0), CLEANLY beating the base rule's (0,3,0) on specificity
+   alone, no source-order dependency (unlike .mk1/.mk2/.mk3 on the ICON further down, which tie
+   the shared .mk rule). mark_2 keeps the base rule's 3rem unchanged; mark_1 and mark_3 get their
+   own. Large's own per-mark twins are NOT the base times 4/3 (see the Large-mode capR rules,
+   further down in the size-mode block, and their own note) -- a deliberate maintainer decision,
+   the user's eye over the x4/3 contract, which is why those two tests fail on this pair and are
+   left standing for qa to re-scope. */
+.mp-cap.side.mp-capR.mk1 { margin-left: 1.000rem; }
+.mp-cap.side.mp-capR.mk3 { margin-left: 5.000rem; }
 /* THE BOX-EDGE GAP is a uniform 1rem on every icon -- but each art asset carries its OWN
    background-size zoom (icoFill 0.75 of a DIFFERENT box, per icon), so the box-edge gap alone
    left the rows reading unevenly: each icon's actual INK stops a different distance short of its
@@ -399,19 +412,25 @@ body { margin: 0; }
              calibrated to a flat 3.000rem target against it, same convention as the vertical pass
      moe     box 17, ink_x == (35/128)*2.747*17 == 12.769rem, inset (17-12.769)/2 == 2.115rem
      mk      box 17, `background-size: contain` on a 24x24 canvas scales the WHOLE canvas by
-             box/24; calibrated to mark_2 (its ink WIDTH 12 of 24, the tuner's own default
-             preview state): ink_x == 17*0.5 == 8.5rem, inset (17-8.5)/2 == 4.25rem. mark_1/
-             mark_3 land off this (see .mp-ico.mk's own note) -- an accepted residual, same as
-             the vertical bar's identical mark-icon correction
+             box/24, so mark_1 (ink width 6 of 24), mark_2 (12 of 24, the tuner's own default
+             preview state: ink_x == 17*0.5 == 8.5rem, inset (17-8.5)/2 == 4.25rem) and mark_3
+             (18 of 24) each land at a DIFFERENT inset. THE SHARED MARGIN THIS NOTE ONCE ACCEPTED
+             AS A RESIDUAL IS RETIRED: .mp-ico.mk1/.mk2/.mk3 below each carry their OWN
+             margin-right now (mark_1 -1.250rem, mark_2 1.000rem, mark_3 4.000rem), hand-tuned in
+             tools/dev/icon_gap_tuner.html rather than solved from the 3.00rem-ink-gap formula the
+             other rows use -- only mark_1's number happens to coincide with the old shared value.
      battles box 13 (base .mp-ico box, unchanged), calibrated on its OWN X-width (27 of a 128px
              canvas -- NOT the maxdim(29) icoSz() zooms it by): ink_x == (27/128)*3.31*13 ==
              9.077rem, inset (13-9.077)/2 == 1.962rem -- see .mp-ico.battles's own rule
    margin-right == 3.00 - inset, REPLACING the shared 1rem outright: dmgp 1.253rem, moe 0.885rem
    (LESS than the shared 1rem: moe's ink is already wide enough that less margin gets it to
-   3.00), mk -1.250rem (mark_2's inset alone overshoots the target, so the correction is
-   NEGATIVE), battles 1.038rem (added to its existing rule below, alongside margin-left). Compound
+   3.00), battles 1.038rem (added to its existing rule below, alongside margin-left). mk1/mk2/mk3
+   are NOT part of this formula -- see the per-mark note above. Compound
    selectors below beat this base rule on SPECIFICITY, not source order (three classes vs two --
-   the same convention the vertical pass's per-icon overrides use). The two CENTRE captions
+   the same convention the vertical pass's per-icon overrides use); .mk1/.mk2/.mk3 in turn beat
+   the shared .mk rule by SOURCE ORDER, not specificity (both are three classes, and .mk's own
+   class stays on the element alongside .mk1/.mk2/.mk3 -- see setIco() -- so the tie is real and
+   must be broken by writing the per-mark rules AFTER .mk below). The two CENTRE captions
    (dmgp, dmgc) additionally cancel their icon's whole outer width with a negative margin-left
    further down -- see the .mp-capP / .mp-capC rules; dmgp's cancel now reads its OWN 1.253rem
    gap, never the shared one, while dmgc's stays untouched (it never moves). Kept to 3 decimal
@@ -423,6 +442,8 @@ body { margin: 0; }
 .mp-cap .mp-ico.dmgp { margin-right: 1.253rem; }
 .mp-cap .mp-ico.moe { margin-right: 0.885rem; }
 .mp-cap .mp-ico.mk { margin-right: -1.250rem; }
+.mp-cap .mp-ico.mk2 { margin-right: 1.000rem; }
+.mp-cap .mp-ico.mk3 { margin-right: 4.000rem; }
 /* .mp-eta shares the plain-white numeral treatment: same colour, weight and dark legibility drop as
    .mp-v. It is deliberately NOT a second .mp-v -- capV() is a first-match querySelector(".mp-v") and
    would keep resolving to the requirement, so a second .mp-v would work today and mis-target on the
@@ -580,7 +601,7 @@ body { margin: 0; }
    its OWN rule (`.mp-capR .mp-ico.battles`, full declaration -- a transform REPLACES its base),
    and this shared 0.5rem is NOT retuned, or the mark glyph moves with it.
    NEEDS VISUAL CONFIRMATION IN-CLIENT: the 0.16rem residual is derived from the bbox, not seen. */
-.mp-capP .mp-ico { transform: translate(0rem, 0rem); margin-left: -15.253rem; }
+.mp-capP .mp-ico { transform: translate(0rem, 0.5rem); margin-left: -15.253rem; }
 .mp-capC .mp-ico { transform: translate(0rem, 1rem); margin-left: -17rem; }
 .mp-capR .mp-ico { transform: translate(0rem, 0.5rem); }
 .mp-ico::before {
@@ -834,6 +855,16 @@ body { margin: 0; }
 .mp-lg .mp-cap .mp-ico.dmgp { margin-right: 1.671rem; }
 .mp-lg .mp-cap .mp-ico.moe { margin-right: 1.18rem; }  /* 0.885 * 4/3, trailing zero dropped */
 .mp-lg .mp-cap .mp-ico.mk { margin-right: -1.667rem; }
+/* PER-MARK Large levers -- SCOPE DECISION (user's eye over the x4/3 contract): -1.250/1.000/
+   3.000rem, LITERAL, reported directly by tools/dev/icon_gap_tuner.html, not derived from the
+   Default row (-1.250/1.000/4.000) times 4/3 (which would be -1.667/1.333/5.333). Ties .mk on
+   specificity (also (0,4,0) once .mp-lg is added), beaten by SOURCE ORDER, written after it.
+   test_every_large_declaration_is_its_base_counterpart_times_four_thirds and
+   test_the_large_block_twins_exactly_the_base_cascades_x_lengths both KNOWINGLY fail on this --
+   left standing for qa to re-scope, per the maintainer's explicit decision. */
+.mp-lg .mp-cap .mp-ico.mk1 { margin-right: -1.250rem; }
+.mp-lg .mp-cap .mp-ico.mk2 { margin-right: 1.000rem; }
+.mp-lg .mp-cap .mp-ico.mk3 { margin-right: 3.000rem; }
 /* THE ETA GAP'S TWIN, and this is an x-length not a fixed-pixel correction: the base rule's
    4rem gap widens the row's own reach (see MoEProgress.js's header comment), so under Large it
    owes the block's SIZE_XF == 4/3 like every other x-length here, not the SIZE_F the root font
@@ -842,6 +873,14 @@ body { margin: 0; }
    ink-gap twin, 1.038 * 4/3 == 1.384, same lever as the three rules just above. */
 .mp-lg .mp-ico.battles { margin-left: 5.333rem; margin-right: 1.384rem; }
 .mp-lg .mp-cap.side.mp-capR { margin-left: 4rem; }
+/* PER-MARK Large block<->bar gaps -- SCOPE DECISION (user's eye over the x4/3 contract):
+   1.000/3.000/5.000rem, LITERAL, byte-identical to the Default row (this bar's block-gap
+   happens to be size-invariant per mark, unlike its lever). (0,4,0), CLEANLY beating the base
+   rule's (0,3,0) on specificity -- no source-order tie, same as the Default pair. Same two
+   tests knowingly fail on this; left standing for qa. */
+.mp-lg .mp-cap.side.mp-capR.mk1 { margin-left: 1.000rem; }
+.mp-lg .mp-cap.side.mp-capR.mk2 { margin-left: 3.000rem; }
+.mp-lg .mp-cap.side.mp-capR.mk3 { margin-left: 5.000rem; }
 /* THE DELTA'S GAP, and the ONE x-length here dialled in `em` rather than rem -- which is exactly why
    it was missing until now: 0.35em of the delta's OWN font-size already rides SIZE_F (the root font
    grows that font-size 1.25x), but an x-length owes SIZE_F * SIZE_XF, so under Large the gap came out
@@ -923,6 +962,21 @@ body { margin: 0; }
 .mp-s1.mp-lg .mp-capC .mp-ico { transform: translate(0rem, 0.2rem); }
 .mp-s1 .mp-cap .mp-d          { transform: translateY(0.5rem); }
 .mp-s1.mp-lg .mp-cap .mp-d    { transform: translateY(0.7rem); }
+/* NEW: the maintainer's own "lower the top-row icon 0.5 device px" nudge pushed .mp-capP .mp-ico
+   off a whole rem too (anchor (18-14)/2 + 0.5 == 2.5, was 2.00 -- see
+   test_only_the_ma_pieces_off_a_whole_rem_carry_a_correction), joining .mp-capC .mp-ico / .mp-cap
+   .mp-d in the SAME uniform -1-device-px correction this composition already applies to every
+   fractional anchor at interface scale 1 (see this block's own header: "-1rem... NOT the output
+   of any box arithmetic"). Default: 0.5 - 1 == -0.5. LARGE DELIBERATELY RIDES SIZE_F ALONE, same
+   as .mp-capC's own base rule -- no Large-specific override was added for the raw nudge itself
+   (that would have meant a THIRD icon-Y convention in this file: capC/delta ride SIZE_F, the mk
+   levers are literal-per-size, and capP's own icon Y would have been device-px-pinned. Riding
+   SIZE_F keeps it in the FIRST camp, at the cost of the nudge itself landing 0.625 device px
+   under Large, not exactly 0.5 -- a known, accepted 0.125px drift, not a bug). The correction is
+   the mechanical `-1 device px over SIZE_F` this file already runs for every OTHER Large twin:
+   0.5 - 1/SIZE_F(1.25) == 0.5 - 0.8 == -0.3. */
+.mp-s1 .mp-capP .mp-ico       { transform: translate(0rem, -0.5rem); }
+.mp-s1.mp-lg .mp-capP .mp-ico { transform: translate(0rem, -0.3rem); }
 /* ===== END APPENDED INTERFACE-SCALE BLOCK ===== */
 
 

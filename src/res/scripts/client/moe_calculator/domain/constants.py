@@ -324,12 +324,13 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 #     edge_x == SHIFT_X_REM + trackW == (padX - V_BOX_LEFT_REM) + 3
 #     edge_y == SHIFT_Y_REM + barLen == (PAD_REM - V_BOX_TOP_REM)  + 200
 #
-# `padX` IS THE SURFACE'S X SLACK AND IS NOT PAD_REM ON BOTH BARS. The Moving Average bar's
-# vertical surface reaches further sideways than its backdrop does, because its right-anchored
-# captions grow leftward past it and PAD_REM alone CLIPPED them (MoEProgress.js's V_PAD_X_REM == 63,
-# which carries the whole derivation -- including why it is applied to BOTH sides even though only
-# the left needs it: the centred alignment centres the SURFACE, so an asymmetric one moves the bar);
-# the Damage Efficiency bar still uses PAD_REM on all four sides.
+# `padX` IS THE SURFACE'S X SLACK AND IS NOT PAD_REM ON EITHER BAR NOW. Both vertical surfaces
+# reach further sideways than their backdrops do, because both bars' right-anchored captions grow
+# leftward past them and PAD_REM alone CLIPPED them (MoEProgress.js's V_PAD_X_REM == 63; the
+# Damage Efficiency bar's own per-mark caption pass later ate its PAD_REM margin too, so it now
+# carries the SAME fix, V_PAD_X_REM == 14 -- MoEEfficiency.js's own note carries that derivation).
+# Both apply their pad to BOTH sides even though only the left needs it: the centred alignment
+# centres the SURFACE, so an asymmetric one moves the bar.
 # GROWING THAT SLACK MOVES THE TRACK INSIDE THE SURFACE, so this constant has to grow with it or the
 # whole bar slides left by the difference -- the surface widened on the left alone, the composition
 # did not move within it, and nothing on screen may change.
@@ -339,10 +340,33 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # carries SIZE_XF == 4/3 on every x-length AND SIZE_F == 1.25 through the root font (memory
 # `mp-lg-x-lengths-are-pure-sizexf-not-sizef`; the pad is NOT an x-length -- see
 # MoEBarTransient.applySize, which re-derives shiftX as `padX - boxLeft * xf`):
-#   Moving Average:    (63 + 34) + 3 == 100
-#     LARGE:           (63 + 34*4/3 + 3*4/3) * 1.25 == 112.333 * 1.25 == 140.417 -> 140
-#   Damage Efficiency: (10 + 40) + 3 == 53
-#     LARGE:           (10 + 40*4/3 + 3*4/3) * 1.25 == 67.333 * 1.25 == 84.167 -> 84
+#   Moving Average:    (70 + 34) + 3 == 107
+#     LARGE:           (70 + 34*4/3 + 3*4/3) * 1.25 == 119.333 * 1.25 == 149.167 -> 149
+#   Damage Efficiency: (52 + 40) + 3 == 95
+#     LARGE:           (52 + 40*4/3 + 3*4/3) * 1.25 == 109.333 * 1.25 == 136.667 -> 137
+# BOTH PADS GREW TWICE, in the SAME two passes, for the SAME reason each time -- a caption's own
+# translateX moved further left (more overflow) and the surface pad had to grow with it or clip:
+#   Moving Average V_PAD_X_REM: 63 -> 70. The maintainer's "move the bottom block (current damage
+#     + delta) left 7px" nudge shrank .mpv-capC's translateX from 16 to 9, and .mpv-capC was
+#     ALREADY this file's extreme row (MoEProgress.js's own derivation) -- the pad grew by the
+#     identical +7 to restore the SAME ~4.5rem margin it had before the nudge.
+#   Damage Efficiency V_PAD_X_REM: 10 (plain PAD_REM) -> 14 -> 52, in two corrections to the SAME
+#     bug. First, the per-mark caption pass (icon_gap_tuner.html) pushed r1/r2/r3's mark_2/mark_3
+#     far enough left that PAD_REM's flat 10rem started clipping them, so this bar picked up the
+#     same widened-pad fix the Moving Average bar already had (10 -> 14) -- but that first pass
+#     ONLY checked the mark rows and used the wrong icon width for them (13rem, the shared base
+#     `.mev-ico` box, instead of the 16rem `.mev-ico.mk` override the mark icons actually render
+#     at), and it never checked `.mev-cap.bt` (the current-damage + delta row) at all -- the same
+#     "a gate that only watches one caption" mistake the Moving Average bar's OWN capC-is-the-
+#     extreme lesson already existed to prevent. Re-deriving every row (including .bt, whose
+#     16rem font + bare signed delta make IT this bar's true extreme, exactly as capC is for the
+#     Moving Average bar) needs 52, not 14 -- and the maintainer's OWN "move the top/bottom block
+#     left 4px/7px" nudges (MoEEfficiency.js's own V_PAD_X_REM note carries the exact reach) are
+#     folded into that same 52, not a THIRD separate growth.
+# EITHER GROWTH MOVES THE TRACK INSIDE ITS SURFACE, so the matching *_MM_TRACK_X(_LARGE) below had
+# to grow with it -- else the surface would have widened on the left, the track would have sat
+# further right INSIDE it, and the visible bar would have slid right into the minimap by the same
+# device-px count the pad grew (times SIZE_F under Large).
 #
 # A maintainer Ctrl+drag of this bar once landed 2 logical px off this derivation, and a second,
 # independent Ctrl+drag of the Moving Average bar landed 2px off ITS OWN pure derivation the OTHER
@@ -369,11 +393,19 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # of fixed hand-measured offset, not a composition length that scales with SIZE_F/SIZE_XF).
 #
 # THE DAMAGE EFFICIENCY BAR IS DELIBERATELY NOT GIVEN THIS CORRECTION. EFFICIENCY_MM_TRACK_X below
-# stays the pure derivation (53 / 84) -- its own single hand-drag (the FIRST one above) is still
-# just one data point, never confirmed by a second independent drag the way the Moving Average
-# bar's now is, and it has since been inspected in-game and accepted as correct as derived. The two
-# bars' compositions differ (different surfaces, different shiftX), so nothing here licenses
-# copying a Moving-Average-specific measurement onto its sibling.
+# stays the pure derivation (95 / 137, off the widened padX -- see above) -- its own single
+# hand-drag (the FIRST one above) is still just one data point, never confirmed by a second
+# independent drag the way the Moving Average bar's now is, and it has since been inspected in-game
+# and accepted as correct as derived. The two bars' compositions differ (different surfaces,
+# different shiftX), so nothing here licenses copying a Moving-Average-specific measurement onto
+# its sibling. That hand-drag predates BOTH the per-mark caption pass AND the top/bottom-block
+# nudges and their padX widenings, so it checked a MUCH narrower surface (edge_x 53) than the one
+# shipping now (95) -- a fresh in-game confirmation of the new position is owed more than ever.
+# THE MOVING AVERAGE BAR'S OWN -2 CORRECTION IS ALSO UNRE-CONFIRMED AT THE NEW 70 PAD. It is kept
+# here on the working assumption that it is a fixed engine-side miss independent of composition
+# width (its own history section above never varied with shiftX either) -- but every one of the
+# THREE drags that established it happened at a narrower V_PAD_X_REM than 70, so this too is a
+# should-hold, not a re-measured fact.
 # THE Y AXIS WAS DELIBERATELY LEFT ALONE by that same re-placement. The stored drag pair's y was 820,
 # i.e. 58 px BELOW the auto-placed 762, which would mean a bottom gap of -30 -- unreachable: the
 # engine clamps every window into [0, space - surface] in compiled C++ (memory
@@ -393,9 +425,9 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # (only the two VERTICAL ones do), so a horizontal bar beside the minimap has no tuned reference to
 # reproduce -- bar_window._resolve keeps passing the surface's own edges there, which is what it
 # always did. Do not invent the four numbers; tune them first if that alignment ever matters.
-PROGRESS_MM_TRACK_X = 98              # pure derivation 100, -2 measured hand-placement correction
-PROGRESS_MM_TRACK_X_LARGE = 138        # pure derivation 140, same flat -2 (see the comment above)
-EFFICIENCY_MM_TRACK_X = 53              # pure derivation, no correction (see the comment above)
-EFFICIENCY_MM_TRACK_X_LARGE = 84
+PROGRESS_MM_TRACK_X = 105              # pure derivation 107, -2 measured hand-placement correction
+PROGRESS_MM_TRACK_X_LARGE = 147         # pure derivation 149, same flat -2 (see the comment above)
+EFFICIENCY_MM_TRACK_X = 95              # pure derivation, no correction (see the comment above)
+EFFICIENCY_MM_TRACK_X_LARGE = 137
 MM_TRACK_Y = 290
 MM_TRACK_Y_LARGE = 363

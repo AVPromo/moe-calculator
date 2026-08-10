@@ -16,9 +16,9 @@ WHAT IS MIRRORED WHERE -- and the ONE place this differs from the Moving Average
     assertion below reads the `.mp-backdrop` rule -- the composition's true bounding box -- and
     MoEEfficiency.js's BOX_* consts quote it by name.
   * PAD_REM turns that box into the surface size pushed to the engine and into the rigid translate
-    into positive document coordinates -- but those SIX derivations now live ONE FILE OVER, in
+    into positive document coordinates -- but those FIVE derivations now live ONE FILE OVER, in
     the shared MoEBarTransient.js, parameterised over its cfg
-    (viewW/viewH/shiftX/shiftY/hitPadX/hitPadY off cfg.box*/cfg.pad). So the mirror chain has an
+    (viewW/viewH/shiftX/shiftY/hitPad off cfg.box*/cfg.pad). So the mirror chain has an
     extra link: MoEEfficiency.js must actually
     HAND its BOX_*/PAD_REM to createTransient (asserted), and the shared module must derive from
     them (asserted there). Which file owns which scrape is spelled out per test below; the BOX_*
@@ -153,6 +153,14 @@ def _tconst(name):
     return _js_const(_transient(), name, "MoEBarTransient.js")
 
 
+def _js_decimal_const(js, name, what="MoEEfficiency.js"):
+    """Like `_js_const`, but for a FRACTIONAL const (V_PAD_XR_REM_LARGE, -10.4) -- `_js_const`'s
+    integer-only regex refuses those."""
+    match = re.search(r"(?m)^const %s = (-?[\d.]+);" % name, js)
+    assert match, "%s: const %s not found" % (what, name)
+    return Decimal(match.group(1))
+
+
 def _size_factor(name):
     """One of the LARGE size mode's two factors, out of the SHARED MoEBarTransient.js.
 
@@ -234,23 +242,28 @@ def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
     # restore an invariant.
     #
     # THE X PAIR IS NOW SPELLED `padX`, NOT `pad`, and that is a generalisation rather than a
-    # change: `padX` is normalised to `pad` at the top of createTransient, so `2 * padX` and
-    # `padX - boxLeft` are byte-identical to what THIS bar always computed. Only the vertical
-    # Moving Average composition supplies its own (MoEProgress.js's V_PAD_X_REM -- its
+    # change: `padX` is normalised to `pad` at the top of createTransient. Both vertical
+    # compositions supply their own (MoEProgress.js's / MoEEfficiency.js's own V_PAD_X_REM -- their
     # right-anchored captions grow LEFTWARD past the backdrop and PAD_REM clipped them).
     #
-    # HIT PAD IS PER-AXIS (hitPadX off viewW, hitPadY off viewH), NOT ONE SHARED VALUE: a single
-    # `Math.ceil(Math.max(viewW, viewH) / 2)` on all four sides only zeroes whichever axis owns the
-    # larger dimension and OVER-pads the other into a negative extent instead of an exact zero --
-    # see MoEBarTransient.js's own header note. Splitting it is what makes the collapse exact on
-    # both axes regardless of which is bigger.
+    # `padXR` IS `padX`'s RIGHT-side twin, DEFAULTING TO `padX` (so `viewW == boxW + padX + padXR`
+    # is byte-identical to the old `boxW + 2*padX` for a composition -- THIS bar's horizontal AND
+    # this test's own shared-module check -- that never supplies its own): the vertical Minimap-
+    # anchored bars now DO supply a separate, smaller one (V_PAD_XR_REM), which CLIPS the backdrop's
+    # decorative right-side bleed down to just past the track's tick overhang instead of padding it
+    # symmetrically -- see each bar's own V_PAD_XR_REM note for why that asymmetry is safe.
+    #
+    # HIT PAD IS ONE SHARED VALUE (hitPad off Math.max(viewW, viewH)), NOT A PER-AXIS PAIR: WG's
+    # own confirmed wrapper (gui-part3.pkg) always passes four EQUAL values, and an oversized pad
+    # is accepted, not rejected -- so `Math.ceil(Math.max(viewW, viewH) / 2)` on all four sides is
+    # the recorded design, immune to the (top, right, bottom, left) argument order and to which
+    # axis's size the pad happens to be derived from. See MoEBarTransient.js's own header note.
     src = _transient()
-    for line in ("viewW = cfg.boxW + 2 * cfg.padX;",
+    for line in ("viewW = cfg.boxW + cfg.padX + cfg.padXR;",
                  "viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;",
                  "shiftX = cfg.padX - cfg.boxLeft;",
                  "shiftY = cfg.pad - cfg.boxTop;",
-                 "hitPadX = Math.ceil(viewW / 2);",
-                 "hitPadY = Math.ceil(viewH / 2);"):
+                 "hitPad = Math.ceil(Math.max(viewW, viewH) / 2);"):
         assert re.search(r"(?m)^\s*(?:const|let) " + re.escape(line), src), \
             "MoEBarTransient.js: lost the derivation `%s`" % line
 
@@ -298,26 +311,25 @@ def test_the_composition_is_translated_into_the_surface_by_the_shift():
 
 
 def test_the_hit_rect_is_collapsed_on_all_four_sides():
-    # THE SURFACE RECT IS THE MOUSE HIT RECT: a 480rem-wide strip across screen centre would
-    # steal HUD input. WG's wrapper passes (top, right, bottom, left, 15); the call below pads
-    # top/bottom by hitPadY (the Y axis) and left/right by hitPadX (the X axis) -- PER AXIS, not
-    # one shared value, so each axis collapses EXACTLY rather than one axis over-padding into a
-    # negative extent (see MoEBarTransient.js's header note on why a single shared
-    # `Math.ceil(Math.max(viewW, viewH) / 2)` was wrong). The call and HIT_MAGIC moved to the
-    # shared module; the surface it collapses is still THIS bar's (BOX_* + PAD_REM), which is what
-    # makes the arithmetic below this bar's own.
+    # THE SURFACE RECT IS THE MOUSE HIT RECT: a wide strip across screen centre would steal HUD
+    # input. WG's wrapper passes (top, right, bottom, left, 15), always FOUR EQUAL VALUES
+    # (gui-part3.pkg's own uniform helper) -- so the order is moot here, and an oversized pad is
+    # ACCEPTED, not rejected (a real capture logged 240 against a 92-tall surface going through).
+    # `Math.ceil(Math.max(viewW, viewH) / 2)` on all four sides is therefore the recorded design:
+    # it collapses BOTH axes at once and is immune to which axis's size the pad is derived from.
+    # A PER-AXIS split (hitPadX off viewW, hitPadY off viewH) reintroduces both risks for no
+    # benefit -- see MoEBarTransient.js's header note. The call and HIT_MAGIC moved to the shared
+    # module; the surface it collapses is still THIS bar's (BOX_* + PAD_REM), which is what makes
+    # the arithmetic below this bar's own.
     src = _transient()
     assert re.search(r"viewEnv\.setHitAreaPaddingsRem\("
-                     r"hitPadY,\s*hitPadX,\s*hitPadY,\s*hitPadX,\s*HIT_MAGIC\)",
-                     src), "MoEBarTransient.js: the 5-arg per-axis hit-area call is gone"
+                     r"hitPad,\s*hitPad,\s*hitPad,\s*hitPad,\s*HIT_MAGIC\)",
+                     src), "MoEBarTransient.js: the 5-arg shared hit-area call is gone"
     assert _tconst("HIT_MAGIC") == 15
     surface_w, surface_h = _surface_wh(_js())
-    pad_x = -(-surface_w // 2)          # the JS's Math.ceil(viewW / 2)
-    pad_y = -(-surface_h // 2)          # the JS's Math.ceil(viewH / 2)
-    assert 2 * pad_x >= surface_w and 2 * pad_x - surface_w <= 1, \
-        "hitPadX must collapse the X axis to (near-)exactly zero"
-    assert 2 * pad_y >= surface_h and 2 * pad_y - surface_h <= 1, \
-        "hitPadY must collapse the Y axis to (near-)exactly zero"
+    pad = -(-max(surface_w, surface_h) // 2)     # the JS's Math.ceil(Math.max(viewW, viewH) / 2)
+    assert 2 * pad >= surface_w, "hitPad must collapse the X axis to zero or past it"
+    assert 2 * pad >= surface_h, "hitPad must collapse the Y axis to zero or past it"
 
 
 def test_the_surface_reassert_outlasts_the_engines_size_deadline():
@@ -447,9 +459,9 @@ def test_the_current_rows_delta_and_icon_sit_at_their_tuned_y():
     # side), so only the chained translateY() is this row's Y nudge.
     assert Decimal(str(_translate_y(css, ".mp-cap.up .mp-ico"))) == _knob("icoyCur"), \
         "the current row's icon Y is not the icoyCur knob -- a re-emit would move the glyph"
-    assert _knob("icoyCur") == Decimal("0.5"), \
-        "eff_bar_tuner.html's icoyCur default is %s -- the live pass settled the glyph at " \
-        "0.5rem" % (_knob("icoyCur"),)
+    assert _knob("icoyCur") == Decimal("1.0"), \
+        "eff_bar_tuner.html's icoyCur default is %s -- the maintainer's own 'lower the top-row " \
+        "icon 0.5 device px' nudge settled the glyph at 1.0rem (was 0.5rem)" % (_knob("icoyCur"),)
 
 
 def test_the_per_icon_ink_gap_parity_overrides_are_pinned():
@@ -575,13 +587,24 @@ def test_python_large_y_shift_pins_the_bottom_ink_not_the_naive_scale():
 
 
 def _v_surface_wh(js):
-    """The vertical surface this bar's JS pushes to the engine -- V_BOX_W_REM + 2*PAD_REM on the
-    width, V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM on the height (MoEBarTransient.js's
-    `viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;`), the same derivation as _surface_wh above but
-    off the `V_` (vertical) box consts and this bar's own clip."""
+    """The vertical surface this bar's JS pushes to the engine -- V_BOX_W_REM + V_PAD_X_REM +
+    V_PAD_XR_REM on the width (MoEBarTransient's `viewW = cfg.boxW + cfg.padX + cfg.padXR;` -- a
+    SPLIT pad now, not the uniform PAD_REM nor a symmetric V_PAD_X_REM: V_PAD_X_REM on the LEFT
+    covers this bar's own extreme ink (.mev-cap.bt), V_PAD_XR_REM on the RIGHT (minimap-facing)
+    side CLIPS the backdrop's bleed down to just past the track's tick overhang -- see
+    MoEEfficiency.js's notes on both), V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM on the height
+    (`viewH = cfg.boxH + 2*cfg.pad - cfg.clipB`, unaffected -- neither X pad ever widens Y)."""
     pad = _js_const(js, "PAD_REM")
-    return (_js_const(js, "V_BOX_W_REM") + 2 * pad,
+    return (_js_const(js, "V_BOX_W_REM") + _js_const(js, "V_PAD_X_REM") + _js_const(js, "V_PAD_XR_REM"),
             _js_const(js, "V_BOX_H_REM") + 2 * pad - _js_const(js, "V_CLIP_B_REM"))
+
+
+def _v_shift_x(js):
+    """MoEEfficiency.js's vertical SHIFT_X_REM (goVertical's `cfg.padX - cfg.boxLeft`) -- how far
+    RIGHT the composition sits inside its own surface, i.e. how much room the captions have to
+    grow leftward into before the surface clips them. Mirrors test_progress_surface_mirror.py's
+    copy exactly, off this bar's own V_PAD_X_REM."""
+    return _js_const(js, "V_PAD_X_REM") - _js_const(js, "V_BOX_LEFT_REM")
 
 
 def _v_shift_y(js):
@@ -600,7 +623,7 @@ def test_the_vertical_box_consts_quote_the_backdrop_rule():
         (_rem(css, ".mev-backdrop", "left"), _rem(css, ".mev-backdrop", "top"),
          _rem(css, ".mev-backdrop", "width"), _rem(css, ".mev-backdrop", "height"))
     assert (_js_const(js, "V_BOX_LEFT_REM"), _js_const(js, "V_BOX_TOP_REM"),
-            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-40, -80, 96, 360)
+            _js_const(js, "V_BOX_W_REM"), _js_const(js, "V_BOX_H_REM")) == (-40, -80, 54, 360)
 
 
 def test_the_vertical_clip_is_fed_from_its_own_constant():
@@ -614,16 +637,17 @@ def test_the_vertical_clip_is_fed_from_its_own_constant():
 
 
 def test_the_vertical_css_sizing_box_matches_the_js_surface():
-    # body.mev #moe-bar-box mirrors V_BOX_W_REM + 2*PAD_REM on width, V_BOX_H_REM + 2*PAD_REM -
-    # V_CLIP_B_REM on height, exactly as the horizontal #moe-bar-box mirrors BOX_W/H_REM + 2*PAD_REM
-    # in test_the_js_box_consts_quote_the_backdrop_rule's sibling coverage for this bar's OWN
-    # surface push.
+    # body.mev #moe-bar-box mirrors V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM on width (a SPLIT pad
+    # now, NOT the uniform PAD_REM nor a symmetric 2*V_PAD_X_REM -- see _v_surface_wh's own note),
+    # V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM on height, exactly as the horizontal #moe-bar-box
+    # mirrors BOX_W/H_REM + 2*PAD_REM in test_the_js_box_consts_quote_the_backdrop_rule's sibling
+    # coverage for this bar's OWN surface push.
     css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
     match = re.search(r"body\.mev #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*height:\s*(\d+)rem;\s*\}",
                        css)
     assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_js()) == (116, 318)
+    assert box == _v_surface_wh(_js()) == (100, 318)
 
 
 def test_the_vertical_shift_matches_progresss_and_is_pinned():
@@ -654,20 +678,372 @@ def test_the_vertical_large_shift_pins_the_bottom_ink_within_a_pixel():
 
 def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
     # body.mev.mp-lg #moe-bar-box restates ONLY the width, in rem, at V_BOX_W_REM*SIZE_XF +
-    # 2*PAD_REM (the root font's SIZE_F is layered on top of every rem for free, including this
-    # one and the unrestated height) -- so the LOGICAL PX surface under Large is this rem value
-    # times SIZE_F for width, and the default height times SIZE_F alone. Pinned per the plan:
-    # efficiency vertical Large -> 185 x 398.
+    # V_PAD_X_REM + V_PAD_XR_REM_LARGE -- a SPLIT pad now (NOT the uniform PAD_REM nor a symmetric
+    # 2*V_PAD_X_REM -- see _v_surface_wh's own note; the root font's SIZE_F is layered on top of
+    # every rem for free, including this one and the unrestated height) -- so the LOGICAL PX
+    # surface under Large is this rem value times SIZE_F for width, and the default height times
+    # SIZE_F alone. Pinned: efficiency vertical Large -> 144 x 398 (was 290 before this pad was
+    # split -- the OLD symmetric V_PAD_X_REM(52) on BOTH sides reached the surface past the
+    # minimap's own edge; see MoEEfficiency.js's own four-point note). NOTE this SHIM width formula
+    # is unrelated to the backdrop's OWN Large width, which is a literal 98rem (kept,
+    # live-measurement-confirmed correct), not V_BOX_W_REM*SIZE_XF (72) -- see
+    # test_the_backdrops_right_edge_clears_the_minimap. Unlike the sibling Moving Average bar,
+    # EFFICIENCY_MM_TRACK_X carries no hand correction, so no re-derivation trap applies here -- the
+    # 2px margin below is purely to avoid a flush (zero-margin) boundary, not to undo a placement
+    # fudge -- see test_the_surface_does_not_clip_the_tick.
     css, js = _no_css_comments(_read("MoEEfficiencyVertical.css")), _js()
-    match = re.search(r"body\.mev\.mp-lg #moe-bar-box\s*\{\s*width:\s*(\d+)rem;\s*\}", css)
+    match = re.search(r"body\.mev\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
     assert match, "MoEEfficiencyVertical.css: body.mev.mp-lg #moe-bar-box rule not found"
-    large_w_rem = int(match.group(1))
+    large_w_rem = Decimal(match.group(1))
     xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
-    pad = _js_const(js, "PAD_REM")
-    assert large_w_rem == _js_const(js, "V_BOX_W_REM") * xf + 2 * pad
+    pad_x = _js_const(js, "V_PAD_X_REM")
+    padxr_large = _js_decimal_const(js, "V_PAD_XR_REM_LARGE")
+    assert large_w_rem == (Decimal(_js_const(js, "V_BOX_W_REM")) * xf + pad_x
+                           + padxr_large).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
-    assert (iround_half_away(Decimal(large_w_rem) * f),
-            iround_half_away(Decimal(default_h) * f)) == (185, 398)
+    assert (iround_half_away(large_w_rem * f),
+            iround_half_away(Decimal(default_h) * f)) == (144, 398)
+
+
+def _advances():
+    """MoEBattle.ttf's per-glyph advances in em, scraped from MoEProgress.js's OWN hmtx note.
+
+    This bar carries no such note of its own -- it uses the SAME embedded font (MoEEfficiency.js
+    declares no @font-face; MoEProgress.css's is <link>ed into both bars' documents), so this reads
+    the numbers off the sibling file rather than re-transcribing them (mirrors
+    test_progress_surface_mirror.py's own `_advances`, anchored on the same unique "plus" spelling).
+    """
+    js = _read("MoEProgress.js")
+    match = re.search(r"digit ([\d.]+)em, comma ([\d.]+), paren ([\d.]+),\s*\n?//\s*plus ([\d.]+)",
+                       js)
+    assert match, "MoEProgress.js: the MoEBattle.ttf advance note is gone or reworded"
+    return dict(zip(("digit", "comma", "paren", "sign"),
+                    (Decimal(g) for g in match.groups())))
+
+
+def _ink(adv, size, digits=0, commas=0):
+    """One numeral's rendered width in rem, at `size` rem and letter-spacing 0 -- the r1/r2/r3
+    requirement captions carry no sign/parens/delta, so this is the plain-numeral subset of
+    test_progress_surface_mirror.py's own `_ink`."""
+    return size * (digits * adv["digit"] + commas * adv["comma"])
+
+
+def _decrem(css, selector, prop):
+    """The Decimal rem value of `prop` within one line-anchored SOLE rule -- like `_rem` above,
+    but for the fractional per-mark literals (0.500rem, -2.000rem, ...) `_rem`'s whole-int regex
+    refuses."""
+    body = _rule(css, selector)
+    match = re.search(r"\b%s:\s*(-?[\d.]+)rem\s*;" % re.escape(prop), body)
+    assert match, "MoEEfficiencyVertical.css: %s has no %s" % (selector, prop)
+    return Decimal(match.group(1))
+
+
+def test_the_vertical_captions_fit_inside_the_surface():
+    """EVERY caption row's worst-case LEFTWARD ink must fit inside V_PAD_X_REM -- r1/r2/r3
+    (the mark requirements), r4/.tp (the 100% requirement) and .bt (the current damage + delta).
+
+    THE GAP THIS CLOSES -- mirroring test_progress_surface_mirror.py's identically-named gate,
+    which this bar never had: the tuner's own selfCheck() only proves the caption ANCHOR does not
+    move across digit counts, never that the ink FITS, and every other surface assertion in this
+    file compares one copy of a number against another copy of the same number. AN EARLIER VERSION
+    OF THIS GATE ONLY CHECKED r1/r2/r3, which is exactly the "a gate that only watches one caption"
+    mistake this shipped clipped over once already: it also used the WRONG icon width for those
+    rows (13rem, the shared base `.mev-ico` box, instead of the 16rem `.mev-ico.mk` override the
+    mark icons actually render at), and it never noticed `.mev-cap.bt` -- this bar's TRUE extreme,
+    by a wide margin, exactly as `.mpv-capC` is for the Moving Average bar's sheet -- was nowhere
+    near covered. See MoEEfficiency.js's V_PAD_X_REM note for the full re-derivation this re-proves
+    instead of trusting.
+
+    WHY A STATIC WORST CASE IS SOUND HERE. Every one of these captions is RIGHT-anchored
+    (`right: 100%`, the track's own left edge, MoEEfficiencyVertical.css's `.mev-cap`) with the
+    icon as the LAST in-flow child (numeral, then icon -- and on `.bt`, the delta hangs OFF the
+    numeral's own left edge, out-of-flow), so every anchor is digit-count invariant BY
+    CONSTRUCTION and content grows strictly leftward from a fixed edge -- widest content ==
+    furthest reach, with no layout feedback.
+
+    THE BUDGET IS A 4-DIGIT-PLUS-COMMA NUMERAL (e.g. "2,450") and, on `.bt`, a matching 4-digit
+    +comma+sign DELTA (e.g. "+2,970", no parens -- unlike the Moving Average bar's own delta) --
+    the realistic shape fmt() renders, not a padded worst case, exactly as the Moving Average
+    bar's own gate budgets its numeral and delta.
+    """
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    js = _js()
+    adv = _advances()
+
+    def tx(selector):
+        # SUMS every translateX() in the rule -- .tp/.bt still chain TWO (the shared tick-overhang
+        # clearance, then the row's own residual), unlike r1/r2/r3's per-mark overrides, which
+        # collapse both into ONE (see MoEEfficiencyVertical.css's own comment on that collapse).
+        # A single `re.search` here silently read only the FIRST of the two on .tp/.bt and missed
+        # a whole -3rem/-4rem term -- exactly the kind of one-row gate gap this test now closes.
+        body = _rule(css, selector)
+        matches = re.findall(r"translateX\((-?[\d.]+)rem\)", body)
+        assert matches, "MoEEfficiencyVertical.css: %s has no translateX" % selector
+        return sum(Decimal(m) for m in matches)
+
+    def blur(selector):
+        body = _rule(css, selector)
+        match = re.search(r"text-shadow:\s*\S+\s+\S+\s+([\d.]+)rem", body)
+        assert match, "MoEEfficiencyVertical.css: %s declares no text-shadow" % selector
+        return Decimal(match.group(1))
+
+    def translate_x_of(selector):
+        """The FIRST arg of a two-arg translate(x, y) -- `.mev-cap.bt .mev-d`'s own gap term."""
+        body = _rule(css, selector)
+        match = re.search(r"translate\(\s*(-?[\d.]+)rem", body)
+        assert match, "MoEEfficiencyVertical.css: %s has no translate() x term" % selector
+        return Decimal(match.group(1))
+
+    def _ink(size, digits=0, commas=0, signs=0):
+        return size * (digits * adv["digit"] + commas * adv["comma"] + signs * adv["sign"])
+
+    halo = blur(".mev-cap .mev-v")
+
+    # icon_w is PER ICON CLASS (mk 16rem, bm 14rem, dmg 16rem) -- reading the shared base
+    # `.mev-ico` (13rem) here is exactly the bug this gate now closes: every one of these classes
+    # OVERRIDES the base box via a more specific selector.
+    def icon_w(icon_class):
+        return Decimal(_rem(css, ".mev-ico.%s" % icon_class, "width"))
+
+    r_size = Decimal(_rem(css, ".mev-cap.lf", "font-size"))
+    bt_size = Decimal(_rem(css, ".mev-cap.bt", "font-size"))
+    numeral_r = _ink(r_size, digits=4, commas=1)      # mark requirements, r1-r3 and tp (r100)
+    numeral_bt = _ink(bt_size, digits=4, commas=1)    # the current-damage numeral, "3,050"
+
+    def reach_lf(row_sel, icon_margin_sel, icon_class):
+        # The row's content right edge sits at translateX off the track's left edge (x == 0), and
+        # grows leftward through the icon's own margin-left gap, the numeral, and its halo.
+        return -tx(row_sel) + icon_w(icon_class) + _decrem(css, icon_margin_sel, "margin-left") \
+            + numeral_r + halo
+
+    def reach_bt(row_sel, icon_margin_sel, delta_sel, delta_font_size):
+        # Numeral first (icon flush at the anchor, numeral to its left), THEN the delta hangs off
+        # the numeral's own left edge via its own translate() gap and grows further left still --
+        # the delta's tail, not the numeral's, is the worst point on this row (see the docstring).
+        numeral_left = -tx(row_sel) + icon_w("dmg") + _decrem(css, icon_margin_sel, "margin-left") \
+            + numeral_bt
+        delta_gap = -translate_x_of(delta_sel)
+        delta_ink = _ink(delta_font_size, digits=4, commas=1, signs=1)
+        return numeral_left + delta_gap + delta_ink + halo
+
+    # mark_1's Default icon lever has no per-mark override -- it rides the shared `.mk` base rule
+    # (see MoEEfficiencyVertical.css's own note: "mark_1 keeps the shared -1rem ... unchanged").
+    default_lf = {".mev-cap.lf.r1": ".mev-cap .mev-ico.mk",
+                  ".mev-cap.lf.r2": ".mev-cap .mev-ico.mk2",
+                  ".mev-cap.lf.r3": ".mev-cap .mev-ico.mk3"}
+    # Large gives mark_1 its OWN override too (the shared Large `.mk` is -1.333, not -1 -- see the
+    # CSS's own note), so all three rows have a per-mark selector here.
+    large_lf = {".mp-lg .mev-cap.lf.r1": ".mp-lg .mev-cap .mev-ico.mk1",
+                ".mp-lg .mev-cap.lf.r2": ".mp-lg .mev-cap .mev-ico.mk2",
+                ".mp-lg .mev-cap.lf.r3": ".mp-lg .mev-cap .mev-ico.mk3"}
+
+    allowance = Decimal(_v_shift_x(js))
+    worst, worst_sel = Decimal(0), None
+    for row_sel, icon_sel in default_lf.items():
+        r = reach_lf(row_sel, icon_sel, "mk")
+        assert r <= allowance, (
+            "%s's worst-case ink reaches %srem left of the track while the surface only allows "
+            "%srem (V_PAD_X_REM - V_BOX_LEFT_REM) -- the caption is CLIPPED" % (row_sel, r,
+                                                                                 allowance))
+        if r > worst:
+            worst, worst_sel = r, row_sel
+    # bm (dmg icon has NO per-row override at Default) -- r4/.tp, the 100% requirement.
+    r_tp = reach_lf(".mev-cap.tp", ".mev-cap .mev-ico.bm", "bm")
+    assert r_tp <= allowance, (
+        ".mev-cap.tp's worst-case ink reaches %srem left of the track while the surface only "
+        "allows %srem -- the caption is CLIPPED" % (r_tp, allowance))
+    if r_tp > worst:
+        worst, worst_sel = r_tp, ".mev-cap.tp"
+    # .bt -- the current damage + delta, this bar's own extreme (see the docstring).
+    r_bt = reach_bt(".mev-cap.bt", ".mev-cap .mev-ico", ".mev-cap.bt .mev-d", Decimal(12))
+    assert r_bt <= allowance, (
+        ".mev-cap.bt's worst-case ink reaches %srem left of the track while the surface only "
+        "allows %srem -- the caption is CLIPPED" % (r_bt, allowance))
+    if r_bt > worst:
+        worst, worst_sel = r_bt, ".mev-cap.bt"
+    # A real margin, not a hairline -- mirroring the Moving Average gate's own >=4rem convention.
+    assert allowance - worst >= 4, (
+        "only %srem of caption clearance is left at Default (worst row: %s) -- budget the "
+        "surface deliberately" % (allowance - worst, worst_sel))
+
+    # LARGE, computed independently (these levers are LITERAL hand-tuned values, not a *4/3 twin of
+    # the Default row -- see the CSS's own notes -- so there is no formula to reuse here). Read the
+    # backdrop's OWN Large `left` literal rather than re-deriving *SIZE_XF, so this compares against
+    # exactly what ships, not an assumed-exact 4/3.
+    large_backdrop_left = _decrem(css, ".mp-lg .mev-backdrop", "left")
+    large_allowance = Decimal(_js_const(js, "V_PAD_X_REM")) - large_backdrop_left
+    large_worst, large_worst_sel = Decimal(0), None
+    for row_sel, icon_sel in large_lf.items():
+        # icon_w always queries the SHARED `.mev-ico.mk` box rule -- mk1/mk2/mk3 have no width
+        # override of their own, only a margin-left one (see the margin selectors above).
+        r = reach_lf(row_sel, icon_sel, "mk")
+        assert r <= large_allowance, (
+            "%s's worst-case ink reaches %srem left of the track while the Large surface only "
+            "allows %srem -- the caption is CLIPPED" % (row_sel, r, large_allowance))
+        if r > large_worst:
+            large_worst, large_worst_sel = r, row_sel
+    r_tp_lg = reach_lf(".mp-lg .mev-cap.tp", ".mp-lg .mev-cap .mev-ico.bm", "bm")
+    assert r_tp_lg <= large_allowance, (
+        ".mp-lg .mev-cap.tp's worst-case ink reaches %srem left of the track while the Large "
+        "surface only allows %srem -- the caption is CLIPPED" % (r_tp_lg, large_allowance))
+    if r_tp_lg > large_worst:
+        large_worst, large_worst_sel = r_tp_lg, ".mp-lg .mev-cap.tp"
+    r_bt_lg = reach_bt(".mp-lg .mev-cap.bt", ".mp-lg .mev-cap .mev-ico",
+                        ".mp-lg .mev-cap.bt .mev-d", Decimal(12))
+    assert r_bt_lg <= large_allowance, (
+        ".mp-lg .mev-cap.bt's worst-case ink reaches %srem left of the track while the Large "
+        "surface only allows %srem -- the caption is CLIPPED" % (r_bt_lg, large_allowance))
+    if r_bt_lg > large_worst:
+        large_worst, large_worst_sel = r_bt_lg, ".mp-lg .mev-cap.bt"
+    assert large_allowance - large_worst >= 4, (
+        "only %srem of caption clearance is left at Large (worst row: %s) -- budget the surface "
+        "deliberately" % (large_allowance - large_worst, large_worst_sel))
+
+
+def test_the_backdrops_right_edge_clears_the_minimap():
+    """THE GATE THAT WAS MISSING -- the sibling of test_progress_surface_mirror.py's identically
+    named test. No test asserted the backdrop's right edge stayed clear of the minimap, which is
+    exactly how a 42rem (Default) / 30rem (Large) overlap shipped invisibly -- the dark panel
+    visibly covering the minimap's first column, at both scales, unrelated to any hit-test
+    mechanics. See MoEEfficiency.js's own three-point note for the full narrative.
+
+    TWO BOUNDS, both re-derived from the shipped constants, never hardcoded:
+      * the backdrop's right edge (relative to #moe-bar-box: V_PAD_X_REM + the backdrop's own
+        width) must not PASS the minimap's own left edge (EFFICIENCY_MM_TRACK_X + MM_GAP +
+        MM_TICK_OVERHANG) -- the overlap this test exists to catch;
+      * it must not fall SHORT of the track's own right edge (EFFICIENCY_MM_TRACK_X) either, or
+        the track's own tick ink loses its dark backing.
+    Prove it red by setting V_BOX_W_REM back to 96 (Default) or restoring the Large backdrop's
+    width to its old V_BOX_W_REM*SIZE_XF twin (72) -- either reintroduces the exact overlap this
+    gate now refuses.
+    """
+    from moe_calculator.domain.constants import (
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, MM_GAP, MM_TICK_OVERHANG,
+        MM_TICK_OVERHANG_LARGE)
+
+    js = _js()
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    pad_x = _js_const(js, "V_PAD_X_REM")
+    box_w = _js_const(js, "V_BOX_W_REM")
+
+    backdrop_right = pad_x + box_w
+    minimap_left = EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG
+    assert backdrop_right <= minimap_left, (
+        "the Default backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
+        "pass EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG (%srem)" % (
+            backdrop_right, backdrop_right - minimap_left, minimap_left))
+    assert backdrop_right >= EFFICIENCY_MM_TRACK_X, (
+        "the Default backdrop's right edge (%srem) falls %srem SHORT of the track's own right "
+        "edge (EFFICIENCY_MM_TRACK_X, %srem) -- the track's tick ink would lose its backing" % (
+            backdrop_right, EFFICIENCY_MM_TRACK_X - backdrop_right, EFFICIENCY_MM_TRACK_X))
+
+    match = re.search(r"\.mp-lg \.mev-backdrop \{ left: -?[\d.]+rem; width: ([\d.]+)rem; \}", css)
+    assert match, "MoEEfficiencyVertical.css: .mp-lg .mev-backdrop rule not found"
+    large_backdrop_right = pad_x + Decimal(match.group(1))
+    large_minimap_left = EFFICIENCY_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE
+    assert large_backdrop_right <= large_minimap_left, (
+        "the Large backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
+        "pass EFFICIENCY_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE (%srem)" % (
+            large_backdrop_right, large_backdrop_right - large_minimap_left, large_minimap_left))
+    assert large_backdrop_right >= EFFICIENCY_MM_TRACK_X_LARGE, (
+        "the Large backdrop's right edge (%srem) falls %srem SHORT of the track's own right edge "
+        "(EFFICIENCY_MM_TRACK_X_LARGE, %srem) -- the track's tick ink would lose its backing" % (
+            large_backdrop_right, EFFICIENCY_MM_TRACK_X_LARGE - large_backdrop_right,
+            EFFICIENCY_MM_TRACK_X_LARGE))
+
+
+def test_the_surface_clears_the_minimap_at_every_size_index():
+    """THE GATE ON THE SURFACE ITSELF, not the backdrop -- the sibling of test_progress_surface_
+    mirror.py's identically named test. test_the_backdrops_right_edge_clears_the_minimap above
+    proves the DRAWN rect stays clear, but the invisible SURFACE (the mouse-hit-blocking rect --
+    the native Wulf window rect captures a click regardless of the JS hit-area collapse, see
+    bridge/bar_window.py's own note) is a SEPARATE rectangle with its own, independently-tuned
+    right pad (V_PAD_XR_REM/_LARGE), which a backdrop-only gate cannot see.
+
+    `anchor_minimap`'s `x = space_x - mm_size - gap - overhang - edge_x` makes the gap between the
+    TRACK and the minimap's own left edge INDEPENDENT of `mm_size` by construction, so if the
+    surface clears the minimap at one size index it clears it at every index -- checked at all six
+    anyway, so a future change to that construction cannot silently narrow the check to one lucky
+    index.
+
+    A REAL MARGIN, not zero-clearance: this bug shipped twice at a non-negative (or negative)
+    margin, so the bound below requires real daylight, not merely `<=`.
+
+    Prove it red by restoring V_PAD_XR_REM(_LARGE) to V_PAD_X_REM(_LARGE)'s own value (the
+    asymmetric right pad deleted) -- every index goes red at both sizes.
+    """
+    from moe_calculator.domain.constants import (
+        MINIMAP_SIZES, MM_GAP, MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
+    from moe_calculator.domain.positioning import anchor_minimap
+
+    js = _js()
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    view_w, _view_h = _v_surface_wh(js)
+    match = re.search(r"body\.mev\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
+    assert match, "MoEEfficiencyVertical.css: body.mev.mp-lg #moe-bar-box rule not found"
+    large_view_w = iround_half_away(Decimal(match.group(1)) * _size_factor("SIZE_F"))
+
+    _MARGIN_PX = 4   # half of MM_GAP -- a REAL margin, not the zero/negative clearance that shipped
+    _SPACE_X = 3000  # arbitrary: anchor_minimap's x does not depend on space_y/edge_y at all
+
+    for idx, mm_size in enumerate(MINIMAP_SIZES):
+        for large, view, edge_x, overhang in (
+                (False, view_w, EFFICIENCY_MM_TRACK_X, MM_TICK_OVERHANG),
+                (True, large_view_w, EFFICIENCY_MM_TRACK_X_LARGE, MM_TICK_OVERHANG_LARGE)):
+            x, _y = anchor_minimap(_SPACE_X, 2000, edge_x, 0, mm_size, MM_GAP, 0, overhang)
+            margin = (_SPACE_X - mm_size) - (x + view)
+            assert margin >= _MARGIN_PX, (
+                "minimap size index %d (mmSize=%d), %s: the surface's right edge clears the "
+                "minimap by only %spx, need >= %spx" % (
+                    idx, mm_size, "Large" if large else "Default", margin, _MARGIN_PX))
+
+
+def test_the_surface_does_not_clip_the_tick():
+    """THE OTHER EDGE test_the_surface_clears_the_minimap_at_every_size_index's surface must clear
+    -- the sibling of test_progress_surface_mirror.py's identically named test. A tick clip is not
+    cosmetic like a clipped backdrop bleed -- the tick marks a real requirement position.
+
+    UNLIKE THE MOVING AVERAGE BAR, EFFICIENCY_MM_TRACK_X carries no hand placement correction (see
+    MoEEfficiency.js's own note), so it IS this bar's true local tick position and needs no
+    re-derivation the sibling test's own docstring warns about -- this test still computes the tick's
+    position from the JS/CSS geometry directly (shiftX + trackW + MM_TICK_OVERHANG) rather than
+    reusing the Python constant, so a FUTURE hand correction on this bar would be caught here too.
+
+    Prove it red by widening V_PAD_XR_REM(_LARGE) back toward the flush value the derivation
+    comments name (-8 / -10.4) -- the margin below goes to ~0 at both sizes.
+    """
+    from moe_calculator.domain.constants import MM_TICK_OVERHANG
+
+    js = _js()
+    css = _no_css_comments(_read("MoEEfficiencyVertical.css"))
+    xf, f = _size_factor("SIZE_XF"), _size_factor("SIZE_F")
+
+    # trackW is #moe-bar-root's own width (3rem) -- scraped, not hardcoded, so a tuner retune of the
+    # track's cross-section propagates here too.
+    match = re.search(r"body\.mev #moe-bar-root\s*\{[^}]*?width:\s*(\d+)rem;", css)
+    assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-root width not found"
+    track_w = Decimal(match.group(1))
+
+    view_w, _view_h = _v_surface_wh(js)
+    shift_x = _v_shift_x(js)
+    tick_right_default = shift_x + track_w + MM_TICK_OVERHANG
+    margin_default = view_w - tick_right_default
+    assert margin_default >= 2, (
+        "Default: the surface clears the tick's own right edge (%s) by only %spx" % (
+            tick_right_default, margin_default))
+
+    css_lg = re.search(r"body\.mev\.mp-lg #moe-bar-box\s*\{\s*width:\s*([\d.]+)rem;\s*\}", css)
+    assert css_lg, "MoEEfficiencyVertical.css: body.mev.mp-lg #moe-bar-box rule not found"
+    large_view_w_px = Decimal(iround_half_away(Decimal(css_lg.group(1)) * f))
+    box_left = _js_const(js, "V_BOX_LEFT_REM")
+    shift_x_large_pre_f = Decimal(_js_const(js, "V_PAD_X_REM")) - Decimal(box_left) * xf
+    tick_right_large_pre_f = shift_x_large_pre_f + track_w * xf + Decimal(MM_TICK_OVERHANG) * xf
+    tick_right_large_px = tick_right_large_pre_f * f   # rendered continuously -- NOT rounded
+    margin_large = large_view_w_px - tick_right_large_px
+    assert margin_large >= 2, (
+        "Large: the surface (%s) clears the tick's own true right edge (%s) by only %spx" % (
+            large_view_w_px, tick_right_large_px, margin_large))
 
 
 def test_the_reachable_minimap_gap_equals_surface_h_minus_track_y():
@@ -1051,18 +1427,85 @@ def _x_props(body):
     return out
 
 
+# PER-MARK TUNED LEVER -- the maintainer's explicit scope call (see MoEEfficiency.css's own note
+# above `.mp-cap.dn .mp-ico.mk1`): the requirement caption's icon<->number lever, spelled here as
+# the `translate()` x term of `.mp-cap.dn .mp-ico.mkN`'s transform, is a LITERAL per-mark value out
+# of tools/dev/icon_gap_tuner.html for N in 1/2/3, not the base row times 4/3 -- mk2's base term is
+# 0rem (mechanically invariant under any factor, so `_x_props` never counts it as an x-length at
+# all, yet the Large twin still restates the whole transform verbatim). NARROW: only these three
+# (selector, "transform") pairs -- the shared, unsuffixed `.mk` base rule and every other
+# declaration in the file stay under the full x4/3 invariant.
+_MARK_EXEMPT = {(".mp-cap.dn .mp-ico.mk1", "transform"),
+                (".mp-cap.dn .mp-ico.mk2", "transform"),
+                (".mp-cap.dn .mp-ico.mk3", "transform"),
+                # .mp-cap.up .mp-ico joins this set for an UNRELATED reason: the maintainer's own
+                # "lower the top-row icon 0.5 device px" nudge lives in the SAME transform's
+                # translateY() (the Y half, device-px-pinned: 0.5 -> 0.9 at BOTH sizes, not *4/3),
+                # not the translate()'s x term the mk levers exempt -- but this test's formula
+                # re-derives the WHOLE transform string, so it fails the same way.
+                (".mp-cap.up .mp-ico", "transform")}
+
+
 def test_the_large_block_twins_exactly_the_base_cascades_x_lengths():
     # COMPLETE, both directions, and per DECLARATION rather than per selector -- the sibling file's
     # _lg_completeness spells out why: a rule that ALREADY has a twin hides the next x-length added
     # to it, which is the same species of miss as the untwinned gap that shipped. A base x-length
     # with no twin renders half-scaled horizontally under the large mode; a twin with no base
     # x-length is a rule scaling something the root font already handled (or a selector typo that
-    # silently styles nothing).
+    # silently styles nothing) -- MODULO _MARK_EXEMPT's mk2 (its base transform's x term is 0, so
+    # `_x_props` never counts it, yet the twin still legitimately restates the whole declaration).
     base, large = _cascade()
     want = {(s, p) for s, body in base.items() for p in _x_props(body)}
     got = {(s[len(_LG):], p) for s, body in large.items() for p, _v in _decls(body)}
-    assert got == want, "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
-        sorted(want - got), sorted(got - want))
+    assert got - _MARK_EXEMPT == want - _MARK_EXEMPT, \
+        "missing .mp-lg twins: %s; twins with no base x-length: %s" % (
+            sorted(want - got), sorted((got - want) - _MARK_EXEMPT))
+    assert _MARK_EXEMPT & got == _MARK_EXEMPT, \
+        "a per-mark tuned twin vanished: %s" % sorted(_MARK_EXEMPT - got)
+
+
+def test_the_per_mark_tuned_lever_is_pinned_to_its_hand_measured_values():
+    # _MARK_EXEMPT above removed the ONLY test that touched these six numbers -- they are
+    # hand-tuned by eye in tools/dev/icon_gap_tuner.html and cannot be re-derived from any formula,
+    # and this stylesheet is regenerated WHOLESALE by tools/dev/emit_eff_css.js, so a generator edit
+    # can revert them with the rest of the suite fully green. Each assertion is scoped to the EXACT
+    # (selector, "transform") tuple the value lives on -- all three marks carry their OWN per-mark
+    # rule here (unlike the sibling MA bar), so there is no shared-rule special case. Decimal, not
+    # float. mk2's `0.000rem` is included deliberately: it is exactly the value the mechanical
+    # x-length classifier drops, which is how it would go missing unnoticed.
+    css = _css()
+
+    def lever_x(selector):
+        value = _decl(css, selector, "transform")
+        match = re.match(r"translate\(\s*(-?[\d.]+)rem", value)
+        assert match, "MoEEfficiency.css: %s has no leading translate() rem x-term" % selector
+        return Decimal(match.group(1))
+
+    assert (lever_x(".mp-cap.dn .mp-ico.mk1"), lever_x(".mp-cap.dn .mp-ico.mk2"),
+            lever_x(".mp-cap.dn .mp-ico.mk3")) == \
+        (Decimal("2.000"), Decimal("0.000"), Decimal("-1.500")), \
+        "the Default icon<->number lever drifted from its hand-tuned 2.000/0.000/-1.500rem"
+    assert (lever_x(".mp-lg .mp-cap.dn .mp-ico.mk1"), lever_x(".mp-lg .mp-cap.dn .mp-ico.mk2"),
+            lever_x(".mp-lg .mp-cap.dn .mp-ico.mk3")) == \
+        (Decimal("1.000"), Decimal("0.000"), Decimal("-2.000")), \
+        "the Large icon<->number lever drifted from its hand-tuned 1.000/0.000/-2.000rem"
+
+
+def test_the_top_row_icons_device_px_nudge_is_pinned_both_sizes():
+    # The OTHER _MARK_EXEMPT member: .mp-cap.up .mp-ico's translateY, the maintainer's "lower the
+    # top-row icon 0.5 device px" nudge, device-px-pinned (NOT *4/3) at both sizes.
+    css = _css()
+
+    def lever_y(selector):
+        value = _decl(css, selector, "transform")
+        match = re.search(r"translateY\(\s*(-?[\d.]+)rem\)", value)
+        assert match, "MoEEfficiency.css: %s has no translateY() term" % selector
+        return Decimal(match.group(1))
+
+    assert lever_y(".mp-cap.up .mp-ico") == Decimal("1"), \
+        "the Default top-row icon Y drifted from its hand-measured 1rem"
+    assert lever_y(".mp-lg .mp-cap.up .mp-ico") == Decimal("0.9"), \
+        "the Large top-row icon Y drifted from its hand-measured 0.9rem"
 
 
 def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
@@ -1070,15 +1513,21 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
     # the BASE rule (the independent source) and compare. Because the derivation only ever rewrites
     # rem numbers, this equally asserts that no %, em, `contain`, colour, `90deg` or background-size
     # y-ratio was scaled, and the _X_SCALE lookup refuses any property that is not an x-length.
-    # NO exception list, unlike the Moving Average bar's: on this stylesheet the plain x4/3 holds
-    # for every declaration, and the count is pinned so a twin cannot go missing here either.
+    # ONE exception list, `_MARK_EXEMPT` above (mirroring the Moving Average bar's own
+    # `_MARK_EXEMPT`) -- the maintainer's per-mark lever, not a re-derivation this test can check by
+    # formula. The count is DERIVED from `want` minus that exemption, not hand-bumped, so a twin
+    # cannot go missing here either.
     base, large = _cascade()
     checked = 0
     for selector, body in large.items():
         bare = selector[len(_LG):]
-        assert bare in base, "%s overrides a rule that does not exist" % selector
-        base_decls = dict(_decls(base[bare]))
         for prop, value in _decls(body):
+            if (bare, prop) in _MARK_EXEMPT:
+                # SKIPPED before any base lookup: this test is about the x4/3 formula, and the
+                # per-mark lever's presence is already proven by the completeness test above.
+                continue
+            assert bare in base, "%s overrides a rule that does not exist" % selector
+            base_decls = dict(_decls(base[bare]))
             assert prop in _X_SCALE, \
                 "%s { %s } is not an x-length -- the root font already scales it, so a .mp-lg " \
                 "rule DOUBLE-applies SIZE_F" % (selector, prop)
@@ -1087,7 +1536,12 @@ def test_every_large_declaration_is_its_base_counterpart_times_four_thirds():
                 "%s { %s: %s } is not the base `%s` times 4/3" % (selector, prop, value,
                                                                   base_decls[prop])
             checked += 1
-    assert checked == 14, "expected 14 x4/3 declarations, checked %d" % checked
+    base_x_props = {(s, p) for s, body in base.items() for p in _x_props(body)}
+    expected = len(base_x_props) - len(_MARK_EXEMPT & base_x_props)
+    assert checked == expected, (
+        "expected %d straight x4/3 declarations (%d twinned x-lengths minus %d per-mark "
+        "exceptions), checked %d" % (expected, len(base_x_props),
+                                     len(_MARK_EXEMPT & base_x_props), checked))
 
 
 def test_the_large_block_carries_no_keyframe_and_no_vertical_length():

@@ -117,10 +117,11 @@ const PROGRESS_EDITS = [
      '1/6 root rule'],
     // HAND-EDIT 2/6: the sizing shim -- the tuner has no surface, so this rule does not exist in
     // the emit at all; inserted right before the backdrop rule that follows the root in both files.
-    // The width is NOT box + 2*PAD_REM: V_PAD_X_REM pads BOTH sides so the surface covers the
-    // right-anchored captions' leftward ink AND stays concentric with the track (see
-    // MoEProgress.js). 72 + 2*63 == 198.
-    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 198rem; height: 320rem; }\n.mpv-backdrop {',
+    // The width is a SPLIT pad now: 46 + 70 + -4 == 112 (V_BOX_W_REM(46) + V_PAD_X_REM(70) on the
+    // LEFT, where the right-anchored captions' ink lives, + V_PAD_XR_REM(-4) on the RIGHT, which
+    // CLIPS the (already trimmed) backdrop's own decorative bleed a little further, down to just
+    // past the track's tick overhang plus a 2px margin -- see MoEProgress.js's own note).
+    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 112rem; height: 320rem; }\n.mpv-backdrop {',
      '2/6 sizing shim'],
     // HAND-EDIT 3/5: the dash grid's gap stripe goes OPAQUE -- SCOPED to the gradient's own stops,
     // never the box-shadow ring in the same rule (which stays 0.5, a separate knob).
@@ -130,7 +131,11 @@ const PROGRESS_EDITS = [
     // writes, shared by both orientations) plus the box-shim's own Large twin, which -- like 2/6 --
     // the tuner never emits at all.
     ['.mpv-lg #moe-bar-root { width: 4rem; }\n' +
-     '.mpv-lg .mpv-backdrop { left: -45.333rem; width: 96rem; }\n' +
+     // 61.333, not 90 -- V_BOX_W_REM's own knob (bdW) is trimmed 72->46 to stop the backdrop
+     // covering the minimap (live-measurement-confirmed correct, keep it), so the tuner's own
+     // X43(46) twin moved with it. HAND-EDIT 6i/6 below overrides this raw emit outright with a
+     // LITERAL 90 (not this *4/3 figure) -- see the "to" side and MoEProgress.js's own note.
+     '.mpv-lg .mpv-backdrop { left: -45.333rem; width: 61.333rem; }\n' +
      '.mpv-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -141,13 +146,26 @@ const PROGRESS_EDITS = [
      '.mpv-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
      '.mpv-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
      'body.mpv.mp-lg #moe-bar-root { width: 4rem; }\n' +
-     'body.mpv.mp-lg #moe-bar-box { width: 222rem; }\n' +
-     '.mp-lg .mpv-backdrop { left: -45.333rem; width: 96rem; }\n' +
+     // 125.333, the PRE-SIZE_F box-shim quantity (round((boxW*xf + padX + padXRLarge) * f) == 157
+     // is what actually gets pushed via resizeViewRem -- see MoEProgress.js's own V_PAD_XR_REM
+     // note; this shim renders in DOCUMENT rem, so the root font supplies SIZE_F a second time).
+     'body.mpv.mp-lg #moe-bar-box { width: 125.333rem; }\n' +
+     // HAND-EDIT 6i/6: LITERAL 90, not the tuner's own X43(46)==61.333 -- the naive *4/3 twin lands
+     // the backdrop's right edge SHORT of the Large track edge by 15.667rem (see MoEProgress.js's
+     // own fact-3 note); 90 lands it exactly on the minimap's edge instead.
+     '.mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }\n' +
      '.mp-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
-     '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }\n' +
-     '.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(21.333rem); }\n' +
+     // 17rem, not 18.667 (== 14rem's old *4/3): the icon_gap_tuner.html per-mark pass reports the
+     // Large block-gap LITERALLY, not normalised back to Default scale -- see 6f/6g below.
+     '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(17rem); }\n' +
+     // 15.733rem, not the tuner's own X43(16)==21.333 -- HAND-EDIT 6h/6's Large-only nudge (the
+     // maintainer's "move the bottom block left" request, un-halved after the 2026-08-10 correction
+     // that briefly halved it on a since-disproven interface-scale theory -- see
+     // MoEProgressVertical.css's own note) is a hand-tuned literal, not the *4/3 formula. Default
+     // carries no nudge at all (see 6h/6's own note above, now empty of an edit).
+     '.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(15.733rem); }\n' +
      '.mp-lg .mpv-capP { padding-right: 8rem;\n  transform: translateY(50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }\n' +
      '.mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
@@ -161,12 +179,17 @@ const PROGRESS_EDITS = [
     // 6a: insert the NEW `.mpv-capEta` row right after capR, stacked above it via
     // `bottom: 100%; padding-bottom: 30rem` (== capR's own 24rem box + a 6rem visual gap), same
     // right-anchor mechanism copied verbatim from capR.
+    // 15rem, not the tuner's own 14 -- the icon_gap_tuner.html block<->bar-gap pass (6f/6g below
+    // is the per-mark LEVER; this is the single shared block-gap MA_V uses, so no per-mark
+    // selector is needed here, just a value change on the one shared rule capEta always mirrors).
     ['.mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;\n' +
      '            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }',
      '.mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;\n' +
-     '            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }\n' +
+     '            transform: translateX(15rem); font-size: 14rem; line-height: 18rem; }\n' +
+     // translateY(3rem) is the maintainer's OWN "lower the ETA row 3 device px" nudge -- a WHOLE
+     // -ROW move (numeral+icon together), additive to the row's existing right-anchor translateX.
      '.mpv-capEta { bottom: 100%; padding-bottom: 30rem; padding-right: 6rem;\n' +
-     '              transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }',
+     '              transform: translateX(15rem) translateY(3rem); font-size: 14rem; line-height: 18rem; }',
      '6a/6 capEta row inserted'],
     // 6b: split the old combined capR-scoped Y-nudge rules into per-row copies (same values,
     // capEta's copy governs the battles icon + eta numeral it now owns).
@@ -189,14 +212,22 @@ const PROGRESS_EDITS = [
      '.mpv-cap .mpv-ico.dmgp { margin-left: 1.253rem; }\n' +
      '.mpv-cap .mpv-ico.moe { margin-left: 0.885rem; }\n' +
      '.mpv-cap .mpv-ico.mk { margin-left: -1.25rem; }\n' +
+     // 6f: the mark icon's OWN per-mark levers, hand-tuned in icon_gap_tuner.html -- replace the
+     // single-residual .mk value above with three, same (0,3,0)-tie-by-source-order convention as
+     // MoEProgress.css's identical split.
+     '.mpv-cap .mpv-ico.mk1 { margin-left: 0.500rem; }\n' +
+     '.mpv-cap .mpv-ico.mk2 { margin-left: 2.000rem; }\n' +
+     '.mpv-cap .mpv-ico.mk3 { margin-left: 4.000rem; }\n' +
      '.mpv-cap .mpv-ico.battles { margin-left: 1.038rem; }',
-     '6c/6 four-icon margin corrections (Default)'],
+     '6c/6+6f/6 four-icon margin corrections + per-mark levers (Default)'],
     // 6d: the new capEta row's own Large positioning (byte-identical to capR's).
     // NOTE: anchors on `.mp-lg`, not `.mpv-lg` -- edit 4/6+5/6 above (the rename) has ALREADY run
-    // on this same text by the time this applies.
-    ['.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }',
-     '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }\n' +
-     '.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(18.667rem); }',
+    // on this same text by the time this applies, INCLUDING that edit's own 18.667->17 change.
+    ['.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(17rem); }',
+     '.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(17rem); }\n' +
+     // 2.4rem == 3 / SIZE_F(1.25) -- the SAME 3-device-px nudge as the Default rule above,
+     // re-expressed so it renders as 3px (not 3.75) once the Large root font multiplies it.
+     '.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(17rem) translateY(2.4rem); }',
      '6d/6 capEta Large twin'],
     // 6e: the four margin corrections' own Large twins (SIZE_XF == 4/3, replacing the OLD eta-gap
     // retarget's Large twin outright).
@@ -204,8 +235,19 @@ const PROGRESS_EDITS = [
      '.mp-lg .mpv-cap .mpv-ico.dmgp { margin-left: 1.671rem; }\n' +
      '.mp-lg .mpv-cap .mpv-ico.moe { margin-left: 1.180rem; }\n' +
      '.mp-lg .mpv-cap .mpv-ico.mk { margin-left: -1.667rem; }\n' +
+     // 6g: Large's own per-mark levers -- LITERAL, not this row's *4/3 (see the 4/6+5/6 note above
+     // on the literal-vs-normalised reading), so 0.5/2/4 does NOT become 0.667/2.667/5.333 here.
+     '.mp-lg .mpv-cap .mpv-ico.mk1 { margin-left: -1.000rem; }\n' +
+     '.mp-lg .mpv-cap .mpv-ico.mk2 { margin-left: 1.000rem; }\n' +
+     '.mp-lg .mpv-cap .mpv-ico.mk3 { margin-left: 3.000rem; }\n' +
      '.mp-lg .mpv-cap .mpv-ico.battles { margin-left: 1.384rem; }',
-     '6e/6 four-icon margin corrections (Large)'],
+     '6e/6+6g/6 four-icon margin corrections + per-mark levers (Large)'],
+    // 6h: the bottom block (current damage + delta)'s own residual X nudge -- Large ONLY
+    // (2026-08-10, twice-corrected): the nudge was never meant to touch Default at all, so Default
+    // is UNEDITED (matches the tuner's own capxC=16 default exactly, no entry needed here any
+    // more). Its Large twin is handled inside 4/6+5/6 above, since that edit already owns the whole
+    // Large block and .mpv-capC's Large line lives inside it -- see that edit's own comment for the
+    // restored, un-halved value.
 ];
 
 const EFFICIENCY_EDITS = [
@@ -220,14 +262,36 @@ const EFFICIENCY_EDITS = [
     ['#mev-bar-root', '#moe-bar-root', '1/5 id rename (remaining occurrences)', "all"],
     // HAND-EDIT 3/5: the sizing shim, inserted right before the backdrop rule -- the tuner has no
     // surface, so this does not exist in the emit at all.
-    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 116rem; height: 318rem; }\n.mev-backdrop {',
+    // Width is a SPLIT pad now: 54 + 52 + -6 == 100 (V_BOX_W_REM(54) + V_PAD_X_REM(52) on the LEFT,
+    // this bar's true extreme (.mev-cap.bt, current damage + delta) needs its ink, + V_PAD_XR_REM
+    // (-6) on the RIGHT, which CLIPS the (already trimmed) backdrop's own bleed a little further,
+    // down to just past the track's tick overhang plus a 2px margin -- see MoEEfficiency.js's own
+    // note).
+    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 100rem; height: 318rem; }\n.mev-backdrop {',
      '3/5 sizing shim'],
     // HAND-EDIT 4/5 + 5/5: `.mev-lg` -> `.mp-lg`, plus the box-shim's own Large twin the tuner never
-    // emits.
+    // emits -- the PRE-SIZE_F quantity (72 + 52 + -8.667 == 115.333; round(115.333 * SIZE_F) == 144
+    // is what actually gets pushed via resizeViewRem -- see MoEEfficiency.js's own V_PAD_XR_REM
+    // note).
     ['.mev-lg #moe-bar-root { width: 4rem; }',
-     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 148rem; }',
+     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 115.333rem; }',
      '4/5+5/5 Large block (root/box)'],
     ['.mev-lg ', '.mp-lg ', '4/5 remaining Large-block rename', "all"],
+    // 5i: the backdrop's OWN Large width, overridden with a LITERAL 98, not the tuner's own
+    // X43(54)==72 (already renamed to .mp-lg by the edit above; V_BOX_W_REM's trim to 54 is
+    // live-measurement-confirmed correct -- see MoEEfficiency.js's fact 3, keep it). The naive *4/3
+    // twin lands the backdrop's right edge SHORT of the Large track edge by 13rem (see
+    // MoEEfficiency.js's own note); 98 lands it exactly on the minimap's edge instead.
+    ['.mp-lg .mev-backdrop { left: -53.333rem; width: 72rem; }',
+     '.mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }',
+     '5i/5 backdrop Large width'],
+    // 5h: the top block (r4/.tp, the 100% requirement) and bottom block (.bt, current damage +
+    // delta)'s own residual X nudge -- CANCELLED (2026-08-10, third correction): the maintainer's
+    // follow-up ("4px / 7px RIGHT on Large") is the exact opposite of the un-halved LEFT nudge this
+    // table carried a moment ago, and verified-by-Decimal cancels it exactly (11.467+3.2==14.667,
+    // 11.733+5.6==17.333 -- see MoEEfficiencyVertical.css's own note). Large now matches the tuner's
+    // own capxR4=11 / capxCur=13 defaults (X43'd) exactly too, so no entry is needed here at all any
+    // more -- neither Default nor Large diverges from the fresh emit for this pair of rules.
 ];
 
 function applyEdits(css, edits) {
@@ -263,11 +327,11 @@ function run(mutation) {
             "p-lg-class-restored": [() => { progressShipped = progressShipped.replace(
                 "body.mpv.mp-lg #moe-bar-root", ".mpv-lg #moe-bar-root"); }],
             "p-box-shim-dropped": [() => { progressShipped = progressShipped.replace(
-                "body.mpv #moe-bar-box { width: 198rem; height: 320rem; }\n", ""); }],
+                "body.mpv #moe-bar-box { width: 112rem; height: 320rem; }\n", ""); }],
             "e-root-scope-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
                 "body.mev #moe-bar-root {", "#moe-bar-root {"); }],
             "e-lg-box-twin-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
-                "body.mev.mp-lg #moe-bar-box { width: 148rem; }\n", ""); }],
+                "body.mev.mp-lg #moe-bar-box { width: 115.333rem; }\n", ""); }],
             "e-lg-class-not-renamed": [() => { efficiencyShipped = efficiencyShipped.replace(
                 ".mp-lg .mev-track { width: 4rem; }", ".mev-lg .mev-track { width: 4rem; }"); }],
         };

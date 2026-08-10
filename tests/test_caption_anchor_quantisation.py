@@ -182,7 +182,12 @@ _CORRECTED = ((".mp-s1 .mp-cap.up .mp-ico", ".mp-cap.up .mp-ico", 0),
 _MA_CORRECTED = ((".mp-s1 .mp-capC .mp-ico", ".mp-capC .mp-ico", False),
                  (".mp-s1.mp-lg .mp-capC .mp-ico", ".mp-capC .mp-ico", True),
                  (".mp-s1 .mp-cap .mp-d", ".mp-cap .mp-d", False),
-                 (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-cap .mp-d", True))
+                 (".mp-s1.mp-lg .mp-cap .mp-d", ".mp-cap .mp-d", True),
+                 # NEW: the maintainer's "lower the top-row icon 0.5 device px" nudge pushed
+                 # .mp-capP .mp-ico off a whole rem too (2.00 -> 2.50) -- same uniform -1-device-px
+                 # correction, no Large-specific override on the base (rides SIZE_F, like capC's).
+                 (".mp-s1 .mp-capP .mp-ico", ".mp-capP .mp-ico", False),
+                 (".mp-s1.mp-lg .mp-capP .mp-ico", ".mp-capP .mp-ico", True))
 # EVERY piece this bar hangs off a caption's line box, as
 # (nudge rule, caption rule, own-box rule, own-box property, IS IT IN FLOW?). SIX rows for five
 # pieces: the right-hand axis caption swaps glyph FAMILIES at 3 marks (.mk -> .moe), and both boxes

@@ -286,6 +286,12 @@
      a 24x24 canvas, box 16rem); mark_1/mark_3 land off it by +-2rem -- an accepted residual, same
      class as MoEProgress.css's own mark correction. */
   .mp-cap.dn .mp-ico.mk{transform:translate(1rem,-50%) translateY(var(--icoyreq))}
+  /* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 are three concurrent rows, so
+     mark_1/mark_2/mark_3 no longer share one residual -- each gets its own full transform, tying
+     .mk above on specificity ((0,4,0) each) and beating it by SOURCE ORDER instead. */
+  .mp-cap.dn .mp-ico.mk1{transform:translate(2rem,-50%) translateY(0.25rem)}
+  .mp-cap.dn .mp-ico.mk2{transform:translate(0rem,-50%) translateY(0.25rem)}
+  .mp-cap.dn .mp-ico.mk3{transform:translate(-1.5rem,-50%) translateY(0.25rem)}
   .mp-ico::before{content:"";position:absolute;left:50%;top:50%;z-index:-1;width:106%;height:106%;
     transform:translate(-50%,-50%);
     background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
@@ -627,7 +633,7 @@
       {id:"brmk",label:"brightness() -- marksOnGun (deliberately 1)",min:1,max:6,step:0.1,val:1},
       {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.25},
       {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:-0.25},
-      {id:"icoyCur",label:"Current icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.5}]],
+      {id:"icoyCur",label:"Current icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1.0}]],
     ["Backdrop",[
       {id:"ckCell",label:"Checker cell (game px @3840)",min:1,max:16,step:1,val:2},
       {id:"ckAlpha",label:"Checker opacity",min:0,max:0.6,step:0.005,val:0.1},
@@ -1162,6 +1168,14 @@ bandRules+"\n"+
 "   horizontal Moving Average bar's own pass. */\n"+
 ".mp-cap.dn .mp-ico.mk { transform: translate(1rem, -50%) translateY("+
   st.icoyReq+"rem); }\n"+
+"/* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 are three concurrent rows\n"+
+"   (unlike the Moving Average bar's single reused slot), each already statically classed\n"+
+"   mk1/mk2/mk3, so each gets its own full transform instead of sharing .mk's one residual\n"+
+"   value above. (0,4,0), tying .mk on specificity -- beaten by SOURCE ORDER (written after it),\n"+
+"   same convention as MoEProgress.css's identical split. */\n"+
+".mp-cap.dn .mp-ico.mk1 { transform: translate(2.000rem, -50%) translateY(0.25rem); }\n"+
+".mp-cap.dn .mp-ico.mk2 { transform: translate(0.000rem, -50%) translateY(0.25rem); }\n"+
+".mp-cap.dn .mp-ico.mk3 { transform: translate(-1.500rem, -50%) translateY(0.25rem); }\n"+
 ".mp-ico::before {\n  content: \"\";\n  position: absolute;\n  left: 50%;\n  top: 50%;\n"+
 "  z-index: -1;\n  width: 106%;\n  height: 106%;\n  transform: translate(-50%, -50%);\n"+
 "  background: "+icoGlow(hexA(st.icoGlowCol,st.icoGlowA))+";\n}\n"+

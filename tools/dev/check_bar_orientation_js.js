@@ -126,10 +126,18 @@ function vBox(src, where) {
     // the efficiency expectations below are byte-identical to what they were. ONE value for both
     // sides, so the surface stays concentric with the track -- see V_PAD_X_REM's own note.
     const padX = /^const V_PAD_X_REM = /m.test(src) ? jsConst(src, "V_PAD_X_REM", where) : PAD;
+    // THE RIGHT (minimap-facing) PAD is its OWN, separate knob now -- both vertical bars declare
+    // one, so they clip the backdrop's decorative bleed short of the invisible surface's minimap-
+    // facing edge instead of padding it symmetrically (see each bar's own V_PAD_XR_REM note).
+    // Absent -> padX, MoEBarTransient's own fallback (a composition that never supplies one stays
+    // symmetric, byte-identical to the old `2 * padX` formula).
+    const padXR = /^const V_PAD_XR_REM = /m.test(src) ? jsConst(src, "V_PAD_XR_REM", where) : padX;
+    const padXRLarge = /^const V_PAD_XR_REM_LARGE = /m.test(src)
+        ? jsConst(src, "V_PAD_XR_REM_LARGE", where) : padXR;
     return {
-        surface: [w + 2 * padX, h + 2 * PAD - clipB],
+        surface: [w + padX + padXR, h + 2 * PAD - clipB],
         shiftX: padX - left + "rem", shiftY: PAD - top + "rem",
-        lgSurface: [Math.round((w * SIZE_XF + 2 * padX) * SIZE_F),
+        lgSurface: [Math.round((w * SIZE_XF + padX + padXRLarge) * SIZE_F),
                     Math.round((h + 2 * PAD - clipB) * SIZE_F)],
     };
 }

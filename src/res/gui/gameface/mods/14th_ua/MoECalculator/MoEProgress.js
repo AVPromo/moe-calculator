@@ -157,12 +157,14 @@ const PAD_REM = 10;
 // new itemID would cost every user a one-time client restart.
 //
 // V_BOX_* IS .mpv-backdrop, exactly as BOX_* above is .mp-backdrop -- and it is the axis-swap of it
-// with the tuner's own tuned lengths, NOT a transpose of these four (72 wide against 360 tall, vs
+// with the tuner's own tuned lengths, NOT a transpose of these four (46 wide against 360 tall, vs
 // 360 x 72; the side clearance is 34 a side, not 80, because a vertical bar's captions grow along
-// its cross axis and the tuned overhang differs). PAD_REM serves the Y axis; the X axis is
-// V_PAD_X_REM (see its own note below), so:
-//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 97
-//                            + 2 * V_PAD_X_REM == 198
+// its cross axis and the tuned overhang differs, and the RIGHT edge is trimmed -- see V_BOX_W_REM's
+// own note below). PAD_REM serves the Y axis; the X axis is a SPLIT pad, V_PAD_X_REM on the left
+// (caption ink) and V_PAD_XR_REM on the right (the track's own tick overhang, deliberately smaller
+// -- see both constants' own notes below), so:
+//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 104
+//               + V_PAD_X_REM + V_PAD_XR_REM == 112
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                                - V_CLIP_B_REM == 320 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
 // V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
@@ -246,13 +248,17 @@ const PAD_REM = 10;
 // extremes above use). Each row's ink starts at `-padding-right + translateX` off the track's left
 // edge and grows leftward; the design is digit-count INVARIANT at the anchor (see the CSS's own
 // note), so a static worst case is sound:
-//   .mpv-capC (bottom) IS STILL THE EXTREME, untouched by any of this (.mpv-ico.dmgc keeps its
-//     base 1rem margin, "the reference"), and only with a 4-DIGIT delta -- which is what is
-//     budgeted for, per the maintainer, not the 3-digit case:
-//     (-6 + 16) - [ 39.78 ("(+2,970)" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
+//   .mpv-capC (bottom) IS STILL THE EXTREME, and MORE so now: the maintainer's own "move the
+//     bottom block left 7px" nudge shrank its translateX from 16 to 9, moving the anchor 7rem
+//     CLOSER to the surface's left edge (mind the clip -- every one of these captions is
+//     right-anchored, so "left" is the OVERFLOW direction). .mpv-ico.dmgc still keeps its base
+//     1rem margin ("the reference"), and this is still budgeted for the 4-DIGIT delta case, not
+//     the 3-digit one:
+//     (-6 + 9) - [ 39.78 ("(+2,970)" at the .mpv-d 12rem) + 4.20 (its 0.35em gap of that same
 //     12rem) + 35.52 ("3,050" at 16rem) + 1.00 (the shared icon gap) + 16.00 (.mpv-ico.dmgc) ]
-//     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -92.49rem.
-//     A 3-digit delta ("(+297)" == 30.89) reaches only -83.61.
+//     - 6.00 (.mpv-d-num's up/down sign GLOW, the widest text-shadow in the file) == -99.49rem
+//     (was -92.49 before the nudge -- exactly +7, the same device-px count the translateX lost).
+//     A 3-digit delta ("(+297)" == 30.89) reaches only -90.61.
 //   .mpv-capR (now JUST the requirement group -- the eta group moved to its own row below): the
 //     mark icon's own margin correction (-1.25rem) makes IT the shorter reach; the icon that
 //     actually binds is .moe (the achievement glyph that REPLACES .mk once 3 marks are earned),
@@ -267,9 +273,13 @@ const PAD_REM = 10;
 //     the file by a wide margin.
 //   .mpv-capP (moving, dmgp back at 14rem, margin corrected to 1.253rem): (-6 + 0) -
 //     [ 31.08 + 1.253 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.33rem.
-// capC is STILL the extreme (92.49 > 53.33 > 41.97 > 20.85), so the surface's left edge stays
-// exactly where it was:
-//   V_PAD_X_REM == 97 + V_BOX_LEFT_REM == 97 - 34 == 63   (UNCHANGED -- neither job moved this)
+// capC is STILL the extreme (99.49 > 53.33 > 41.97 > 20.85), and the maintainer's own 7px-left
+// nudge ate the margin (104 - 99.49 == 4.51, was 97 - 92.49 == 4.51 before -- the SAME margin,
+// because V_PAD_X_REM grew by the identical +7): the surface's left edge had to move WITH it:
+//   V_PAD_X_REM == 104 + V_BOX_LEFT_REM == 104 - 34 == 70   (was 63; +7, matching the capC nudge)
+// GROWING THIS MOVES THE TRACK INSIDE THE SURFACE, so domain/constants.PROGRESS_MM_TRACK_X(
+// _LARGE) had to grow with it by the exact same amount (in logical px, i.e. *SIZE_F under Large)
+// or the visible bar would slide RIGHT into the minimap -- see that constant's own comment.
 // tests/test_progress_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is the
 // GATE on all of the above -- it re-derives every row from the stylesheet and the advances rather
 // than trusting this note, and goes red the moment V_PAD_X_REM is trimmed. Splitting capR into
@@ -295,20 +305,104 @@ const PAD_REM = 10;
 // re-deriving both sides from source rather than hardcoding 54.5 and 90 as two literals that would
 // have to agree by hand.
 // LARGE IS STRICTLY SLACKER and needs no twin: the allowance is `V_PAD_X_REM - V_BOX_LEFT_REM*4/3`
-// == 108.33rem (the backdrop's left bleed is an x-length and takes SIZE_XF; V_PAD_X_REM, like
-// PAD_REM, does NOT -- the ink it covers is rem-sized and rides the root font's SIZE_F alone),
-// while the ink only grows on its three x-GAPS. The Default size keeps binding.
+// == 115.33rem (was 108.33 before V_PAD_X_REM grew to 70 -- the backdrop's left bleed is an
+// x-length and takes SIZE_XF; V_PAD_X_REM, like PAD_REM, does NOT -- the ink it covers is
+// rem-sized and rides the root font's SIZE_F alone), while the ink only grows on its three
+// x-GAPS. The Default size keeps binding.
 // THE MINIMAP ANCHOR MUST FOLLOW THIS CONSTANT. domain/constants.PROGRESS_MM_TRACK_X's PURE
 // derivation is `V_SHIFT_X_REM + trackW`, i.e. where the track sits inside the surface -- widen
 // the left slack without growing it and the whole bar slides left by the difference. The shipped
 // constant also carries a further -2 measured hand-placement correction on top; see its
 // derivation there.
+//
+// FOUR DURABLE FACTS, established by reading the source rather than assuming (a maintainer once
+// saw the minimap's first column "covered by a dark panel" and the fix took four rounds to land):
+//   1. THE BACKDROP IS NOT MEANT TO COVER THE RIGHT-ANCHORED CAPTIONS -- only V_PAD_X_REM (above)
+//      was ever sized for their ink. .mpv-backdrop is a SEPARATE rectangle, drawn for the
+//      shadow/glow bleed around the TRACK, and every one of capR/capEta/capP/capC already reaches
+//      far past it by design (see the worst-case reach note above -- 20.85 to 99.49rem, against a
+//      34rem backdrop bleed). Do not "fix" a clip by widening the backdrop; that is V_PAD_X_REM's
+//      job, on the SURFACE, which is never drawn.
+//   2. THE VERTICAL BAR'S BACKDROP HAS NO SYMMETRY CONTRACT. `test_the_large_backdrop_stays_
+//      symmetric_about_the_track` (tests/test_progress_surface_mirror.py) asserts symmetry ONLY
+//      for the HORIZONTAL bar's `.mp-backdrop`, because `anchor_centred_reduced`'s `max_x // 2` has
+//      no X term and only centres the BAR by centring the SURFACE -- true for the Damage Log
+//      (horizontal) anchor. Fixed+Vertical resolves through `anchor_minimap` instead
+//      (bar_window._resolve), whose `x = space_x - mm_size - gap - overhang - edge_x` reads
+//      `edge_x` (PROGRESS_MM_TRACK_X) and NOTHING about the backdrop's own width or left. Trimming
+//      `.mpv-backdrop` asymmetrically (this file's own V_BOX_W_REM, leaving V_BOX_LEFT_REM alone)
+//      moves nothing the placement math depends on.
+//   3. THE BACKDROP TRIM (V_BOX_W_REM 72 -> 46) WAS REAL WORK -- KEEP IT. A maintainer report of
+//      the backdrop "sitting well clear of the minimap" turned out to describe a DIFFERENT panel;
+//      measured live (window pos (1294,760), minimap index 4 == 510px wide at 1920x1080 logical
+//      space), THIS backdrop's own right edge (V_PAD_X_REM + V_BOX_W_REM == 70+46==116) lands
+//      EXACTLY on the minimap's own left edge (PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG ==
+//      105+8+3==116) -- zero overlap, by design, at the tuned 46. Reverting to 72 (right edge 142)
+//      would reopen a real 26rem overlap. Do not touch V_BOX_W_REM again without a live measurement
+//      to justify it.
+//   4. THE ACTUAL CULPRIT WAS THE INVISIBLE SURFACE'S OWN RIGHT PAD, NEVER UPDATED TO MATCH. The
+//      backdrop trim shrank the DRAWN rect; nothing shrank the SURFACE (the mouse-hit-blocking rect
+//      per this file's header) on that side, so it stayed the OLD symmetric V_PAD_X_REM(70) past
+//      the ALREADY-TRIMMED backdrop -- measured live: window size (186,320) == 46+70+70, its right
+//      edge 70 logical px INSIDE the minimap (space_x - mm_size == 1410; window right == 1294+186==
+//      1480). See MoEBarTransient.js's `padXR`/`padXRLarge` arg notes for the fix (a SEPARATE,
+//      smaller right pad, V_PAD_XR_REM/_LARGE below) and V_PAD_XR_REM's own derivation. Because the
+//      fix only shrinks the RIGHT pad and V_PAD_X_REM (the LEFT side, where the caption ink and the
+//      track itself both live) is untouched, `shiftX` and therefore PROGRESS_MM_TRACK_X(_LARGE) --
+//      both pure functions of the LEFT side alone -- need no correction, and the bar does not move
+//      on screen (confirmed live: the measured window position matches anchor_minimap bit-exactly
+//      already, before this pad fix, and stays that way after it).
+//   5. PROGRESS_MM_TRACK_X CARRIES A -2 HAND CORRECTION (see its own derivation in domain/
+//      constants.py) THAT MUST NOT LEAK INTO THIS FILE'S OWN SURFACE-WIDTH MATH. That correction
+//      exists ONLY to match a measured discrepancy in where the WINDOW lands in SPACE (two
+//      independent Ctrl-drags); it shifts the whole window (surface + everything drawn inside it)
+//      by a constant 2px, and does NOT change where the TICK renders inside its OWN surface -- that
+//      is a pure JS/CSS fact (shiftX + trackW), unrelated to any Python-side placement fudge. Using
+//      the CORRECTED constant (105) as if it were this bar's own local tick position (as an earlier
+//      pass of this fix did) UNDERSTATES the tick's real reach by exactly that 2px and clips it --
+//      the true local tick-right is shiftX(104) + trackW(3) + MM_TICK_OVERHANG(3) == 110, not 108.
+//      See V_PAD_XR_REM's own derivation below, which uses the PURE (uncorrected) value throughout.
 const V_BOX_LEFT_REM = -34;                          // .mpv-backdrop's left
 const V_BOX_TOP_REM = -80;                           // .mpv-backdrop's top
-const V_BOX_W_REM = 72;                              // .mpv-backdrop's width
+const V_BOX_W_REM = 46;                              // .mpv-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mpv-backdrop's height
 const V_CLIP_B_REM = 60;                             // backdrop bleed the SURFACE clips off the bottom
-const V_PAD_X_REM = 63;                              // the X slack, decoupled from the backdrop
+const V_PAD_X_REM = 70;                              // the LEFT X slack, decoupled from the backdrop
+// THE SURFACE'S RIGHT (minimap-facing) PAD -- deliberately NOT V_PAD_X_REM's mirror, and a SEPARATE
+// knob from the backdrop's own V_BOX_W_REM trim above: the backdrop trim shrinks what is DRAWN, this
+// shrinks what is CLICK-BLOCKING (the surface, never drawn). Shrunk close to the minimum the TRACK's
+// own ink needs on that side: the tick's cross-axis overhang past its own edge
+// (domain/constants.MM_TICK_OVERHANG(_LARGE), the SAME term anchor_minimap's `x` formula already
+// adds as clearance), plus a small, deliberate MARGIN (+2 logical/document px, flat, NOT xf-scaled
+// -- see fact 5: this is a JS-local geometry decision, so it uses the PURE tick position, never
+// PROGRESS_MM_TRACK_X's hand-corrected placement value) so the surface's own edge is never flush
+// with the tick's -- a flush boundary is exactly the "rounding could shave a px and eat the ink"
+// risk fact 5 exists to head off. Nothing for caption ink is needed on this side at all -- every
+// caption here is anchored to the LEFT (see V_PAD_X_REM's own note), so the right side backs nothing
+// but the (already-trimmed) backdrop's own remaining decorative bleed, which this pad now clips a
+// little further, at the surface edge, rather than containing it (the same clip-not-contain pattern
+// V_CLIP_B_REM already uses on the bottom).
+// Solved directly against MoEBarTransient.applySize's own formula
+// (viewW == round((boxW*xf + padX + padXR) * f)), using the PURE (uncorrected) tick position:
+//   tick-right (Default, xf=f=1) == shiftX(104) + trackW(3) + MM_TICK_OVERHANG(3) == 110
+//   Default:  viewW == 110 + 2 (margin) == 112  ->  padXR == 112 - V_BOX_W_REM(46) - V_PAD_X_REM(70) == -4
+//   tick-right (Large, PRE-SIZE_F) == shiftX_pre_f(346/3) + trackW_large(4) + overhang_large_pre_f(4)
+//                                  == 370/3 ~= 123.333 (renders at 123.333*SIZE_F ~= 154.167 device px)
+//   Large:    viewW_pre_f == 370/3 + 2 == 376/3 ~= 125.333  ->  round(125.333 * SIZE_F) == 157
+//     padXRLarge == 376/3 - boxW*xf(184/3) - V_PAD_X_REM(70) == -18/3 == -6 (exact)
+// Both NEGATIVE: the surface's right edge sits a LITTLE further inside the backdrop's own (already
+// trimmed) drawn rect than its own edge -- the box+left-pad sum (46+70==116 Default, 61.333+70==
+// 131.333 pre-SIZE_F Large) is already flush with the minimap (fact 3), so ANY margin (to the tick,
+// or to the minimap) needs the surface a shade smaller still. Resulting margins, both real and
+// checked (tests/test_progress_surface_mirror.py::test_the_surface_clears_the_minimap_at_every_
+// size_index / test_the_surface_does_not_clip_the_tick): Default clears the minimap by 4px and the
+// tick by 2px; Large by 3px and ~2.8px respectively -- none of it flush, none of it negative.
+// padXRLarge is NOT padXR*SIZE_XF, for the same reason MM_TRACK_X_LARGE and MM_TICK_OVERHANG_LARGE
+// are their own literals: the Large geometry (trackW_large, shiftX_large) is not a pure *SIZE_XF
+// scale of the Default one once V_BOX_LEFT_REM's own fractional Large scaling is folded in, so
+// neither is what clears it -- see the derivation above, computed directly, not scaled.
+const V_PAD_XR_REM = -4;                             // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -6;                       // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
 // together by goVertical() below and never touched again.
@@ -486,7 +580,19 @@ function capV(c) { return c.querySelector(ns(".mp-v")); }
 // The k=0 arm is unreached from paintStatic today -- its only caller passes marks+1 or 4 -- but it
 // stays, because without it a stray 0 would write the nonexistent class "mk mk0" and blank the
 // glyph silently instead of hiding it.
+// CAP-LEVEL mk1/mk2/mk3, SEPARATELY FROM THE ICON'S OWN CLASS: .mp-capR's own margin-left (the
+// block<->bar gap, CSS's "block-gap" knob) now varies per mark too, and unlike the icon there is
+// no OTHER class on the caption to key a compound selector off, so capR gets its own copy of the
+// same mk<k> marker. classList.toggle, not a wholesale className rewrite: capR carries its own
+// "mp-cap side mp-capR" (horizontal) / "mpv-cap mpv-capR" (vertical) classes permanently and only
+// the mark marker should move. Ungated by capMkIco's null-guard on purpose -- the caption's own
+// classing must stay correct even on the rare tick capMkIco failed to resolve.
 function setIco(k) {
+    if (capR) {
+        capR.classList.toggle("mk1", k === 1);
+        capR.classList.toggle("mk2", k === 2);
+        capR.classList.toggle("mk3", k === 3);
+    }
     if (!capMkIco) return;
     capMkIco.className = ns("mp-ico") + (k === 0 ? " none" : k === 4 ? " moe" : " mk mk" + k);
 }
@@ -749,7 +855,8 @@ const T = createTransient({
     // `box` replaces the four box* arguments above. Adopted at mount iff the model's `vertical` is
     // true, which then calls goVertical below for the DOM half.
     vert: { cls: "mpv", box: [V_BOX_LEFT_REM, V_BOX_TOP_REM, V_BOX_W_REM, V_BOX_H_REM],
-            clipB: V_CLIP_B_REM, padX: V_PAD_X_REM },
+            clipB: V_CLIP_B_REM, padX: V_PAD_X_REM,
+            padXR: V_PAD_XR_REM, padXRLarge: V_PAD_XR_REM_LARGE },
     onVertical: goVertical,
 });
 

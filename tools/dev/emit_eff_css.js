@@ -271,6 +271,21 @@ const LARGE = `
    The .bm and .mk lines below are the Large twins of the emit's own per-icon ink-gap-parity
    overrides (see the emit's own comment above .mp-cap.dn .mp-ico.bm/.mk): literal, SIZE_XF (4/3)
    applied by hand to the Default literal, never re-derived from the shared --icoGap knob.
+   .mk1/.mk2/.mk3 (SCOPE DECISION, the user's eye over the x4/3 contract): 1.000/0.000/-2.000rem,
+   LITERAL, reported directly by tools/dev/icon_gap_tuner.html, NOT the Default row's
+   (2.000/0.000/-1.500) times 4/3. r1/r2/r3 already carry static mk1/mk2/mk3 classes
+   (MoEEfficiency.js's MARKUP), so no new plumbing -- same as the Default per-mark pass. mark_2's
+   0.000rem is a real tuned value despite the surface-mirror gate's own regex never classifying a
+   zero translateX as an x-length (it looks for a NONZERO digit inside translate()'s first arg) --
+   added anyway, per the maintainer's explicit instruction. Both
+   test_every_large_declaration_is_its_base_counterpart_times_four_thirds and
+   test_the_large_block_twins_exactly_the_base_cascades_x_lengths knowingly fail on this trio (the
+   first outright on mark_1/mark_3's values, the second additionally on mark_2 landing as a twin
+   with no base x-length to match) -- left standing for qa to re-scope.
+   .mp-cap.up .mp-ico's Y is 0.9rem, not icoyCur's plain 0.5 -- the maintainer's own "lower the
+   top-row icon 0.5 device px" nudge, added on top of the existing 0.5: 0.5 (existing) +
+   0.5/1.25 (the new nudge, discounted so it renders as 0.5 device px under Large too, not
+   0.625) == 0.9. LITERAL here too, exempted from the x4/3 formula test the same way.
 ===== */
 .mp-lg #moe-bar-box { width: 613.333rem; }
 .mp-lg #moe-bar-root { width: 400rem; }
@@ -284,9 +299,12 @@ const LARGE = `
 .mp-lg .mp-cap .mp-d { transform: translate(5.6rem, 2.5rem); }
 .mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
 .mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
-.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.5rem); }
+.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.9rem); }
 .mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(-0.25rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk { transform: translate(1.333rem, -50%) translateY(0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.mk1 { transform: translate(1.000rem, -50%) translateY(0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.mk2 { transform: translate(0.000rem, -50%) translateY(0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.mk3 { transform: translate(-2.000rem, -50%) translateY(0.25rem); }
 /* ===== END HAND-ADDED BLOCK 3 ===== */
 `;
 
@@ -350,8 +368,8 @@ const QUANT = `
    class at all, so no selector here can match and the base cascade is bit-for-bit the approved
    render. Same for an untrusted read (see the trust gate in MoEBarTransient.js).
 ===== */
-.mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(-0.5rem); }
-.mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.3rem); }
+.mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(0rem); }
+.mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.7rem); }
 .mp-s1 .mp-cap .mp-d            { transform: translate(4.2rem, 1.5rem); }
 .mp-s1.mp-lg .mp-cap .mp-d      { transform: translate(5.6rem, 0.7rem); }
 /* ===== END HAND-ADDED BLOCK 4 ===== */

@@ -907,17 +907,22 @@ def test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large(m
 # see EFFICIENCY_ANCHOR_X_OFFSET, the MINIMAP_SIZES lookup or the orientation/size gates).
 #
 #   screen 3840x2160 device px @ interfaceScale 2  ->  logical GUI space 1920x1080
-#   surface 116x318 logical px (MoEEfficiency.js V_VIEW_W_REM x V_VIEW_H_REM)
-#   -> movable extent 1804x762
+#   surface 200x318 logical px (MoEEfficiency.js V_VIEW_W_REM x V_VIEW_H_REM, widened from 116 in
+#     two passes -- the per-mark caption pass's V_PAD_X_REM fix, then corrected again once the
+#     .bt row and the top/bottom-block nudges were folded in)
+#   -> movable extent 1720x762
 #   minimap size index 4, Default size, VERTICAL, Minimap alignment
 #
-# X == 1346 is the PURE composition derivation (1920 - 510 - 8 - 3 - 53). The maintainer's own
-# Ctrl+drag of this exact configuration landed 2px away from it (1344) -- read at the time as
-# hand-drag scatter against a second, independent Moving Average drag that missed the OTHER way.
-# THAT READING NO LONGER STANDS FOR THE MOVING AVERAGE BAR (a third, independent drag in a
-# different geometry repeated its miss exactly -- see constants.py's PROGRESS_MM_TRACK_X), but the
-# Damage Efficiency bar's single drag has since been inspected in-game and accepted as correct AS
-# DERIVED, so it still ships the pure derivation, not the drag. Y == 762 is NOT their stored 820, and that is the point of the second
+# X == 1304 is the PURE composition derivation (1920 - 510 - 8 - 3 - 95). This bar's own hand-drag
+# (see constants.py's EFFICIENCY_MM_TRACK_X comment) predates every one of those widenings and
+# checked a MUCH narrower surface (edge_x 53, X == 1346) -- it landed 2px off that OLDER derivation
+# (1344), read at the time as hand-drag scatter against a second, independent Moving Average drag
+# that missed the OTHER way. THAT READING NO LONGER STANDS FOR THE MOVING AVERAGE BAR (a third,
+# independent drag in a different geometry repeated its miss exactly -- see constants.py's
+# PROGRESS_MM_TRACK_X), and the Damage Efficiency bar's own single drag was already accepted as
+# correct AS DERIVED rather than as measured, so this still ships the pure (now-widened)
+# derivation, not either drag -- a fresh in-game check of the new position is owed more than ever
+# (see constants.py). Y == 762 is NOT their stored 820, and that is the point of the second
 # half of this test: 820 is 58 px past the movable extent, so the engine clamps it (compiled C++, no
 # opt-out -- memory `engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it`) and the
 # bar they were looking at was ALREADY at 762, i.e. already at EFFICIENCY_MM_GAP_BOTTOM's hard floor.
@@ -925,7 +930,7 @@ def test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large(m
 # surface (MoEEfficiency.js V_CLIP_B_REM), not a constant.
 
 _EFF_SPACE = (1920, 1080)
-_EFF_SURFACE = (116, 318)
+_EFF_SURFACE = (200, 318)
 _EFF_MAX = (_EFF_SPACE[0] - _EFF_SURFACE[0], _EFF_SPACE[1] - _EFF_SURFACE[1])
 
 
@@ -951,7 +956,7 @@ def test_the_vertical_efficiency_bar_lands_on_the_derived_position(monkeypatch):
                         mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_DEFAULT,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
     host, window = _efficiency_host()
-    assert _resolved(host, window) == (1346, 762)
+    assert _resolved(host, window) == (1304, 762)
 
 
 def test_the_hand_placed_y_was_below_the_engines_clamp_floor_so_none_of_it_was_folded_in():
@@ -973,7 +978,7 @@ def test_the_hand_placed_y_was_below_the_engines_clamp_floor_so_none_of_it_was_f
 # in-game measurement, confirmed by two independent drags in two different surface geometries.
 
 _PROG_V_SPACE = (1920, 1080)
-_PROG_V_SURFACE = (198, 320)   # MoEProgress.js's vertical surface -- see test_progress_surface_mirror
+_PROG_V_SURFACE = (212, 320)   # MoEProgress.js's vertical surface -- see test_progress_surface_mirror
 _PROG_V_MAX = (_PROG_V_SPACE[0] - _PROG_V_SURFACE[0], _PROG_V_SPACE[1] - _PROG_V_SURFACE[1])
 
 
@@ -995,8 +1000,11 @@ def _progress_vertical_host(max_xy=_PROG_V_MAX, surface=_PROG_V_SURFACE):
 
 def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monkeypatch):
     # Composed through each bar's REAL _resolve (not a reimplementation of anchor_minimap), then
-    # cross-checked against the PURE derivation numbers -- 53 for the efficiency edge, 100 for the
-    # progress edge -- rather than against whatever EFFICIENCY_MM_TRACK_X / PROGRESS_MM_TRACK_X
+    # cross-checked against the PURE derivation numbers -- 95 for the efficiency edge (grew twice:
+    # 53 -> 57 for the per-mark caption widening, -> 95 once the top/bottom-block nudges and the
+    # .bt-row fix grew V_PAD_X_REM to 52), 107 for the progress edge (was 100, grew to 107 when the
+    # "move the bottom block left 7px" nudge grew its own V_PAD_X_REM to 70) -- rather than
+    # against whatever EFFICIENCY_MM_TRACK_X / PROGRESS_MM_TRACK_X
     # happen to currently hold: adding a bar's OWN (possibly corrected) mm_track_x back onto its own
     # resolved x cancels algebraically for ANY value fed to anchor_minimap, so that comparison could
     # never see a correction land. Pinning against the literal PURE derived numbers instead means
@@ -1011,7 +1019,7 @@ def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monk
     prog_host, prog_window = _progress_vertical_host()
     eff_x, _ = _resolved(eff_host, eff_window)
     prog_x, _ = _resolved(prog_host, prog_window)
-    assert prog_x + 100 == eff_x + 53 + 2, (
+    assert prog_x + 107 == eff_x + 95 + 2, (
         "the Moving Average bar's track must sit 2px RIGHT of Damage Efficiency's -- a recorded "
         "in-game measurement (two independent Ctrl+drags, two geometries), not a bug to fix back "
         "to equality")

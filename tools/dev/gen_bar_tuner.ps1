@@ -274,17 +274,26 @@ $tpl = @'
      longer "the top captions", so they must not inherit .up's. */
   .mp-cap.side{top:50%;transform:translateY(-50%);font-size:var(--endfs);line-height:var(--endlh)}
   .mp-cap.side.mp-capR{left:100%;margin-left:var(--gapendr)}
+  /* PER-MARK block<->bar gap: mark_2 keeps --gapendr unchanged; mark_1/mark_3 hand-tuned in
+     tools/dev/icon_gap_tuner.html. (0,4,0) beats the base rule outright, no source-order tie. */
+  .mp-cap.side.mp-capR.mk1{margin-left:1rem}
+  .mp-cap.side.mp-capR.mk3{margin-left:5rem}
   /* The ONE gap, on every caption. The two CENTRE captions then cancel their icon's whole outer
      width with a negative margin-left -- see the .mp-capP / .mp-capC rules below. */
   .mp-cap .mp-ico{margin-right:var(--icogap)}
   /* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): the box-edge gap above is a
-     uniform --icogap, but each art asset's own zoom leaves a different INK gap, so these three
+     uniform --icogap, but each art asset's own zoom leaves a different INK gap, so these
      override it outright (compound selectors, (0,3,0), beat the shared (0,2,0) rule on
-     specificity). Literal, not slider-driven -- calibrated once off the real PNGs' alpha>32 bbox,
-     same numbers as the vertical composition's identical pass (same boxes, same assets). */
+     specificity). Literal, not slider-driven -- dmgp/moe/mk calibrated once off the real PNGs'
+     alpha>32 bbox, same numbers as the vertical composition's identical pass (same boxes, same
+     assets). mk1/mk2/mk3 replace the old single .mk residual with per-mark values hand-tuned in
+     tools/dev/icon_gap_tuner.html; they tie .mk on specificity (also three classes), so they are
+     written AFTER it to win on source order instead. */
   .mp-cap .mp-ico.dmgp{margin-right:1.253rem}
   .mp-cap .mp-ico.moe{margin-right:.885rem}
   .mp-cap .mp-ico.mk{margin-right:-1.25rem}
+  .mp-cap .mp-ico.mk2{margin-right:1rem}
+  .mp-cap .mp-ico.mk3{margin-right:4rem}
   .mp-cap .mp-v,.mp-cap .mp-eta,.mp-cap .mp-d{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
   /* SHIPPED CONVENTION (MoEBattle.css .mb-up/.mb-down): FOR TEXT the sign is a coloured GLOW,
      never a fill -- the numerals stay WHITE, because a coloured glyph loses legibility over a
@@ -784,7 +793,7 @@ $tpl = @'
       // Signed per-ROLE baseline nudge (the glyph families sit differently on their baselines).
       // Stays on .mp-ico's own transform -- see the CSS note; a margin would kill the glow scope.
       // (icoYL, the axis-floor mark's twin, went with .mp-capL.)
-      {id:"icoYP",label:"TOP damage icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0},
+      {id:"icoYP",label:"TOP damage icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0.5},
       {id:"icoYC",label:"BOTTOM damage icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:1},
       {id:"icoYR",label:"RIGHT mark icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0.5},
       // ...and the same nudge for the side captions' NUMERALS -- a FONT METRICS fix, not a box fix.
@@ -1354,12 +1363,26 @@ $tpl = @'
       "   on this caption at the same font-size and pinned line box, so the ink offset is identical. */\n"+
       ".mp-cap.side .mp-v,\n.mp-cap.side .mp-eta { transform: translateY("+st.numY+"rem); }\n"+
       ".mp-cap.side.mp-capR { left: 100%; margin-left: "+st.gapEndR+"rem; }\n"+
+      "/* PER-MARK block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html: mark_2 keeps the\n"+
+      "   base rule's margin-left unchanged; mark_1 (1.000rem) and mark_3 (5.000rem) get their own,\n"+
+      "   via setIco()'s capR mk1/mk2/mk3 marker. (0,4,0) beats the (0,3,0) base rule outright on\n"+
+      "   specificity -- no source-order tie, unlike the icon-level .mk1/.mk2/.mk3 below. Large's\n"+
+      "   own per-mark twins (1/3/5rem, LITERAL, not this row's *4/3) live only in the shipped\n"+
+      "   MoEProgress.css hand-appended size-mode block -- this tuner has no size mode at all, so\n"+
+      "   they are never emitted here. */\n"+
+      ".mp-cap.side.mp-capR.mk1 { margin-left: 1.000rem; }\n"+
+      ".mp-cap.side.mp-capR.mk3 { margin-left: 5.000rem; }\n"+
       "/* The box-edge gap above is a uniform "+st.icoGap+"rem, but each art asset's own zoom leaves a\n"+
-      "   different INK gap -- the three overrides below equalise it instead (ink-gap parity,\n"+
-      "   maintainer's ask, box sizes untouched), calibrated once off the real PNGs' alpha>32 bbox,\n"+
-      "   IDENTICAL to the vertical composition's own pass (same boxes, same assets): dmgp 1.253rem,\n"+
-      "   moe 0.885rem, mk -1.250rem, battles 1.038rem (added to its own rule further down). Compound\n"+
-      "   selectors, (0,3,0), beat this (0,2,0) base rule on specificity, not source order. The two\n"+
+      "   different INK gap -- the overrides below equalise it instead (ink-gap parity,\n"+
+      "   maintainer's ask, box sizes untouched). dmgp/moe/battles are calibrated once off the real\n"+
+      "   PNGs' alpha>32 bbox, IDENTICAL to the vertical composition's own pass (same boxes, same\n"+
+      "   assets): dmgp 1.253rem, moe 0.885rem, battles 1.038rem (added to its own rule further\n"+
+      "   down). mk1/mk2/mk3 replace the old single .mk residual with per-mark values hand-tuned in\n"+
+      "   tools/dev/icon_gap_tuner.html: mark_1 -1.250rem, mark_2 1.000rem, mark_3 4.000rem -- only\n"+
+      "   mark_1's number coincides with the old shared value. Compound selectors, (0,3,0), beat\n"+
+      "   this (0,2,0) base rule on specificity, not source order; .mk1/.mk2/.mk3 in turn beat .mk\n"+
+      "   itself by SOURCE ORDER (both are (0,3,0) -- setIco() leaves .mk on the element alongside\n"+
+      "   .mk1/.mk2/.mk3, so the tie is real), which is why they are written after it below. The two\n"+
       "   CENTRE captions then cancel their icon's whole outer width with a negative margin-left\n"+
       "   further down -- see the .mp-capP / .mp-capC rules; dmgp's cancel reads its OWN 1.253rem gap\n"+
       "   there, not this shared one. */\n"+
@@ -1367,6 +1390,8 @@ $tpl = @'
       ".mp-cap .mp-ico.dmgp { margin-right: 1.253rem; }\n"+
       ".mp-cap .mp-ico.moe { margin-right: 0.885rem; }\n"+
       ".mp-cap .mp-ico.mk { margin-right: -1.250rem; }\n"+
+      ".mp-cap .mp-ico.mk2 { margin-right: 1.000rem; }\n"+
+      ".mp-cap .mp-ico.mk3 { margin-right: 4.000rem; }\n"+
       ".mp-cap .mp-v,\n.mp-cap .mp-eta,\n.mp-cap .mp-d {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
       "  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n}\n"+

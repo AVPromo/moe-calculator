@@ -253,12 +253,15 @@ shared verbatim by both bars).
 
 Constants (`domain/constants.py`): `PROGRESS_ANCHOR_Y_FRAC=0.865`,
 `PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-44` / `_LARGE=-65`,
-`PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X=98` / `_LARGE=138` (pure derivation 100/140,
+`PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X=105` / `_LARGE=147` (pure derivation 107/149,
 with a measured -2 hand-placement correction — see the constants' long comment on two
 independent Ctrl+drags landing on the same corrected value across different surface
-geometries); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`, `EFFICIENCY_ANCHOR_Y_SHIFT=-50` / `_LARGE=-77`,
-`EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X=53` / `_LARGE=84` (pure derivation, no
-correction — only one, unconfirmed hand-drag exists for this bar). Shared:
+geometries; both the pure derivation and the correction's own validity predate the vertical
+bars' V_PAD_X_REM growth to 70/52 below — a fresh in-game drag is owed); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`,
+`EFFICIENCY_ANCHOR_Y_SHIFT=-50` / `_LARGE=-77`,
+`EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X=95` / `_LARGE=137` (pure derivation, no
+correction — only one, unconfirmed hand-drag exists for this bar, and it too predates the
+growth below). Shared:
 `MM_GAP=8`, `MM_TICK_OVERHANG=3`/`_LARGE=5`, `MM_TRACK_Y=290`/`_LARGE=363`,
 `VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-170` (identical for both bars — both vertical
 compositions share the same backdrop geometry).

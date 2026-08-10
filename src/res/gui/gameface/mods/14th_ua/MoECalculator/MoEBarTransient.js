@@ -89,28 +89,32 @@ const SURFACE_SETTLE_MS = 250;
 const END_MARGIN_MS = 250;
 
 // THE SURFACE RECT IS THE MOUSE HIT RECT -- exactly why WindowFlags.WINDOW_FULLSCREEN was rejected
-// for these windows (bridge/battle_view.py). A ~480rem-wide surface across screen centre would be an
+// for these windows (bridge/battle_view.py). A surface spanning most of screen centre would be an
 // input-stealing strip, and these bars are purely decorative and must never take input. So collapse
 // the input rect to nothing, PERMANENTLY -- this document needs no mouse input at ALL any more: the
 // Ctrl+drag reposition is driven entirely from Python (adapter/battle_input samples the keys,
 // bridge/bar_window re-places the window from the live cursor), so the rect that used to be OPENED
 // for the gesture never opens again. Confirmed against WG's own JS wrapper (gui-part3.pkg
-// battle/battle_notifier/BattleNotifierView/BattleNotifierView.js): the order is
-// (top, right, bottom, left, 15) -- our per-axis pair below is symmetric within each axis, so within
-// an axis the order is moot, but TOP/BOTTOM and LEFT/RIGHT are NOT interchangeable with each other.
+// battle/battle_notifier/BattleNotifierView/BattleNotifierView.js), against a LIVE decompile, not
+// just this file's own memory of one:
+//   * the order is (top, right, bottom, left, 15) -- CONFIRMED;
+//   * WG's own wrapper passes FOUR EQUAL VALUES, always -- so arg order is MOOT there, and matters
+//     here only if the four are NOT equal;
+//   * an OVERSIZED padding is ACCEPTED, not rejected -- a real capture logged 240 accepted against a
+//     92-tall surface. NEGATIVE values are what gets rejected, not an oversized positive one.
+// ONE SHARED VALUE ACROSS ALL FOUR SIDES, per that recorded design -- NOT a per-axis pair. A prior
+// revision of this file split hitPad into hitPadX/hitPadY on the theory that `Math.ceil(Math.max(
+// viewW, viewH) / 2)` on all four sides "over-pads the smaller axis into a negative extent instead
+// of the exact zero a real collapse needs" -- but per the CONFIRMED behaviour above, an oversized
+// (or negative-implying) padding is exactly what WG's own wrapper already ships and the engine
+// already accepts; the "exact zero" the split chased was never necessary, and splitting it
+// reintroduced two risks the uniform value never had: sensitivity to the (top, right, bottom, left)
+// ARGUMENT ORDER (moot when all four are equal, live when they differ) and sensitivity to WHICH
+// AXIS'S size the pad happens to be derived from at push time. `Math.ceil(Math.max(viewW, viewH) /
+// 2)` on all four sides collapses BOTH axes to nothing, is immune to the argument order, and is the
+// smaller diff. Revert target if this file's hit collapse is ever found not to hold at runtime.
 // HIT_MAGIC mirrors WG's constant (its own wrapper always passes this literal 15 too); its meaning
 // is unknown, so the call is retried without it if the 5-argument form is rejected.
-//
-// PER-AXIS, NOT ONE SHARED VALUE ACROSS ALL FOUR SIDES. An earlier build padded all four sides by
-// `Math.ceil(Math.max(viewW, viewH) / 2)` -- half the LARGER dimension -- on the theory that it
-// "collapses both axes to nothing". It does not: half the larger dimension only zeroes the axis IT
-// belongs to (380/2 == 190, and 190+190 == the 380-wide Progress bar's own width) and OVER-pads the
-// other axis into a negative extent (92 - 2*190 == -288 for that same bar's height) instead of the
-// exact zero a real collapse needs. Whether the engine's C++ clamps a negative extent to zero, to the
-// full surface, or does something stranger is NOT something JS can observe or prove -- but there is
-// no reason to ship an admittedly-wrong number when the right one is exactly as cheap: pad the X axis
-// by half the SURFACE WIDTH and the Y axis by half the SURFACE HEIGHT, so each axis collapses to
-// EXACTLY zero on its own terms and neither is left negative.
 const HIT_MAGIC = 15;
 
 // --- THE "LARGE" SIZE MODE (mod_settings.progress_bar_size, pushed as the VM's `barSize`) -----
@@ -183,12 +187,35 @@ function fmt(n) {
 //                                 track evenly. A per-side pad would let a caller silently slide
 //                                 every centred placement by half the asymmetry; this shape cannot
 //                                 express that. Pay the unused slack on the other side instead --
-//                                 the surface rect is invisible (the hit rect is collapsed
-//                                 per-axis, unconditionally, regardless of which axis padX widens),
-//                                 so a wider surface costs literally nothing.
+//                                 the surface rect is invisible (the hit rect is collapsed to
+//                                 nothing off `Math.max(viewW, viewH)`, unconditionally, regardless
+//                                 of which axis padX widens), so a wider surface costs literally
+//                                 nothing.
 //                                 It is an X length like `pad` and, like `pad`, it does NOT carry
 //                                 SIZE_XF: it is a rem-space allowance for rem-sized caption INK,
 //                                 which the root font already scales by SIZE_F alone.
+//   padXR/padXRLarge              OPTIONAL, default `padX`/`padXR`. The RIGHT-side twin of `padX`,
+//                                 for a composition whose two sides need DIFFERENT slack -- so far
+//                                 only the two VERTICAL, Minimap-anchored bars, whose left side
+//                                 carries the caption ink (padX, above) while their right side faces
+//                                 the minimap and needs only cover the TRACK's own tick overhang, not
+//                                 the ink. Unlike `padX`, splitting this one is SAFE precisely because
+//                                 it is never paired with the centred (Damage Log) anchor's `max_x //
+//                                 2` (positioning.anchor_centred_reduced has no X term and needs the
+//                                 surface symmetric to stay centred on the track -- see padX's own
+//                                 note); the Minimap anchor (positioning.anchor_minimap) reads
+//                                 `edge_x` off the LEFT side alone (padX, boxLeft, trackW) and has no
+//                                 term for the surface's overall width at all, so shrinking the RIGHT
+//                                 side moves nothing the placement math depends on and the bar does
+//                                 not move on screen. May be NEGATIVE (and, for both shipped bars,
+//                                 is): the composition's own backdrop bleeds further right than the
+//                                 track needs, and a negative padXR clips that decorative bleed at the
+//                                 surface edge exactly the way `clipB` already clips the bottom bleed
+//                                 -- see domain/constants.py's *_MM_TRACK_X note and the bars' own V_
+//                                 PAD_X_REM notes for the numbers. `padXRLarge` exists because the
+//                                 target it has to hit (the Python-side `edge_x` it must clear) is
+//                                 itself a hand-corrected, not purely `*SIZE_XF`-scaled, number at
+//                                 Large -- so, like MM_TICK_OVERHANG_LARGE, it is its own literal.
 //   clipB                         OPTIONAL, default 0. Rem of the box's BOTTOM that the surface
 //                                 deliberately does NOT cover, i.e. how much backdrop bleed is
 //                                 CLIPPED at the surface's bottom edge. The ONE asymmetry in an
@@ -226,6 +253,8 @@ function fmt(n) {
 //                                          `clipB` arg above), replacing the horizontal 0
 //                                   padX   OPTIONAL, that composition's own X-axis slack (see the
 //                                          `padX` arg above), replacing the horizontal `pad`
+//                                   padXR/padXRLarge  OPTIONAL, that composition's own RIGHT-side
+//                                          slack (see the `padXR`/`padXRLarge` arg above)
 //                                 A bar without it is horizontal-only and reads `vertical` never.
 //   onVertical()                  OPTIONAL, and only called if `vert` was adopted: the bar's own
 //                                 half of the switch (rebuild the DOM under the vertical prefix,
@@ -267,16 +296,19 @@ export function createTransient(cfg) {
     // `2 * pad` it replaces everywhere except the one composition that supplies its own.
     cfg.clipB = cfg.clipB || 0;
     cfg.padX = cfg.padX || cfg.pad;
-    let viewW = cfg.boxW + 2 * cfg.padX;
+    // `padXR`/`padXRLarge` default to symmetric (== padX / padXR), which is BYTE-IDENTICAL to the
+    // old `2 * cfg.padX` for every composition that supplies neither -- see the arg note above.
+    cfg.padXR = cfg.padXR || cfg.padX;
+    cfg.padXRLarge = cfg.padXRLarge || cfg.padXR;
+    let viewW = cfg.boxW + cfg.padX + cfg.padXR;
     let viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;
     let shiftX = cfg.padX - cfg.boxLeft;
     let shiftY = cfg.pad - cfg.boxTop;        // MIRRORED (negated) in Python as
                                               // domain/constants.*_ANCHOR_Y_SHIFT, and as
                                               // VERTICAL_ANCHOR_Y_SHIFT under cfg.vert
-    // PER-AXIS collapse (see the header note above): half of EACH axis' own surface length, not
-    // half of whichever axis is larger.
-    let hitPadX = Math.ceil(viewW / 2);
-    let hitPadY = Math.ceil(viewH / 2);
+    // ONE SHARED PAD (see the header note above): half the LARGER of the two axes, on all four
+    // sides -- an oversized value is accepted, not rejected, so this collapses both axes at once.
+    let hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
 
     // THE LIVE RUN IDENTITY PAIR. Horizontal by default; goVertical repoints both at the vertical
     // composition's own twin (see RUN_CLASSES_V / RUN_NAMES_V), which is what makes armRun's
@@ -378,12 +410,13 @@ export function createTransient(cfg) {
         cfg.boxH = cfg.vert.box[3];
         cfg.clipB = cfg.vert.clipB || 0;
         cfg.padX = cfg.vert.padX || cfg.pad;
-        viewW = cfg.boxW + 2 * cfg.padX;
+        cfg.padXR = cfg.vert.padXR || cfg.padX;
+        cfg.padXRLarge = cfg.vert.padXRLarge || cfg.padXR;
+        viewW = cfg.boxW + cfg.padX + cfg.padXR;
         viewH = cfg.boxH + 2 * cfg.pad - cfg.clipB;
         shiftX = cfg.padX - cfg.boxLeft;
         shiftY = cfg.pad - cfg.boxTop;
-        hitPadX = Math.ceil(viewW / 2);
-        hitPadY = Math.ceil(viewH / 2);
+        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
         runCls = RUN_CLASSES_V[cfg.vert.cls] || RUN_CLASSES;
         runNames = RUN_NAMES_V[cfg.vert.cls] || RUN_NAMES;
         try {
@@ -712,15 +745,15 @@ export function createTransient(cfg) {
     function pushHitArea() {
         if (typeof viewEnv === "undefined" || !viewEnv) return;
         if (!viewEnv.setHitAreaPaddingsRem) return;
-        // (top, right, bottom, left, magic) -- confirmed order (see the header note). top/bottom
-        // pad the Y axis, so they take hitPadY; left/right pad the X axis, so hitPadX.
+        // (top, right, bottom, left, magic) -- confirmed order (see the header note). FOUR EQUAL
+        // VALUES, matching WG's own wrapper -- the order is moot when they cannot differ.
         try {
-            viewEnv.setHitAreaPaddingsRem(hitPadY, hitPadX, hitPadY, hitPadX, HIT_MAGIC);
+            viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad, HIT_MAGIC);
         } catch (e) {
             // The 5th argument's meaning is unknown -- if the binding rejects the 5-arg form, the
             // 4-arg one still collapses the rect.
             try {
-                viewEnv.setHitAreaPaddingsRem(hitPadY, hitPadX, hitPadY, hitPadX);
+                viewEnv.setHitAreaPaddingsRem(hitPad, hitPad, hitPad, hitPad);
             } catch (e2) { /* fail-soft */ }
         }
     }
@@ -809,9 +842,12 @@ export function createTransient(cfg) {
         // ROUNDED, because 4/3 is not representable: (460 * 4/3 + 20) * 1.25 evaluates to
         // 791.6666666666665, and the engine takes whole logical px (a floor there would hand us a
         // 1px-narrow surface). Both factors are exact at the shipped size, so this is identity there.
-        // `padX` does NOT carry `xf` -- see its arg note: it is rem-space slack for rem-sized ink,
-        // which the root font's SIZE_F already grows.
-        viewW = Math.round((cfg.boxW * xf + 2 * cfg.padX) * f);
+        // `padX`/`padXR` do NOT carry `xf` -- see their arg notes: they are rem-space slack (ink
+        // allowance on the left, a bleed CLIP on the right), which the root font's SIZE_F already
+        // grows/shrinks. Large reads `padXRLarge` instead of `padXR * xf`: its target (the Python
+        // `edge_x` it must clear) is a hand-corrected, not purely `*SIZE_XF`-scaled, number -- see
+        // the arg note.
+        viewW = Math.round((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);
         // clipB is a Y length like boxH and pad, so it takes `f` alone with them and NEVER `xf` --
         // it stays INSIDE the parenthesis so the clip scales with the composition it clips (the
         // caption ink below the track scales too), rather than staying a fixed logical-px bite that
@@ -820,8 +856,7 @@ export function createTransient(cfg) {
         // rem, so it self-scales with the root font -- 3dp to match the stylesheet's own x-lengths,
         // which keeps shiftX + the .mp-lg backdrop's `left` exactly `pad`.
         shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;
-        hitPadX = Math.ceil(viewW / 2);
-        hitPadY = Math.ceil(viewH / 2);
+        hitPad = Math.ceil(Math.max(viewW, viewH) / 2);
         setRootFont();
         // THE SCALE GATE IS RE-EVALUATED ON EVERY FLIP, in BOTH directions, and is deliberately not
         // latched at mount. The shipped build computed it in ONE branch of the re-assert, so `.mp-s1`

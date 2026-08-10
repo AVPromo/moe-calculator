@@ -9,6 +9,16 @@
    every marker positions with bottom:<pct> + translateY(+50%), not the horizontal bar's -50%: a
    bottom-anchored box must shift back DOWN by half its own length to land on its point.
 
+   EVERY "MAINTAINER NUDGE" BELOW (and in MoEEfficiencyVertical.css) IS AUTHORED IN LOGICAL PX,
+   NEVER DEVICE PX -- a bare `Nrem` declaration is 1rem == 1 logical px at Default (see
+   MoEProgress.js's own header note), so a maintainer's "move it N px" is a LOGICAL-px request only
+   if N is already stated that way. A player's interface scale (captureBaseFont(), legible only as
+   <1.5 vs >=1.5, fixed at mount -- see the memory `interface-scale-is-only-legible-via-
+   capturebasefont`) is UNRELATED to this bar's own Default/Large size mode and can silently double
+   (or more) a "device px" request into logical px: GUI.screenResolution() reading 3840x2160 over a
+   1920x1080 logical space is interface scale 2, so "N device px" there means N/2 logical px, not N.
+   CONFIRM THE UNIT before translating a maintainer's px count into one of these declarations.
+
    THIS SHEET IS LOADED ALONGSIDE MoEProgress.css, NOT INSTEAD OF IT (MoEProgressView.html links
    both; orientation is a MOUNT-TIME branch in MoEProgress.js, not a second res_map layout -- a new
    itemID would cost every user a one-time client restart). The two sheets are namespace-DISJOINT by
@@ -82,27 +92,41 @@ body.mpv #moe-bar-root {
    on the horizontal bar and disproven; MoEBarTransient's post-deadline SURFACE_REASSERT_MS is the
    only fix. The box is kept because it is the honest description of the document's size, and the
    horizontal sheet's 380x92 is the WRONG WAY ROUND for this composition.
-   198 x 320 MIRRORS the vertical surface MoEProgress.js pushes -- width V_BOX_W_REM + 2*V_PAD_X_REM
-   == 72+126, height V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM == 360+20-60, the same
-   mirrored-constant contract as the JS's vertical shiftY <-> Python's
-   domain/constants.VERTICAL_ANCHOR_Y_SHIFT: change one, change all three.
-   THE X PAD IS 63rem, NOT PAD_REM's 10, and it applies to BOTH sides (read V_PAD_X_REM's note in
-   MoEProgress.js): the three captions are right-anchored and grow LEFTWARD past .mpv-backdrop by
-   design, so the SURFACE has to reach out to their ink while the backdrop deliberately does not --
-   and it is mirrored onto the unused right side because the centred alignment centres the SURFACE.
-   Do NOT "restore the symmetry" by moving .mpv-backdrop, and do NOT trim the right side.
+   112 x 320 MIRRORS the vertical surface MoEProgress.js pushes -- width
+   V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM == 46+70-4, a SPLIT pad now (V_PAD_X_REM on the LEFT,
+   caption ink; V_PAD_XR_REM on the RIGHT, the track's own tick overhang PLUS a small margin -- see
+   both constants' own notes in MoEProgress.js, including fact 5 on why the margin is a PURE local
+   quantity, never PROGRESS_MM_TRACK_X's hand-corrected placement value), height
+   V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM == 360+20-60, the same mirrored-constant contract as the
+   JS's vertical shiftY <-> Python's domain/constants.VERTICAL_ANCHOR_Y_SHIFT: change one, change
+   all three.
+   THE LEFT X PAD IS 70rem, NOT PAD_REM's 10 (read V_PAD_X_REM's note in MoEProgress.js): the three
+   captions are right-anchored and grow LEFTWARD past .mpv-backdrop by design, so the SURFACE has to
+   reach out to their ink on that side while the backdrop deliberately does not.
+   THE RIGHT X PAD IS NEGATIVE (-4rem, V_PAD_XR_REM): the SURFACE clips .mpv-backdrop's right-side
+   bleed a little further than the backdrop's own (ALREADY TRIMMED, see below) drawn width, down to
+   just past the track's own tick overhang PLUS a 2px margin -- this is the fix for the invisible
+   surface reaching into the minimap's first column (see MoEProgress.js's own five-point note); it
+   is a SEPARATE knob from the backdrop's own trim and costs nothing visible (the backdrop's
+   right-side bleed is pure shadow/glow, no caption ink reaches that far -- see fact 1 of that same
+   note).
+   THE BACKDROP'S OWN RIGHT EDGE IS A DIFFERENT KNOB, V_BOX_W_REM (46, ALREADY TRIMMED from 72 to
+   land flush with the minimap's own edge -- see MoEProgress.js's fact 3), NOT EITHER PAD -- and
+   unlike the surface pad, IT HAS NO SYMMETRY CONTRACT for this bar: `anchor_minimap` (the
+   Fixed+Vertical placement function, bar_window._resolve) has no term for the backdrop's width or
+   left at all.
    THE HEIGHT IS 60rem SHORT OF THE COMPOSITION ON PURPOSE, and that is the surface's own doing, not
    this rule's: the surface CLIPS .mpv-backdrop's lower bleed so the engine's screen clamp can bring
    the bar's track down to the tuner's 30-logical-px gap off the screen bottom (read
    MoEProgress.js's V_CLIP_B_REM note -- it carries the whole derivation). This rule only keeps
    describing whatever the surface actually is. It stays a plain rem box either way, so it cannot
    reflow the composition when the surface shrinks past it. */
-body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
+body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
 .mpv-backdrop {
   position: absolute;
   left: -34rem;
   top: -80rem;
-  width: 72rem;
+  width: 46rem;
   height: 360rem;
   z-index: 0;
 }
@@ -223,7 +247,7 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
    tick's outer-edge overhang (see the anchor comment above), so it clears the tick, not just
    the track. */
 .mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;
-            transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }
+            transform: translateX(15rem); font-size: 14rem; line-height: 18rem; }
 /* HAND-EDIT 6/6: the ETA row, stacked directly above capR (maintainer's call: "move the ETA on
    top of the next mark requirement"). Same right-anchor mechanism as capR, copied verbatim --
    both rows shared it identically before the split. `padding-bottom: 30rem` == capR's own box
@@ -231,8 +255,21 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
    magnitude this file already uses to clear the track (capR's own 6rem, capC's 6rem). Re-derived
    in tests/test_progress_surface_mirror.py's Y-fit test against V_BOX_TOP_REM + PAD_REM, never
    hardcoded there. */
+/* MAINTAINER NUDGE: the ETA row lowered 3 device/logical px (translateY, additive to the existing
+   right-anchor translateX -- a WHOLE-ROW move, numeral+icon together). Pinned as a device-px count,
+   not a bare rem: 1rem == 1 logical px at Default, but the root font IS the Large scale (SIZE_F ==
+   1.25), so a plain "3rem" here would render 3.75px under Large. 3 / 1.25 == 2.4 is this rule's own
+   Large twin below, so both sizes move by the SAME 3px on screen. */
 .mpv-capEta { bottom: 100%; padding-bottom: 30rem; padding-right: 6rem;
-              transform: translateX(14rem); font-size: 14rem; line-height: 18rem; }
+              transform: translateX(15rem) translateY(3rem); font-size: 14rem; line-height: 18rem; }
+/* NUDGE REVERTED ON DEFAULT (2026-08-10 correction, twice-corrected): the maintainer's nudge was
+   only ever meant for Large (see .mp-lg .mpv-capC below, which keeps its ORIGINAL, un-halved
+   nudge -- a since-disproven interface-scale theory wrongly halved Large too; that halving is
+   undone). Default restored to its pre-nudge value, translateX(16rem) -- LOGICAL PX is what a
+   bare "Nrem" declaration always means here; see the header for the general rule. This is still
+   the row test_the_vertical_captions_fit_inside_the_surface tracks as the file's own extreme (see
+   MoEProgress.js's "capC is STILL the extreme" derivation); V_PAD_X_REM is UNCHANGED at 70 (it now
+   carries more margin than this reverted move strictly needs, which is safe, not a bug). */
 .mpv-capC { top: 100%; margin-top: 6rem; padding-right: 6rem;
             transform: translateX(16rem); font-size: 16rem; line-height: 20.5rem; }
 .mpv-capP { padding-right: 6rem; transform: translateY(50%) translateX(0rem);
@@ -385,6 +422,14 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
 .mpv-cap .mpv-ico.dmgp { margin-left: 1.253rem; }
 .mpv-cap .mpv-ico.moe { margin-left: 0.885rem; }
 .mpv-cap .mpv-ico.mk { margin-left: -1.25rem; }
+/* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: mark_1/mark_2/mark_3 no longer share one
+   residual value off .mk above. Same (0,3,0) as .mk -- these win it by SOURCE ORDER (the icon
+   keeps BOTH classes, "mpv-ico mk mk1", so the tie is real; see MoEProgress.css's identical note
+   for the horizontal bar). No test in this repo pins an exact base*4/3 relationship for THIS
+   file's .mp-lg block, so the Large twins below need not (and do not) satisfy it. */
+.mpv-cap .mpv-ico.mk1 { margin-left: 0.500rem; }
+.mpv-cap .mpv-ico.mk2 { margin-left: 2.000rem; }
+.mpv-cap .mpv-ico.mk3 { margin-left: 4.000rem; }
 .mpv-cap .mpv-ico.battles { margin-left: 1.038rem; }
 .mpv-ico.battles::before {
   background: radial-gradient(circle at 50% 50%, rgba(255,205,90,0.5) 0%, transparent 73%);
@@ -448,27 +493,45 @@ body.mpv #moe-bar-box { width: 198rem; height: 320rem; }
    -- nothing would ever match it. */
 /* HAND-EDIT 5/6: these two are the emit's `.mpv-lg #moe-bar-root` plus the shim rule the tuner
    never emits, both scoped `body.mpv.mp-lg` (1,2,1) so they out-specify the horizontal sheet's
-   own `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is
-   V_BOX_W_REM*SIZE_XF + 2*V_PAD_X_REM == 96 + 126 == 222 (only the BACKDROP half takes SIZE_XF --
-   the pad is rem-space slack for rem-sized ink and rides the root font's SIZE_F alone, which is
-   also why the logical-px surface the JS pushes is 222 * 1.25 == 277.5 -> 278); its HEIGHT is
-   unchanged (the root font carries SIZE_F on a y-length), exactly as the horizontal block's own
-   500rem twin restates width only. THIS SHIM IS DOCUMENT REM, NOT LOGICAL PX -- do not write 278
-   here, the root font supplies the 1.25. */
+   own `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is the
+   PRE-SIZE_F quantity MoEBarTransient.applySize computes before its own final `* f`:
+   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 61.333 + 70 + -8.133 == 123.2
+   (V_PAD_XR_REM_LARGE is its own literal, -8.133, NOT V_PAD_XR_REM*SIZE_XF -- see MoEProgress.js's
+   own note); its HEIGHT is unchanged (the root font carries SIZE_F on a y-length), exactly as the
+   horizontal block's own 500rem twin restates width only. THIS SHIM IS DOCUMENT REM, NOT LOGICAL
+   PX -- the root font (1.25 under Large) supplies the SIZE_F when the DOCUMENT renders this box,
+   so 125.333rem here reproduces the same round(125.333*1.25)==157 logical px MoEBarTransient.
+   applySize pushes via resizeViewRem -- do not write 157 here, that would double the factor.
+   THE BACKDROP'S OWN LARGE WIDTH BELOW IS A LITERAL 90rem, NOT V_BOX_W_REM*SIZE_XF (61.333, the
+   naive *4/3 twin of the tuned Default 46) -- see MoEProgress.js's fact 3: 90 lands the backdrop's
+   own right edge exactly on the minimap's edge (70+90==160==edge_x(147)+MM_GAP(8)+
+   MM_TICK_OVERHANG_LARGE(5)), keep it. The surface above is narrower still than even the trimmed
+   backdrop (125.333 < 70+90==160, the SAME pre-SIZE_F rem space) -- that is the SEPARATE surface
+   fix (fact 4/5): the surface clips a little more of the backdrop's own right-side bleed, to leave
+   a real margin (3px to the minimap, ~2.8px to the tick's own true right edge -- MoEProgress.js's
+   fact 5) instead of the backdrop's own flush zero-clearance edge. */
 body.mpv.mp-lg #moe-bar-root { width: 4rem; }
-body.mpv.mp-lg #moe-bar-box { width: 222rem; }
-.mp-lg .mpv-backdrop { left: -45.333rem; width: 96rem; }
+body.mpv.mp-lg #moe-bar-box { width: 125.333rem; }
+.mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }
 .mp-lg .mpv-tick.mpv-end { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-pre { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-proj { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
-.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(18.667rem); }
+.mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(17rem); }
 /* HAND-EDIT 6/6's Large twin of the new capEta rule -- byte-identical to capR's own Large
-   values above, same as the Default pair. */
-.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(18.667rem); }
-.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(21.333rem); }
+   values above, same as the Default pair. NOTE: as of the icon_gap_tuner.html per-mark pass,
+   17rem is no longer capR's own Default (15rem) times 4/3 (that would be 20rem) -- it is the
+   hand-tuned Large value reported by the tuner directly (see MoEProgress.css's own note on the
+   literal-vs-normalised reading), byte-identical to capR's above on purpose. */
+.mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(17rem) translateY(2.4rem); }
+/* NUDGE RESTORED TO ORIGINAL, UN-HALVED (2026-08-10, second correction, see the Default rule's own
+   note above): the prior halving pass assumed Large's nudge had shipped with the SAME 2x-overshoot
+   the Default rule did, and halved it on that (since-disproven) basis. That halving is undone here:
+   the pre-nudge Large value was 21.333 (16rem's X4/3); the maintainer's ORIGINAL nudge moved it to
+   15.733, which is what this rule restores. Default carries NO nudge at all (see above). */
+.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(15.733rem); }
 .mp-lg .mpv-capP { padding-right: 8rem;
   transform: translateY(50%) translateX(0rem); }
 .mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }
@@ -479,6 +542,12 @@ body.mpv.mp-lg #moe-bar-box { width: 222rem; }
 .mp-lg .mpv-cap .mpv-ico.dmgp { margin-left: 1.671rem; }    /* 1.253 * 4/3 */
 .mp-lg .mpv-cap .mpv-ico.moe { margin-left: 1.180rem; }     /* 0.885 * 4/3 */
 .mp-lg .mpv-cap .mpv-ico.mk { margin-left: -1.667rem; }     /* -1.25 * 4/3 */
+/* Large's per-mark twins, hand-tuned in tools/dev/icon_gap_tuner.html -- literal, NOT the
+   Default row's *4/3 (0.5/2/4 * 4/3 would be 0.667/2.667/5.333): no test in this repo pins that
+   relationship for this file. */
+.mp-lg .mpv-cap .mpv-ico.mk1 { margin-left: -1.000rem; }
+.mp-lg .mpv-cap .mpv-ico.mk2 { margin-left: 1.000rem; }
+.mp-lg .mpv-cap .mpv-ico.mk3 { margin-left: 3.000rem; }
 .mp-lg .mpv-cap .mpv-ico.battles { margin-left: 1.384rem; } /* 1.038 * 4/3 */
 
 /* Animation timings for the JS (mirrored in MoEBarTransient.js -- the VERTICAL keyframes are

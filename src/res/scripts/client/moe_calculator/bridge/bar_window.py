@@ -188,7 +188,17 @@ class _BarWindow(WindowImpl):
     has no Python-visible seam, so this cannot be proven headless -- it needs an in-client Ctrl+
     click + Enter-to-chat check under both alignments before being treated as done. If it
     regresses (bar disappears, renders under the HUD, or the reposition gesture misbehaves),
-    revert to WindowFlags.WINDOW here first."""
+    revert to WindowFlags.WINDOW here first.
+
+    THE SAME FACT -- pushHitArea's JS-side collapse does NOT stop the native Wulf window rect from
+    capturing a click -- is also why a vertical bar's SURFACE (not just its drawn backdrop) blocked
+    clicks on the minimap's first column: the surface is sized in MoEBarTransient.js (viewW), and
+    the JS hit-area collapse never shrinks that rect, only pads it to (near-)zero AROUND its own
+    size -- a bigger surface just gets a bigger, still-fully-collapsed pad. So the surface itself
+    has to clear the minimap on its own; shrinking only the drawn backdrop (.mpv-backdrop /
+    .mev-backdrop, V_BOX_W_REM) leaves the invisible surface exactly where it was. See
+    domain.positioning.anchor_minimap and each bar's own V_PAD_XR_REM note (MoEProgress.js /
+    MoEEfficiency.js) for the fix."""
 
     def __init__(self, content, place, host):
         super(_BarWindow, self).__init__(

@@ -517,7 +517,7 @@ $tpl = @'
     ["Backdrop",[
       {id:"bdBleedY",label:"Vertical bleed past the bar's ends (rem)",min:0,max:200,step:1,val:80},
       {id:"bdLeft",label:"Left (rem, negative = wider than the track)",min:-120,max:40,step:0.5,val:-34},
-      {id:"bdW",label:"Width (rem, EXPLICIT)",min:10,max:200,step:1,val:72},
+      {id:"bdW",label:"Width (rem, EXPLICIT)",min:10,max:200,step:1,val:46},
       {id:"dotAlpha",label:"Dither strength (opacity)",min:0,max:1,step:0.01,val:0.1},
       {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:56},
       {id:"dotRY",label:"Dither fade size Y (%)",min:0,max:250,step:1,val:110},

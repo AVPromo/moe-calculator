@@ -408,11 +408,13 @@ assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its 
     // --- 5. NOTHING y/uniform may appear under .mev-lg -- the root font already scales it, so a
     // rule here would DOUBLE-APPLY SIZE_F.
     const lgRules = emit.match(/\.mev-lg [^{}]*\{[^{}]*\}/g) || [];
-    // Exactly 12, and pinned: root, track, backdrop, the two ticks, the three captions, the icon
-    // gap, its two per-icon ink-gap-parity twins (bm/mk), the delta gap. A rule appearing or
-    // vanishing must be deliberate.
-    assert.strictEqual(lgRules.length, 12,
-        "the .mev-lg block must declare exactly 12 rules, found " + lgRules.length);
+    // Exactly 18, and pinned: root, track, backdrop, the two ticks, the three captions, the icon
+    // gap, its two per-icon ink-gap-parity twins (bm/mk), the delta gap -- PLUS the six the
+    // icon_gap_tuner.html per-mark pass added: three per-row block-gap overrides (.mev-cap.lf.r1/
+    // .r2/.r3) and three per-mark lever overrides (.mev-cap .mev-ico.mk1/.mk2/.mk3). A rule
+    // appearing or vanishing beyond that must be deliberate.
+    assert.strictEqual(lgRules.length, 18,
+        "the .mev-lg block must declare exactly 18 rules, found " + lgRules.length);
     const lgDecls = lgRules.join("");
     assert.ok(!/(font-size|line-height|height:|padding|margin-top|margin-bottom|animation|background|translateY\(-?[0-9.]+rem\))/
         .test(lgDecls),

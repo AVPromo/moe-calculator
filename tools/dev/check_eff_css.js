@@ -41,8 +41,8 @@ assert.strictEqual(stripped, emit,
 const block4 = found.find((b) => /HAND-ADDED BLOCK 4 OF 4/.test(b));
 assert.ok(block4, "no HAND-ADDED BLOCK 4 (QUANT) found");
 [
-    ".mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(-0.5rem); }",
-    ".mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.3rem); }",
+    ".mp-s1 .mp-cap.up .mp-ico       { transform: translate(-1rem, -50%) translateY(0rem); }",
+    ".mp-s1.mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.7rem); }",
     ".mp-s1 .mp-cap .mp-d            { transform: translate(4.2rem, 1.5rem); }",
     ".mp-s1.mp-lg .mp-cap .mp-d      { transform: translate(5.6rem, 0.7rem); }",
 ].forEach((line) => assert.ok(block4.includes(line),
@@ -73,7 +73,7 @@ const ruleIn = (text, sel) => {
     [".mp-lg .mp-cap .mp-d", "transform: translate(5.6rem, 2.5rem);"],
     [".mp-lg .mp-ico", "transform: translate(-1.333rem, -50%);"],
     [".mp-lg .mp-cap.dn .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.25rem);"],
-    [".mp-lg .mp-cap.up .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.5rem);"],
+    [".mp-lg .mp-cap.up .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.9rem);"],
     [".mp-lg .mp-cap.dn .mp-ico.bm", "transform: translate(-1.671rem, -50%) translateY(-0.25rem);"],
     [".mp-lg .mp-cap.dn .mp-ico.mk", "transform: translate(1.333rem, -50%) translateY(0.25rem);"],
 ].forEach(([sel, expected]) => assert.strictEqual(ruleIn(block3Decl, sel), expected,

@@ -136,9 +136,48 @@ const PAD_REM = 10;                                  // slack for the shadow/glo
 // these four -- the vertical tuner's own tuned lengths -- but its TOP and HEIGHT are IDENTICAL to
 // the vertical Moving Average bar's (-80 / 360), which is why the two share ONE Python shift
 // constant where their horizontal siblings need -50 and -44 apiece:
-//   V_VIEW_W_REM = V_BOX_W_REM + 2 * PAD_REM == 116   V_SHIFT_X_REM = PAD_REM - V_BOX_LEFT_REM == 50
+//   V_VIEW_W_REM = V_BOX_W_REM + V_PAD_X_REM        V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 92
+//               + V_PAD_XR_REM == 98 (a SPLIT pad now -- see both constants' own notes below)
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                               - V_CLIP_B_REM == 318 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
+// THE X AXIS IS NOT box + PAD_REM EITHER -- SAME DEFECT THE MOVING AVERAGE BAR ALREADY FIXED
+// (MoEProgress.js's V_PAD_X_REM note carries the mechanism in full; only the numbers differ here).
+// Every caption here is RIGHT-ANCHORED (`right: 100%`, MoEEfficiencyVertical.css's .mev-cap) and
+// grows LEFTWARD from a fixed edge, same as the sibling bar's captions, so "left" is the overflow
+// direction for every one of the maintainer's nudges below.
+// THIS WENT THROUGH TWO CORRECTIONS TO THE SAME BUG, because the first one watched only one
+// caption family:
+//   PASS 1 (14rem): the per-mark gap pass (icon_gap_tuner.html) pushed mark_2/mark_3 far enough
+//     that PAD_REM's flat 10rem no longer covered them. But that pass's own re-derivation used the
+//     WRONG icon width for the mark rows (13rem, the shared base `.mev-ico` box) instead of the
+//     16rem `.mev-ico.mk` override the mark icons actually render at (CSS specificity: `.mev-ico.mk`
+//     beats bare `.mev-ico`), AND it never checked `.mev-cap.bt` (the current-damage + delta row) at
+//     all -- exactly the "a gate that only watches one caption" mistake the Moving Average bar's own
+//     capC-is-the-extreme derivation already exists to warn against.
+//   PASS 2 (52rem, this one): re-derives EVERY row, worst case, 4-digit+comma numerals throughout
+//     (font-size / icon width / icon margin-left all read from the shipped CSS, never transcribed):
+//       r1 (mk1, tx -2):  2 + 16(.mev-ico.mk) + (-1)(mk shared margin) + 26.64(numeral) + 1(halo) == 44.64
+//       r2 (mk2, tx -4):  4 + 16 + 0.5 + 26.64 + 1 == 48.14
+//       r3 (mk3, tx -6):  6 + 16 + 3.0 + 26.64 + 1 == 52.64
+//       tp (bm, tx -3+7=4, AFTER the maintainer's "move the top block left 4px" nudge, was tx 8):
+//         -4 + 14(.mev-ico.bm) + 1.253 + 26.64 + 1 == 38.89
+//       bt (dmg, tx -3+6=3, AFTER the maintainer's "move the bottom block left 7px" nudge, was
+//         tx 10): the BARE signed delta (no parens, unlike the sibling bar's) sits LEFT of the
+//         numeral via its own translate(-4.2rem, ...), so it -- not the numeral -- is the worst
+//         point:
+//         -3 + 16(.mev-ico.dmg) + 1(shared margin) + 35.52("3,050" at 16rem) + 4.2(delta gap)
+//           + 32.56("+2,970" at 12rem, sign+4digits+comma, no parens) + 1(halo) == 87.28
+//     .bt IS THIS FILE'S EXTREME (87.28 > 52.64 > 48.14 > 44.64 > 38.89), exactly as .mpv-capC is
+//     for the Moving Average bar's sheet -- and by the SAME margin (each grew its own V_PAD_X_REM
+//     by exactly its own nudge's device-px count and landed on ~4.5rem of margin, not a coincidence,
+//     just two rows with the same shape being pushed by the same kind of nudge):
+//       V_PAD_X_REM == 92 + V_BOX_LEFT_REM == 92 - 40 == 52   (allowance 92, reach 87.28, margin 4.72)
+// tests/test_efficiency_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is
+// the GATE on all of this, re-deriving every row (not just the mark rows) from the stylesheet
+// rather than trusting this note.
+// GROWING THIS MOVES THE TRACK INSIDE THE SURFACE, so domain/constants.EFFICIENCY_MM_TRACK_X(
+// _LARGE) had to grow with it by the exact same amount (in logical px, i.e. *SIZE_F under Large)
+// or the visible bar would slide RIGHT into the minimap -- see that constant's own comment.
 // V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
 // -113 for Large == -round(90 * SIZE_F)). #moe-bar-box in MoEEfficiencyVertical.css is sized to the
 // derived surface -- and unlike the horizontal file's box (left at the tuner's own emitted 460x55,
@@ -173,11 +212,73 @@ const PAD_REM = 10;                                  // slack for the shadow/glo
 // pushed and RE-ASSERTED after the deadline by the same shared machinery (MoEBarTransient's
 // SURFACE_REASSERT_MS); each push round-trips back as onSizeChanged -> bar_window._place, which is
 // what makes the placement agree with the surface.
+// FOUR DURABLE FACTS, established by reading the source rather than assuming (a maintainer once
+// saw the minimap's first column "covered by a dark panel" and the fix took four rounds to land):
+//   1. THE BACKDROP IS NOT MEANT TO COVER THE RIGHT-ANCHORED CAPTIONS -- only V_PAD_X_REM (above)
+//      was ever sized for their ink. .mev-backdrop is a SEPARATE rectangle, drawn for the
+//      shadow/glow bleed around the TRACK, and r1-r3/tp/bt already reach far past it by design (see
+//      the V_PAD_X_REM derivation above -- 38.89 to 87.28rem, against a 40rem backdrop bleed). Do
+//      not "fix" a clip by widening the backdrop; that is V_PAD_X_REM's job, on the SURFACE, which
+//      is never drawn.
+//   2. THE VERTICAL BAR'S BACKDROP HAS NO SYMMETRY CONTRACT. The symmetry test in this repo
+//      (`test_the_large_backdrop_stays_symmetric_about_the_track`) covers ONLY the HORIZONTAL bar's
+//      `.mp-backdrop`, because `anchor_centred_reduced`'s `max_x // 2` has no X term and only
+//      centres the BAR by centring the SURFACE -- true for the Damage Log (horizontal) anchor.
+//      Fixed+Vertical resolves through `anchor_minimap` instead (bar_window._resolve), whose
+//      `x = space_x - mm_size - gap - overhang - edge_x` reads `edge_x` (EFFICIENCY_MM_TRACK_X) and
+//      NOTHING about the backdrop's own width or left. Trimming `.mev-backdrop` asymmetrically
+//      (this file's own V_BOX_W_REM, leaving V_BOX_LEFT_REM alone) moves nothing the placement math
+//      depends on.
+//   3. THE BACKDROP TRIM (V_BOX_W_REM 96 -> 54) WAS REAL WORK -- KEEP IT. A maintainer report of
+//      the backdrop "sitting well clear of the minimap" turned out to describe a DIFFERENT panel;
+//      measured live on the sibling Moving Average bar (same mechanism, same minimap edge), this
+//      bar's own backdrop right edge (V_PAD_X_REM + V_BOX_W_REM == 52+54==106) lands EXACTLY on the
+//      minimap's own left edge (EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG == 95+8+3==106)
+//      -- zero overlap, by design, at the tuned 54. Reverting to 96 (right edge 148) would reopen a
+//      real 42rem overlap. Do not touch V_BOX_W_REM again without a live measurement to justify it.
+//   4. THE ACTUAL CULPRIT WAS THE INVISIBLE SURFACE'S OWN RIGHT PAD, NEVER UPDATED TO MATCH. The
+//      backdrop trim shrank the DRAWN rect; nothing shrank the SURFACE (the mouse-hit-blocking rect
+//      per this file's header) on that side, so it stayed the OLD symmetric V_PAD_X_REM(52) past
+//      the ALREADY-TRIMMED backdrop -- see MoEBarTransient.js's `padXR`/`padXRLarge` arg notes for
+//      the fix (a SEPARATE, smaller right pad, V_PAD_XR_REM/_LARGE below) and V_PAD_XR_REM's own
+//      derivation, mirroring the sibling Moving Average bar's live-measured diagnosis exactly.
+//      Because the fix only shrinks the RIGHT pad and V_PAD_X_REM (the LEFT side, where the caption
+//      ink and the track itself both live) is untouched, `shiftX` and therefore
+//      EFFICIENCY_MM_TRACK_X(_LARGE) -- both pure functions of the LEFT side alone -- need no
+//      correction, and the bar does not move on screen.
 const V_BOX_LEFT_REM = -40;                          // .mev-backdrop's left
 const V_BOX_TOP_REM = -80;                           // .mev-backdrop's top
-const V_BOX_W_REM = 96;                              // .mev-backdrop's width
+const V_BOX_W_REM = 54;                              // .mev-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mev-backdrop's height
 const V_CLIP_B_REM = 62;                             // backdrop bleed the SURFACE clips off the bottom
+const V_PAD_X_REM = 52;                              // the LEFT X slack, decoupled from the backdrop -- see above
+// THE SURFACE'S RIGHT (minimap-facing) PAD -- see the sibling MoEProgress.js's own V_PAD_XR_REM note
+// for the full mechanism; only the numbers differ here, and it is a SEPARATE knob from the backdrop's
+// own V_BOX_W_REM trim above: that trim shrinks what is DRAWN, this shrinks what is CLICK-BLOCKING
+// (the surface, never drawn).
+// UNLIKE THE MOVING AVERAGE BAR, EFFICIENCY_MM_TRACK_X CARRIES NO HAND CORRECTION ("pure derivation,
+// no correction" -- domain/constants.py's own comment), so it IS this bar's true local tick position
+// and needs no re-derivation the way the sibling file's fact 5 does. Solved against
+// MoEBarTransient.applySize's own formula (viewW == round((boxW*xf + padX + padXR) * f)) for the
+// tick's own visible right edge PLUS a small, deliberate MARGIN (+2 logical/document px, flat, NOT
+// xf-scaled) -- a flush boundary (viewW == tick-right exactly, zero margin) is the "rounding could
+// shave a px and eat the ink" risk the margin exists to head off, mirroring the sibling file's fact 5:
+//   Default (xf=f=1):  tick-right == 95 + 3 == 98  ->  viewW == 98 + 2 == 100  ->
+//     padXR == 100 - V_BOX_W_REM(54) - V_PAD_X_REM(52) == -6
+//   Large:  tick-right_pre_f == 137/SIZE_F... computed directly, not via the rounded PX constant:
+//     shiftX_large_pre_f(316/3) + trackW_large(4) + overhang_large_pre_f(4) == 340/3 ~= 113.333
+//     (renders at 113.333*SIZE_F ~= 141.667 device px) -> viewW_pre_f == 340/3 + 2 == 346/3 ~= 115.333
+//     -> round(115.333 * SIZE_F) == 144 -> padXRLarge == 346/3 - boxW*xf(72) - V_PAD_X_REM(52) ==
+//     -26/3 ~= -8.667
+// Both NEGATIVE: the box+left-pad sum (54+52==106 Default, 72+52==124 pre-SIZE_F Large) is already
+// flush with the minimap (fact 3), so ANY margin (to the tick, or to the minimap) needs the surface a
+// shade smaller still -- the surface's right edge sits a little further inside the backdrop's own
+// (already trimmed) drawn rect than its own edge. Resulting margins, both real and checked
+// (tests/test_efficiency_surface_mirror.py::test_the_surface_clears_the_minimap_at_every_size_index /
+// test_the_surface_does_not_clip_the_tick): Default clears the minimap by 6px and the tick by 2px;
+// Large by 6px and ~2.3px respectively.
+const V_PAD_XR_REM = -6;                             // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -8.667;                   // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- see the sibling MoEProgress.js for the same three-value shape.
 //   PFX      the class prefix every selector and toggled class here is written in. The source spells
@@ -450,7 +551,8 @@ const T = createTransient({
     // `box` replaces the four box* arguments above. Adopted at mount iff the model's `vertical` is
     // true, which then calls goVertical above for the DOM half.
     vert: { cls: "mev", box: [V_BOX_LEFT_REM, V_BOX_TOP_REM, V_BOX_W_REM, V_BOX_H_REM],
-            clipB: V_CLIP_B_REM },
+            clipB: V_CLIP_B_REM, padX: V_PAD_X_REM,
+            padXR: V_PAD_XR_REM, padXRLarge: V_PAD_XR_REM_LARGE },
     onVertical: goVertical,
 });
 

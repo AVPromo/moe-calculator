@@ -634,20 +634,26 @@ def test_the_vertical_track_x_terms_are_pure_composition_derivations():
     # Damage Efficiency bar's own single drag has since been inspected in-game and accepted as
     # correct AS DERIVED, so it gets no correction.
     #
-    # THE X SLACK IS PAD_REM ON ONE BAR AND NOT THE OTHER. The Moving Average bar's vertical surface
-    # reaches 63rem past its backdrop on EACH side (MoEProgress.js's V_PAD_X_REM) so it can cover its
-    # right-anchored captions' leftward ink, which PAD_REM alone clipped; the Damage Efficiency bar
-    # still uses PAD_REM on all four sides. This term is what keeps the widened surface from sliding
-    # the bar left on screen -- the surface grew, the track did not move inside it.
+    # THE X SLACK IS NOT PAD_REM ON EITHER BAR ANY MORE, and it has grown TWICE on each, both times
+    # for the same reason: a caption's own translateX moved further left (more overflow) and the
+    # pad had to grow with it or clip (see constants.py's own derivation history). The Moving
+    # Average bar's vertical surface now reaches 70rem past its backdrop on EACH side
+    # (MoEProgress.js's V_PAD_X_REM, up from 63 after the maintainer's "move the bottom block left
+    # 7px" nudge); the Damage Efficiency bar's is 52rem (MoEEfficiency.js's V_PAD_X_REM, up from a
+    # plain PAD_REM of 10, via an intermediate 14 that only checked the mark rows). This term is
+    # what keeps the widened surface from sliding the bar right into the minimap on screen -- the
+    # surface grew, the track did not move inside it.
     from moe_calculator.domain.constants import (
         PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
         EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
 
-    # (63 + 34) + 3 == 100 and (63 + 34*4/3 + 3*4/3) * 1.25 == 140.417 -> 140 is the PURE derivation;
-    # the shipped constant is that MINUS the flat -2 hand-placement correction (98 / 138).
-    assert (PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE) == (98, 138)
-    # (10 + 40) + 3 == 53 and (10 + 40*4/3 + 3*4/3) * 1.25 == 84.167 -> 84 -- no correction on top.
-    assert (EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE) == (53, 84)
+    # (70 + 34) + 3 == 107 and (70 + 34*4/3 + 3*4/3) * 1.25 == 119.333 * 1.25 == 149.167 -> 149 is
+    # the PURE derivation; the shipped constant is that MINUS the flat -2 hand-placement correction
+    # (105 / 147).
+    assert (PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE) == (105, 147)
+    # (52 + 40) + 3 == 95 and (52 + 40*4/3 + 3*4/3) * 1.25 == 109.333 * 1.25 == 136.667 -> 137 --
+    # no correction on top.
+    assert (EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE) == (95, 137)
 
 
 def test_vertical_anchor_shift_is_identical_for_both_bars():

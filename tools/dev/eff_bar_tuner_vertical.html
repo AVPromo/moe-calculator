@@ -210,6 +210,12 @@
      residual TRIM on top of that (r1-r3 only -- own knob, split from r4's, see below). */
   .mev-cap.lf{transform:translateY(50%) translateX(var(--lfclear)) translateX(var(--capxreq));
     font-size:var(--reqfs);line-height:var(--reqlh)}
+  /* PER-MARK block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 already exist
+     as three concurrent rows, so no new plumbing -- each collapses the two translateX() calls
+     above into ONE literal, (0,3,0) cleanly beating the (0,2,0) base rule. */
+  .mev-cap.lf.r1{transform:translateY(50%) translateX(-2rem)}
+  .mev-cap.lf.r2{transform:translateY(50%) translateX(-4rem)}
+  .mev-cap.lf.r3{transform:translateY(50%) translateX(-6rem)}
   .mev-cap.r1{bottom:25%}.mev-cap.r2{bottom:50%}.mev-cap.r3{bottom:75%}
   /* ---- r4: the 100% tick's caption, a static cap ABOVE the track's top end -- reads as the
      axis's top end cap. padding-bottom, not margin-bottom: Coherent drops margin on the
@@ -249,6 +255,10 @@
      Compound selectors beat the shared rule above on specificity. Literal, not slider-driven. */
   .mev-cap .mev-ico.bm{margin-left:1.253rem}
   .mev-cap .mev-ico.mk{margin-left:-1rem}
+  /* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: mark_1 coincides with -1rem above,
+     mark_2/mark_3 get their own -- (0,3,0), tying .mk, beaten by SOURCE ORDER. */
+  .mev-cap .mev-ico.mk2{margin-left:0.5rem}
+  .mev-cap .mev-ico.mk3{margin-left:3rem}
   .mev-cap.lf .mev-ico{transform:translateY(var(--icoyreq))}
   .mev-cap.tp .mev-ico{transform:translateY(var(--icoybm))}
   .mev-cap.bt .mev-ico{transform:translateY(var(--icoycur))}
@@ -563,7 +573,7 @@
       // caption rows run horizontally): icoyReq moves the three marksOnGun cuts (r1-r3), icoyBm
       // the r4 barrel_mark glyph ALONE, icoyCur the current caption's own icon -- kept as three
       // separate knobs, never merged.
-      {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.25},
+      {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1},
       {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:-0.25},
       {id:"icoyCur",label:"Current caption's icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.5}]],
     ["Backdrop",[
@@ -579,7 +589,7 @@
       {id:"ug2p",label:"Darkening fade out at (%)",min:0,max:100,step:1,val:70},
       {id:"bdBleedX",label:"Backdrop bleed past each end, along axis (rem)",min:0,max:200,step:5,val:80},
       {id:"bdTop",label:"Backdrop cross-axis offset (rem)",min:-200,max:100,step:1,val:-40},
-      {id:"bdH",label:"Backdrop cross-axis thickness (rem)",min:10,max:300,step:1,val:96},
+      {id:"bdH",label:"Backdrop cross-axis thickness (rem)",min:10,max:300,step:1,val:54},
       {id:"stageCol",label:"Stage tint over the frame (preview only)",hex:true,val:"#0d0e10"},
       {id:"stageVig",label:"...alpha at the frame edges",min:0,max:1,step:0.01,val:0.25}]],
     ["Animation",[
@@ -691,6 +701,11 @@
       ".mev-lg .mev-tick.mev-cur { width: "+X43(st.tickHC)+"rem;\n"+
       "  transform: translate(-50%, 50%) translateX("+X43(st.tickyCur)+"rem); }\n"+
       ".mev-lg .mev-cap.lf { transform: translateY(50%) "+clr+" translateX("+X43(st.capxReq)+"rem); }\n"+
+      // Large's per-row block<->bar gap, hand-tuned in icon_gap_tuner.html -- LITERAL, not this
+      // row's *4/3, same convention as the horizontal Moving Average bar's Large block-gap.
+      ".mev-lg .mev-cap.lf.r1 { transform: translateY(50%) translateX(-3.000rem); }\n"+
+      ".mev-lg .mev-cap.lf.r2 { transform: translateY(50%) translateX(-5.000rem); }\n"+
+      ".mev-lg .mev-cap.lf.r3 { transform: translateY(50%) translateX(-7.000rem); }\n"+
       ".mev-lg .mev-cap.tp { transform: "+clr+" translateX("+X43(st.capxR4)+"rem); }\n"+
       ".mev-lg .mev-cap.bt { transform: "+clr+" translateX("+X43(st.capxCur)+"rem); }\n"+
       ".mev-lg .mev-cap .mev-ico { margin-left: "+X43(st.icoGap)+"rem; }\n"+
@@ -698,6 +713,11 @@
       // applied by hand to the Default literal, never re-derived from the shared icoGap knob.
       ".mev-lg .mev-cap .mev-ico.bm { margin-left: 1.671rem; }\n"+
       ".mev-lg .mev-cap .mev-ico.mk { margin-left: -1.333rem; }\n"+
+      // PER-MARK Large levers, hand-tuned in icon_gap_tuner.html -- LITERAL, not this row's *4/3;
+      // mark_1 needs its own override here even though it didn't at Default.
+      ".mev-lg .mev-cap .mev-ico.mk1 { margin-left: -1.000rem; }\n"+
+      ".mev-lg .mev-cap .mev-ico.mk2 { margin-left: 1.000rem; }\n"+
+      ".mev-lg .mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }\n"+
       ".mev-lg .mev-cap.bt .mev-d { transform: translate("+
         X43(-Math.round(st.dGap*st.dFS*100)/100)+"rem, "+st.dY+"rem); }\n";
   }
@@ -974,6 +994,12 @@
 ".mev-cap.lf {\n  transform: translateY(50%) translateX("+REM(-p.pad)+") translateX("+
   st.capxReq+"rem);\n"+
 "  font-size: "+st.reqFS+"rem;\n  line-height: "+lh(st.reqFS)+"rem;\n}\n"+
+"/* PER-MARK block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 already exist\n"+
+"   as three concurrent rows, so no new plumbing -- each collapses the two translateX() calls\n"+
+"   above into ONE literal, (0,3,0) cleanly beating the (0,2,0) base rule. */\n"+
+".mev-cap.lf.r1 { transform: translateY(50%) translateX(-2.000rem); }\n"+
+".mev-cap.lf.r2 { transform: translateY(50%) translateX(-4.000rem); }\n"+
+".mev-cap.lf.r3 { transform: translateY(50%) translateX(-6.000rem); }\n"+
 ".mev-cap.r1 { bottom: 25%; }\n.mev-cap.r2 { bottom: 50%; }\n.mev-cap.r3 { bottom: 75%; }\n"+
 "/* r4: the 100% tick's caption, a static cap ABOVE the track's top end -- reads as the axis's\n"+
 "   top end cap. padding-bottom, not margin-bottom: Coherent drops margin on the bottom:100%-\n"+
@@ -1012,6 +1038,10 @@
 "   own mark correction. Literal, not slider-driven. */\n"+
 ".mev-cap .mev-ico.bm { margin-left: 1.253rem; }\n"+
 ".mev-cap .mev-ico.mk { margin-left: -1rem; }\n"+
+"/* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: mark_1 coincides with -1rem above,\n"+
+"   mark_2/mark_3 get their own -- (0,3,0), tying .mk, beaten by SOURCE ORDER. */\n"+
+".mev-cap .mev-ico.mk2 { margin-left: 0.500rem; }\n"+
+".mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }\n"+
 ".mev-cap.lf .mev-ico { transform: translateY("+st.icoyReq+"rem); }\n"+
 ".mev-cap.tp .mev-ico { transform: translateY("+st.icoyBm+"rem); }\n"+
 ".mev-cap.bt .mev-ico { transform: translateY("+st.icoyCur+"rem); }\n"+

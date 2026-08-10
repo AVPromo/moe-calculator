@@ -216,6 +216,89 @@ def test_push_writes_eta_battles_from_the_domain_function(monkeypatch):
     assert len(calls) == 1
 
 
+def test_push_gates_ctrl_held_on_free_alignment_regardless_of_which_visibility_switch_is_on(
+        monkeypatch):
+    # THE reported bug: pressing Ctrl revealed the bar even under Fixed alignment, because
+    # MoEBarTransient.js's peek() ORs the pushed `ctrlHeld` into its show/hold decision
+    # unconditionally -- bar_window.BarHost.drag() already refuses the WHOLE reposition gesture
+    # unless alignment is Free, but that gate never reached the PUSHED ctrlHeld value, so it
+    # stopped the drag but not the appearance. `ctrlHeld` must consult the SAME alignment gate
+    # drag() does, and it must not care which show-trigger switch (Events/Alt Press/Always) is on
+    # -- Ctrl is not Alt, and must not borrow Alt's show trigger from ANY of them.
+    #
+    # Matrix: alignment (Fixed/Free) x ctrl-down (True/False) x visibility config, including the
+    # report's exact repro ("Alt-only": Events + Always off, Alt Press on) and its opposite
+    # (Events on, Alt Press + Always off) -- ctrlHeld must land on the SAME value either way.
+    cases = (
+        (mod_settings.PROGRESS_ALIGN_FIXED, True, False),   # the reported repro
+        (mod_settings.PROGRESS_ALIGN_FIXED, False, False),
+        (mod_settings.PROGRESS_ALIGN_FREE, True, True),     # Free must keep working
+        (mod_settings.PROGRESS_ALIGN_FREE, False, False),
+    )
+    visibility_configs = (
+        {mod_settings.PROGRESS_SHOW_EVENTS_KEY: False, mod_settings.PROGRESS_SHOW_ALT_KEY: True,
+         mod_settings.PROGRESS_SHOW_ALWAYS_KEY: False},   # "Alt-only"
+        {mod_settings.PROGRESS_SHOW_EVENTS_KEY: True, mod_settings.PROGRESS_SHOW_ALT_KEY: False,
+         mod_settings.PROGRESS_SHOW_ALWAYS_KEY: False},   # "Events-only"
+    )
+    for alignment, ctrl_down, expected in cases:
+        monkeypatch.setattr(battle_bridge, "_ctrl_held", ctrl_down)
+        for visibility in visibility_configs:
+            settings_over = dict(visibility)
+            settings_over[mod_settings.PROGRESS_ALIGNMENT_KEY] = alignment
+            props = _push(**settings_over)
+            assert props["ctrlHeld"] is expected, (alignment, ctrl_down, visibility)
+
+
+def test_RECORDED_ctrl_gate_under_vertical_plus_fixed_the_minimap_anchor_case(monkeypatch):
+    # RECORDED OBSERVATION, not an endorsed design -- raised by review, not chosen by us. The
+    # maintainer owns any deliberate change to what Minimap-anchored placement should do; this
+    # only pins what the code does TODAY so a future renumbering fails loudly instead of silently
+    # changing behaviour.
+    #
+    # mod_settings.py:441-442 PROGRESS_ALIGN_FIXED = 0 / PROGRESS_ALIGN_FREE = 1 (the STORED
+    # alignment setting) vs. mod_settings.py:452-453 PROGRESS_ALIGN_DAMAGE_LOG = 0 /
+    # PROGRESS_ALIGN_MINIMAP = 1 (bar_window._resolve's INTERNAL anchor selector, picked purely by
+    # Orientation when alignment is Fixed -- Vertical -> Minimap). Two vocabularies really do
+    # share the value 1.
+    #
+    # It does NOT reach _ctrl_relevant(): that gate (like BarHost.drag()'s) reads
+    # progress_bar_alignment() itself -- the STORED key, ceiling PROGRESS_ALIGN_FREE == 1 -- never
+    # a locally-resolved "anchor" variable that could hold PROGRESS_ALIGN_MINIMAP. Fixed+Vertical
+    # still stores PROGRESS_ALIGN_FIXED (0); "Minimap" only ever exists as _resolve's internal
+    # choice of WHERE Fixed anchors, not as a value progress_bar_alignment() can return. So a
+    # vertical bar under Fixed alignment -- the configuration that resolves to the Minimap anchor
+    # -- gates Ctrl exactly like any other Fixed configuration: OFF.
+    monkeypatch.setattr(battle_bridge, "_ctrl_held", True)
+    props = _push(**{mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FIXED,
+                     mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL})
+    assert props["ctrlHeld"] is False
+
+
+def test_ctrl_relevant_actually_consults_alignment_every_call(monkeypatch):
+    # A gate that got short-circuited (e.g. cached the alignment once, or a fail-soft branch that
+    # never calls through at all) would look identical to a working one on a single push's value
+    # -- assert the CALL COUNT so a no-op mutation here cannot pass silently.
+    calls = []
+    real_alignment = mod_settings.progress_bar_alignment
+
+    def _spy():
+        calls.append(1)
+        return real_alignment()
+
+    monkeypatch.setattr(mod_settings, "progress_bar_alignment", _spy)
+    monkeypatch.setattr(battle_bridge, "_ctrl_held", True)
+    assert battle_bridge._ctrl_relevant() is False   # default settings: Fixed
+    assert len(calls) == 1
+    mod_settings._apply({mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE})
+    assert battle_bridge._ctrl_relevant() is True
+    assert len(calls) == 2
+    # Ctrl not down at all -- must short-circuit and never even read alignment.
+    monkeypatch.setattr(battle_bridge, "_ctrl_held", False)
+    assert battle_bridge._ctrl_relevant() is False
+    assert len(calls) == 2
+
+
 def test_push_derives_has_data_from_mark_axis_not_the_display_floor():
     # THE invariant: hasData is mark_axis's own verdict, computed BEFORE axisLo is overwritten
     # with the display floor (progress_axis_lo). A rewrite that instead compared the PUSHED

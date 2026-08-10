@@ -119,9 +119,27 @@ _alt_held = False
 # it reports both keys at once -- see that module). ONE reader: the two centre-screen bars, which
 # get it pushed as `ctrlHeld` and use it to open their input hit rect for the Ctrl+DRAG reposition
 # gesture (and, like altHeld, to hold themselves up while it lasts -- you cannot grab a bar that
-# has faded out). Raw, NOT settings-folded: it is a key state, not a switch, and the position
-# controls stay usable whatever the visibility switches say.
+# has faded out). NOT folded with the VISIBILITY switches (Events/Alt Press/Always): the position
+# controls stay usable whatever those say -- see _ctrl_relevant() for the one gate it DOES need.
 _ctrl_held = False
+
+
+def _ctrl_relevant():
+    """Whether the raw Ctrl key state is worth pushing as a bar's `ctrlHeld` VM slot at all.
+
+    `ctrlHeld` does two things client-side (MoEBarTransient.js): it opens the drag hit rect, and
+    `peek()` ORs it into the show/hold decision so a held Ctrl pins the bar up like a held Alt --
+    the bar needs to be up and stationary before there is anything to grab. Both are pointless
+    while `bar_window.BarHost.drag()` is going to refuse the WHOLE gesture anyway, which it does,
+    at the very top, before any cursor read or window move, unless alignment is Free
+    (mod_settings.PROGRESS_ALIGN_FREE) -- so this consults that SAME gate. Without it, a raw Ctrl
+    press pushed `ctrlHeld=True` under Fixed alignment too, and the shared peek() reveals the bar
+    on a Ctrl press even when the drag it exists for cannot do anything -- the gate stopped the
+    drag but not the appearance. Fail toward NOT relevant: an unreadable/absent alignment reads as
+    Fixed (mod_settings.progress_bar_alignment()'s own fail-soft), so a bad read never leaves the
+    bar spuriously pinned up."""
+    return (_ctrl_held
+            and mod_settings.progress_bar_alignment() == mod_settings.PROGRESS_ALIGN_FREE)
 
 
 # WHICH ORIENTATION THE OPEN BAR WINDOW WAS MOUNTED WITH (None == no bar has been opened since the
@@ -761,10 +779,12 @@ def push_progress(rvm, snap, model):
             # The hold duration, in MS for the JS clock. NOT master-folded (see the getter): a
             # duration ANDed with a switch would push 0, i.e. no hold at all.
             tx.setHoldMs(mod_settings.progress_hold_seconds() * 1000)
-            # The raw Ctrl state -- the bar's drag gesture (open the hit rect, hold the bar up).
+            # The Ctrl state -- the bar's drag gesture (open the hit rect, hold the bar up).
             # Deliberately NOT run through progress_alt_held: that getter folds the VISIBILITY
-            # switches in, and repositioning must work whatever they say.
-            tx.setCtrlHeld(_ctrl_held)
+            # switches in, and repositioning must work whatever they say. It IS gated on alignment
+            # (_ctrl_relevant), the same gate BarHost.drag() uses to refuse the gesture outright --
+            # see that function's docstring for why.
+            tx.setCtrlHeld(_ctrl_relevant())
             # Repeats of this battle to reach axis_hi (0 = already there, -1 = no data). The JS
             # appends it to the delta caption and renders nothing below 1.
             tx.setEtaBattles(eta)
@@ -841,9 +861,10 @@ def push_efficiency(rvm, snap, model):
             tx.setShowEvents(show_events)
             # The hold duration in MS -- see push_progress; both bars share the setting.
             tx.setHoldMs(mod_settings.progress_hold_seconds() * 1000)
-            # The raw Ctrl state -- the drag gesture. Same wire meaning as push_progress's, and
-            # both bars share the ONE stored position pair (bar_window / mod_settings).
-            tx.setCtrlHeld(_ctrl_held)
+            # The Ctrl state -- the drag gesture. Same wire meaning as push_progress's (see
+            # _ctrl_relevant), and both bars share the ONE stored position pair (bar_window /
+            # mod_settings).
+            tx.setCtrlHeld(_ctrl_relevant())
             # WHICH COMPOSITION the JS draws -- same wire meaning as push_progress's, including the
             # mount-only branch that makes a live flip a close/reopen (see apply_settings).
             tx.setVertical(vertical)
