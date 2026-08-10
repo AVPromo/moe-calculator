@@ -15,8 +15,9 @@ from moe_calculator.bridge.bar_window import BarHost
 from moe_calculator.bridge.view_models import ProgressVM
 from moe_calculator.domain.constants import (
     PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC,
-    PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_GAP_BOTTOM,
-    PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
+    PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_GAP,
+    PROGRESS_MM_GAP_LARGE, PROGRESS_MM_GAP_BOTTOM, PROGRESS_MM_TRACK_X,
+    PROGRESS_MM_TRACK_X_LARGE)
 
 # itemID registered in mods/configs/res_map/MoEProgressView.json -- keep in lockstep. It MUST
 # differ from every other entry's: OpenWG assigns the numeric resId positionally when it rebuilds
@@ -26,7 +27,8 @@ RES_MAP_ITEM_ID = "MoEProgressView"
 _host = BarHost(RES_MAP_ITEM_ID, ProgressVM,
                 PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT,
                 PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
-                PROGRESS_MM_GAP_BOTTOM, "[moe-bar]",
+                PROGRESS_MM_GAP_BOTTOM, "[moe-bar]", mm_gap=PROGRESS_MM_GAP,
+                mm_gap_large=PROGRESS_MM_GAP_LARGE,
                 variant=mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE)
 
 open_window = _host.open_window

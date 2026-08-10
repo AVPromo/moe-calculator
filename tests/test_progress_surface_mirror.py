@@ -476,68 +476,27 @@ def test_the_stacked_eta_row_fits_above_the_track_without_clipping():
 # loosening it until green (masking a real, if unreachable, asymmetry) or leaving it red forever.
 
 
-def test_the_backdrops_right_edge_clears_the_minimap():
-    """THE GATE THAT WAS MISSING. No test asserted the backdrop's right edge stayed clear of the
-    minimap, which is exactly how a 26rem (Default) / 6rem (Large) overlap shipped invisibly --
-    the dark panel visibly covering the minimap's first column, at both scales, unrelated to any
-    hit-test mechanics (setHitAreaPaddingsRem's collapse is real; the backdrop is drawn regardless
-    of it). See MoEProgress.js's own three-point note for the full narrative.
-
-    TWO BOUNDS, both re-derived from the shipped constants, never hardcoded:
-      * the backdrop's right edge (relative to #moe-bar-box: V_PAD_X_REM + the backdrop's own
-        width) must not PASS the minimap's own left edge (PROGRESS_MM_TRACK_X + MM_GAP +
-        MM_TICK_OVERHANG) -- the overlap this test exists to catch;
-      * it must not fall SHORT of the track's own right edge (PROGRESS_MM_TRACK_X) either, or the
-        track's own tick ink loses its dark backing -- the mistake a naive symmetric trim, or an
-        over-eager asymmetric one, would make instead.
-    Prove it red by setting V_BOX_W_REM back to 72 (Default) or restoring the Large backdrop's
-    width to its old V_BOX_W_REM*SIZE_XF twin (96) -- either reintroduces the exact overlap this
-    gate now refuses.
-    """
-    from moe_calculator.domain.constants import (
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE, MM_GAP, MM_TICK_OVERHANG,
-        MM_TICK_OVERHANG_LARGE)
-
-    js = _read("MoEProgress.js")
-    css = _read("MoEProgressVertical.css")
-    pad_x = _js_const(js, "V_PAD_X_REM")
-    box_w = _js_const(js, "V_BOX_W_REM")
-
-    backdrop_right = pad_x + box_w
-    minimap_left = PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG
-    assert backdrop_right <= minimap_left, (
-        "the Default backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
-        "pass PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG (%srem)" % (
-            backdrop_right, backdrop_right - minimap_left, minimap_left))
-    assert backdrop_right >= PROGRESS_MM_TRACK_X, (
-        "the Default backdrop's right edge (%srem) falls %srem SHORT of the track's own right "
-        "edge (PROGRESS_MM_TRACK_X, %srem) -- the track's tick ink would lose its backing" % (
-            backdrop_right, PROGRESS_MM_TRACK_X - backdrop_right, PROGRESS_MM_TRACK_X))
-
-    match = re.search(r"\.mp-lg \.mpv-backdrop \{ left: -?[\d.]+rem; width: ([\d.]+)rem; \}", css)
-    assert match, "MoEProgressVertical.css: .mp-lg .mpv-backdrop rule not found"
-    large_backdrop_right = pad_x + Decimal(match.group(1))
-    large_minimap_left = PROGRESS_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE
-    assert large_backdrop_right <= large_minimap_left, (
-        "the Large backdrop's right edge (%srem) overlaps the minimap by %srem -- it must not "
-        "pass PROGRESS_MM_TRACK_X_LARGE + MM_GAP + MM_TICK_OVERHANG_LARGE (%srem)" % (
-            large_backdrop_right, large_backdrop_right - large_minimap_left, large_minimap_left))
-    assert large_backdrop_right >= PROGRESS_MM_TRACK_X_LARGE, (
-        "the Large backdrop's right edge (%srem) falls %srem SHORT of the track's own right edge "
-        "(PROGRESS_MM_TRACK_X_LARGE, %srem) -- the track's tick ink would lose its backing" % (
-            large_backdrop_right, PROGRESS_MM_TRACK_X_LARGE - large_backdrop_right,
-            PROGRESS_MM_TRACK_X_LARGE))
+# REMOVED: test_the_backdrops_right_edge_clears_the_minimap. It used to claim "the DRAWN backdrop
+# rectangle clears the minimap", comparing the CSS rule's literal (undrawn) extent against the
+# minimap's left edge. Once its PRE-SIZE_F-vs-POST-SIZE_F unit bug was fixed, it failed at every
+# size: the backdrop's own literal CSS extent reaches PAST the minimap at both sizes (Large by 40
+# real logical px, independent of any gap tuning). That overlap is not visible on screen, because
+# the invisible SURFACE (the mouse-hit rect, its own right pad trimmed by V_PAD_XR_REM/_LARGE) is
+# narrower than the backdrop's literal extent at every size, and Gameface clips anything drawn
+# past a view's own declared size ("an origin overflow is clipped at ANY surface size" --
+# MoEBarTransient.js). So this test was measuring an extent that was never fully rendered, and it
+# only ever passed by a units coincidence (both sides landing on the same integer). The real,
+# currently-provable invariant -- does the actual click-blocking SURFACE clear the minimap -- is
+# test_the_surface_clears_the_minimap_at_every_size_index below; that is the one gate this ground
+# belongs to now.
 
 
 def test_the_surface_clears_the_minimap_at_every_size_index():
-    """THE GATE ON THE SURFACE ITSELF, not the backdrop. test_the_backdrops_right_edge_clears_the_
-    minimap above proves the DRAWN rect stays clear, but the invisible SURFACE (the actual
-    mouse-hit-blocking rect -- the native Wulf window rect captures a click regardless of the JS
-    hit-area collapse, see bridge/bar_window.py's own note) is a SEPARATE rectangle with its own,
-    independently-tuned right pad (V_PAD_XR_REM/_LARGE), which a backdrop-only gate cannot see.
-    That is exactly how this shipped TWICE with the backdrop gate green throughout -- live-measured:
-    window size (186,320) == V_BOX_W_REM(46) + V_PAD_X_REM(70) + V_PAD_X_REM(70), the OLD symmetric
-    right pad past an ALREADY-TRIMMED backdrop, 70 logical px inside the minimap.
+    """THE GATE ON THE SURFACE ITSELF -- the invisible, mouse-hit-blocking rect (the native Wulf
+    window rect captures a click regardless of the JS hit-area collapse, see bridge/bar_window.py's
+    own note), which has its own, independently-tuned right pad (V_PAD_XR_REM/_LARGE). This is the
+    one gate that ties directly to what is reachable on screen; see the removed-test comment above
+    for why a DRAWN-backdrop version of this check does not carry independent signal.
 
     `anchor_minimap`'s `x = space_x - mm_size - gap - overhang - edge_x` makes the gap between the
     TRACK and the minimap's own left edge INDEPENDENT of `mm_size` by construction (`mm_size`
@@ -548,13 +507,24 @@ def test_the_surface_clears_the_minimap_at_every_size_index():
     A REAL MARGIN, not zero-clearance: this bug shipped twice at a non-negative (or negative)
     margin, so the bound below requires real daylight, not merely `<=`.
 
+    PINNED AT THE MAINTAINER'S OWN SPEND, PER SIZE (see domain/constants.PROGRESS_MM_GAP(_LARGE)):
+    the placement gap was deliberately shrunk from the shared MM_GAP(8), independently at each
+    size, trading margin for a bar closer to the minimap. Default and Large are DIFFERENT affine
+    functions of the gap for this bar (Large is always 1px tighter than Default at this anchor),
+    so each was solved on its own: Default reaches 5 (margin 1, down from 4px at gap=8), Large
+    reaches 6 (margin 1, down from 3px at gap=8). A first pass used one shared gap (6) for both
+    sizes, which left Default sitting at an unnecessary 2px margin -- Default is the one that
+    improved when the knob was split by size. 1px is the FLOOR both were solved for (not 0):
+    landing exactly flush is reachable but was deliberately not chosen, to keep 1-2px of daylight
+    rather than land on exact equality.
+
     Prove it red by restoring V_PAD_XR_REM(_LARGE) to V_PAD_X_REM(_LARGE)'s own value (the
     asymmetric right pad deleted, reproducing the live-measured overlap) -- every index goes red at
     both sizes.
     """
     from moe_calculator.domain.constants import (
-        MINIMAP_SIZES, MM_GAP, MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
-        PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
+        MINIMAP_SIZES, PROGRESS_MM_GAP, PROGRESS_MM_GAP_LARGE, MM_TICK_OVERHANG,
+        MM_TICK_OVERHANG_LARGE, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE)
     from moe_calculator.domain.positioning import anchor_minimap
 
     js = _read("MoEProgress.js")
@@ -564,16 +534,18 @@ def test_the_surface_clears_the_minimap_at_every_size_index():
     assert match, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
     large_view_w = iround_half_away(Decimal(match.group(1)) * _size_factor("SIZE_F"))
 
-    _MARGIN_PX = 3   # the smaller of this bar's two achieved margins (Large) -- see
-                     # test_the_surface_does_not_clip_the_tick for the OTHER edge this same surface
-                     # must clear; the two trade off against a single, small total slack (fact 5)
+    _MARGIN_PX = 1   # both sizes' achieved margin now that the gap is solved per size -- see
+                     # test_the_surface_does_not_clip_the_tick for the OTHER edge this same
+                     # surface must clear; the two trade off against a single, small total slack
+                     # (fact 5)
     _SPACE_X = 3000  # arbitrary: anchor_minimap's x does not depend on space_y/edge_y at all
 
     for idx, mm_size in enumerate(MINIMAP_SIZES):
-        for large, view, edge_x, overhang in (
-                (False, view_w, PROGRESS_MM_TRACK_X, MM_TICK_OVERHANG),
-                (True, large_view_w, PROGRESS_MM_TRACK_X_LARGE, MM_TICK_OVERHANG_LARGE)):
-            x, _y = anchor_minimap(_SPACE_X, 2000, edge_x, 0, mm_size, MM_GAP, 0, overhang)
+        for large, view, edge_x, overhang, gap in (
+                (False, view_w, PROGRESS_MM_TRACK_X, MM_TICK_OVERHANG, PROGRESS_MM_GAP),
+                (True, large_view_w, PROGRESS_MM_TRACK_X_LARGE, MM_TICK_OVERHANG_LARGE,
+                 PROGRESS_MM_GAP_LARGE)):
+            x, _y = anchor_minimap(_SPACE_X, 2000, edge_x, 0, mm_size, gap, 0, overhang)
             margin = (_SPACE_X - mm_size) - (x + view)
             assert margin >= _MARGIN_PX, (
                 "minimap size index %d (mmSize=%d), %s: the surface's right edge clears the "

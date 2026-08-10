@@ -232,10 +232,17 @@ const PAD_REM = 10;                                  // slack for the shadow/glo
 //   3. THE BACKDROP TRIM (V_BOX_W_REM 96 -> 54) WAS REAL WORK -- KEEP IT. A maintainer report of
 //      the backdrop "sitting well clear of the minimap" turned out to describe a DIFFERENT panel;
 //      measured live on the sibling Moving Average bar (same mechanism, same minimap edge), this
-//      bar's own backdrop right edge (V_PAD_X_REM + V_BOX_W_REM == 52+54==106) lands EXACTLY on the
-//      minimap's own left edge (EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG == 95+8+3==106)
-//      -- zero overlap, by design, at the tuned 54. Reverting to 96 (right edge 148) would reopen a
-//      real 42rem overlap. Do not touch V_BOX_W_REM again without a live measurement to justify it.
+//      bar's own backdrop right edge (V_PAD_X_REM + V_BOX_W_REM == 52+54==106) landed EXACTLY on
+//      the minimap's own left edge (EFFICIENCY_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG ==
+//      95+8+3==106) -- zero overlap, by design, at the tuned 54, AT THE TIME (the shared MM_GAP
+//      was 8). Reverting to 96 (right edge 148) would reopen a real 42rem overlap. Do not touch
+//      V_BOX_W_REM again without a live measurement to justify it.
+//      SINCE THEN, PLACEMENT MOVED CLOSER TO THE MINIMAP (domain/constants.EFFICIENCY_MM_GAP
+//      (_LARGE), 3/3, replacing the shared MM_GAP(8) for this bar's own anchor) -- the backdrop's
+//      own DRAWN right edge no longer sits flush with the minimap's now-closer left edge. Not a
+//      regression: fact 4 below already established the DRAWN backdrop is not what clears the
+//      minimap, the invisible SURFACE is (V_PAD_XR_REM/_LARGE), and the surface still clears it
+//      with a real, checked margin at the new gap -- see V_PAD_XR_REM's own derivation below.
 //   4. THE ACTUAL CULPRIT WAS THE INVISIBLE SURFACE'S OWN RIGHT PAD, NEVER UPDATED TO MATCH. The
 //      backdrop trim shrank the DRAWN rect; nothing shrank the SURFACE (the mouse-hit-blocking rect
 //      per this file's header) on that side, so it stayed the OLD symmetric V_PAD_X_REM(52) past
@@ -270,13 +277,17 @@ const V_PAD_X_REM = 52;                              // the LEFT X slack, decoup
 //     (renders at 113.333*SIZE_F ~= 141.667 device px) -> viewW_pre_f == 340/3 + 2 == 346/3 ~= 115.333
 //     -> round(115.333 * SIZE_F) == 144 -> padXRLarge == 346/3 - boxW*xf(72) - V_PAD_X_REM(52) ==
 //     -26/3 ~= -8.667
-// Both NEGATIVE: the box+left-pad sum (54+52==106 Default, 72+52==124 pre-SIZE_F Large) is already
-// flush with the minimap (fact 3), so ANY margin (to the tick, or to the minimap) needs the surface a
-// shade smaller still -- the surface's right edge sits a little further inside the backdrop's own
-// (already trimmed) drawn rect than its own edge. Resulting margins, both real and checked
+// Both NEGATIVE: the box+left-pad sum (54+52==106 Default, 72+52==124 pre-SIZE_F Large) was flush
+// with the minimap at the ORIGINAL shared MM_GAP(8) (fact 3), so ANY margin (to the tick, or to
+// the minimap) needed the surface a shade smaller still -- the surface's right edge sits a little
+// further inside the backdrop's own (already trimmed) drawn rect than its own edge. This
+// derivation (padXR/padXRLarge themselves) is UNCHANGED by the later gap move -- pure JS/CSS
+// geometry, independent of where Python places the window -- but the MARGIN it buys against the
+// minimap moved WITH that gap. Resulting margins, both real and checked
 // (tests/test_efficiency_surface_mirror.py::test_the_surface_clears_the_minimap_at_every_size_index /
-// test_the_surface_does_not_clip_the_tick): Default clears the minimap by 6px and the tick by 2px;
-// Large by 6px and ~2.3px respectively.
+// test_the_surface_does_not_clip_the_tick), at domain/constants.EFFICIENCY_MM_GAP(_LARGE) == 3/3:
+// Default clears the minimap by 1px (was 6px at the original shared gap of 8) and the tick by
+// 2px; Large by 1px (was 6px) and ~2.3px respectively.
 const V_PAD_XR_REM = -6;                             // the RIGHT (minimap-facing) X slack, Default
 const V_PAD_XR_REM_LARGE = -8.667;                   // ...and Large -- its OWN literal, see above
 

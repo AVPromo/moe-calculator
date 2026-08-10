@@ -503,13 +503,16 @@ body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
    so 125.333rem here reproduces the same round(125.333*1.25)==157 logical px MoEBarTransient.
    applySize pushes via resizeViewRem -- do not write 157 here, that would double the factor.
    THE BACKDROP'S OWN LARGE WIDTH BELOW IS A LITERAL 90rem, NOT V_BOX_W_REM*SIZE_XF (61.333, the
-   naive *4/3 twin of the tuned Default 46) -- see MoEProgress.js's fact 3: 90 lands the backdrop's
+   naive *4/3 twin of the tuned Default 46) -- see MoEProgress.js's fact 3: 90 landed the backdrop's
    own right edge exactly on the minimap's edge (70+90==160==edge_x(147)+MM_GAP(8)+
-   MM_TICK_OVERHANG_LARGE(5)), keep it. The surface above is narrower still than even the trimmed
+   MM_TICK_OVERHANG_LARGE(5)) AT THE ORIGINAL SHARED MM_GAP(8), keep it. Placement has since moved
+   closer to the minimap (domain/constants.PROGRESS_MM_GAP_LARGE == 6, not 8), so the backdrop's own
+   drawn edge no longer sits flush -- harmless, per fact 3's own update, since the invisible SURFACE
+   is what actually clears the minimap. The surface above is narrower still than even the trimmed
    backdrop (125.333 < 70+90==160, the SAME pre-SIZE_F rem space) -- that is the SEPARATE surface
    fix (fact 4/5): the surface clips a little more of the backdrop's own right-side bleed, to leave
-   a real margin (3px to the minimap, ~2.8px to the tick's own true right edge -- MoEProgress.js's
-   fact 5) instead of the backdrop's own flush zero-clearance edge. */
+   a real margin (1px to the minimap at the current gap, ~2.8px to the tick's own true right edge --
+   MoEProgress.js's fact 5) instead of the backdrop's own flush zero-clearance edge. */
 body.mpv.mp-lg #moe-bar-root { width: 4rem; }
 body.mpv.mp-lg #moe-bar-box { width: 125.333rem; }
 .mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }

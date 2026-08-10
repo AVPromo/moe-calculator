@@ -258,6 +258,14 @@ class BarHost(object):
     logical px of unreachable slack; the front-end change that shortened both vertical surfaces to
     their own tuned gap is what made the two numbers differ ON SCREEN and so worth threading. It has
     no Large twin, on purpose -- see the constants' note.
+    ``mm_gap`` / ``mm_gap_large`` are the MINIMAP alignment's per-bar, per-size X clearance to
+    spend (constants.PROGRESS_/EFFICIENCY_MM_GAP(_LARGE), replacing the shared constants.MM_GAP
+    for actual placement -- see that constant's own derivation for why a single shared knob
+    cannot serve both bars, and why even a per-bar knob still has to split by size: the two sizes'
+    margins are different affine functions of the gap, so one shared value is capped by whichever
+    size is tighter). Both default to constants.MM_GAP, so a caller that never passes either
+    (every non-production BarHost in the test suite) keeps the ORIGINAL shared behaviour unchanged
+    at both sizes.
     ``variant`` is this bar's own mod_settings.PROGRESS_VARIANT_* index (progress_view passes
     MOVING_AVERAGE, efficiency_view EFFICIENCY) -- BarHost._materialise's own-variant gate against
     it, since both hosts share ONE stored Free pair and a live variant flip mid-battle can briefly
@@ -274,7 +282,8 @@ class BarHost(object):
     """
 
     def __init__(self, item_id, vm_factory, y_frac, x_off, y_shift, y_shift_large,
-                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag, variant=None):
+                 mm_track_x, mm_track_x_large, mm_gap_bottom, tag,
+                 mm_gap=MM_GAP, mm_gap_large=MM_GAP, variant=None):
         self.item_id = item_id
         self._vm_factory = vm_factory
         self._y_frac = y_frac
@@ -284,6 +293,8 @@ class BarHost(object):
         self._mm_track_x = mm_track_x
         self._mm_track_x_large = mm_track_x_large
         self._mm_gap_bottom = mm_gap_bottom
+        self._mm_gap = mm_gap
+        self._mm_gap_large = mm_gap_large
         self._tag = tag
         self._variant = variant
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
@@ -388,8 +399,9 @@ class BarHost(object):
             overhang = MM_TICK_OVERHANG_LARGE if large else MM_TICK_OVERHANG
             edge_x = self._mm_track_x_large if large else self._mm_track_x
             edge_y = MM_TRACK_Y_LARGE if large else MM_TRACK_Y
+            gap = self._mm_gap_large if large else self._mm_gap
             base = anchor_minimap(space_x, space_y, edge_x, edge_y,
-                                  MINIMAP_SIZES[_minimap_size_index()], MM_GAP,
+                                  MINIMAP_SIZES[_minimap_size_index()], gap,
                                   self._mm_gap_bottom, overhang)
         else:
             base = anchor_centred_reduced(max_x, max_y, space_y, self._y_frac,

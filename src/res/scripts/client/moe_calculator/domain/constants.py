@@ -239,6 +239,41 @@ MINIMAP_SIZES = (228, 279, 329, 409, 510, 628)
 # *_LARGE twin here would compute the identical placement with more code. See MoEProgress.js's
 # V_CLIP_B_REM note for why the clip must stay inside that factor.
 MM_GAP = 8
+
+# THE ACTUAL PLACEMENT GAP, PER BAR *AND PER SIZE* -- deliberately NOT MM_GAP above (kept at 8,
+# the tuners' own shared reference/backdrop-fit constant -- both vertical CSS files' derivation
+# comments still cite it, and it stays what a stock BarHost defaults to). The maintainer chose to
+# spend part of the surface's own minimap clearance to pull both vertical bars closer to the
+# minimap -- see anchor_minimap's `x = space_x - mm_size - gap - overhang - edge_x`: shrinking
+# `gap` alone moves the ink AND the surface right by the same amount, so the ceiling is whichever
+# size's surface has less clearance to spend
+# (test_the_surface_clears_the_minimap_at_every_size_index pins the real number for each).
+# margin(gap) = gap + overhang + edge_x - view -- overhang/edge_x/view are each their OWN
+# Default/Large pair (MM_TICK_OVERHANG(_LARGE), *_MM_TRACK_X(_LARGE), the surface width at that
+# size), so margin is a DIFFERENT affine function of `gap` at each size, and margin is
+# INDEPENDENT of the minimap's own size index by construction (see the same test). A FIRST PASS
+# solved one shared gap per bar (the largest reduction with BOTH sizes' margins >= 1), which
+# left the SLACKER size of a pair paying for the tighter one: the Moving Average bar's Large size
+# is always 1px tighter than Default at this anchor (its right-side pad was trimmed to the tick's
+# own overhang plus a 2px margin -- see MoEProgress.js's own five-point note), so a single shared
+# gap of 6 left Default sitting at a 2px margin it did not need to keep. SOLVED PER SIZE NOW,
+# because the maintainer plays at Default and asked for THAT size's gap closed as far as it goes
+# without also being bound by Large's tighter pad:
+#   Moving Average: margin_default == gap - 4, margin_large == gap_large - 5
+#                   -> gap == 5 (margin 1), gap_large == 6 (margin 1) -- Default improves from the
+#                   shared pass's 6 to 5; Large is UNCHANGED, it was already the binding size.
+#   Damage Efficiency: margin_default == gap - 2, margin_large == gap_large - 2 (the SAME affine
+#                   function at both sizes for this bar, unlike the sibling) -> gap == gap_large
+#                   == 3 (margin 1) at both -- UNCHANGED from the shared pass: splitting a knob
+#                   that already wanted the identical value at both sizes buys nothing.
+# None of the four can be pushed one further without landing a size mode at 0 (flush) or negative
+# (an actual overlap, the click-blocking bug this module's own header calls out as critical) --
+# see test_the_surface_clears_the_minimap_at_every_size_index for the pinned margins this derives.
+PROGRESS_MM_GAP = 5
+PROGRESS_MM_GAP_LARGE = 6
+EFFICIENCY_MM_GAP = 3
+EFFICIENCY_MM_GAP_LARGE = 3
+
 PROGRESS_MM_GAP_BOTTOM = 30
 EFFICIENCY_MM_GAP_BOTTOM = 28
 

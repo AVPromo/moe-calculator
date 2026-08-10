@@ -335,11 +335,18 @@ const PAD_REM = 10;
 //   3. THE BACKDROP TRIM (V_BOX_W_REM 72 -> 46) WAS REAL WORK -- KEEP IT. A maintainer report of
 //      the backdrop "sitting well clear of the minimap" turned out to describe a DIFFERENT panel;
 //      measured live (window pos (1294,760), minimap index 4 == 510px wide at 1920x1080 logical
-//      space), THIS backdrop's own right edge (V_PAD_X_REM + V_BOX_W_REM == 70+46==116) lands
+//      space), THIS backdrop's own right edge (V_PAD_X_REM + V_BOX_W_REM == 70+46==116) landed
 //      EXACTLY on the minimap's own left edge (PROGRESS_MM_TRACK_X + MM_GAP + MM_TICK_OVERHANG ==
-//      105+8+3==116) -- zero overlap, by design, at the tuned 46. Reverting to 72 (right edge 142)
-//      would reopen a real 26rem overlap. Do not touch V_BOX_W_REM again without a live measurement
-//      to justify it.
+//      105+8+3==116) -- zero overlap, by design, at the tuned 46, AT THE TIME (the shared MM_GAP
+//      was 8). Reverting to 72 (right edge 142) would reopen a real 26rem overlap. Do not touch
+//      V_BOX_W_REM again without a live measurement to justify it.
+//      SINCE THEN, PLACEMENT MOVED CLOSER TO THE MINIMAP (domain/constants.PROGRESS_MM_GAP(_LARGE),
+//      5/6, replacing the shared MM_GAP(8) for this bar's own anchor) -- the backdrop's own DRAWN
+//      right edge no longer sits flush with the minimap's own (now closer) left edge, it is a few
+//      rem PAST it. That is not a regression: fact 4 below already established the DRAWN backdrop
+//      is not what clears the minimap, the invisible SURFACE is (V_PAD_XR_REM/_LARGE), and the
+//      surface still clears it with a real, checked margin at the new gap -- see V_PAD_XR_REM's own
+//      derivation below for the current numbers.
 //   4. THE ACTUAL CULPRIT WAS THE INVISIBLE SURFACE'S OWN RIGHT PAD, NEVER UPDATED TO MATCH. The
 //      backdrop trim shrank the DRAWN rect; nothing shrank the SURFACE (the mouse-hit-blocking rect
 //      per this file's header) on that side, so it stayed the OLD symmetric V_PAD_X_REM(70) past
@@ -392,11 +399,15 @@ const V_PAD_X_REM = 70;                              // the LEFT X slack, decoup
 //     padXRLarge == 376/3 - boxW*xf(184/3) - V_PAD_X_REM(70) == -18/3 == -6 (exact)
 // Both NEGATIVE: the surface's right edge sits a LITTLE further inside the backdrop's own (already
 // trimmed) drawn rect than its own edge -- the box+left-pad sum (46+70==116 Default, 61.333+70==
-// 131.333 pre-SIZE_F Large) is already flush with the minimap (fact 3), so ANY margin (to the tick,
-// or to the minimap) needs the surface a shade smaller still. Resulting margins, both real and
-// checked (tests/test_progress_surface_mirror.py::test_the_surface_clears_the_minimap_at_every_
-// size_index / test_the_surface_does_not_clip_the_tick): Default clears the minimap by 4px and the
-// tick by 2px; Large by 3px and ~2.8px respectively -- none of it flush, none of it negative.
+// 131.333 pre-SIZE_F Large) was flush with the minimap at the ORIGINAL shared MM_GAP(8) (fact 3),
+// so ANY margin (to the tick, or to the minimap) needed the surface a shade smaller still. This
+// derivation (padXR/padXRLarge themselves) is UNCHANGED by the later gap move -- it is pure
+// JS/CSS geometry, independent of where Python decides to place the window -- but the MARGIN it
+// buys against the minimap moved WITH that gap. Resulting margins, both real and checked
+// (tests/test_progress_surface_mirror.py::test_the_surface_clears_the_minimap_at_every_size_index
+// / test_the_surface_does_not_clip_the_tick), at domain/constants.PROGRESS_MM_GAP(_LARGE) == 5/6:
+// Default clears the minimap by 1px (was 4px at the original shared gap of 8) and the tick by
+// 2px; Large by 1px (was 3px) and ~2.8px respectively -- none of it flush, none of it negative.
 // padXRLarge is NOT padXR*SIZE_XF, for the same reason MM_TRACK_X_LARGE and MM_TICK_OVERHANG_LARGE
 // are their own literals: the Large geometry (trackW_large, shiftX_large) is not a pure *SIZE_XF
 // scale of the Default one once V_BOX_LEFT_REM's own fractional Large scaling is folded in, so
