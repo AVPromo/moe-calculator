@@ -139,17 +139,19 @@ VARIANT_KEY = u"progressVariant"
 # than a key: the sync walk's `if not rendered: continue` then skips it for free, with no
 # type-sniffing branch and with the alignment intact.
 #
-# FOURTEEN slots (was 26 -- most of the old column 1 moved to column 2; see COL2_KEYS below).
+# FIFTEEN slots (14 after the 23->24 column swap, +1 for the calcPreview Image's None sentinel at
+# 24->25; see mod_settings's SETTINGS_VERSION history).
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
-             None,
+             None,                                   # calcPreview Image (no i18n text)
+             None,                                   # Empty spacer
              u"catGarage", u"garageWidget",
              None,
              u"positioning", u"followCarousel",
              None,
              u"positionSub", u"posX", u"posY")
-# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally. TWENTY-ONE
-# slots (was 9 -- the garage "Layout" group that used to live here moved to column 1; see
-# COL1_KEYS above).
+# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally. TWENTY-TWO
+# slots (21 after the 23->24 column swap, +1 for the barPreview Image's trailing None sentinel at
+# 24->25; see COL1_KEYS above).
 COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
              None,
@@ -161,7 +163,8 @@ COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressHoldSeconds",
              None,
              u"catBarPosition", u"progressOrientation", u"progressAlignment",
-             u"barPosX", u"barPosY")
+             u"barPosX", u"barPosY",
+             None)                                   # barPreview Image (no i18n text)
 
 # The six CATEGORY/GROUP header keys that render BOLD (see build()). "positionSub"
 # ("Position") is deliberately EXCLUDED -- it is the non-bold sub-label under "Layout", and

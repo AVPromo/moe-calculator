@@ -297,7 +297,14 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # COL2_KEYS positional pairing _sync_template_text relies on) reaches nobody without a forward
 # bump. The migration branch carries every saved value across unchanged (enumerated from
 # DEFAULTS, not hand-listed), so no user loses a setting.
-SETTINGS_VERSION = 24
+# Bumped 24 -> 25 to add two live PREVIEW IMAGES (see update_preview_images / _image): a
+# calcPreview Image in column 1's calculator group and a barPreview Image at the tail of column 2's
+# Layout category. A new template ROW is structural -- register()'s saved-truthy path never calls
+# setModTemplate on an existing install, so the new controls (and the COL1_KEYS/COL2_KEYS None
+# sentinels that keep _sync_template_text's positional zip aligned) reach nobody without a forward
+# bump. Neither varName is a stored setting (both absent from DEFAULTS -- they are updateImage
+# addressing handles only), so the migration branch carries every real value across unchanged.
+SETTINGS_VERSION = 25
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -467,6 +474,27 @@ PROGRESS_ALIGN_MINIMAP = 1
 # state changes (1<->2 rows, small<->tall), so a dragged widget never overlaps the carousel.
 # The nudge is live-measured JS-side -- no extra persisted coordinate.
 FOLLOW_CAROUSEL_KEY = "followCarousel"
+
+# --- MSA settings-panel PREVIEW IMAGES (see update_preview_images / _image / _template). --------
+# Two Image controls show a pre-baked PNG of each in-battle widget, swapped live via
+# g_modsSettingsApi.updateImage as the driving settings change (MSA is Scaleform/AS3 and cannot
+# render the real Gameface DOM). These two varNames are ADDRESSING HANDLES for updateImage, NOT
+# stored settings -- deliberately absent from DEFAULTS, so merge_settings / _apply never persist or
+# coerce them. The PNGs ship under res/gui/maps/icons/moe_calculator/previews/ in the .wotmod (see
+# tools/dev/gen_settings_previews.py).
+#
+# THE SOURCE IS A BARE RELATIVE RESOURCE PATH, NOT the Gameface img:// scheme: MSA's Image control is
+# Scaleform/Flash and feeds a WG UILoaderAlt/Loader whose .source needs a plain classic path (an
+# img:// URL fails silently there, leaving the reserved box blank). Matches MSA's own menu icon
+# convention (gui/maps/icons/aslainMenu/icon.png), which loads through the same panel/loader.
+CALC_PREVIEW_KEY = "calcPreview"
+BAR_PREVIEW_KEY = "barPreview"
+_PREVIEW_DIR = "gui/maps/icons/moe_calculator/previews/"
+# Reserved layout slots (scaled px from gen_settings_previews.py, SCALE=0.5) so the panel never
+# jumps when a differently-sized PNG swaps in: the calc box holds the taller 3-row image, the bar
+# box holds the widest (Efficiency horizontal, 315) and tallest (Efficiency vertical, 275) bars.
+_CALC_PREVIEW_W, _CALC_PREVIEW_H = 222, 82
+_BAR_PREVIEW_W, _BAR_PREVIEW_H = 315, 275
 
 # Sanity MAGNITUDE limit for a stored pixel coordinate (well past any real screen size); a
 # typed / echoed value is clamped into [-POS_MAX, POS_MAX], with 0/0 meaning "auto / unseeded".
@@ -833,6 +861,48 @@ def _notify():
             LOG_CURRENT_EXCEPTION()
 
 
+def preview_source_names(counted_assist, variant, orientation):
+    """The two preview PNG base names for the current driving settings. PURE + engine-free
+    (unit-tested): takes the three settings that change the static look and returns
+    (calc_name, bar_name), matching the files gen_settings_previews.py bakes.
+
+    calc: countedAssist adds/removes the third row. bar: (variant, orientation) picks one of the
+    four bar PNGs -- variant 0 = Damage Efficiency / 1 = Moving Average, orientation 0 = Horizontal
+    / 1 = Vertical (confirmed against settings_i18n's option order). Size is deliberately NOT a
+    knob -- every PNG shows the Default size (see TASKS/settings-preview-images.md)."""
+    calc = "calc_assist_on" if counted_assist else "calc_assist_off"
+    variant_name = "ma" if variant == PROGRESS_VARIANT_MOVING_AVERAGE else "eff"
+    orient_name = "vertical" if orientation == PROGRESS_ORIENT_VERTICAL else "horizontal"
+    return calc, "bar_%s_%s" % (variant_name, orient_name)
+
+
+def preview_sources():
+    """The two bare-relative preview resource paths for the CURRENT live settings (reads the
+    getters). Classic Scaleform paths, not img:// -- see _PREVIEW_DIR."""
+    calc, bar = preview_source_names(counted_assistance_enabled(),
+                                     progress_bar_variant(), progress_bar_orientation())
+    return _PREVIEW_DIR + calc + ".png", _PREVIEW_DIR + bar + ".png"
+
+
+def update_preview_images():
+    """Swap the two MSA preview Images to match the current driving settings (guarded, fail-soft).
+
+    Wired as a change listener (see mod_moe_calculator) so a settings change swaps the preview
+    live, and called once at register() so the first panel open is correct on an existing install.
+    updateImage writes a runtime-only, non-persisted cache and fires onImageUpdate; a panel that
+    has not opened yet just reads the initial template `source`. No-op if MSA is absent or too old
+    to expose updateImage (soft dependency)."""
+    try:
+        g = _primary_api()
+        if g is None or not hasattr(g, "updateImage"):
+            return
+        calc_src, bar_src = preview_sources()
+        g.updateImage(LINKAGE, CALC_PREVIEW_KEY, calc_src)
+        g.updateImage(LINKAGE, BAR_PREVIEW_KEY, bar_src)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 def _seed(saved):
     """Replace the WHOLE flag state from an AUTHORITATIVE store (registration only), filling
     defaults for any key it omits. Used where `saved` fully defines our state."""
@@ -1024,6 +1094,37 @@ def _empty():
     return {"type": "Empty"}
 
 
+def _image(source, var_name, width=None, height=None, container_w=None, container_h=None,
+           collapsed=False, label=None, tooltip=None):
+    """One MSA Image descriptor -- a pre-baked widget preview swapped live via updateImage.
+
+    Hand-built like every other helper here (see _radio) so _template() stays import-free and
+    unit-testable with the game closed -- the shape is exactly what gui.aslainMenu.templates
+    .createImage emits ({type: "Image", source, varName, ...}). Only the keys that are actually
+    set are emitted; container_w/container_h reserve a stable layout slot so a taller image
+    swapping in never reflows the panel. `source` is a bare-relative Scaleform resource path (see
+    _PREVIEW_DIR -- NOT the Gameface img:// scheme, which this Flash loader can't resolve).
+
+    `var_name` is an ADDRESSING HANDLE for g_modsSettingsApi.updateImage, not a stored setting --
+    it is absent from DEFAULTS on purpose, so nothing coerces/persists it (see CALC_PREVIEW_KEY)."""
+    control = {"type": "Image", "source": source, "varName": var_name}
+    if width is not None:
+        control["width"] = width
+    if height is not None:
+        control["height"] = height
+    if container_w is not None:
+        control["containerWidth"] = container_w
+    if container_h is not None:
+        control["containerHeight"] = container_h
+    if collapsed:
+        control["collapsed"] = True
+    if label:
+        control["label"] = label
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
+
+
 def _gate_and(control, conditions):
     """Gate `control` on SEVERAL peers at once (MSA's multi-condition form, ANDed).
 
@@ -1139,6 +1240,15 @@ def _template():
                                      PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FREE)
     bar_pos_y_stepper = _gate_enable(_stepper(BAR_POS_Y_KEY, t["barPosY"]),
                                      PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FREE)
+    # The two live preview Images. Their initial `source` matches the CURRENT settings (corrected
+    # after seed by update_preview_images() at register()); the containers reserve a stable slot so
+    # a taller image swapping in never reflows the panel. Both carry a `None` sentinel slot in
+    # settings_i18n.COL*_KEYS (no i18n text), so _sync_template_text's zip stays aligned.
+    calc_src, bar_src = preview_sources()
+    calc_preview = _image(calc_src, CALC_PREVIEW_KEY,
+                          container_w=_CALC_PREVIEW_W, container_h=_CALC_PREVIEW_H)
+    bar_preview = _image(bar_src, BAR_PREVIEW_KEY,
+                         container_w=_BAR_PREVIEW_W, container_h=_BAR_PREVIEW_H)
     return {
         "modDisplayName": MOD_DISPLAY_NAME,
         "enabled": True,
@@ -1160,7 +1270,8 @@ def _template():
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
         "column1": ([_label("catBattleCalc", t["catBattleCalc"])]
                     + _grouped_column1(battle_master, [battle_alt, counted])
-                    + [_empty(), _label("catGarage", t["catGarage"]), garage,
+                    + [calc_preview,
+                       _empty(), _label("catGarage", t["catGarage"]), garage,
                        _empty(), _label("positioning", t["positioning"]),
                        _checkbox(FOLLOW_CAROUSEL_KEY, t["followCarousel"]),
                        _empty(), _label("positionSub", t["positionSub"]),
@@ -1219,7 +1330,8 @@ def _template():
                     + [_empty(), trans_hold,
                        _empty(), _label("catBarPosition", t["catBarPosition"]),
                        progress_orientation, progress_alignment,
-                       bar_pos_x_stepper, bar_pos_y_stepper]),
+                       bar_pos_x_stepper, bar_pos_y_stepper,
+                       bar_preview]),
     }
 
 
@@ -1517,6 +1629,10 @@ def register():
         # existing install whose stored template is a stale language). No-op on a fresh one.
         for api in _candidate_apis():
             _sync_template_text(api)
+        # Seed the two preview Images to the JUST-SEEDED settings: the template's initial `source`
+        # was built before _seed ran, so on an existing install it reflects DEFAULTS, not the
+        # user's saved values. updateImage corrects it so the first panel open is right.
+        update_preview_images()
         _registered = True
         LOG_DEBUG("[moe] settings registered -> %r" % (_settings,))
     except Exception:

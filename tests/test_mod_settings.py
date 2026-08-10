@@ -1165,7 +1165,11 @@ def test_template_settings_version_pins_the_current_layout():
     # saved-truthy path never calls setModTemplate on an existing install, so the new column
     # assignment (and the COL1_KEYS/COL2_KEYS positional pairing) reaches nobody without this
     # forward bump. The migration branch carries every saved value across unchanged.
-    assert SETTINGS_VERSION == 24
+    # Bumped 24 -> 25 to add two live preview Images (calcPreview in column 1's calculator group,
+    # barPreview at the tail of column 2's Layout category -- see mod_settings's _image/_template).
+    # A new template ROW is structural, and neither varName is a stored setting (both absent from
+    # DEFAULTS -- updateImage addressing handles only), so no user loses a value across the bump.
+    assert SETTINGS_VERSION == 25
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1176,44 +1180,54 @@ def test_template_column1_is_the_calculator_and_garage_groups():
     # column 2 -- see test_template_column2_is_four_categories_each_a_label_then_its_group.
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # FOURTEEN controls: "Battle Calculator" + [In-Battle master, Alt child, counted-assist
-    # child], an Empty spacer, then "Garage Widget" + [the standalone garage master -- no
-    # children of its own], a SECOND Empty spacer, then the garage's "Layout" group -- its own
-    # bold header, Follow Carousel, a THIRD Empty spacer, the non-bold "Position" sub-label, then
-    # the X/Y numeric steppers.
+    # FIFTEEN controls: "Battle Calculator" + [In-Battle master, Alt child, counted-assist
+    # child], the calcPreview Image (24->25 -- closes the calculator group), an Empty spacer, then
+    # "Garage Widget" + [the standalone garage master -- no children of its own], a SECOND Empty
+    # spacer, then the garage's "Layout" group -- its own bold header, Follow Carousel, a THIRD
+    # Empty spacer, the non-bold "Position" sub-label, then the X/Y numeric steppers.
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
+        "Image",
         "Empty",
         "Label", "CheckBox",
         "Empty",
         "Label", "CheckBox",
         "Empty",
         "Label", "NumericStepper", "NumericStepper"]
-    # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
+    # The varName-bearing controls, in order (a Label header / an Empty spacer has no varName).
+    # The calcPreview Image DOES carry a varName -- it is an updateImage addressing handle, not a
+    # stored value (absent from DEFAULTS; see mod_settings.CALC_PREVIEW_KEY) -- so it sits in this
+    # list right after countedAssist, closing the calculator group.
     assert [c["varName"] for c in col1 if "varName" in c] == [
         BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
+        mod_settings.CALC_PREVIEW_KEY,
         GARAGE_KEY,
         FOLLOW_CAROUSEL_KEY,
         POS_X_KEY, POS_Y_KEY]
     # ...and the four Label rows carry no varName at all -- and they are the ONLY four, so no
     # group can quietly grow a header row of its own.
-    assert ("varName" not in col1[0] and "varName" not in col1[5]
-            and "varName" not in col1[8] and "varName" not in col1[11])
-    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 5, 8, 11]
+    assert ("varName" not in col1[0] and "varName" not in col1[6]
+            and "varName" not in col1[9] and "varName" not in col1[12])
+    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 6, 9, 12]
     # Three of the four headers are BOLD: <b>...</b> wrapped text and an explicit useHTML key.
-    # "Position" (index 11) is deliberately NOT bold -- the weight difference marks it as a
+    # "Position" (index 12) is deliberately NOT bold -- the weight difference marks it as a
     # sub-level under "Layout" rather than a fourth header.
     assert col1[0]["text"] == u"<b>Battle Calculator</b>" and col1[0]["useHTML"] is True
-    assert col1[5]["text"] == u"<b>Garage Widget</b>" and col1[5]["useHTML"] is True
-    assert col1[8]["text"] == u"<b>Layout</b>" and col1[8]["useHTML"] is True
-    assert col1[11]["text"] == u"Position" and "useHTML" not in col1[11]
+    assert col1[6]["text"] == u"<b>Garage Widget</b>" and col1[6]["useHTML"] is True
+    assert col1[9]["text"] == u"<b>Layout</b>" and col1[9]["useHTML"] is True
+    assert col1[12]["text"] == u"Position" and "useHTML" not in col1[12]
+    # The calcPreview Image sits at index 4 (after the calculator group's three checkboxes), with
+    # its source path, addressing-handle varName and a reserved container so a swap never reflows.
+    assert col1[4]["type"] == "Image" and col1[4]["varName"] == mod_settings.CALC_PREVIEW_KEY
+    assert col1[4]["source"].startswith(u"gui/maps/icons/") and col1[4]["source"].endswith(u".png")
+    assert col1[4]["containerWidth"] and col1[4]["containerHeight"]
     # All THREE Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Garage Widget"; the second heads "Layout"; the third heads "Position".
-    assert col1[4] == {"type": "Empty"}
-    assert col1[7] == {"type": "Empty"}
-    assert col1[10] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 7, 10]
+    assert col1[5] == {"type": "Empty"}
+    assert col1[8] == {"type": "Empty"}
+    assert col1[11] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [5, 8, 11]
     # The garage master carries no group at all -- it has no children of its own.
     assert "masterVarName" not in _at(col1, GARAGE_KEY)[0]
     # The steppers and Follow Carousel stay STANDALONE -- see
@@ -1404,7 +1418,7 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     # garage-related groups (test_template_column1_is_the_calculator_and_garage_groups).
     tmpl = mod_settings._template()
     col2 = tmpl["column2"]
-    # TWENTY-SIX controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
+    # TWENTY-TWO controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
     # followed by that feature's controls: "Battle Progress" + [Progress Bar master + its three
     # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two standalone radios],
     # then a THIRD Empty spacer and "Transitions" -- its OWN header since the hold-duration Slider
@@ -1413,8 +1427,8 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     # the master (its masterVarName absence is pinned in
     # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
     # "Layout" (header text; i18n key stays catBarPosition) + [the standalone Orientation/Alignment
-    # radios, ABOVE the two standalone position steppers]. The header names the feature, which is
-    # why every master reads just "Enabled" (was "Show").
+    # radios, ABOVE the two standalone position steppers], then the barPreview Image APPENDED at the
+    # tail (24->25). The header names the feature, which is why every master reads just "Enabled".
     assert [c["type"] for c in col2] == [
         "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
@@ -1424,8 +1438,11 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
         "Empty",
         "Slider",
         "Empty",
-        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper"]
-    # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
+        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper",
+        "Image"]
+    # The varName-bearing controls, in order (a Label header / an Empty spacer has no varName). The
+    # barPreview Image DOES carry a varName -- an updateImage addressing handle, not a stored value
+    # (absent from DEFAULTS; see mod_settings.BAR_PREVIEW_KEY) -- so it closes this list.
     assert [c["varName"] for c in col2 if "varName" in c] == [
         PROGRESS_BAR_KEY,
         PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
@@ -1433,7 +1450,8 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
         PROGRESS_HOLD_SECONDS_KEY,
         PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
-        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
+        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY,
+        mod_settings.BAR_PREVIEW_KEY]
     # ...and the two category headers carry no varName at all -- and they are the ONLY two here.
     assert "varName" not in col2[0] and "varName" not in col2[9] and "varName" not in col2[16]
     assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 9, 16]
@@ -1462,8 +1480,43 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     assert col2[18]["varName"] == PROGRESS_ALIGNMENT_KEY
     assert col2[19]["varName"] == mod_settings.BAR_POS_X_KEY
     assert col2[20]["varName"] == mod_settings.BAR_POS_Y_KEY
+    # The barPreview Image closes the column (index 21): source path, addressing-handle varName and
+    # a reserved container sized for the widest/tallest bar so a swap never reflows the panel.
+    assert col2[21]["type"] == "Image" and col2[21]["varName"] == mod_settings.BAR_PREVIEW_KEY
+    assert col2[21]["source"].startswith(u"gui/maps/icons/") and col2[21]["source"].endswith(u".png")
+    assert col2[21]["containerWidth"] and col2[21]["containerHeight"]
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
+
+
+def test_preview_source_names_map_every_driving_combo():
+    # The pure preview-source picker: countedAssist toggles the calc PNG (3-row vs 2-row), and
+    # (variant, orientation) picks one of the four bar PNGs. Confirmed against settings_i18n's
+    # option order: variant 0 = Damage Efficiency / 1 = Moving Average, orientation 0 = Horizontal
+    # / 1 = Vertical. All four bar combos + both calc states, so a swapped mapping fails loudly.
+    E, MA = PROGRESS_VARIANT_EFFICIENCY, PROGRESS_VARIANT_MOVING_AVERAGE
+    H, V = PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL
+    assert mod_settings.preview_source_names(True, E, H) == ("calc_assist_on", "bar_eff_horizontal")
+    assert mod_settings.preview_source_names(False, E, V) == ("calc_assist_off", "bar_eff_vertical")
+    assert mod_settings.preview_source_names(True, MA, H)[1] == "bar_ma_horizontal"
+    assert mod_settings.preview_source_names(True, MA, V)[1] == "bar_ma_vertical"
+    assert mod_settings.preview_source_names(True, E, V)[1] == "bar_eff_vertical"
+    assert mod_settings.preview_source_names(False, E, H)[0] == "calc_assist_off"
+
+
+def test_preview_sources_are_bare_relative_scaleform_paths():
+    # preview_sources() reads the live getters and returns BARE-RELATIVE Scaleform resource paths
+    # (NOT the Gameface img:// scheme -- MSA's Image feeds a Flash UILoaderAlt that can't resolve
+    # img://; it needs a plain path like MSA's own gui/maps/icons/aslainMenu/icon.png).
+    mod_settings._seed(dict(DEFAULTS))
+    calc_src, bar_src = mod_settings.preview_sources()
+    for src in (calc_src, bar_src):
+        assert src.startswith(u"gui/maps/icons/moe_calculator/previews/")
+        assert not src.startswith(u"img://")
+        assert src.endswith(u".png")
+    # Defaults: countedAssist on -> 3-row calc, variant Efficiency + Horizontal -> eff_horizontal.
+    assert calc_src.endswith(u"calc_assist_on.png")
+    assert bar_src.endswith(u"bar_eff_horizontal.png")
 
 
 def test_template_steppers_are_bounded_manual_entry():
@@ -1591,6 +1644,9 @@ def test_template_control_defaults_match_defaults_dict():
     tmpl = mod_settings._template()
     for col, _keys in _column_pairs(tmpl):
         for c in tmpl[col]:
+            if c["type"] == "Image":          # a preview: has a varName but no stored `value`
+                assert c["varName"] not in DEFAULTS and "value" not in c
+                continue
             if "varName" not in c:            # a Label header / an Empty spacer
                 assert c["type"] in ("Label", "Empty")
                 continue
@@ -1647,21 +1703,20 @@ def test_col_keys_lockstep_with_template_order():
             "%s length drifted from COL keys" % col)
         for control, key in zip(controls, keys):
             if key is None:
-                # The text-less sentinel slot -- and it must line up with a control that genuinely
-                # HAS no text, or the sentinel is hiding a real control from the sync walk.
-                assert control["type"] == "Empty"
+                # The text-less sentinel slot -- an Empty spacer OR a preview Image (an updateImage
+                # addressing handle with no i18n text). Either way it must genuinely have no text,
+                # or the sentinel is hiding a real control from the sync walk.
+                assert control["type"] in ("Empty", "Image")
                 assert "text" not in control and "tooltip" not in control
                 sentinels += 1
                 continue
             assert control["text"] == text[key]["text"]
             assert control.get("tooltip") == text[key].get("tooltip")
-    # ...and every Empty in the template is covered by one: a spacer added without a sentinel would
-    # shift the whole tail of the zip and silently retitle every control after it. SEVEN now (grew
-    # from six in v19): column 1 has a spacer ahead of "Battle Progress", "Mode", "Transitions",
-    # the hold Slider (new, v19) and "Layout" (header text as of v21; i18n key stays
-    # catBarPosition); column 2 has one ahead of "Layout" and one ahead of "Position".
+    # ...and every text-less row in the template is covered by one: a spacer/Image added without a
+    # sentinel would shift the whole tail of the zip and silently retitle every control after it.
+    # NINE now: SEVEN Empty spacers plus the TWO preview Images (calcPreview / barPreview, 24->25).
     assert sentinels == sum(1 for col, _k in _column_pairs(tmpl)
-                            for c in tmpl[col] if c["type"] == "Empty") == 7
+                            for c in tmpl[col] if c["type"] in ("Empty", "Image")) == 9
 
 
 def test_sync_template_text_walks_built_template_in_lockstep():
@@ -1747,8 +1802,9 @@ def test_sync_template_text_walks_built_template_in_lockstep():
     assert tipless == 8, "expected 8 tooltip-less controls, got %d" % tipless
     # v19 added a FIFTH column-1 Empty spacer (ahead of the hold Slider) but moved no tooltip, so
     # it grew the spacer count alone -- same as v16's spacer-only bump.
-    # ...and all SEVEN Empty spacers were walked and left untouched (see the sentinel branch above).
-    assert spacers == 7, "expected 7 text-less spacer rows, got %d" % spacers
+    # NINE None-keyed rows now: the SEVEN Empty spacers plus the TWO preview Images (24->25), all
+    # walked and left untouched (see the sentinel branch above -- an Image is text-less too).
+    assert spacers == 9, "expected 9 text-less None-keyed rows, got %d" % spacers
     assert saved["called"] is True   # something changed -> state persisted
 
 

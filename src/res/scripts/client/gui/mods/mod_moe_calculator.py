@@ -133,6 +133,8 @@ def _install_settings():
     mod_settings.register()
     mod_settings.add_change_listener(gameface_bridge.apply_settings)
     mod_settings.add_change_listener(battle_bridge.apply_settings)
+    # Swap the two MSA settings-panel preview images to match the driving settings, live.
+    mod_settings.add_change_listener(mod_settings.update_preview_images)
     LOG_DEBUG("[%s] settings registered (garage=%s, battle=%s, battle_alt=%s)"
               % (MOD_NAME, mod_settings.garage_enabled(), mod_settings.battle_enabled(),
                  mod_settings.battle_alt_key_enabled()))

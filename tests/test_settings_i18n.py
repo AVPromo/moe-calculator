@@ -40,8 +40,10 @@ def test_the_text_less_spacer_rows_take_a_none_sentinel_slot():
     # 23->24 comment): column 1 has one heading "Garage Widget", one heading "Layout"/positioning
     # and one heading "Position"; column 2 has one heading "Mode", one heading "Transitions", one
     # heading the hold Slider and one heading "Layout"/catBarPosition.
-    assert S.COL1_KEYS.count(None) == 3
-    assert S.COL2_KEYS.count(None) == 4
+    # +1 each at SETTINGS_VERSION 24->25 for the two preview Images' text-less None slots
+    # (calcPreview in column 1, barPreview in column 2 -- see mod_settings's _image / _template).
+    assert S.COL1_KEYS.count(None) == 4
+    assert S.COL2_KEYS.count(None) == 5
     # A sentinel must never collide with a real row, in any language.
     for code in S._PANEL:
         assert None not in S.build(code)
@@ -142,8 +144,9 @@ def test_counted_assist_present_in_master_and_col1():
     # test_mod_settings, not restated here.
     alt, counted, next_cat = _col1_slice(u"battleAltKey", u"countedAssist", u"catGarage")
     assert counted == alt + 1
-    assert S.COL1_KEYS[counted + 1] is None      # the Empty spacer between the categories
-    assert next_cat == counted + 2
+    assert S.COL1_KEYS[counted + 1] is None      # the calcPreview Image (no i18n text)
+    assert S.COL1_KEYS[counted + 2] is None      # the Empty spacer between the categories
+    assert next_cat == counted + 3
     en = S.resolve(u"en")
     assert en[u"countedAssist"][u"label"] == u"Counted Assistance Row"
     assert u"ttHeader" in en[u"countedAssist"] and u"ttBody" in en[u"countedAssist"]
@@ -187,9 +190,10 @@ def test_progress_bar_group_is_the_whole_of_col2():
         u"run in COL2_KEYS: %r" % (S.COL2_KEYS,))
     # ...and the "Layout" category (key catBarPosition, displayed text "Layout") IS the tail,
     # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers.
+    # The trailing None is the barPreview Image's sentinel, appended at 24->25 (see mod_settings).
     assert S.COL2_KEYS[start + 15:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
-        u"barPosX", u"barPosY"), (
+        u"barPosX", u"barPosY", None), (
         u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
