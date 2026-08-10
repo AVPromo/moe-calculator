@@ -32,11 +32,12 @@ def _stub(name, **attrs):
 KEY_LALT, KEY_RALT = 56, 184
 KEY_LCONTROL, KEY_RCONTROL = 29, 157
 KEY_LEFTMOUSE = 256
+KEY_I = 23
 
 _DOWN = set()          # the keys the fake engine currently reports as held
 
 _stub("Keys", KEY_LALT=KEY_LALT, KEY_RALT=KEY_RALT, KEY_LCONTROL=KEY_LCONTROL,
-      KEY_RCONTROL=KEY_RCONTROL, KEY_LEFTMOUSE=KEY_LEFTMOUSE)
+      KEY_RCONTROL=KEY_RCONTROL, KEY_LEFTMOUSE=KEY_LEFTMOUSE, KEY_I=KEY_I)
 _stub("BigWorld", isKeyDown=lambda k: k in _DOWN)
 # WG's own non-monkey-patch mouse registry: a plain set() that game.handleMouseEvent iterates.
 _stub("gui", g_mouseEventHandlers=set())
@@ -85,6 +86,9 @@ def wired():
     battle_input._alt_held = False
     battle_input._ctrl_held = False
     battle_input._drag_active = False
+    battle_input._hotkey_keys = []
+    battle_input._on_hotkey = None
+    battle_input._hotkey_down = False
     changes = []
     drags = []
     # `drags` records PHASES only; the cursor the gesture carries has its own test, which installs
@@ -354,3 +358,41 @@ def test_a_raising_callback_never_escapes_into_the_engine(wired):
     _DOWN.update((KEY_LCONTROL, KEY_LEFTMOUSE))
     assert _key(inst, KEY_LEFTMOUSE) == "wg-key-result"
     assert _move(inst) == "wg-mouse-result"
+
+
+# --- THE HOTKEY SLOT: EDGE-TRIGGERED, ARBITRARY CHORD -------------------------------------------
+
+def test_hotkey_fires_once_per_press(wired):
+    inst, _changes, _drags = wired
+    fires = []
+    battle_input.set_hotkey([KEY_I], lambda: fires.append(1))
+    _DOWN.add(KEY_I)
+    _key(inst)          # not-down -> down: fire
+    _key(inst)          # still down: no fire
+    assert fires == [1]
+    _DOWN.discard(KEY_I)
+    _key(inst)          # released
+    _DOWN.add(KEY_I)
+    _key(inst)          # down again: fire
+    assert fires == [1, 1]
+
+
+def test_hotkey_chord_needs_all_keys(wired):
+    inst, _c, _d = wired
+    fires = []
+    battle_input.set_hotkey([KEY_LCONTROL, KEY_I], lambda: fires.append(1))
+    _DOWN.add(KEY_I)
+    _key(inst)
+    assert fires == []
+    _DOWN.add(KEY_LCONTROL)
+    _key(inst)
+    assert fires == [1]
+
+
+def test_empty_hotkey_never_fires(wired):
+    inst, _c, _d = wired
+    fires = []
+    battle_input.set_hotkey([], lambda: fires.append(1))
+    _DOWN.add(KEY_I)
+    _key(inst)
+    assert fires == []

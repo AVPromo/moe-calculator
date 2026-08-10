@@ -72,6 +72,9 @@ _ctrl_held = False
 _drag_active = False
 _on_change = None
 _on_drag = None
+_on_hotkey = None
+_hotkey_keys = []
+_hotkey_down = False
 
 
 def _alt_down_now():
@@ -136,6 +139,27 @@ def _update_drag_state(cursor=None):
     return active
 
 
+def set_hotkey(keys, on_press):
+    """Arm a battle hotkey that fires `on_press()` once on the not-all-down -> all-down
+    edge of every key in `keys` (a chord). Safe to call repeatedly to REBIND; it only
+    updates the slots, never re-installs the handler patch (a second install would steal
+    the Alt/Ctrl callback -- see install_alt_key_listener). Empty `keys` disables it."""
+    global _on_hotkey, _hotkey_keys, _hotkey_down
+    _hotkey_keys = list(keys or [])
+    _on_hotkey = on_press
+    _hotkey_down = False
+
+
+def _update_hotkey_state():
+    global _hotkey_down
+    import BigWorld
+    down = bool(_hotkey_keys) and all(BigWorld.isKeyDown(k) for k in _hotkey_keys)
+    if down != _hotkey_down:
+        _hotkey_down = down
+        if down and _on_hotkey is not None:
+            _on_hotkey()
+
+
 def _handle_gui_mouse_event(event):
     """The ``gui.g_mouseEventHandlers`` member: one mouse event, observed, never consumed.
 
@@ -197,6 +221,7 @@ def install_alt_key_listener(on_change, on_drag=None):
             try:
                 _update_alt_state()
                 _update_drag_state()
+                _update_hotkey_state()
             except Exception:
                 LOG_CURRENT_EXCEPTION()
             return result
