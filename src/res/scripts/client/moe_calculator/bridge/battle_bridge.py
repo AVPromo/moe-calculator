@@ -19,6 +19,7 @@ from moe_calculator.adapter import battle_adapter
 from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import sample_log
+from moe_calculator.adapter import variant_overrides
 from moe_calculator.domain.battle_builder import (
     build_battle_model, battle_bar_visible, battles_to_axis_hi, efficiency_band, efficiency_bar_x,
     efficiency_stops, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
@@ -88,6 +89,13 @@ _last_wide = None
 # True between avatar-ready and avatar-non-player, i.e. while we're in a battle. Tracked even
 # when the overlay is disabled so a live enable (apply_settings) knows to open the window now.
 _in_battle = False
+
+
+# The played vehicle's intCD for THIS battle (None outside a battle, or when it couldn't be read
+# yet). The key `_window_gates()` resolves the per-vehicle mode override against
+# (variant_overrides.effective) and the hotkey handler persists a flip against
+# (variant_overrides.toggle) -- captured once on mount, cleared on teardown.
+_current_int_cd = None
 
 
 # A monotonic per-battle counter, bumped once on each battle mount and pushed to the Damage
@@ -167,9 +175,11 @@ def _window_gates():
     the "exactly one centre-screen bar at a time" rule cannot drift between them. The corner
     overlay has its own master; the two centre-screen bars are radio ALTERNATIVES that split the
     single progress_bar_enabled master by variant (EFFICIENCY = efficiency_view, MOVING_AVERAGE =
-    progress_view), so at most one of them is ever gated on."""
+    progress_view), so at most one of them is ever gated on. The variant itself goes through
+    variant_overrides.effective() so a stored per-vehicle override (keyed on _current_int_cd)
+    wins over the settings-panel default -- None (no known vehicle) just falls back to it."""
     bar_on = mod_settings.progress_bar_enabled()
-    variant = mod_settings.progress_bar_variant()
+    variant = variant_overrides.effective(_current_int_cd, mod_settings.progress_bar_variant())
     return ((mod_settings.battle_enabled(), battle_view),
             (bar_on and variant == mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE, progress_view),
             (bar_on and variant == mod_settings.PROGRESS_VARIANT_EFFICIENCY, efficiency_view))
@@ -182,9 +192,11 @@ def _on_mount_refresh(*args, **kwargs):
     # Avatar ready -> we're in a battle: open the overlay window, (re)arm the efficiency
     # listener, kick the thresholds loader, and push the initial model. Reset the played-tank
     # record so this battle promotes its vehicle exactly once (see push).
-    global _battle_recorded, _last_wide, _in_battle, _battle_epoch, _bar_orientation
+    global _battle_recorded, _last_wide, _in_battle, _battle_epoch, _bar_orientation, _current_int_cd
     try:
         _in_battle = True
+        descr = battle_adapter._player_vehicle_descr()
+        _current_int_cd = battle_adapter._player_vehicle_int_cd(descr) if descr else None
         # SEED the orientation record for this battle's windows, so a flip made LATER in the battle
         # has something to be different from. Without this seed the very first settings change of a
         # session could BE the flip, find no record, and leave the bar drawing the old composition
@@ -271,9 +283,10 @@ def _on_teardown(*args, **kwargs):
     # Each window needs its OWN close here (its own module-level singleton) or it leaks across
     # battles -- including the one whose variant is not currently selected: a live radio switch
     # mid-battle can have opened it earlier this match.
-    global _in_battle
+    global _in_battle, _current_int_cd
     try:
         _in_battle = False
+        _current_int_cd = None
         _flush_prediction()
         battle_view.close_window()
         progress_view.close_window()
@@ -386,6 +399,19 @@ def _on_drag(phase, cursor=None):
         LOG_CURRENT_EXCEPTION()
 
 
+def _on_variant_toggle():
+    # battle_input's hotkey callback: flip the played vehicle's progress-bar mode override and
+    # swap the centre-screen bar now. No-ops with no known vehicle (pregame / unreadable descr) --
+    # there is nothing to key the override on.
+    if _current_int_cd is None:
+        return
+    try:
+        variant_overrides.toggle(_current_int_cd, mod_settings.progress_bar_variant())
+        apply_settings()   # re-read gates, close/open the affected bar now
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 def _player_events_holder():
     from PlayerEvents import g_playerEvents
     return g_playerEvents
@@ -484,6 +510,10 @@ def install_all_listeners():
     # replace this one. Idempotent + self-healing: AvatarInputHandler may not be importable until a
     # battle exists, so a failed attempt retries on the next mount.
     battle_input.install_alt_key_listener(_set_alt_held, _on_drag)
+    # The per-vehicle mode-override hotkey. set_hotkey is edge-triggered and safe to re-call to
+    # rebind (unlike install_alt_key_listener's single callback slot), so this mirrors it here and
+    # again in apply_settings so a rebind in the settings panel takes effect live.
+    battle_input.set_hotkey(mod_settings.progress_variant_hotkey(), _on_variant_toggle)
 
 
 def _arm_overlay_listeners():
@@ -919,6 +949,9 @@ def apply_settings():
         # Idempotent and a no-op on a closed window, so this costs nothing on every other change.
         progress_view.apply_position()
         efficiency_view.apply_position()
+        # Re-arm the toggle hotkey so a rebind made in the settings panel takes effect live,
+        # without waiting for the next battle mount.
+        battle_input.set_hotkey(mod_settings.progress_variant_hotkey(), _on_variant_toggle)
         refresh()
     except Exception:
         LOG_CURRENT_EXCEPTION()
