@@ -180,7 +180,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_read("MoEProgress.js")) == (112, 320)
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (115, 320)
 
 
 def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
@@ -240,7 +240,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + _js_decimal_const(js, "V_PAD_XR_REM_LARGE")).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (157, 400)
+            iround_half_away(Decimal(default_h) * f)) == (159, 400)
 
 
 def _advances(js):

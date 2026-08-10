@@ -121,7 +121,12 @@ body.mpv #moe-bar-root {
    MoEProgress.js's V_CLIP_B_REM note -- it carries the whole derivation). This rule only keeps
    describing whatever the surface actually is. It stays a plain rem box either way, so it cannot
    reflow the composition when the surface shrinks past it. */
-body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
+body.mpv #moe-bar-box { width: 115rem; height: 320rem; }
+/* .mpv-backdrop is now the INVISIBLE surface bounding-box marker only (its rule stays at
+   V_BOX_* == -34/-80/46/360 as the CSS cross-check of MoEProgress.js's surface constants, pinned by
+   tests/test_progress_surface_mirror.py). The visible dither moved to the per-row .mpv-bd strips
+   below -- the corner overlay's .mb-backdrop technique (checker ::before + dark radial ::after),
+   one strip per number row, each pinned FLUSH on the surface's minimap-facing edge. */
 .mpv-backdrop {
   position: absolute;
   left: -34rem;
@@ -130,7 +135,20 @@ body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
   height: 360rem;
   z-index: 0;
 }
-.mpv-backdrop::before {
+/* PER-ROW STRIPS. left/width are NOT free literals: they MIRROR the invisible surface the JS pushes
+   (body.mpv #moe-bar-box == 112rem wide, left edge at -(V_PAD_X_REM - V_BOX_LEFT_REM) == -104rem),
+   so each strip's right (minimap-facing) edge lands on the surface's own right edge (root x 8rem
+   Default; 10rem Large via the .mp-lg twin below) -- flush, zero gap, and never past the surface
+   (Gameface clips a draw that overruns the view). Solid dither hugs the minimap side (mask `at 90%`)
+   and fades toward the leftward-growing numerals. Per-row `top` is a seed the maintainer converges. */
+.mpv-bd {
+  position: absolute;
+  left: -104rem;
+  width: 115rem;
+  height: 30rem;
+  z-index: 0;
+}
+.mpv-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   background: url(checker.png) repeat;
@@ -138,14 +156,18 @@ body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
   background-position: 0px 0px;
   image-rendering: pixelated;
   opacity: 0.1;
-  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+  mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%);
 }
-.mpv-backdrop::after {
+.mpv-bd::after {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   z-index: -1;
-  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+  background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
 }
+.mpv-bd-1 { top: -54rem; }
+.mpv-bd-2 { top: -30rem; }
+.mpv-bd-3 { top: 85rem; }
+.mpv-bd-4 { top: 201rem; }
 .mpv-track {
   position: relative;
   z-index: 1;
@@ -514,8 +536,13 @@ body.mpv #moe-bar-box { width: 112rem; height: 320rem; }
    a real margin (1px to the minimap at the current gap, ~2.8px to the tick's own true right edge --
    MoEProgress.js's fact 5) instead of the backdrop's own flush zero-clearance edge. */
 body.mpv.mp-lg #moe-bar-root { width: 4rem; }
-body.mpv.mp-lg #moe-bar-box { width: 125.333rem; }
+body.mpv.mp-lg #moe-bar-box { width: 127.2rem; }
 .mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }
+/* The strips' Large flush override: right edge at root x 10rem (== surface's Large right edge),
+   left/width their OWN literals (the surface's Large left is -(V_PAD_X_REM - V_BOX_LEFT_REM*SIZE_XF),
+   not a clean *4/3 of the Default). Per-row `top` is a y-length the root font already scales, so it
+   takes no Large twin -- same as the dash grid. */
+.mp-lg .mpv-bd { left: -115.333rem; width: 127.2rem; }
 .mp-lg .mpv-tick.mpv-end { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-pre { width: 12rem;

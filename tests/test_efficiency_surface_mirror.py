@@ -647,7 +647,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_js()) == (100, 318)
+    assert box == _v_surface_wh(_js()) == (105, 318)
 
 
 def test_the_vertical_shift_matches_progresss_and_is_pinned():
@@ -702,7 +702,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + padxr_large).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (144, 398)
+            iround_half_away(Decimal(default_h) * f)) == (149, 398)
 
 
 def _advances():

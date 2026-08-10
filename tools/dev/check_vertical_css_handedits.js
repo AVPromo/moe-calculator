@@ -121,7 +121,7 @@ const PROGRESS_EDITS = [
     // LEFT, where the right-anchored captions' ink lives, + V_PAD_XR_REM(-4) on the RIGHT, which
     // CLIPS the (already trimmed) backdrop's own decorative bleed a little further, down to just
     // past the track's tick overhang plus a 2px margin -- see MoEProgress.js's own note).
-    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 112rem; height: 320rem; }\n.mpv-backdrop {',
+    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 115rem; height: 320rem; }\n.mpv-backdrop {',
      '2/6 sizing shim'],
     // HAND-EDIT 3/5: the dash grid's gap stripe goes OPAQUE -- SCOPED to the gradient's own stops,
     // never the box-shadow ring in the same rule (which stays 0.5, a separate knob).
@@ -136,6 +136,10 @@ const PROGRESS_EDITS = [
      // X43(46) twin moved with it. HAND-EDIT 6i/6 below overrides this raw emit outright with a
      // LITERAL 90 (not this *4/3 figure) -- see the "to" side and MoEProgress.js's own note.
      '.mpv-lg .mpv-backdrop { left: -45.333rem; width: 61.333rem; }\n' +
+     // the per-row strips' Large flush override -- OWN literals (not *SIZE_XF); renamed .mpv-lg ->
+     // .mp-lg like every sibling line, VALUE unchanged (the surface's Large geometry, not the
+     // backdrop's, drives it -- see MoEProgressVertical.css).
+     '.mpv-lg .mpv-bd { left: -115.333rem; width: 127.2rem; }\n' +
      '.mpv-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -149,11 +153,12 @@ const PROGRESS_EDITS = [
      // 125.333, the PRE-SIZE_F box-shim quantity (round((boxW*xf + padX + padXRLarge) * f) == 157
      // is what actually gets pushed via resizeViewRem -- see MoEProgress.js's own V_PAD_XR_REM
      // note; this shim renders in DOCUMENT rem, so the root font supplies SIZE_F a second time).
-     'body.mpv.mp-lg #moe-bar-box { width: 125.333rem; }\n' +
+     'body.mpv.mp-lg #moe-bar-box { width: 127.2rem; }\n' +
      // HAND-EDIT 6i/6: LITERAL 90, not the tuner's own X43(46)==61.333 -- the naive *4/3 twin lands
      // the backdrop's right edge SHORT of the Large track edge by 15.667rem (see MoEProgress.js's
      // own fact-3 note); 90 lands it exactly on the minimap's edge instead.
      '.mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }\n' +
+     '.mp-lg .mpv-bd { left: -115.333rem; width: 127.2rem; }\n' +
      '.mp-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -267,14 +272,14 @@ const EFFICIENCY_EDITS = [
     // (-6) on the RIGHT, which CLIPS the (already trimmed) backdrop's own bleed a little further,
     // down to just past the track's tick overhang plus a 2px margin -- see MoEEfficiency.js's own
     // note).
-    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 100rem; height: 318rem; }\n.mev-backdrop {',
+    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 105rem; height: 318rem; }\n.mev-backdrop {',
      '3/5 sizing shim'],
     // HAND-EDIT 4/5 + 5/5: `.mev-lg` -> `.mp-lg`, plus the box-shim's own Large twin the tuner never
     // emits -- the PRE-SIZE_F quantity (72 + 52 + -8.667 == 115.333; round(115.333 * SIZE_F) == 144
     // is what actually gets pushed via resizeViewRem -- see MoEEfficiency.js's own V_PAD_XR_REM
     // note).
     ['.mev-lg #moe-bar-root { width: 4rem; }',
-     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 115.333rem; }',
+     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 119.2rem; }',
      '4/5+5/5 Large block (root/box)'],
     ['.mev-lg ', '.mp-lg ', '4/5 remaining Large-block rename', "all"],
     // 5i: the backdrop's OWN Large width, overridden with a LITERAL 98, not the tuner's own
@@ -327,11 +332,11 @@ function run(mutation) {
             "p-lg-class-restored": [() => { progressShipped = progressShipped.replace(
                 "body.mpv.mp-lg #moe-bar-root", ".mpv-lg #moe-bar-root"); }],
             "p-box-shim-dropped": [() => { progressShipped = progressShipped.replace(
-                "body.mpv #moe-bar-box { width: 112rem; height: 320rem; }\n", ""); }],
+                "body.mpv #moe-bar-box { width: 115rem; height: 320rem; }\n", ""); }],
             "e-root-scope-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
                 "body.mev #moe-bar-root {", "#moe-bar-root {"); }],
             "e-lg-box-twin-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
-                "body.mev.mp-lg #moe-bar-box { width: 115.333rem; }\n", ""); }],
+                "body.mev.mp-lg #moe-bar-box { width: 119.2rem; }\n", ""); }],
             "e-lg-class-not-renamed": [() => { efficiencyShipped = efficiencyShipped.replace(
                 ".mp-lg .mev-track { width: 4rem; }", ".mev-lg .mev-track { width: 4rem; }"); }],
         };

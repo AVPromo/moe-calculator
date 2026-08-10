@@ -88,7 +88,11 @@ body.mev #moe-bar-root {
    the fix for the invisible SURFACE reaching into the minimap's first column (see MoEEfficiency.js's
    own four-point note for the full derivation); it costs nothing visible, since no caption ink
    reaches that far right (every caption here is anchored to the LEFT). */
-body.mev #moe-bar-box { width: 100rem; height: 318rem; }
+body.mev #moe-bar-box { width: 105rem; height: 318rem; }
+/* .mev-backdrop is now the INVISIBLE surface bounding-box marker only (rule kept at V_BOX_* ==
+   -40/-80/54/360 as the CSS cross-check of MoEEfficiency.js's surface constants, pinned by
+   tests/test_efficiency_surface_mirror.py; its .mp-lg twin's `left` is also read by the caption-fit
+   test). The visible dither moved to the per-row .mev-bd strips below. */
 .mev-backdrop {
   position: absolute;
   top: -80rem;
@@ -97,21 +101,38 @@ body.mev #moe-bar-box { width: 100rem; height: 318rem; }
   width: 54rem;
   z-index: 0;
 }
-.mev-backdrop::before {
+/* PER-ROW STRIPS. left/width MIRROR the invisible surface (body.mev #moe-bar-box == 100rem wide,
+   left edge at -(V_PAD_X_REM - V_BOX_LEFT_REM) == -92rem), so each strip's right (minimap-facing)
+   edge lands flush on the surface's own right edge (root x 8rem Default; 10rem Large). Solid dither
+   hugs the minimap side (mask `at 90%`) and fades toward the leftward-growing numerals. Per-row
+   `top` is a seed the maintainer converges. */
+.mev-bd {
+  position: absolute;
+  left: -92rem;
+  width: 105rem;
+  height: 30rem;
+  z-index: 0;
+}
+.mev-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   background: url(checker.png) repeat;
   background-size: auto;
   image-rendering: pixelated;
   opacity: 0.1;
-  mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
+  mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%);
 }
-.mev-backdrop::after {
+.mev-bd::after {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   z-index: -1;
-  background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+  background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
 }
+.mev-bd-1 { top: -27rem; }
+.mev-bd-2 { top: 35rem; }
+.mev-bd-3 { top: 85rem; }
+.mev-bd-4 { top: 135rem; }
+.mev-bd-5 { top: 200rem; }
 .mev-track {
   position: relative;
   z-index: 1;
@@ -417,9 +438,12 @@ body.mev #moe-bar-box { width: 100rem; height: 318rem; }
    leave a real margin (1px to the minimap at the current gap, ~2.3px to the tick's own true right
    edge) instead of the backdrop's own flush zero-clearance edge. */
 body.mev.mp-lg #moe-bar-root { width: 4rem; }
-body.mev.mp-lg #moe-bar-box { width: 115.333rem; }
+body.mev.mp-lg #moe-bar-box { width: 119.2rem; }
 .mp-lg .mev-track { width: 4rem; }
 .mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }
+/* The strips' Large flush override: right edge at root x 10rem (surface's Large right edge); OWN
+   literals (not *SIZE_XF). Per-row `top` is a y-length the root font scales -- no Large twin. */
+.mp-lg .mev-bd { left: -105.333rem; width: 119.2rem; }
 .mp-lg .mev-tick.mev-req { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-tick.mev-cur { width: 12rem;

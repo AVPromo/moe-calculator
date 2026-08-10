@@ -288,8 +288,14 @@ const V_PAD_X_REM = 52;                              // the LEFT X slack, decoup
 // test_the_surface_does_not_clip_the_tick), at domain/constants.EFFICIENCY_MM_GAP(_LARGE) == 3/3:
 // Default clears the minimap by 1px (was 6px at the original shared gap of 8) and the tick by
 // 2px; Large by 1px (was 6px) and ~2.3px respectively.
-const V_PAD_XR_REM = -6;                             // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -8.667;                   // ...and Large -- its OWN literal, see above
+// GROWN (2026-08-10, in-client review) so the surface still reaches the minimap's 1px floor after
+// the placement gap was RESTORED to 8 (domain/constants.EFFICIENCY_MM_GAP(_LARGE)). Solved against
+// anchor_minimap's margin (== gap + overhang + edge_x - view_w == 1):
+//   Default: view_w == 8 + 3 + 95 - 1 == 105 -> padXR == 105 - V_BOX_W(54) - V_PAD_X(52) == -1
+//   Large:   view_w == 8 + 5 + 137 - 1 == 149 -> padXRLarge == 149/SIZE_F - boxW*xf(72) - 52
+//                                             == 119.2 - 124 == -4.8
+const V_PAD_XR_REM = -1;                             // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -4.8;                     // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- see the sibling MoEProgress.js for the same three-value shape.
 //   PFX      the class prefix every selector and toggled class here is written in. The source spells
@@ -355,6 +361,11 @@ const MARKUP =
 //     only keeps the diff against the tuner readable).
 const V_MARKUP =
         '<div class="mev-backdrop"></div>' +
+        // Per-row dither strips (MoEEfficiencyVertical.css .mev-bd) -- one per number row, each
+        // flush on the surface's minimap-facing edge. Positioned purely by CSS `top`.
+        '<div class="mev-bd mev-bd-1"></div><div class="mev-bd mev-bd-2"></div>' +
+        '<div class="mev-bd mev-bd-3"></div><div class="mev-bd mev-bd-4"></div>' +
+        '<div class="mev-bd mev-bd-5"></div>' +
         '<div class="mev-track">' +
         '  <div class="mev-fill"></div>' +
         '  <div class="mev-tick mev-req r1"></div>' +

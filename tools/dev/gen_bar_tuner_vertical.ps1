@@ -168,10 +168,15 @@ $tpl = @'
      the box that used to be an explicit, hand-tuned vertical rect (bdTop/bdH) is now an explicit
      horizontal one (bdLeft/bdW), because the track is the narrow dimension either way. */
   .mpv-backdrop{position:absolute;left:var(--bdleft);top:var(--bdtop);width:var(--bdw);height:var(--bdh);z-index:0}
-  .mpv-backdrop::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;
+  /* PER-ROW STRIPS -- the shipped composition draws the dither on these (one per number row),
+     NOT on .mpv-backdrop (kept only as the invisible surface bounding-box marker). Right edge
+     flush on the surface's minimap-facing edge; per-row `top` only. */
+  .mpv-bd{position:absolute;left:var(--bdstripleft);width:var(--bdstripw);height:var(--bdstriph);z-index:0}
+  .mpv-bd::before{content:"";position:absolute;left:0;top:0;width:100%;height:100%;
     background:var(--ckbg) repeat;background-size:var(--cksize);background-position:0 0;
     image-rendering:pixelated;opacity:var(--dotop);-webkit-mask:var(--dotmask);mask:var(--dotmask)}
-  .mpv-backdrop::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;background:var(--uggrad)}
+  .mpv-bd::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;background:var(--uggrad)}
+  .mpv-bd-1{top:var(--bd1top)}.mpv-bd-2{top:var(--bd2top)}.mpv-bd-3{top:var(--bd3top)}.mpv-bd-4{top:var(--bd4top)}
   .mpv-track{position:relative;z-index:1;width:100%;height:100%;background:var(--trackbg)}
   /* Garage dash-grid + outset ring, cloned from the horizontal tuner (MoECalculator.css:277-296,
      see gen_bar_tuner.ps1 for the full mask-not-overlay history) -- ROTATED: the gradient direction
@@ -323,6 +328,7 @@ $tpl = @'
   <div id="mmMock"></div>
   <div class="mpv-anchor" id="mpv-anchor"><div id="moe-bar-root" class="mpv-hold">
     <div class="mpv-backdrop"></div>
+    <div class="mpv-bd mpv-bd-1"></div><div class="mpv-bd mpv-bd-2"></div><div class="mpv-bd mpv-bd-3"></div><div class="mpv-bd mpv-bd-4"></div>
     <div class="mpv-track">
       <div class="mpv-fill"></div>
       <div class="mpv-tick mpv-end mpv-bottom"></div>
@@ -518,12 +524,31 @@ $tpl = @'
       {id:"bdBleedY",label:"Vertical bleed past the bar's ends (rem)",min:0,max:200,step:1,val:80},
       {id:"bdLeft",label:"Left (rem, negative = wider than the track)",min:-120,max:40,step:0.5,val:-34},
       {id:"bdW",label:"Width (rem, EXPLICIT)",min:10,max:200,step:1,val:46},
+      // PER-ROW STRIPS (.mpv-bd, mimicking the corner overlay's .mb-bd-N). Left/width are NOT
+      // free -- they MIRROR the invisible SURFACE the JS pushes (body.mpv #moe-bar-box == 112rem
+      // wide, its left edge at -(V_PAD_X_REM - V_BOX_LEFT_REM) == -104 root-rem), so every strip's
+      // minimap-facing (right) edge lands flush on the surface's own right edge (root x 8 Default /
+      // 10 Large) with zero gap. The Large twins are their OWN literals (the surface's Large left
+      // is -(padX - boxLeft*SIZE_XF), which is not a clean *4/3 of the Default). Change the JS
+      // surface (V_BOX_*/V_PAD_*) and these must move with it. Tops are per-row seeds the maintainer
+      // converges in-client.
+      {id:"bdStripLeft",label:"Strip left == surface left (rem)",min:-160,max:0,step:0.001,val:-104},
+      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:115},
+      {id:"bdStripLeftLg",label:"Strip left, Large (rem)",min:-200,max:0,step:0.001,val:-115.333},
+      {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:127.2},
+      {id:"bdStripH",label:"Strip height, shared (rem)",min:6,max:120,step:1,val:30},
+      {id:"bd1T",label:"Strip 1 top (eta row, rem)",min:-160,max:240,step:0.5,val:-54},
+      {id:"bd2T",label:"Strip 2 top (req row, rem)",min:-160,max:240,step:0.5,val:-30},
+      {id:"bd3T",label:"Strip 3 top (proj row, rem)",min:-160,max:240,step:0.5,val:85},
+      {id:"bd4T",label:"Strip 4 top (current row, rem)",min:-160,max:240,step:0.5,val:201},
       {id:"dotAlpha",label:"Dither strength (opacity)",min:0,max:1,step:0.01,val:0.1},
-      {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:56},
+      {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:112},
       {id:"dotRY",label:"Dither fade size Y (%)",min:0,max:250,step:1,val:110},
       {id:"dotIn",label:"Dither solid to (%)",min:0,max:100,step:1,val:0},
       {id:"dotOut",label:"Dither gone by (%)",min:0,max:120,step:1,val:67},
-      {id:"ugRX",label:"Radial size X (%)",min:0,max:250,step:1,val:76},
+      {id:"dotAX",label:"Dither solid CORE x (%) - 100 = minimap edge, 0 = numerals",min:0,max:100,step:1,val:90},
+      {id:"ugAX",label:"Radial underlay core x (%)",min:0,max:100,step:1,val:90},
+      {id:"ugRX",label:"Radial size X (%)",min:0,max:250,step:1,val:152},
       {id:"ugRY",label:"Radial size Y (%)",min:0,max:250,step:1,val:57},
       {id:"ug1a",label:"Radial inner alpha",min:0,max:1,step:0.01,val:0.35},
       {id:"ug1p",label:"Radial inner pos (%)",min:0,max:100,step:1,val:0},
@@ -587,8 +612,8 @@ $tpl = @'
   function bdrSh(u){return st.bdrOn?"0 0 0 "+u(st.bdrW)+" "+hexA(st.bdrCol,st.bdrA):"none";}
   function projSh(u,c){c=c||hexA(st.projGlowCol,st.projGlowA);
     return "0 0 "+u(st.projGlowB)+" "+c+",0 0 "+u(st.projGlowB2)+" "+c;}
-  function dotMask(){return "radial-gradient("+st.dotRX+"% "+st.dotRY+"% at 50% 50%,#000 "+st.dotIn+"%,transparent "+st.dotOut+"%)";}
-  function ugGrad(){return "radial-gradient("+st.ugRX+"% "+st.ugRY+"% at 50% 50%,rgba(0,0,0,"+st.ug1a+") "+st.ug1p+"%,rgba(0,0,0,"+st.ug2a+") "+st.ug2p+"%)";}
+  function dotMask(){return "radial-gradient("+st.dotRX+"% "+st.dotRY+"% at "+st.dotAX+"% 50%,#000 "+st.dotIn+"%,transparent "+st.dotOut+"%)";}
+  function ugGrad(){return "radial-gradient("+st.ugRX+"% "+st.ugRY+"% at "+st.ugAX+"% 50%,rgba(0,0,0,"+st.ug1a+") "+st.ug1p+"%,rgba(0,0,0,"+st.ug2a+") "+st.ug2p+"%)";}
   function textSh(){return "0px 0px "+rem(st.shBlur)+" "+hexA(st.shColor,st.shAlpha);}
   function total(){return st.fadeIn+st.hold+st.fadeOut;}
   function icoSz(bb){return (100/bb*st.icoFill).toFixed(1)+"%";}
@@ -675,10 +700,15 @@ $tpl = @'
     S.setProperty("--dfadms",st.dFadeMs+"ms");S.setProperty("--dfadease",st.dFadeEase);
     S.setProperty("--bdleft",rem(st.bdLeft));S.setProperty("--bdw",rem(st.bdW));
     S.setProperty("--bdtop",rem(-st.bdBleedY));S.setProperty("--bdh",rem(st.barH+2*st.bdBleedY));
+    S.setProperty("--bdstripleft",rem(st.bdStripLeft));S.setProperty("--bdstripw",rem(st.bdStripW));
+    S.setProperty("--bdstriph",rem(st.bdStripH));
+    S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
+    S.setProperty("--bd3top",rem(st.bd3T));S.setProperty("--bd4top",rem(st.bd4T));
     S.setProperty("--ckbg","url("+CKURI+")");
     S.setProperty("--cksize",(CKTILE*st.pxrem).toFixed(3)+"px "+(CKTILE*st.pxrem).toFixed(3)+"px");
     S.setProperty("--dotop",st.dotAlpha);S.setProperty("--dotmask",dotMask());S.setProperty("--uggrad",ugGrad());
-    bd.style.display=st.bd?"block":"none";
+    bd.style.display="none";
+    root.querySelectorAll(".mpv-bd").forEach(function(e){e.style.display=st.bd?"block":"none";});
     root.style.outline=st.bounds?"1px dashed #ff5":"none";
     root.classList.toggle("mpv-full",met());
     var b=bounds();
@@ -765,6 +795,7 @@ $tpl = @'
     }
     return ".mpv-lg #moe-bar-root { width: "+X43(st.trackW)+"rem; }\n"+
       ".mpv-lg .mpv-backdrop { left: "+X43(st.bdLeft)+"rem; width: "+X43(st.bdW)+"rem; }\n"+
+      ".mpv-lg .mpv-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
       tick("end",st.tickWEnd,st.tickXEnd)+tick("pre",st.tickWPre,st.tickXPre)+
       tick("proj",st.tickWProj,st.tickXProj)+
       ".mpv-lg .mpv-capR { padding-right: "+pr+"; transform: translateX("+X43(st.capxR)+"rem); }\n"+
@@ -793,11 +824,15 @@ $tpl = @'
       "  font-family: \"MoEBattle\", \"Arial Narrow\", sans-serif;\n  text-align: center;\n  opacity: 0;\n}\n"+
       ".mpv-backdrop {\n  position: absolute;\n  left: "+st.bdLeft+"rem;\n  top: "+(-st.bdBleedY)+"rem;\n"+
       "  width: "+st.bdW+"rem;\n  height: "+(st.barH+2*st.bdBleedY)+"rem;\n  z-index: 0;\n}\n"+
-      ".mpv-backdrop::before {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
+      ".mpv-bd {\n  position: absolute;\n  left: "+st.bdStripLeft+"rem;\n  width: "+st.bdStripW+"rem;\n"+
+      "  height: "+st.bdStripH+"rem;\n  z-index: 0;\n}\n"+
+      ".mpv-bd::before {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  background: url(checker.png) repeat;\n  background-size: auto;\n  background-position: 0px 0px;\n"+
       "  image-rendering: pixelated;\n  opacity: "+st.dotAlpha+";\n  mask: "+dotMask()+";\n}\n"+
-      ".mpv-backdrop::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
+      ".mpv-bd::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  z-index: -1;\n  background: "+ugGrad()+";\n}\n"+
+      ".mpv-bd-1 { top: "+st.bd1T+"rem; }\n.mpv-bd-2 { top: "+st.bd2T+"rem; }\n"+
+      ".mpv-bd-3 { top: "+st.bd3T+"rem; }\n.mpv-bd-4 { top: "+st.bd4T+"rem; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+
       "/* Garage dash grid, rotated (0deg == \"to top\", so the first stop sits at the BOTTOM edge).\n"+
       "   background-size: 100% <period>rem tiles the gradient from a single period-sized tile instead\n"+

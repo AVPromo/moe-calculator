@@ -412,8 +412,16 @@ const V_PAD_X_REM = 70;                              // the LEFT X slack, decoup
 // are their own literals: the Large geometry (trackW_large, shiftX_large) is not a pure *SIZE_XF
 // scale of the Default one once V_BOX_LEFT_REM's own fractional Large scaling is folded in, so
 // neither is what clears it -- see the derivation above, computed directly, not scaled.
-const V_PAD_XR_REM = -4;                             // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -6;                       // ...and Large -- its OWN literal, see above
+// GROWN (2026-08-10, in-client review) so the surface still reaches the minimap's 1px floor after
+// the placement gap was RESTORED to 8 (domain/constants.PROGRESS_MM_GAP(_LARGE)). Solved directly
+// against anchor_minimap's margin (== gap + overhang + edge_x - view_w == 1):
+//   Default: view_w == 8 + 3 + 105 - 1 == 115 -> padXR == 115 - V_BOX_W(46) - V_PAD_X(70) == -1
+//   Large:   view_w == 8 + 5 + 147 - 1 == 159 -> padXRLarge == 159/SIZE_F - boxW*xf(61.333) - 70
+//                                             == 127.2 - 131.333 == -4.133
+// The visible TRACK sits further from the minimap than the surface's right edge (that daylight IS
+// this right pad); growing it only widened the surface toward the minimap, it did NOT move the track.
+const V_PAD_XR_REM = -1;                             // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -4.133;                   // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
 // together by goVertical() below and never touched again.
@@ -495,6 +503,10 @@ const MARKUP =
 // class-filtered as they always were and do not care about which row they live in.
 const V_MARKUP =
         '<div class="mpv-backdrop"></div>' +
+        // Per-row dither strips (MoEProgressVertical.css .mpv-bd) -- one per number row, each flush
+        // on the surface's minimap-facing edge. Positioned purely by CSS `top`; no JS drives them.
+        '<div class="mpv-bd mpv-bd-1"></div><div class="mpv-bd mpv-bd-2"></div>' +
+        '<div class="mpv-bd mpv-bd-3"></div><div class="mpv-bd mpv-bd-4"></div>' +
         '<div class="mpv-track">' +
         '  <div class="mpv-fill"></div>' +
         '  <div class="mpv-tick mpv-end mpv-bottom"></div>' +

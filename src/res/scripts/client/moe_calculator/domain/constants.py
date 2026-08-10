@@ -269,10 +269,15 @@ MM_GAP = 8
 # None of the four can be pushed one further without landing a size mode at 0 (flush) or negative
 # (an actual overlap, the click-blocking bug this module's own header calls out as critical) --
 # see test_the_surface_clears_the_minimap_at_every_size_index for the pinned margins this derives.
-PROGRESS_MM_GAP = 5
-PROGRESS_MM_GAP_LARGE = 6
-EFFICIENCY_MM_GAP = 3
-EFFICIENCY_MM_GAP_LARGE = 3
+# RESTORED to the shared 8 (2026-08-10, in-client review): the earlier per-size shrink (5/6, 3/3)
+# moved the visible TRACK+numerals toward the minimap by 3-5px off the maintainer-approved position
+# (track on-screen clearance == gap + overhang; edge_x/MM_TRACK_X cancels). The surface still reaches
+# the minimap (1px floor) INDEPENDENTLY via each bar's grown V_PAD_XR(_LARGE) -- see MoEProgress.js /
+# MoEEfficiency.js -- so restoring the gap did NOT reopen the backdrop-to-minimap gap.
+PROGRESS_MM_GAP = 8
+PROGRESS_MM_GAP_LARGE = 8
+EFFICIENCY_MM_GAP = 8
+EFFICIENCY_MM_GAP_LARGE = 8
 
 PROGRESS_MM_GAP_BOTTOM = 30
 EFFICIENCY_MM_GAP_BOTTOM = 28
