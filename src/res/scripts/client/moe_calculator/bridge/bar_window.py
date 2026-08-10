@@ -128,6 +128,23 @@ def _minimap_size_index():
         return len(MINIMAP_SIZES) - 1
 
 
+def _effective_variant():
+    """The variant actually gating the currently-open bar host: the played vehicle's stored
+    override if it has one, else the global default -- mirrors battle_bridge._window_gates so
+    _materialise's own-variant check (below) doesn't skip the host an override actually opened.
+
+    Lazily imported for the same reason _minimap_size_index is (battle_adapter touches BigWorld
+    at module scope) and fail-soft to the global default -- a read failure can only fall back to
+    the pre-override behaviour, never wedge _materialise."""
+    default = mod_settings.progress_bar_variant()
+    try:
+        from moe_calculator.adapter import battle_adapter, variant_overrides
+        int_cd = battle_adapter._player_vehicle_int_cd(battle_adapter._player_vehicle_descr())
+        return variant_overrides.effective(int_cd, default)
+    except Exception:
+        return default
+
+
 def _screen_resolution():
     """(width, height) in device px, or None. Only needed for the PIXEL-space cursor convention --
     a clip-space read normalises itself."""
@@ -494,7 +511,7 @@ class BarHost(object):
             can briefly have both open (see the class docstring)."""
         if not self._sized:
             return
-        if mod_settings.progress_bar_variant() != self._variant:
+        if _effective_variant() != self._variant:
             return
         if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
             return

@@ -35,6 +35,8 @@ def test_corrupt_file_reads_as_empty(store):
     assert vo.load() == {}
 
 
-def test_load_coerces_str_keys_and_drops_bool(store):
-    vo.save({123: 1})
-    assert vo.load() == {123: 1}
+def test_load_coerces_str_keys_and_drops_bool_and_out_of_range(store):
+    # save()'s own coercion would reject these before they ever hit disk, so write the RAW
+    # blob straight through moe_wgapi to exercise load()'s drop branches.
+    moe_wgapi.write_json(os.path.join(str(store), vo.OVERRIDES_FILE), {"1": True, "2": 9, "3": 0})
+    assert vo.load() == {3: 0}

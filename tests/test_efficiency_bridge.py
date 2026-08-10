@@ -234,6 +234,21 @@ def test_the_bar_is_visible_with_the_master_on_and_the_variant_selected():
     assert _push(2000)["visible"] is True
 
 
+def test_an_override_selecting_efficiency_is_visible_over_a_moving_average_default(monkeypatch):
+    # THE MERGE-BLOCKER REGRESSION: push_efficiency's `enabled` term used to read the GLOBAL
+    # mod_settings.progress_bar_variant() directly, so a per-vehicle override that picked
+    # Efficiency while the global default stayed Moving Average opened this bar's window
+    # (_window_gates IS override-aware) but pushed it invisible forever. Must go through
+    # variant_overrides.effective the same way _window_gates does.
+    monkeypatch.setattr(mod_settings, "progress_bar_variant",
+                        lambda: mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE)
+    monkeypatch.setattr(battle_bridge.variant_overrides, "effective",
+                        lambda icd, default: mod_settings.PROGRESS_VARIANT_EFFICIENCY
+                        if icd == 555 else default)
+    monkeypatch.setattr(battle_bridge, "_current_int_cd", 555)
+    assert _push(2000)["visible"] is True
+
+
 def test_push_writes_the_two_transition_flags_master_folded(monkeypatch):
     # The two effective transition flags, on the SECOND bar. Proven separately from the Moving
     # Average bar's (tests/test_progress_bridge.py) because the two pushes are independent code:

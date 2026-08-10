@@ -403,7 +403,7 @@ def _on_variant_toggle():
     # battle_input's hotkey callback: flip the played vehicle's progress-bar mode override and
     # swap the centre-screen bar now. No-ops with no known vehicle (pregame / unreadable descr) --
     # there is nothing to key the override on.
-    if _current_int_cd is None:
+    if not _current_int_cd:
         return
     try:
         variant_overrides.toggle(_current_int_cd, mod_settings.progress_bar_variant())
@@ -856,7 +856,7 @@ def push_efficiency(rvm, snap, model):
             snap.in_battle, snap.has_vehicle, snap.is_spectating,
             overlay_open=bool(_open_overlays),
             enabled=(mod_settings.progress_bar_enabled()
-                     and mod_settings.progress_bar_variant()
+                     and variant_overrides.effective(_current_int_cd, mod_settings.progress_bar_variant())
                      == mod_settings.PROGRESS_VARIANT_EFFICIENCY))
         r = stops if has_data else (0.0, 0.0, 0.0, 0.0, 0.0)
         bar_x = efficiency_bar_x(damage, stops)
