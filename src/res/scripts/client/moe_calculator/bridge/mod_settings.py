@@ -346,6 +346,11 @@ PROGRESS_VARIANT_MOVING_AVERAGE = 1   # the original next-mark moving-average ba
 # ... and MOVING_AVERAGE is the highest legal index: a stored value outside [0, MOVING_AVERAGE] is
 # corrupt (clamp_variant).
 
+# The in-battle hotkey (a chord of BigWorld key ints) that overrides this vehicle's progress-bar
+# mode for the rest of the battle. Not wired into the MSA descriptor yet -- this task only adds
+# the constant/default/getter; the panel control and the SETTINGS_VERSION bump are later tasks.
+PROGRESS_VARIANT_HOTKEY_KEY = "progress_variant_hotkey"
+
 # How large the Progress Bar draws -- the SECOND child radio of PROGRESS_BAR_KEY and the mod's
 # second non-bool setting, so _coerce needs its own branch here too (falling through to bool()
 # would turn index 1 into True and destroy the setting, exactly as for the variant).
@@ -526,7 +531,8 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_POS_FRAME_KEY: POS_FRAME_ANCHOR,
             PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
             PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_DAMAGE_LOG,
-            FOLLOW_CAROUSEL_KEY: True}
+            FOLLOW_CAROUSEL_KEY: True,
+            PROGRESS_VARIANT_HOTKEY_KEY: [37]}
 
 
 def clamp_pos(v):
@@ -612,8 +618,8 @@ _deriving = False
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
     the progress-bar variant/size/orientation/alignment are clamped radio INDEXes, the hold
-    duration a clamped second count, the pos-frame marker one of two known strings, everything
-    else is a bool. Pure + engine-free.
+    duration a clamped second count, the pos-frame marker one of two known strings, the hotkey
+    chord passed through as-is, everything else a bool. Pure + engine-free.
 
     Every non-bool branch is load-bearing: falling through to bool() would turn a radio's
     index 1 into True and index 0 into False (and the hold's 5 into True, or a "legacy" string
@@ -632,6 +638,11 @@ def _coerce(key, value):
         return clamp_hold_seconds(value)
     if key == PROGRESS_POS_FRAME_KEY:
         return value if value == POS_FRAME_LEGACY else POS_FRAME_ANCHOR
+    if key == PROGRESS_VARIANT_HOTKEY_KEY:
+        # A key chord, not a bool -- pass it through unchanged (bool([38]) would collapse any
+        # non-empty chord to True). progress_variant_hotkey() does its own list/int guarding
+        # on read, so a corrupt non-list value is safe to store as-is here.
+        return value
     return bool(value)
 
 
@@ -713,6 +724,16 @@ def progress_bar_variant():
     Meaningless while progress_bar_enabled() is off: the master gates the whole feature."""
     return clamp_variant(_settings.get(PROGRESS_VARIANT_KEY,
                                        PROGRESS_VARIANT_EFFICIENCY))
+
+
+def progress_variant_hotkey():
+    """The battle hotkey that overrides this vehicle's progress-bar mode, as a list of
+    BigWorld key ints (a chord). Default [37] (Keys.KEY_K). A missing/corrupt store or a
+    non-list falls back to the default; an explicitly EMPTY list disables the hotkey."""
+    v = _settings.get(PROGRESS_VARIANT_HOTKEY_KEY, [37])
+    if not isinstance(v, list):
+        return [37]
+    return [int(k) for k in v if isinstance(k, int) and not isinstance(k, bool)]
 
 
 def progress_bar_size():

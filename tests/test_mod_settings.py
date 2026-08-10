@@ -29,7 +29,8 @@ from moe_calculator.bridge.mod_settings import (
     PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ORIENT_VERTICAL,
     PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FIXED, PROGRESS_ALIGN_FREE,
     PROGRESS_ALIGN_DAMAGE_LOG, PROGRESS_ALIGN_MINIMAP,
-    progress_bar_orientation, progress_bar_alignment)
+    progress_bar_orientation, progress_bar_alignment,
+    PROGRESS_VARIANT_HOTKEY_KEY, progress_variant_hotkey)
 from moe_calculator.adapter import settings_i18n
 
 
@@ -74,7 +75,8 @@ def test_defaults_when_empty_or_none():
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                         mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_ANCHOR,
                         PROGRESS_ORIENTATION_KEY: 0, PROGRESS_ALIGNMENT_KEY: 0,
-                        FOLLOW_CAROUSEL_KEY: True}
+                        FOLLOW_CAROUSEL_KEY: True,
+                        PROGRESS_VARIANT_HOTKEY_KEY: [37]}
     # v22: fresh installs start straight in the ANCHOR frame -- there is no legacy pair to carry.
     assert DEFAULTS[mod_settings.PROGRESS_POS_FRAME_KEY] == mod_settings.POS_FRAME_ANCHOR
     # THE ORIENTATION/ALIGNMENT RADIOS: an int 0 each (Horizontal / Fixed), never a bool -- the
@@ -145,7 +147,8 @@ def test_overlays_known_keys():
                     mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                     mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_ANCHOR,
                     PROGRESS_ORIENTATION_KEY: 0, PROGRESS_ALIGNMENT_KEY: 0,
-                    FOLLOW_CAROUSEL_KEY: False}
+                    FOLLOW_CAROUSEL_KEY: False,
+                    PROGRESS_VARIANT_HOTKEY_KEY: [37]}
 
 
 def test_partial_dict_fills_missing_with_defaults():
@@ -282,6 +285,21 @@ def test_progress_bar_variant_getter_reclamps_a_corrupt_store():
     # An absent key falls back to the 0 default rather than raising.
     del mod_settings._settings[PROGRESS_VARIANT_KEY]
     assert progress_bar_variant() == PROGRESS_VARIANT_EFFICIENCY
+
+
+def test_progress_variant_hotkey_default_and_getter():
+    mod_settings._seed(DEFAULTS)
+    assert progress_variant_hotkey() == [37]
+    mod_settings._apply({PROGRESS_VARIANT_HOTKEY_KEY: [38]})
+    assert progress_variant_hotkey() == [38]
+    mod_settings._apply({PROGRESS_VARIANT_HOTKEY_KEY: []})
+    assert progress_variant_hotkey() == []
+
+
+def test_progress_variant_hotkey_guards_bad_store():
+    mod_settings._seed(DEFAULTS)
+    mod_settings._apply({PROGRESS_VARIANT_HOTKEY_KEY: "K"})
+    assert progress_variant_hotkey() == [37]
 
 
 # --- the Progress Bar SIZE radio: the mod's SECOND non-bool setting ---------------------------
@@ -2487,10 +2505,11 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     # ABSENT from `old`: this store is pre-v21 (the whole point of the fixture), and none of these
     # three keys existed before v21/v22 -- their value is DERIVED by _migrate_pre_v21_layout /
     # _migrate_pre_v22_pos_frame, not carried across like every other key here, so they are
-    # checked separately below instead of by this "must differ" loop.
+    # checked separately below instead of by this "must differ" loop. PROGRESS_VARIANT_HOTKEY_KEY
+    # is likewise absent -- it postdates this store and has no migration wiring yet (a later task).
     for key in DEFAULTS:
         if key in (PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
-                   mod_settings.PROGRESS_POS_FRAME_KEY):
+                   mod_settings.PROGRESS_POS_FRAME_KEY, PROGRESS_VARIANT_HOTKEY_KEY):
             continue
         assert old[key] != DEFAULTS[key], "%s must differ from its default to prove anything" % key
     api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
