@@ -172,17 +172,20 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # header, the Transitions master, its two switches and the hold-duration slider. The TABLE KEY
     # `progressBar` never changed through any of those moves, so no translation was ever orphaned.
     #
-    # Pinned as a literal FIFTEEN-slot RUN (twelve real keys + the three `None` sentinels that sit
-    # inside it), rather than filtering the sentinels out and asserting contiguity on what remains
-    # -- that would silently accept a spacer landing anywhere in the run instead of exactly where
-    # it belongs. It is now COL2_KEYS' own HEAD (the whole feature is column 2 in full), so the
-    # run starts at index 0; the six slots after it are pinned separately below.
+    # Pinned as a literal SIXTEEN-slot RUN (thirteen real keys + the three `None` sentinels that
+    # sit inside it), rather than filtering the sentinels out and asserting contiguity on what
+    # remains -- that would silently accept a spacer landing anywhere in the run instead of exactly
+    # where it belongs. It is now COL2_KEYS' own HEAD (the whole feature is column 2 in full), so
+    # the run starts at index 0; the six slots after it are pinned separately below.
+    #
+    # v25->26 added VARIANT_HOTKEY_KEY right after VARIANT_KEY (the in-battle mode-override
+    # HotKey control -- see mod_settings's SETTINGS_VERSION comment), growing the run 15 -> 16.
     assert u"progressBar" in S._PANEL[u"en"]
     start = S.COL2_KEYS.index(u"catBattleProgress")
-    tail = S.COL2_KEYS[start:start + 15]
+    tail = S.COL2_KEYS[start:start + 16]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
-                    None, S.VARIANT_KEY, u"progressSize",
+                    None, S.VARIANT_KEY, S.VARIANT_HOTKEY_KEY, u"progressSize",
                     None, u"catTransitions",
                     u"progressTransitions", u"progressTransEvents", u"progressTransManual",
                     None, u"progressHoldSeconds"), (
@@ -191,7 +194,7 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # ...and the "Layout" category (key catBarPosition, displayed text "Layout") IS the tail,
     # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers.
     # The trailing None is the barPreview Image's sentinel, appended at 24->25 (see mod_settings).
-    assert S.COL2_KEYS[start + 15:] == (
+    assert S.COL2_KEYS[start + 16:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
         u"barPosX", u"barPosY", None), (
         u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))

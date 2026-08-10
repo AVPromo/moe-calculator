@@ -304,7 +304,17 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # sentinels that keep _sync_template_text's positional zip aligned) reach nobody without a forward
 # bump. Neither varName is a stored setting (both absent from DEFAULTS -- they are updateImage
 # addressing handles only), so the migration branch carries every real value across unchanged.
-SETTINGS_VERSION = 25
+# Bumped 25 -> 26 for the in-battle per-vehicle mode-override HOTKEY control: a new varName
+# (progress_variant_hotkey) and a new component TYPE ("HotKey", the first control here of that
+# type), spliced into column 2 right after the Mode radio (progress_bar_variant) -- COL2_KEYS
+# grows 22 -> 23. Either alone would be structural (a new varName; Aslain's _settingsStructure
+# signature also folds in the type), so only a forward bump reaches an existing install --
+# register()'s saved-truthy path never calls setModTemplate. The control is deliberately
+# STANDALONE (no masterVarName), matching the Mode/Scale radios it sits beside: the override key
+# describes the bar, not when it shows. The migration branch carries every saved value across
+# unchanged (enumerated from DEFAULTS, not hand-listed) and the new key takes its fresh [37]
+# (Keys.KEY_K) default, matching progress_variant_hotkey()'s own fallback.
+SETTINGS_VERSION = 26
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -1076,6 +1086,30 @@ def _radio(key, rendered):
     return control
 
 
+def _hotkey(key, rendered):
+    """One MSA HotKey descriptor for the in-battle mode-override chord. `varName` matches a
+    DEFAULTS key so the key-int list MSA echoes back maps straight through merge_settings;
+    `value` is the default chord (a list of BigWorld key ints -- see PROGRESS_VARIANT_HOTKEY_KEY
+    / progress_variant_hotkey).
+
+    Built as a plain dict, matching every other helper here (see _radio) -- Aslain's own
+    createHotKey emits exactly this shape (type/text/varName/value/tooltip) -- so _template()
+    stays import-free and unit-testable with the game closed. The tooltip key is OMITTED rather
+    than emitted empty when the rendered row has none, same shape as _checkbox / _radio / _label /
+    _stepper / _slider (a hard index there is what killed the WHOLE settings panel once -- see
+    _radio's docstring)."""
+    control = {
+        "type": "HotKey",
+        "text": rendered["text"],
+        "value": DEFAULTS[key],
+        "varName": key,
+    }
+    tooltip = rendered.get("tooltip")
+    if tooltip:
+        control["tooltip"] = tooltip
+    return control
+
+
 def _label(key, rendered):
     """A plain MSA Label header (no varName -- not a stored value). Carries text, and a tooltip
     only when there IS one, so _sync_template_text can refresh it in lockstep with the column's
@@ -1220,8 +1254,9 @@ def _template():
     garage master, no children of its own) and its own "Layout" group (a header, Follow Carousel,
     an Empty spacer, a "Position" sub-label, then the X/Y numeric steppers).
     Column 2: the WHOLE Progress Bar feature -- "Battle Progress" (the Progress Bar master + its
-    three VISIBILITY children, an Empty spacer, the standalone Mode and Scale radios), then a
-    SECOND Empty spacer and "Transitions" (its own header + the Transitions master with its
+    three VISIBILITY children, an Empty spacer, the standalone Mode radio, its HotKey mode-override
+    sibling, and the Scale radio), then a SECOND Empty spacer and "Transitions" (its own header +
+    the Transitions master with its
     Events, Alt Press children, a spacer, then the UNGROUPED Hold Duration slider), then a THIRD
     Empty spacer and "Layout" (header text; i18n key stays catBarPosition -- its own header + the
     standalone Orientation and Alignment radios ABOVE the two standalone X/Y steppers). Because
@@ -1237,6 +1272,8 @@ def _template():
     show_alt = _checkbox(PROGRESS_SHOW_ALT_KEY, t["progressShowAlt"])
     show_always = _checkbox(PROGRESS_SHOW_ALWAYS_KEY, t["progressShowAlways"])
     progress_variant = _radio(PROGRESS_VARIANT_KEY, t[settings_i18n.VARIANT_KEY])
+    progress_variant_hotkey = _hotkey(PROGRESS_VARIANT_HOTKEY_KEY,
+                                      t[settings_i18n.VARIANT_HOTKEY_KEY])
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
     progress_orientation = _radio(PROGRESS_ORIENTATION_KEY, t["progressOrientation"])
     progress_alignment = _radio(PROGRESS_ALIGNMENT_KEY, t["progressAlignment"])
@@ -1315,6 +1352,10 @@ def _template():
         # call already made for the column-1 steppers. An Empty spacer heads them, same purely
         # visual role as every other spacer in this column.
         #
+        # The HotKey mode-override control (v26) sits between Mode and Scale, ALSO standalone for
+        # the same reason: it describes the bar (which key overrides it mid-battle), not when it
+        # shows, so it must stay readable and editable while the feature is off.
+        #
         # Wire order MUST stay in lockstep with settings_i18n.COL2_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
         #
@@ -1345,7 +1386,7 @@ def _template():
         # earlier control's positional pairing moves.
         "column2": ([_label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
-                    + [_empty(), progress_variant, progress_size,
+                    + [_empty(), progress_variant, progress_variant_hotkey, progress_size,
                        _empty(), _label("catTransitions", t["catTransitions"])]
                     + _grouped_column1(trans_master, [trans_events, trans_manual])
                     + [_empty(), trans_hold,

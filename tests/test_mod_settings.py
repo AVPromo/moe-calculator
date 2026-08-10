@@ -1187,7 +1187,10 @@ def test_template_settings_version_pins_the_current_layout():
     # barPreview at the tail of column 2's Layout category -- see mod_settings's _image/_template).
     # A new template ROW is structural, and neither varName is a stored setting (both absent from
     # DEFAULTS -- updateImage addressing handles only), so no user loses a value across the bump.
-    assert SETTINGS_VERSION == 25
+    # Bumped 25 -> 26 for the in-battle mode-override HotKey control (progress_variant_hotkey),
+    # spliced into column 2 right after the Mode radio -- a new varName AND a new component type,
+    # either structural on its own. See mod_settings's own SETTINGS_VERSION comment.
+    assert SETTINGS_VERSION == 26
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1283,7 +1286,9 @@ def test_template_variant_radio_shape(monkeypatch):
     assert col2[_at(col2, PROGRESS_SHOW_ALWAYS_KEY)[1] + 1] == {"type": "Empty"}, \
         "a control was inserted between the last visibility child and the Mode radio's spacer"
     assert index == _at(col2, PROGRESS_SHOW_ALWAYS_KEY)[1] + 2
-    assert index + 1 == _at(col2, PROGRESS_SIZE_KEY)[1]
+    # v26: the HotKey mode-override control now sits directly between Mode and Scale.
+    assert index + 1 == _at(col2, PROGRESS_VARIANT_HOTKEY_KEY)[1]
+    assert index + 2 == _at(col2, PROGRESS_SIZE_KEY)[1]
     assert radio["type"] == "RadioButtonGroup"
     assert radio["varName"] == PROGRESS_VARIANT_KEY
     assert radio["value"] == DEFAULTS[PROGRESS_VARIANT_KEY] == 0
@@ -1436,21 +1441,22 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     # garage-related groups (test_template_column1_is_the_calculator_and_garage_groups).
     tmpl = mod_settings._template()
     col2 = tmpl["column2"]
-    # TWENTY-TWO controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
+    # TWENTY-THREE controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
     # followed by that feature's controls: "Battle Progress" + [Progress Bar master + its three
-    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two standalone radios],
-    # then a THIRD Empty spacer and "Transitions" -- its OWN header since the hold-duration Slider
-    # arrived -- + [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer
-    # (ahead of the Slider) + the UNGROUPED hold Slider, which hangs off that header rather than
-    # the master (its masterVarName absence is pinned in
-    # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
-    # "Layout" (header text; i18n key stays catBarPosition) + [the standalone Orientation/Alignment
-    # radios, ABOVE the two standalone position steppers], then the barPreview Image APPENDED at the
-    # tail (24->25). The header names the feature, which is why every master reads just "Enabled".
+    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the Mode radio, its HotKey
+    # mode-override sibling (v26), and the Scale radio -- all three standalone], then a THIRD Empty
+    # spacer and "Transitions" -- its OWN header since the hold-duration Slider arrived -- +
+    # [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer (ahead of the
+    # Slider) + the UNGROUPED hold Slider, which hangs off that header rather than the master (its
+    # masterVarName absence is pinned in test_slider_descriptor_shape_and_tipless_omission), and
+    # finally a FIFTH Empty spacer and "Layout" (header text; i18n key stays catBarPosition) +
+    # [the standalone Orientation/Alignment radios, ABOVE the two standalone position steppers],
+    # then the barPreview Image APPENDED at the tail (24->25). The header names the feature, which
+    # is why every master reads just "Enabled".
     assert [c["type"] for c in col2] == [
         "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
-        "RadioButtonGroup", "RadioButtonGroup",
+        "RadioButtonGroup", "HotKey", "RadioButtonGroup",
         "Empty",
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
@@ -1464,47 +1470,77 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     assert [c["varName"] for c in col2 if "varName" in c] == [
         PROGRESS_BAR_KEY,
         PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
-        PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY,
+        PROGRESS_VARIANT_KEY, PROGRESS_VARIANT_HOTKEY_KEY, PROGRESS_SIZE_KEY,
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
         PROGRESS_HOLD_SECONDS_KEY,
         PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
         mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY,
         mod_settings.BAR_PREVIEW_KEY]
     # ...and the two category headers carry no varName at all -- and they are the ONLY two here.
-    assert "varName" not in col2[0] and "varName" not in col2[9] and "varName" not in col2[16]
-    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 9, 16]
+    assert "varName" not in col2[0] and "varName" not in col2[10] and "varName" not in col2[17]
+    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 10, 17]
     # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
     # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
     assert col2[0]["text"] == u"<b>Battle Progress</b>" and col2[0]["useHTML"] is True
-    assert col2[9]["text"] == u"<b>Transitions</b>" and col2[9]["useHTML"] is True
-    assert col2[16]["text"] == u"<b>Layout</b>" and col2[16]["useHTML"] is True
+    assert col2[10]["text"] == u"<b>Transitions</b>" and col2[10]["useHTML"] is True
+    assert col2[17]["text"] == u"<b>Layout</b>" and col2[17]["useHTML"] is True
     # All FOUR Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Mode"; the second heads "Transitions"; the third heads the hold Slider;
     # the fourth heads "Layout".
     assert col2[5] == {"type": "Empty"}
-    assert col2[8] == {"type": "Empty"}
-    assert col2[13] == {"type": "Empty"}
-    assert col2[15] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 8, 13, 15]
-    # The two radios are STANDALONE -- no masterVarName, no conditions -- so they stay readable
-    # and editable while the Progress Bar master is off, exactly like column 1's steppers used to
-    # be before they were gated. The two position steppers ARE gated: see
-    # test_template_position_steppers_are_gated_on_alignment_free below.
-    for control in col2[17:19]:
+    assert col2[9] == {"type": "Empty"}
+    assert col2[14] == {"type": "Empty"}
+    assert col2[16] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 9, 14, 16]
+    # The Mode/HotKey/Scale trio are STANDALONE -- no masterVarName, no conditions -- so they stay
+    # readable and editable while the Progress Bar master is off, exactly like column 1's steppers
+    # used to be before they were gated.
+    for control in col2[6:9]:
+        assert "masterVarName" not in control and "conditions" not in control
+    assert col2[6]["varName"] == PROGRESS_VARIANT_KEY
+    assert col2[7]["type"] == "HotKey" and col2[7]["varName"] == PROGRESS_VARIANT_HOTKEY_KEY
+    assert col2[8]["varName"] == PROGRESS_SIZE_KEY
+    # The two Orientation/Alignment radios are ALSO STANDALONE -- see above. The two position
+    # steppers ARE gated: see test_template_position_steppers_are_gated_on_alignment_free below.
+    for control in col2[18:20]:
         assert "masterVarName" not in control and "conditions" not in control
     # The two radios sit directly between the "Layout" header and the two steppers.
-    assert col2[17]["varName"] == PROGRESS_ORIENTATION_KEY
-    assert col2[18]["varName"] == PROGRESS_ALIGNMENT_KEY
-    assert col2[19]["varName"] == mod_settings.BAR_POS_X_KEY
-    assert col2[20]["varName"] == mod_settings.BAR_POS_Y_KEY
-    # The barPreview Image closes the column (index 21): source path, addressing-handle varName and
+    assert col2[18]["varName"] == PROGRESS_ORIENTATION_KEY
+    assert col2[19]["varName"] == PROGRESS_ALIGNMENT_KEY
+    assert col2[20]["varName"] == mod_settings.BAR_POS_X_KEY
+    assert col2[21]["varName"] == mod_settings.BAR_POS_Y_KEY
+    # The barPreview Image closes the column (index 22): source path, addressing-handle varName and
     # a reserved container sized for the widest/tallest bar so a swap never reflows the panel.
-    assert col2[21]["type"] == "Image" and col2[21]["varName"] == mod_settings.BAR_PREVIEW_KEY
-    assert col2[21]["source"].startswith(u"gui/maps/icons/") and col2[21]["source"].endswith(u".png")
-    assert col2[21]["containerWidth"] and col2[21]["containerHeight"]
+    assert col2[22]["type"] == "Image" and col2[22]["varName"] == mod_settings.BAR_PREVIEW_KEY
+    assert col2[22]["source"].startswith(u"gui/maps/icons/") and col2[22]["source"].endswith(u".png")
+    assert col2[22]["containerWidth"] and col2[22]["containerHeight"]
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
+
+
+def _find_desc(tmpl, key):
+    """The descriptor bearing `key` as its varName, searched across every column the built
+    template declares (column-agnostic -- mirrors _at, which only looks at one column list)."""
+    for col, _keys in _column_pairs(tmpl):
+        for c in tmpl[col]:
+            if c.get("varName") == key:
+                return c
+    raise AssertionError("no control with varName %r in any column" % (key,))
+
+
+def test_settings_version_bumped_for_hotkey_control():
+    assert mod_settings.SETTINGS_VERSION == 26
+
+
+def test_template_includes_hotkey_descriptor():
+    tmpl = mod_settings._template()
+    names = [c["varName"] for col, _keys in _column_pairs(tmpl)
+             for c in tmpl[col] if "varName" in c]
+    assert PROGRESS_VARIANT_HOTKEY_KEY in names
+    desc = _find_desc(tmpl, PROGRESS_VARIANT_HOTKEY_KEY)
+    assert desc["type"] == "HotKey"
+    assert desc["value"] == [37]
 
 
 def test_preview_source_names_map_every_driving_combo():
@@ -1668,7 +1704,8 @@ def test_template_control_defaults_match_defaults_dict():
             if "varName" not in c:            # a Label header / an Empty spacer
                 assert c["type"] in ("Label", "Empty")
                 continue
-            assert c["type"] in ("CheckBox", "NumericStepper", "RadioButtonGroup", "Slider")
+            assert c["type"] in ("CheckBox", "NumericStepper", "RadioButtonGroup", "Slider",
+                                 "HotKey")
             assert c["value"] == DEFAULTS[c["varName"]]
 
 

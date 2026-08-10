@@ -153,13 +153,14 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              u"positioning", u"followCarousel",
              None,
              u"positionSub", u"posX", u"posY")
-# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally. TWENTY-TWO
-# slots (21 after the 23->24 column swap, +1 for the barPreview Image's trailing None sentinel at
-# 24->25; see COL1_KEYS above).
+# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally. TWENTY-
+# THREE slots (21 after the 23->24 column swap, +1 for the barPreview Image's trailing None
+# sentinel at 24->25, +1 for the variantHotkey HotKey control spliced in right after VARIANT_KEY
+# at 25->26; see COL1_KEYS above).
 COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
              None,
-             VARIANT_KEY, u"progressSize",
+             VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressSize",
              None,
              u"catTransitions", u"progressTransitions",
              u"progressTransEvents", u"progressTransManual",
