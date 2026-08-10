@@ -36,11 +36,12 @@ def test_the_text_less_spacer_rows_take_a_none_sentinel_slot():
     # slot would shift every later control's text by one. `None` specifically, because
     # `panel_text().get(None)` is falsy and the sync walk's existing `if not rendered: continue`
     # then skips it with no new branch (the template-side pairing is pinned in test_mod_settings).
-    # FIVE in column 1, TWO in column 2: column 1 has one heading "Battle Progress", one heading
-    # "Mode", one heading "Transitions", one (v19) heading the hold Slider and one (v18) heading
-    # "Bar Position"; column 2 has one heading "Layout" and one heading "Position".
-    assert S.COL1_KEYS.count(None) == 5
-    assert S.COL2_KEYS.count(None) == 2
+    # THREE in column 1, FOUR in column 2 (RESTRUCTURED -- see mod_settings's SETTINGS_VERSION
+    # 23->24 comment): column 1 has one heading "Garage Widget", one heading "Layout"/positioning
+    # and one heading "Position"; column 2 has one heading "Mode", one heading "Transitions", one
+    # heading the hold Slider and one heading "Layout"/catBarPosition.
+    assert S.COL1_KEYS.count(None) == 3
+    assert S.COL2_KEYS.count(None) == 4
     # A sentinel must never collide with a real row, in any language.
     for code in S._PANEL:
         assert None not in S.build(code)
@@ -135,9 +136,11 @@ def test_counted_assist_present_in_master_and_col1():
     assert u"countedAssist" in S._PANEL[u"en"]
     # The SECOND child under the In-Battle master, i.e. the LAST key of the Battle Calculator
     # category -- the next slot is the spacer's `None` sentinel, and the one after it starts the
-    # Battle Progress category. It is the last of the GROUP, not of the column; the column length
-    # is pinned by the template<->COL1_KEYS pairing test in test_mod_settings, not restated here.
-    alt, counted, next_cat = _col1_slice(u"battleAltKey", u"countedAssist", u"catBattleProgress")
+    # Garage Widget category (RESTRUCTURED -- see mod_settings's SETTINGS_VERSION 23->24 comment;
+    # "Battle Progress" now heads column 2 instead). It is the last of the GROUP, not of the
+    # column; the column length is pinned by the template<->COL1_KEYS pairing test in
+    # test_mod_settings, not restated here.
+    alt, counted, next_cat = _col1_slice(u"battleAltKey", u"countedAssist", u"catGarage")
     assert counted == alt + 1
     assert S.COL1_KEYS[counted + 1] is None      # the Empty spacer between the categories
     assert next_cat == counted + 2
@@ -153,26 +156,27 @@ def test_counted_assist_ukrainian_translated():
     assert uk[u"countedAssist"][u"label"] != en[u"countedAssist"][u"label"]
 
 
-# --- progressBar + progressVariant (the Progress Bar group, last in column 1) --
+# --- progressBar + progressVariant (the WHOLE Progress Bar group, now column 2) --
 
-def test_progress_bar_group_is_the_tail_of_col1():
-    # The progress-bar control briefly had a column 3 of its own; that column never rendered
-    # in-client, so it is back in column 1 -- as the "Battle Progress" CATEGORY: a bare header row,
-    # the Progress Bar master with its three VISIBILITY children, an Empty spacer (ahead of "Mode")
-    # and the standalone Mode and Scale radios. A SECOND Empty spacer then closes it and the
-    # "Transitions" CATEGORY takes the tail: its own bare header, the Transitions master, its two
-    # switches and (v17) the hold-duration slider. The TABLE KEY `progressBar` never changed
-    # through any of those moves, so no translation was ever orphaned.
+def test_progress_bar_group_is_the_whole_of_col2():
+    # RENAMED + MOVED for the SETTINGS_VERSION 23->24 column swap: the progress-bar control
+    # briefly had a column 3 of its own; that column never rendered in-client, so it went back
+    # into column 1 -- and now (this dispatch) the WHOLE Progress Bar feature moved to column 2,
+    # unchanged internally, to make room for the garage groups in column 1. It is the "Battle
+    # Progress" CATEGORY: a bare header row, the Progress Bar master with its three VISIBILITY
+    # children, an Empty spacer (ahead of "Mode") and the standalone Mode and Scale radios. A
+    # SECOND Empty spacer then closes it and the "Transitions" CATEGORY follows: its own bare
+    # header, the Transitions master, its two switches and the hold-duration slider. The TABLE KEY
+    # `progressBar` never changed through any of those moves, so no translation was ever orphaned.
     #
     # Pinned as a literal FIFTEEN-slot RUN (twelve real keys + the three `None` sentinels that sit
-    # inside it -- v19 added a fifth Empty spacer ahead of "progressHoldSeconds"), rather than
-    # filtering the sentinels out and asserting contiguity on what remains -- that would silently
-    # accept a spacer landing anywhere in the run instead of exactly where it belongs. It was the
-    # column TAIL until v18 appended a fourth category ("Bar Position"), so the run is now anchored
-    # to where "Battle Progress" starts; the four slots after it are pinned separately below.
+    # inside it), rather than filtering the sentinels out and asserting contiguity on what remains
+    # -- that would silently accept a spacer landing anywhere in the run instead of exactly where
+    # it belongs. It is now COL2_KEYS' own HEAD (the whole feature is column 2 in full), so the
+    # run starts at index 0; the six slots after it are pinned separately below.
     assert u"progressBar" in S._PANEL[u"en"]
-    start = S.COL1_KEYS.index(u"catBattleProgress")
-    tail = S.COL1_KEYS[start:start + 15]
+    start = S.COL2_KEYS.index(u"catBattleProgress")
+    tail = S.COL2_KEYS[start:start + 15]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
                     None, S.VARIANT_KEY, u"progressSize",
@@ -180,14 +184,13 @@ def test_progress_bar_group_is_the_tail_of_col1():
                     u"progressTransitions", u"progressTransEvents", u"progressTransManual",
                     None, u"progressHoldSeconds"), (
         u"the Battle Progress + Transitions categories (incl. all three spacers) are no longer one "
-        u"run in COL1_KEYS: %r" % (S.COL1_KEYS,))
-    # ...and the "Layout" category (key catBarPosition, displayed text "Layout" as of v21) IS the
-    # tail, spacer included -- now with the two v21 Orientation/Alignment radios spliced in BEFORE
-    # the steppers.
-    assert S.COL1_KEYS[start + 15:] == (
+        u"run in COL2_KEYS: %r" % (S.COL2_KEYS,))
+    # ...and the "Layout" category (key catBarPosition, displayed text "Layout") IS the tail,
+    # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers.
+    assert S.COL2_KEYS[start + 15:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
         u"barPosX", u"barPosY"), (
-        u"the Layout category is no longer the tail of COL1_KEYS: %r" % (S.COL1_KEYS,))
+        u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a
     # phantom column to mod_settings._sync_template_text's walk.
@@ -477,13 +480,14 @@ def test_the_three_category_headers_are_label_only_in_every_language():
 
 
 def test_position_sub_label_now_carries_a_tooltip_in_every_language():
-    # The column-2 sub-label heading the two steppers (mod_settings SETTINGS_VERSION 14) shipped
-    # tipless -- deliberately NOT bold (unlike "Layout" above it), the weight difference alone
-    # marking it as a sub-level. MAINTAINER OVERRIDE (v15) waives that: it now carries a real
+    # The garage "Layout" group's sub-label heading the two steppers (mod_settings
+    # SETTINGS_VERSION 14; moved to column 1 at 23->24 along with the rest of the garage groups)
+    # shipped tipless -- deliberately NOT bold (unlike "Layout" above it), the weight difference
+    # alone marking it as a sub-level. MAINTAINER OVERRIDE (v15) waives that: it now carries a real
     # header+body tooltip explaining NEW info (that both steppers apply immediately, without
     # dragging the widget) -- not a repeat of "positioning"'s drag instructions or posX/posY's
     # per-axis tooltips. Still not bold; only the tipless status changed.
-    assert u"positionSub" in S.COL2_KEYS
+    assert u"positionSub" in S.COL1_KEYS
     en = S._PANEL[u"en"]
     for code in S._PANEL:
         entry = S._PANEL[code][u"positionSub"]

@@ -962,8 +962,8 @@ def test_slider_descriptor_shape_and_tipless_omission():
     # deliberately NOT master-folded; PROGRESS_BAR_KEY would be the wrong feature entirely).
     # It does carry a real tooltip: the Transitions prose lives on the master and its label-only
     # children, but the Slider is a real value control, not a label-only switch.
-    col1 = mod_settings._template()["column1"]
-    slider = _at(col1, PROGRESS_HOLD_SECONDS_KEY)[0]
+    col2 = mod_settings._template()["column2"]
+    slider = _at(col2, PROGRESS_HOLD_SECONDS_KEY)[0]
     assert slider["type"] == "Slider"
     assert "masterVarName" not in slider, \
         "the hold slider was re-parented into a group -- it must hang off the header (see " \
@@ -979,7 +979,7 @@ def test_slider_descriptor_shape_and_tipless_omission():
     # ...while its two SIBLING switches DO stay grouped under the master -- the reparent moved one
     # control, not the group. Pinning both halves is what makes this a boundary rather than a
     # blanket "nothing in this category is grouped".
-    assert [_at(col1, k)[0]["masterVarName"] for k in
+    assert [_at(col2, k)[0]["masterVarName"] for k in
             (PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY)] == \
         [PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANSITIONS_KEY]
 
@@ -1157,84 +1157,67 @@ def test_template_settings_version_pins_the_current_layout():
     # _derive_layout and set_bar_position: with the gate + the drag block in place, a stored
     # position can only ever change while Alignment is ALREADY Free, so the rule has nothing left
     # to fire on.
-    assert SETTINGS_VERSION == 23
+    # Bumped 23 -> 24 for a pure COLUMN SWAP: column 1 now holds the In-Battle Calculator group
+    # plus EVERY garage-related group ("Garage Widget" + its "Layout"/positioning group), and
+    # column 2 now holds the WHOLE Progress Bar feature ("Battle Progress", the Mode/Scale radios,
+    # "Transitions", the hold Slider, and the Progress Bar's own "Layout"/catBarPosition group) in
+    # its previous internal order. No varName/control/option changed shape, but register()'s
+    # saved-truthy path never calls setModTemplate on an existing install, so the new column
+    # assignment (and the COL1_KEYS/COL2_KEYS positional pairing) reaches nobody without this
+    # forward bump. The migration branch carries every saved value across unchanged.
+    assert SETTINGS_VERSION == 24
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
-def test_template_column1_is_four_categories_each_a_label_then_its_group():
-    # RENAMED from "...is_three_categories..." (v18 already made this a FOUR-category column with
-    # "Bar Position"; the old name was stale well before v21 -- see the SETTINGS_VERSION 20->21
-    # comment). Kept an accurate name this time: a stale test NAME is how the next reader
-    # misjudges what the assertions below actually cover.
+def test_template_column1_is_the_calculator_and_garage_groups():
+    # RENAMED + REWRITTEN for the SETTINGS_VERSION 23->24 column swap: column 1 now holds the
+    # In-Battle Calculator group (unchanged) plus EVERY garage-related group (moved here from
+    # the old column 2). What used to be column 1's four Progress Bar categories now lives in
+    # column 2 -- see test_template_column2_is_four_categories_each_a_label_then_its_group.
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # TWENTY-SIX controls (grew from 24 at v21) = FOUR CATEGORIES separated by Empty spacers, each
-    # a bare Label header followed by that feature's controls: "Battle Calculator" + [In-Battle
-    # master, Alt child, counted-assist child], spacer, then "Battle Progress" + [Progress Bar
-    # master + its three VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two
-    # standalone radios], then a THIRD Empty spacer and "Transitions" -- its OWN header since the
-    # hold-duration Slider arrived -- + [Transitions master, Events child, Alt Press child] + a
-    # FOURTH Empty spacer (ahead of the Slider, v19) + the UNGROUPED hold Slider, which hangs off
-    # that header rather than the master (its masterVarName absence is pinned in
-    # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
-    # "Layout" (header text as of v21; i18n key stays catBarPosition) + [the two NEW standalone
-    # Orientation/Alignment radios, ABOVE the two standalone position steppers]. The header names
-    # the feature, which is why every master reads just "Enabled" (was "Show").
+    # FOURTEEN controls: "Battle Calculator" + [In-Battle master, Alt child, counted-assist
+    # child], an Empty spacer, then "Garage Widget" + [the standalone garage master -- no
+    # children of its own], a SECOND Empty spacer, then the garage's "Layout" group -- its own
+    # bold header, Follow Carousel, a THIRD Empty spacer, the non-bold "Position" sub-label, then
+    # the X/Y numeric steppers.
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
-        "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
+        "Label", "CheckBox",
         "Empty",
-        "RadioButtonGroup", "RadioButtonGroup",
+        "Label", "CheckBox",
         "Empty",
-        "Label", "CheckBox", "CheckBox", "CheckBox",
-        "Empty",
-        "Slider",
-        "Empty",
-        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper"]
+        "Label", "NumericStepper", "NumericStepper"]
     # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
     assert [c["varName"] for c in col1 if "varName" in c] == [
         BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
-        PROGRESS_BAR_KEY,
-        PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
-        PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY,
-        PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
-        PROGRESS_HOLD_SECONDS_KEY,
-        PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
-        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
-    # ...and the four category headers carry no varName at all -- and they are the ONLY four, so
-    # no group can quietly grow a header row of its own.
+        GARAGE_KEY,
+        FOLLOW_CAROUSEL_KEY,
+        POS_X_KEY, POS_Y_KEY]
+    # ...and the four Label rows carry no varName at all -- and they are the ONLY four, so no
+    # group can quietly grow a header row of its own.
     assert ("varName" not in col1[0] and "varName" not in col1[5]
-            and "varName" not in col1[14] and "varName" not in col1[21])
-    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 5, 14, 21]
-    # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
-    # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
+            and "varName" not in col1[8] and "varName" not in col1[11])
+    assert [i for i, c in enumerate(col1) if c["type"] == "Label"] == [0, 5, 8, 11]
+    # Three of the four headers are BOLD: <b>...</b> wrapped text and an explicit useHTML key.
+    # "Position" (index 11) is deliberately NOT bold -- the weight difference marks it as a
+    # sub-level under "Layout" rather than a fourth header.
     assert col1[0]["text"] == u"<b>Battle Calculator</b>" and col1[0]["useHTML"] is True
-    assert col1[5]["text"] == u"<b>Battle Progress</b>" and col1[5]["useHTML"] is True
-    assert col1[14]["text"] == u"<b>Transitions</b>" and col1[14]["useHTML"] is True
-    # THE v21 RENAME: "Bar Position" -> "Layout" (text only; the i18n key stays catBarPosition).
-    assert col1[21]["text"] == u"<b>Layout</b>" and col1[21]["useHTML"] is True
-    # All FIVE Empty spacers are a bare type and NOTHING else: no varName, and above all no
+    assert col1[5]["text"] == u"<b>Garage Widget</b>" and col1[5]["useHTML"] is True
+    assert col1[8]["text"] == u"<b>Layout</b>" and col1[8]["useHTML"] is True
+    assert col1[11]["text"] == u"Position" and "useHTML" not in col1[11]
+    # All THREE Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
-    # key. The first heads "Battle Progress"; the second heads "Mode"; the third heads
-    # "Transitions"; the fourth heads the hold Slider (v19); the fifth heads "Layout".
+    # key. The first heads "Garage Widget"; the second heads "Layout"; the third heads "Position".
     assert col1[4] == {"type": "Empty"}
+    assert col1[7] == {"type": "Empty"}
     assert col1[10] == {"type": "Empty"}
-    assert col1[13] == {"type": "Empty"}
-    assert col1[18] == {"type": "Empty"}
-    assert col1[20] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 10, 13, 18, 20]
-    # The two v21 radios are STANDALONE -- no masterVarName, no conditions -- so they stay readable
-    # and editable while the Progress Bar master is off, exactly like the column-2 pair. The two
-    # position steppers are NOT standalone any more (this dispatch): see
-    # test_template_position_steppers_are_gated_on_alignment_free below.
-    for control in col1[22:24]:
-        assert "masterVarName" not in control and "conditions" not in control
-    # The two new radios sit directly between the "Layout" header and the two steppers.
-    assert col1[22]["varName"] == PROGRESS_ORIENTATION_KEY
-    assert col1[23]["varName"] == PROGRESS_ALIGNMENT_KEY
-    assert col1[24]["varName"] == mod_settings.BAR_POS_X_KEY
-    assert col1[25]["varName"] == mod_settings.BAR_POS_Y_KEY
+    assert [i for i, c in enumerate(col1) if c["type"] == "Empty"] == [4, 7, 10]
+    # The garage master carries no group at all -- it has no children of its own.
+    assert "masterVarName" not in _at(col1, GARAGE_KEY)[0]
+    # The steppers and Follow Carousel stay STANDALONE -- see
+    # test_template_children_bind_to_their_own_master_only for the full gating assertions.
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -1259,16 +1242,16 @@ def test_template_variant_radio_shape(monkeypatch):
     # The descriptor must match what Aslain's templates.createRadioButtonGroup emits (we build it
     # by hand to keep _template() import-free): a 0-based INT index in `value` and an `options`
     # list of {"label": ...} dicts in index order, localized via settings_i18n.
-    col1 = mod_settings._template()["column1"]
-    radio, index = _at(col1, PROGRESS_VARIANT_KEY)
+    col2 = mod_settings._template()["column2"]
+    radio, index = _at(col2, PROGRESS_VARIANT_KEY)
     # POSITION, named rather than an index literal buried in a longer assertion: an Empty spacer
     # (new in this bump) now sits between the last visibility child and the Mode radio, and the
     # Scale radio still directly follows Mode, so the pair's order is what _sync_template_text's
     # positional zip walks.
-    assert col1[_at(col1, PROGRESS_SHOW_ALWAYS_KEY)[1] + 1] == {"type": "Empty"}, \
+    assert col2[_at(col2, PROGRESS_SHOW_ALWAYS_KEY)[1] + 1] == {"type": "Empty"}, \
         "a control was inserted between the last visibility child and the Mode radio's spacer"
-    assert index == _at(col1, PROGRESS_SHOW_ALWAYS_KEY)[1] + 2
-    assert index + 1 == _at(col1, PROGRESS_SIZE_KEY)[1]
+    assert index == _at(col2, PROGRESS_SHOW_ALWAYS_KEY)[1] + 2
+    assert index + 1 == _at(col2, PROGRESS_SIZE_KEY)[1]
     assert radio["type"] == "RadioButtonGroup"
     assert radio["varName"] == PROGRESS_VARIANT_KEY
     assert radio["value"] == DEFAULTS[PROGRESS_VARIANT_KEY] == 0
@@ -1291,7 +1274,7 @@ def test_template_variant_radio_shape(monkeypatch):
     assert radio["tooltip"] == u"{HEADER}%s{/HEADER}{BODY}%s{/BODY}" % (
         settings_i18n._PANEL[u"en"][settings_i18n.VARIANT_KEY][u"ttHeader"],
         settings_i18n._PANEL[u"en"][settings_i18n.VARIANT_KEY][u"ttBody"])
-    master = _at(col1, PROGRESS_BAR_KEY)[0]
+    master = _at(col2, PROGRESS_BAR_KEY)[0]
     assert u"Moving Average" in master["tooltip"]
     assert u"Damage Efficiency" in master["tooltip"]
     # LOCALIZED, not hardcoded here. The old `== list(settings_i18n.variant_options(u"en"))` line
@@ -1301,7 +1284,7 @@ def test_template_variant_radio_shape(monkeypatch):
     # beside. This is the claim it was reaching for and the one that mutation-probes: swap the
     # source tuple and the descriptor must follow.
     monkeypatch.setitem(settings_i18n._VARIANT_OPTIONS, u"en", (u"AAA", u"BBB"))
-    fresh = _at(mod_settings._template()["column1"], PROGRESS_VARIANT_KEY)[0]
+    fresh = _at(mod_settings._template()["column2"], PROGRESS_VARIANT_KEY)[0]
     assert [o["label"] for o in fresh["options"]] == [u"AAA", u"BBB"], \
         "the radio's options are not read from settings_i18n"
 
@@ -1312,33 +1295,30 @@ def test_template_size_radio_shape(monkeypatch):
     # (never a bool), `inline` emitted as a KEY and never as createRadioButtonGroup's kwarg
     # (TypeError on MSA < 1.6.1), and LOCALIZED options read off settings_i18n rather than
     # hardcoded in _radio.
-    col1 = mod_settings._template()["column1"]
-    radio, index = _at(col1, PROGRESS_SIZE_KEY)
+    col2 = mod_settings._template()["column2"]
+    radio, index = _at(col2, PROGRESS_SIZE_KEY)
     # POSITION, anchored to NAMED neighbours rather than to a length: an Empty spacer and the
     # "Transitions" category header now sit between the Scale radio and the Transitions master, and
     # that master plus its two switches plus the ungrouped hold Slider are still a contiguous
     # FOUR-row run. So an insertion anywhere else (which shifts every later control's text --
-    # COL1_KEYS' zip is positional) still fails here, while a legitimate append does not.
-    # NOT `col1[-4:]` any more: v18 appended a fourth category ("Bar Position") after the group, so
-    # that literal would now read the two steppers. Anchored to the master's own index instead --
-    # which is what the tail slice was always reaching for.
-    assert col1[index + 1] == {"type": "Empty"}, \
+    # COL2_KEYS' zip is positional) still fails here, while a legitimate append does not.
+    assert col2[index + 1] == {"type": "Empty"}, \
         "a control was inserted between the Scale radio and its spacer"
-    assert col1[index + 2]["type"] == "Label", \
+    assert col2[index + 2]["type"] == "Label", \
         "the Transitions category header moved or disappeared"
-    master_at = _at(col1, PROGRESS_TRANSITIONS_KEY)[1]
+    master_at = _at(col2, PROGRESS_TRANSITIONS_KEY)[1]
     assert index + 3 == master_at, \
         "the spacer + header ahead of the Transitions master moved or disappeared"
     # The group's THREE varName-bearing controls (master + two switches) are still a contiguous
     # run; the hold Slider is one further slot out, with a FIFTH Empty spacer (v19) between it and
     # "Alt Press" -- so the run is 5 rows wide, not 4, once that spacer joined.
-    assert [c.get("varName") for c in col1[master_at:master_at + 3]] == [
+    assert [c.get("varName") for c in col2[master_at:master_at + 3]] == [
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY], \
-        "the Transitions group is no longer contiguous (COL1_KEYS' zip is positional)"
-    assert col1[master_at + 3] == {"type": "Empty"}, \
+        "the Transitions group is no longer contiguous (COL2_KEYS' zip is positional)"
+    assert col2[master_at + 3] == {"type": "Empty"}, \
         "the spacer ahead of the hold Slider moved or disappeared"
-    assert col1[master_at + 4].get("varName") == PROGRESS_HOLD_SECONDS_KEY, \
-        "the hold Slider moved (COL1_KEYS' zip is positional)"
+    assert col2[master_at + 4].get("varName") == PROGRESS_HOLD_SECONDS_KEY, \
+        "the hold Slider moved (COL2_KEYS' zip is positional)"
     assert radio["type"] == "RadioButtonGroup"
     assert radio["value"] == DEFAULTS[PROGRESS_SIZE_KEY] == 0
     assert not isinstance(radio["value"], bool)
@@ -1352,7 +1332,7 @@ def test_template_size_radio_shape(monkeypatch):
         settings_i18n._PANEL[u"en"]["progressSize"][u"ttHeader"],
         settings_i18n._PANEL[u"en"]["progressSize"][u"ttBody"])
     monkeypatch.setitem(settings_i18n._SIZE_OPTIONS, u"en", (u"AAA", u"BBB"))
-    fresh = _at(mod_settings._template()["column1"], PROGRESS_SIZE_KEY)[0]
+    fresh = _at(mod_settings._template()["column2"], PROGRESS_SIZE_KEY)[0]
     assert [o["label"] for o in fresh["options"]] == [u"AAA", u"BBB"], \
         "the size radio's options are not read from settings_i18n"
 
@@ -1386,11 +1366,11 @@ def test_checkbox_tolerates_a_label_only_row_and_omits_the_tooltip_key():
     assert "tooltip" not in mod_settings._stepper(POS_X_KEY, {"text": u"X"})
     assert mod_settings._stepper(POS_Y_KEY, {"text": u"Y", "tooltip": u"T"})["tooltip"] == u"T"
     # End to end: the two real children in the built template are tipless, the master is not.
-    col1 = mod_settings._template()["column1"]
+    col2 = mod_settings._template()["column2"]
     for child_key in (PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY):
-        assert "tooltip" not in _at(col1, child_key)[0], \
+        assert "tooltip" not in _at(col2, child_key)[0], \
             "%s grew a tooltip -- it is a label-only row" % child_key
-    assert _at(col1, PROGRESS_TRANSITIONS_KEY)[0]["tooltip"], \
+    assert _at(col2, PROGRESS_TRANSITIONS_KEY)[0]["tooltip"], \
         "the Transitions master lost the tooltip that is the group's only prose"
 
 
@@ -1417,36 +1397,73 @@ def test_label_emits_usehtml_by_key_and_never_touches_the_text():
     assert tipless_bold["text"] == u"<b>Position</b>" and tipless_bold["useHTML"] is True
 
 
-def test_template_column2_is_the_garage_category_then_the_layout_group():
-    # Column 2 = the "Garage Widget" category header, the garage master ("Enabled"), an Empty
-    # spacer, then the "Layout" group: its BOLD Label header (no varName), Follow Carousel, a
-    # SECOND Empty spacer (new in this bump), then the non-bold "Position" sub-label, then the X/Y
-    # numeric steppers.
-    col2 = mod_settings._template()["column2"]
+def test_template_column2_is_four_categories_each_a_label_then_its_group():
+    # RENAMED + MOVED for the SETTINGS_VERSION 23->24 column swap: this is the WHOLE Progress Bar
+    # feature -- what used to be column 1's tail (see the SETTINGS_VERSION 20->21 comment for its
+    # own history) now lives in column 2, unchanged internally, alongside column 1's new
+    # garage-related groups (test_template_column1_is_the_calculator_and_garage_groups).
+    tmpl = mod_settings._template()
+    col2 = tmpl["column2"]
+    # TWENTY-SIX controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
+    # followed by that feature's controls: "Battle Progress" + [Progress Bar master + its three
+    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the two standalone radios],
+    # then a THIRD Empty spacer and "Transitions" -- its OWN header since the hold-duration Slider
+    # arrived -- + [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer
+    # (ahead of the Slider) + the UNGROUPED hold Slider, which hangs off that header rather than
+    # the master (its masterVarName absence is pinned in
+    # test_slider_descriptor_shape_and_tipless_omission), and finally a FIFTH Empty spacer and
+    # "Layout" (header text; i18n key stays catBarPosition) + [the standalone Orientation/Alignment
+    # radios, ABOVE the two standalone position steppers]. The header names the feature, which is
+    # why every master reads just "Enabled" (was "Show").
     assert [c["type"] for c in col2] == [
-        "Label", "CheckBox", "Empty", "Label", "CheckBox", "Empty", "Label",
-        "NumericStepper", "NumericStepper"]
-    # The varName-bearing controls, in order (a Label header / Empty spacer has no stored value).
+        "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
+        "Empty",
+        "RadioButtonGroup", "RadioButtonGroup",
+        "Empty",
+        "Label", "CheckBox", "CheckBox", "CheckBox",
+        "Empty",
+        "Slider",
+        "Empty",
+        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper"]
+    # The varName-bearing controls, in order (a Label header / an Empty spacer has no stored value).
     assert [c["varName"] for c in col2 if "varName" in c] == [
-        GARAGE_KEY, FOLLOW_CAROUSEL_KEY, POS_X_KEY, POS_Y_KEY]
-    # THREE Label rows carry no varName. The CATEGORY header and the "Layout" header are both BOLD
-    # (<b> wrap + explicit useHTML) and the category header stays TIPLESS (a bare feature name has
-    # nothing to explain) while "Layout" keeps its tooltip; "Position" is not bold (the weight
-    # difference alone marks it as a sub-level under "Layout") but DOES now carry its own tooltip
-    # (a maintainer override of the tipless rule, v15). _label() emits the tooltip key only when
-    # there IS one and the useHTML key only when bold -- see the tipless counter in
-    # test_sync_template_text_walks_built_template_in_lockstep.
-    assert "varName" not in col2[0] and "tooltip" not in col2[0]
-    assert col2[0]["text"] == u"<b>Garage Widget</b>"
-    assert col2[0]["useHTML"] is True
-    assert col2[2] == {"type": "Empty"}
-    assert "varName" not in col2[3] and col2[3]["tooltip"]
-    assert col2[3]["text"] == u"<b>Layout</b>"
-    assert col2[3]["useHTML"] is True
+        PROGRESS_BAR_KEY,
+        PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
+        PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY,
+        PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
+        PROGRESS_HOLD_SECONDS_KEY,
+        PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
+        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
+    # ...and the two category headers carry no varName at all -- and they are the ONLY two here.
+    assert "varName" not in col2[0] and "varName" not in col2[9] and "varName" not in col2[16]
+    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 9, 16]
+    # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
+    # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
+    assert col2[0]["text"] == u"<b>Battle Progress</b>" and col2[0]["useHTML"] is True
+    assert col2[9]["text"] == u"<b>Transitions</b>" and col2[9]["useHTML"] is True
+    assert col2[16]["text"] == u"<b>Layout</b>" and col2[16]["useHTML"] is True
+    # All FOUR Empty spacers are a bare type and NOTHING else: no varName, and above all no
+    # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
+    # key. The first heads "Mode"; the second heads "Transitions"; the third heads the hold Slider;
+    # the fourth heads "Layout".
     assert col2[5] == {"type": "Empty"}
-    assert "varName" not in col2[6] and col2[6]["tooltip"]
-    assert col2[6]["text"] == u"Position"
-    assert "useHTML" not in col2[6]
+    assert col2[8] == {"type": "Empty"}
+    assert col2[13] == {"type": "Empty"}
+    assert col2[15] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 8, 13, 15]
+    # The two radios are STANDALONE -- no masterVarName, no conditions -- so they stay readable
+    # and editable while the Progress Bar master is off, exactly like column 1's steppers used to
+    # be before they were gated. The two position steppers ARE gated: see
+    # test_template_position_steppers_are_gated_on_alignment_free below.
+    for control in col2[17:19]:
+        assert "masterVarName" not in control and "conditions" not in control
+    # The two radios sit directly between the "Layout" header and the two steppers.
+    assert col2[17]["varName"] == PROGRESS_ORIENTATION_KEY
+    assert col2[18]["varName"] == PROGRESS_ALIGNMENT_KEY
+    assert col2[19]["varName"] == mod_settings.BAR_POS_X_KEY
+    assert col2[20]["varName"] == mod_settings.BAR_POS_Y_KEY
+    # ...and still only TWO columns: a third column does not render in the panel at all.
+    assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
 
 def test_template_steppers_are_bounded_manual_entry():
@@ -1458,9 +1475,9 @@ def test_template_steppers_are_bounded_manual_entry():
     # back through onSettingsChanged, so a `minimum: 0` would snap that position to 0 as soon as the
     # user merely OPENED the panel. This is what the 19 -> 20 SETTINGS_VERSION bump exists to deliver.
     tmpl = mod_settings._template()
-    steppers = [c for c in tmpl["column2"] if c["type"] == "NumericStepper"]
+    steppers = [c for c in tmpl["column1"] if c["type"] == "NumericStepper"]
     assert [c["varName"] for c in steppers] == [POS_X_KEY, POS_Y_KEY]
-    steppers += [c for c in tmpl["column1"] if c["type"] == "NumericStepper"]
+    steppers += [c for c in tmpl["column2"] if c["type"] == "NumericStepper"]
     for s in steppers:
         assert s["minimum"] == -POS_MAX
         assert s["maximum"] == POS_MAX
@@ -1475,9 +1492,9 @@ def test_template_position_steppers_are_gated_on_alignment_free():
     # (masterVarName / masterValue / masterIndent / condition), keyed on the REAL Free value
     # rather than a hardcoded 1, so a future renumbering of the radio can't silently desync the
     # gate from the option it means to test.
-    col1 = mod_settings._template()["column1"]
-    x_stepper = _at(col1, mod_settings.BAR_POS_X_KEY)[0]
-    y_stepper = _at(col1, mod_settings.BAR_POS_Y_KEY)[0]
+    col2 = mod_settings._template()["column2"]
+    x_stepper = _at(col2, mod_settings.BAR_POS_X_KEY)[0]
+    y_stepper = _at(col2, mod_settings.BAR_POS_Y_KEY)[0]
     for stepper in (x_stepper, y_stepper):
         assert stepper["masterVarName"] == PROGRESS_ALIGNMENT_KEY
         assert stepper["masterValue"] == PROGRESS_ALIGN_FREE
@@ -1492,14 +1509,16 @@ def test_template_position_steppers_are_gated_on_alignment_free():
 def test_template_children_bind_to_their_own_master_only():
     # Each group's children carry masterVarName == THEIR master's varName so MSA groups + greys
     # them out under it. Proven via the manual-binding fallback branch (no gui.aslainMenu under
-    # pytest -- see _grouped_column1).
+    # pytest -- see _grouped_column1). The In-Battle Calculator group is column 1; the Progress
+    # Bar / Transitions groups are column 2 (SETTINGS_VERSION 23->24 moved them).
     col1 = mod_settings._template()["column1"]
+    col2 = mod_settings._template()["column2"]
     master = _at(col1, BATTLE_KEY)[0]
     alt_child = _at(col1, BATTLE_ALT_KEY)[0]
     counted_child = _at(col1, COUNTED_ASSIST_KEY)[0]
-    progress = _at(col1, PROGRESS_BAR_KEY)[0]
-    variant = _at(col1, PROGRESS_VARIANT_KEY)[0]
-    size = _at(col1, PROGRESS_SIZE_KEY)[0]
+    progress = _at(col2, PROGRESS_BAR_KEY)[0]
+    variant = _at(col2, PROGRESS_VARIANT_KEY)[0]
+    size = _at(col2, PROGRESS_SIZE_KEY)[0]
     assert alt_child["masterVarName"] == BATTLE_KEY
     assert counted_child["masterVarName"] == BATTLE_KEY
     # Neither master is bound to anything: the Progress Bar is an independent feature and must
@@ -1512,14 +1531,14 @@ def test_template_children_bind_to_their_own_master_only():
     assert "masterVarName" not in progress
     # ...and BOTH radios are deliberately STANDALONE since v13: Mode and Scale describe the bar
     # itself, not when it shows, so they carry no master and no condition at all -- the same call
-    # already made for the column-2 steppers. (A child of the FIRST group would have inherited
+    # already made for column 1's steppers. (A child of the FIRST group would have inherited
     # BATTLE_KEY and greyed out with the unrelated In-Battle Widget; that hazard is why this is
     # asserted rather than assumed.)
     for radio in (variant, size):
         assert "masterVarName" not in radio and "conditions" not in radio, \
             "%s gained a gate -- both radios are deliberately standalone" % radio["varName"]
     # The THREE VISIBILITY children. "Always" is a plain child of the Progress Bar master...
-    always = _at(col1, PROGRESS_SHOW_ALWAYS_KEY)[0]
+    always = _at(col2, PROGRESS_SHOW_ALWAYS_KEY)[0]
     assert always["masterVarName"] == PROGRESS_BAR_KEY
     assert "conditions" not in always
     # ...while "Events" and "Alt Press" are dead in TWO ways -- with the bar off and with "Always"
@@ -1527,7 +1546,7 @@ def test_template_children_bind_to_their_own_master_only():
     # masterVarName, so it REPLACES the group parenting: the master has to ride along as one of the
     # conditions, and the stale key must be gone or the panel reads a parent the gate ignores.
     for key in (PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY):
-        child = _at(col1, key)[0]
+        child = _at(col2, key)[0]
         assert "masterVarName" not in child, \
             "%s kept a masterVarName the `conditions` form supersedes" % key
         assert child["conditionsLogic"] == "AND"
@@ -1543,22 +1562,25 @@ def test_template_children_bind_to_their_own_master_only():
     # breaks silently if someone re-parents the splice -- passing these two as children of the
     # PROGRESS BAR group would grey them out with the bar, and the panel would look plausible while
     # the binding was wrong.
-    trans = _at(col1, PROGRESS_TRANSITIONS_KEY)[0]
+    trans = _at(col2, PROGRESS_TRANSITIONS_KEY)[0]
     assert "masterVarName" not in trans, \
         "the Transitions master was re-parented -- it is a group MASTER, not a child"
     for child_key in (PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY):
-        child = _at(col1, child_key)[0]
+        child = _at(col2, child_key)[0]
         assert child["masterVarName"] == PROGRESS_TRANSITIONS_KEY, \
             "%s is gated by %r, not by the Transitions master" % (
                 child_key, child.get("masterVarName"))
         assert child["masterVarName"] != PROGRESS_BAR_KEY
         assert child["masterVarName"] != BATTLE_KEY
-    # The position steppers and Follow Carousel stay STANDALONE: they must keep working, and stay
-    # ungreyed, while the garage widget is off (that is a deliberate decision, not an oversight).
-    # `conditions` is checked too -- it is the OTHER way a control can acquire a gate now.
-    for control in mod_settings._template()["column2"]:
+    # The position steppers and Follow Carousel (column 1) and the standalone Orientation/
+    # Alignment radios (column 2) stay STANDALONE: the garage steppers/Follow Carousel must keep
+    # working, and stay ungreyed, while the garage widget is off (a deliberate decision, not an
+    # oversight). `conditions` is checked too -- it is the OTHER way a control can acquire a gate.
+    for control in (_at(col1, POS_X_KEY)[0], _at(col1, POS_Y_KEY)[0],
+                    _at(col1, FOLLOW_CAROUSEL_KEY)[0]):
         assert "masterVarName" not in control and "conditions" not in control, \
-            "%s gained a master -- column 2 is deliberately flat" % control.get("varName")
+            "%s gained a master -- these garage controls are deliberately standalone" % (
+                control.get("varName"),)
 
 
 def test_template_control_defaults_match_defaults_dict():
