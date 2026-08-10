@@ -143,11 +143,19 @@ def set_hotkey(keys, on_press):
     """Arm a battle hotkey that fires `on_press()` once on the not-all-down -> all-down
     edge of every key in `keys` (a chord). Safe to call repeatedly to REBIND; it only
     updates the slots, never re-installs the handler patch (a second install would steal
-    the Alt/Ctrl callback -- see install_alt_key_listener). Empty `keys` disables it."""
+    the Alt/Ctrl callback -- see install_alt_key_listener). Empty `keys` disables it.
+
+    Only re-primes `_hotkey_down` on a GENUINE (re)bind -- keys or callback changed. Both
+    apply_settings() and install_all_listeners() re-arm with the SAME keys+callback on every
+    bar open / settings apply, including while the chord is still physically held from the
+    press that triggered this call; resetting the edge unconditionally would make the very
+    next unrelated key event read down=True != _hotkey_down(False) and spuriously re-fire."""
     global _on_hotkey, _hotkey_keys, _hotkey_down
-    _hotkey_keys = list(keys or [])
+    keys = list(keys or [])
+    if keys != _hotkey_keys or on_press is not _on_hotkey:
+        _hotkey_down = False   # genuine (re)bind: re-prime the edge
+    _hotkey_keys = keys
     _on_hotkey = on_press
-    _hotkey_down = False
 
 
 def _update_hotkey_state():

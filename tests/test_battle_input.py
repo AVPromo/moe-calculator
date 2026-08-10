@@ -396,3 +396,34 @@ def test_empty_hotkey_never_fires(wired):
     _DOWN.add(KEY_I)
     _key(inst)
     assert fires == []
+
+
+def test_rearm_same_keys_while_held_does_not_refire(wired):
+    # apply_settings()/install_all_listeners() re-arm with the SAME keys+callback on every bar
+    # open / settings apply -- including while the chord is still physically held. Resetting the
+    # edge on that no-op re-arm would make the next unrelated key event spuriously re-fire.
+    inst, _c, _d = wired
+    fires = []
+    cb = lambda: fires.append(1)
+    battle_input.set_hotkey([KEY_I], cb)
+    _DOWN.add(KEY_I)
+    _key(inst)                       # press -> fire once
+    assert fires == [1]
+    battle_input.set_hotkey([KEY_I], cb)   # re-arm (apply_settings), key still held
+    _key(inst)                       # must NOT re-fire
+    assert fires == [1]
+
+
+def test_rebind_changed_keys_reprimes_edge(wired):
+    # A GENUINE rebind (the keys actually changed) must re-prime the edge so the new chord, if
+    # already down, is recognised as a fresh press rather than treated as still-held.
+    inst, _c, _d = wired
+    fires = []
+    battle_input.set_hotkey([KEY_I], lambda: fires.append(1))
+    _DOWN.add(KEY_I)
+    _key(inst)
+    assert fires == [1]
+    _DOWN.add(KEY_LCONTROL)
+    battle_input.set_hotkey([KEY_LCONTROL, KEY_I], lambda: fires.append(2))  # rebind
+    _key(inst)                       # both held, fresh bind -> fires
+    assert fires == [1, 2]
