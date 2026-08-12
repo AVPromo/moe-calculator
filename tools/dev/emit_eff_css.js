@@ -300,7 +300,7 @@ const LARGE = `
 .mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
 .mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.9rem); }
-.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(0.4rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk { transform: translate(1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk1 { transform: translate(1.000rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk2 { transform: translate(0.000rem, -50%) translateY(0.25rem); }

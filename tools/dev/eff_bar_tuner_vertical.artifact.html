@@ -170,6 +170,14 @@
   .mev-bd::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;
     z-index:-1;background:var(--uggrad)}
   .mev-bd-1{top:var(--bd1top)}.mev-bd-2{top:var(--bd2top)}.mev-bd-3{top:var(--bd3top)}.mev-bd-4{top:var(--bd4top)}.mev-bd-5{top:var(--bd5top)}
+  /* PER-ROW WIDTH OVERRIDES (shipped MoEEfficiencyVertical.css, 2026-08-12 backdrop-widen pass):
+     current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, BOTH right-edge-pinned (new_left =
+     old_left - (new_width - old_width), so the minimap-facing edge never moves). Literal, not
+     slider-driven -- these are a one-off approved widen, not a tunable knob. */
+  .mev-bd-5{left:var(--bd5left);width:var(--bd5w)}
+  .mev-bd-1{left:var(--bd1left);width:var(--bd1w)}
+  .mev-bd-2::before,.mev-bd-3::before,.mev-bd-4::before{-webkit-mask:var(--ckmaskwide);mask:var(--ckmaskwide)}
+  .mev-bd-2::after,.mev-bd-3::after,.mev-bd-4::after{background:var(--uggradwide)}
   /* Track: thickness (cross-axis) is width, LENGTH (along axis) is height:100% of the root. */
   .mev-track{position:relative;z-index:1;height:100%;width:var(--trackh);background:var(--trackbg)}
   .mev-track::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;
@@ -217,9 +225,9 @@
   /* PER-MARK block<->bar gap, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 already exist
      as three concurrent rows, so no new plumbing -- each collapses the two translateX() calls
      above into ONE literal, (0,3,0) cleanly beating the (0,2,0) base rule. */
-  .mev-cap.lf.r1{transform:translateY(50%) translateX(-2rem)}
-  .mev-cap.lf.r2{transform:translateY(50%) translateX(-4rem)}
-  .mev-cap.lf.r3{transform:translateY(50%) translateX(-6rem)}
+  .mev-cap.lf.r1{transform:translateY(50%) translateX(var(--capxlf1))}
+  .mev-cap.lf.r2{transform:translateY(50%) translateX(var(--capxlf2))}
+  .mev-cap.lf.r3{transform:translateY(50%) translateX(var(--capxlf3))}
   .mev-cap.r1{bottom:25%}.mev-cap.r2{bottom:50%}.mev-cap.r3{bottom:75%}
   /* ---- r4: the 100% tick's caption, a static cap ABOVE the track's top end -- reads as the
      axis's top end cap. padding-bottom, not margin-bottom: Coherent drops margin on the
@@ -257,12 +265,12 @@
   /* PER-ICON INK-GAP PARITY -- see eff_bar_tuner.html's identical note (.mp-ico.bm/.mp-ico.mk):
      SAME literals, same boxes, same assets -- the axis rotation changes nothing about the ink.
      Compound selectors beat the shared rule above on specificity. Literal, not slider-driven. */
-  .mev-cap .mev-ico.bm{margin-left:1.253rem}
-  .mev-cap .mev-ico.mk{margin-left:-1rem}
+  .mev-cap .mev-ico.bm{margin-left:var(--icoxbm)}
+  .mev-cap .mev-ico.mk{margin-left:var(--icoxmk)}
   /* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: mark_1 coincides with -1rem above,
      mark_2/mark_3 get their own -- (0,3,0), tying .mk, beaten by SOURCE ORDER. */
-  .mev-cap .mev-ico.mk2{margin-left:0.5rem}
-  .mev-cap .mev-ico.mk3{margin-left:3rem}
+  .mev-cap .mev-ico.mk2{margin-left:var(--icoxmk2)}
+  .mev-cap .mev-ico.mk3{margin-left:var(--icoxmk3)}
   .mev-cap.lf .mev-ico{transform:translateY(var(--icoyreq))}
   .mev-cap.tp .mev-ico{transform:translateY(var(--icoybm))}
   .mev-cap.bt .mev-ico{transform:translateY(var(--icoycur))}
@@ -580,17 +588,21 @@
       // separate knobs, never merged.
       {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1},
       {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:-0.25},
-      {id:"icoyCur",label:"Current caption's icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.5}]],
+      {id:"icoyCur",label:"Current caption's icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1.5}]],
     ["Backdrop",[
       {id:"ckCell",label:"Checker cell (game px @3840)",min:1,max:16,step:1,val:2},
       {id:"ckAlpha",label:"Checker opacity",min:0,max:0.6,step:0.005,val:0.1},
-      {id:"ckRX",label:"Checker mask radius X (%)",min:10,max:200,step:1,val:112},
+      {id:"ckRX",label:"Checker mask radius X (%)",min:10,max:200,step:1,val:56},
       {id:"ckRY",label:"Checker mask radius Y (%)",min:10,max:300,step:1,val:110},
       {id:"ckIn",label:"Checker mask solid to (%)",min:0,max:100,step:1,val:0},
       {id:"ckOut",label:"Checker mask fade out at (%)",min:0,max:100,step:1,val:67},
       {id:"ckAX",label:"Checker solid CORE x (%) - 100 = minimap edge, 0 = numerals",min:0,max:100,step:1,val:90},
       {id:"ugAX",label:"Darkening core x (%)",min:0,max:100,step:1,val:90},
-      {id:"ugRX",label:"Darkening radius X (%)",min:10,max:200,step:1,val:152},
+      // WIDE radii -- r1/r2/r3 strips ONLY (.mev-bd-2/3/4): their numbers sit farther from the
+      // minimap, so their dither reaches ~2x further left. tp/bt use the default ckRX/ugRX above.
+      {id:"ckRXWide",label:"WIDE checker mask X (%) - r1/r2/r3 strips only",min:10,max:250,step:1,val:112},
+      {id:"ugRXWide",label:"WIDE darkening X (%) - r1/r2/r3 strips only",min:10,max:250,step:1,val:152},
+      {id:"ugRX",label:"Darkening radius X (%)",min:10,max:200,step:1,val:76},
       {id:"ugRY",label:"Darkening radius Y (%)",min:10,max:300,step:1,val:57},
       {id:"ug1a",label:"Darkening centre alpha",min:0,max:1,step:0.01,val:0.35},
       {id:"ug2p",label:"Darkening fade out at (%)",min:0,max:100,step:1,val:70},
@@ -602,15 +614,15 @@
       // strip's minimap-facing edge lands flush on the surface's right edge (root x 8 Default / 10
       // Large). Large twins are their OWN literals (not *SIZE_XF). Tops are per-row seeds.
       {id:"bdStripLeft",label:"Strip left == surface left (rem)",min:-160,max:0,step:0.001,val:-92},
-      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:105},
+      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:109},
       {id:"bdStripLeftLg",label:"Strip left, Large (rem)",min:-200,max:0,step:0.001,val:-105.333},
-      {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:119.2},
+      {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:122.4},
       {id:"bdStripH",label:"Strip height, shared (rem)",min:6,max:120,step:1,val:30},
       {id:"bd1T",label:"Strip 1 top (r4/top row, rem)",min:-160,max:260,step:0.5,val:-27},
       {id:"bd2T",label:"Strip 2 top (r3 row, rem)",min:-160,max:260,step:0.5,val:35},
       {id:"bd3T",label:"Strip 3 top (r2 row, rem)",min:-160,max:260,step:0.5,val:85},
       {id:"bd4T",label:"Strip 4 top (r1 row, rem)",min:-160,max:260,step:0.5,val:135},
-      {id:"bd5T",label:"Strip 5 top (current row, rem)",min:-160,max:260,step:0.5,val:200},
+      {id:"bd5T",label:"Strip 5 top (current row, rem)",min:-160,max:260,step:0.5,val:196.5},
       {id:"stageCol",label:"Stage tint over the frame (preview only)",hex:true,val:"#0d0e10"},
       {id:"stageVig",label:"...alpha at the frame edges",min:0,max:1,step:0.01,val:0.25}]],
     ["Animation",[
@@ -680,9 +692,10 @@
   function glowSh(u,c){return "0 0 "+u(st.glowW)+" "+c+",0 0 "+u(st.glowT)+" "+c;}
   function textSh(u){return "0 0 "+u(st.shBlur)+" "+hexA(st.shColor,st.shAlpha);}
   function textGlow(u,c){return textSh(u)+","+glowSh(u,c);}
-  function ckMask(){return "radial-gradient("+st.ckRX+"% "+st.ckRY+"% at "+st.ckAX+"% 50%,#000 "+
+  // rx defaults to the shared radius; the WIDENED rows (r1/r2/r3 strips) pass ckRXWide/ugRXWide.
+  function ckMask(rx){return "radial-gradient("+(rx||st.ckRX)+"% "+st.ckRY+"% at "+st.ckAX+"% 50%,#000 "+
     st.ckIn+"%,transparent "+st.ckOut+"%)";}
-  function ugGrad(){return "radial-gradient("+st.ugRX+"% "+st.ugRY+"% at "+st.ugAX+"% 50%,rgba(0,0,0,"+
+  function ugGrad(rx){return "radial-gradient("+(rx||st.ugRX)+"% "+st.ugRY+"% at "+st.ugAX+"% 50%,rgba(0,0,0,"+
     st.ug1a+") 0%,rgba(0,0,0,0) "+st.ug2p+"%)";}
   function icoSz(bb){return (100/bb*st.icoFill).toFixed(1)+"%";}
   // The delta's transform: dGap (em of the delta's own size) is the X gap, resolved to rem here
@@ -716,6 +729,11 @@
       ".mev-lg .mev-track { width: "+X43(st.trackH)+"rem; }\n"+
       ".mev-lg .mev-backdrop { left: "+X43(st.bdTop)+"rem; width: "+X43(st.bdH)+"rem; }\n"+
       ".mev-lg .mev-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
+      // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css's `.mp-lg`
+      // twin, 2026-08-12 widen pass, right-edge-pinned to 17.067rem).
+      ".mev-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }\n"+
+      // bd-1's Large override REVERTED to the shared Large strip (no separate rule needed).
+
       // NO dash-grid rule: the grid is 0deg, so its period is a y-length the root font already
       // scales -- unlike the horizontal .mp-lg block's 90deg twin, which owes SIZE_XF.
       ".mev-lg .mev-tick.mev-req { width: "+X43(st.tickH)+"rem;\n"+
@@ -802,6 +820,21 @@
     S.setProperty("--bmimg","url("+BMURI+")");S.setProperty("--bmsz",icoSz(st.bbBm));
     S.setProperty("--dmgimg","url("+DMGURI+")");S.setProperty("--dmgsz",icoSz(st.bbDmg));
     S.setProperty("--icogapp",rem(st.icoGap));
+    // PER-ROLE ICON MARGIN-X + PER-ROW CAPTION X, hand-added (not slider-driven -- see the static
+    // rules' own comments) and MUST go through rem() like everything else here: a raw CSS `rem`
+    // literal in the <style> block resolves against the browser's OWN root font-size (16px), not
+    // this stage's simulated px-per-rem (st.pxrem), which is the SAME live-preview bug the
+    // horizontal tuner had (icons/blocks landing ~1/pxrem too far, and progressively worse on
+    // r1/r2/r3 since those three literals are themselves an arithmetic progression). Literal
+    // constants, mirroring the shipped MoEEfficiencyVertical.css verbatim (.mev-cap.lf.r1/r2/r3,
+    // .mev-cap .mev-ico.bm/.mk/.mk2/.mk3).
+    S.setProperty("--icoxbm",rem(1.253));
+    S.setProperty("--icoxmk",rem(-1));
+    S.setProperty("--icoxmk2",rem(0.5));
+    S.setProperty("--icoxmk3",rem(3));
+    S.setProperty("--capxlf1",rem(-2));
+    S.setProperty("--capxlf2",rem(-4));
+    S.setProperty("--capxlf3",rem(-6));
     S.setProperty("--reqglow",hexA(st.reqGlowCol,st.reqGlowA));
     S.setProperty("--icoglow",hexA(st.icoGlowCol,st.icoGlowA));
     S.setProperty("--brqt",st.brqt);S.setProperty("--brmk",st.brmk);
@@ -814,6 +847,13 @@
     S.setProperty("--bdleft",rem(st.bdTop));S.setProperty("--bdcross",rem(st.bdH));
     S.setProperty("--bdstripleft",rem(st.bdStripLeft));S.setProperty("--bdstripw",rem(st.bdStripW));
     S.setProperty("--bdstriph",rem(st.bdStripH));
+    // PER-ROW WIDTH OVERRIDES, literal (see the static rule's own comment): shipped
+    // MoEEfficiencyVertical.css verbatim, right-edge-pinned to the shared strip's own edge (17rem).
+    // bd-1 (top mark-req row) REVERTED to the shared strip's own width/left (no override at all,
+    // right edge still 17rem == -92+109) -- the prior +25% widen read as an overshoot; bd-5
+    // (current-damage) keeps its +50% widen, which was NOT flagged.
+    S.setProperty("--bd5left",rem(-146.5));S.setProperty("--bd5w",rem(163.5));
+    S.setProperty("--bd1left",rem(st.bdStripLeft));S.setProperty("--bd1w",rem(st.bdStripW));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
     S.setProperty("--bd3top",rem(st.bd3T));S.setProperty("--bd4top",rem(st.bd4T));
     S.setProperty("--bd5top",rem(st.bd5T));
@@ -821,6 +861,7 @@
     var tile=(CKTILE*st.ckCell/2*SCALE).toFixed(3)+"px";
     S.setProperty("--cksize",tile+" "+tile);
     S.setProperty("--ckalpha",st.ckAlpha);S.setProperty("--ckmask",ckMask());
+    S.setProperty("--ckmaskwide",ckMask(st.ckRXWide));S.setProperty("--uggradwide",ugGrad(st.ugRXWide));
     S.setProperty("--uggrad",ugGrad());
     // ---- animation
     S.setProperty("--filldur",st.fillDur+"ms");S.setProperty("--fillease",st.fillEase);
@@ -976,6 +1017,11 @@
 "  background: "+ugGrad()+";\n}\n"+
 ".mev-bd-1 { top: "+st.bd1T+"rem; }\n.mev-bd-2 { top: "+st.bd2T+"rem; }\n"+
 ".mev-bd-3 { top: "+st.bd3T+"rem; }\n.mev-bd-4 { top: "+st.bd4T+"rem; }\n.mev-bd-5 { top: "+st.bd5T+"rem; }\n"+
+// PER-ROW WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css, 2026-08-12 widen pass):
+// current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, right-edge-pinned.
+".mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
+".mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: "+ckMask(st.ckRXWide)+"; }\n"+
+".mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
 ".mev-track {\n  position: relative;\n  z-index: 1;\n  height: 100%;\n  width: "+st.trackH+"rem;\n"+
 "  background: "+hexA(st.trackCol,st.trackA)+";\n}\n"+
 ".mev-track::after {\n  content: \"\";\n"+

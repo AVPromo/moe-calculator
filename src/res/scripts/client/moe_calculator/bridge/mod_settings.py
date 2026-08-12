@@ -505,11 +505,25 @@ FOLLOW_CAROUSEL_KEY = "followCarousel"
 CALC_PREVIEW_KEY = "calcPreview"
 BAR_PREVIEW_KEY = "barPreview"
 _PREVIEW_DIR = "gui/maps/icons/moe_calculator/previews/"
-# Reserved layout slots (scaled px from gen_settings_previews.py, SCALE=0.5) so the panel never
-# jumps when a differently-sized PNG swaps in: the calc box holds the taller 3-row image, the bar
-# box holds the widest (Efficiency horizontal, 315) and tallest (Efficiency vertical, 275) bars.
-_CALC_PREVIEW_W, _CALC_PREVIEW_H = 222, 82
-_BAR_PREVIEW_W, _BAR_PREVIEW_H = 315, 275
+# DISPLAY size per preview PNG (px). The PNGs are baked at 4x supersample for crispness, so MSA
+# must DOWNSCALE the source to these dims -- the Image descriptor AND every updateImage swap carry
+# an explicit width/height, and the reserved container below matches the display size.
+# CAVEAT: NOT yet live-confirmed that MSA's AS3 UILoaderAlt/Loader honors width/height as a scale
+# factor (rather than, say, cropping) -- this wiring ASSUMES it downscales the source to
+# width/height. Revisit if the live panel shows a cropped or unscaled preview.
+_PREVIEW_DISPLAY = {
+    "calc_assist_on": (125, 73),
+    "calc_assist_off": (125, 52),
+    "bar_eff_horizontal": (392, 88),
+    "bar_eff_vertical": (92, 212),
+    "bar_ma_horizontal": (310, 68),
+    "bar_ma_vertical": (75, 232),
+}
+# Reserved layout slot = MAX display dims across each swappable set, so the panel never jumps when a
+# differently-sized PNG swaps in: the calc box holds the taller 3-row image (125x73), the bar box
+# holds the widest (Efficiency horizontal, 392) and tallest (Moving Average vertical, 232) bars.
+_CALC_PREVIEW_W, _CALC_PREVIEW_H = 125, 73
+_BAR_PREVIEW_W, _BAR_PREVIEW_H = 392, 232
 
 # Sanity MAGNITUDE limit for a stored pixel coordinate (well past any real screen size); a
 # typed / echoed value is clamped into [-POS_MAX, POS_MAX], with 0/0 meaning "auto / unseeded".
@@ -907,12 +921,23 @@ def preview_source_names(counted_assist, variant, orientation):
     return calc, "bar_%s_%s" % (variant_name, orient_name)
 
 
+def _preview_entry(name):
+    """(bare-relative source path, display_w, display_h) for a baked preview PNG base name.
+    The dims are the DISPLAY size MSA downscales the 4x-supersampled source to -- see
+    _PREVIEW_DISPLAY / _PREVIEW_DIR."""
+    w, h = _PREVIEW_DISPLAY[name]
+    return _PREVIEW_DIR + name + ".png", w, h
+
+
 def preview_sources():
-    """The two bare-relative preview resource paths for the CURRENT live settings (reads the
-    getters). Classic Scaleform paths, not img:// -- see _PREVIEW_DIR."""
+    """The two preview entries for the CURRENT live settings (reads the getters), as
+    (calc_src, calc_w, calc_h, bar_src, bar_w, bar_h). Bare-relative Scaleform paths (not img://
+    -- see _PREVIEW_DIR) plus the explicit display size MSA must scale each 4x source down to."""
     calc, bar = preview_source_names(counted_assistance_enabled(),
                                      progress_bar_variant(), progress_bar_orientation())
-    return _PREVIEW_DIR + calc + ".png", _PREVIEW_DIR + bar + ".png"
+    calc_src, calc_w, calc_h = _preview_entry(calc)
+    bar_src, bar_w, bar_h = _preview_entry(bar)
+    return calc_src, calc_w, calc_h, bar_src, bar_w, bar_h
 
 
 def update_preview_images():
@@ -920,6 +945,7 @@ def update_preview_images():
 
     Wired as a change listener (see mod_moe_calculator) so a settings change swaps the preview
     live, and called once at register() so the first panel open is correct on an existing install.
+    Passes the explicit display width/height so MSA downscales each 4x source (see _PREVIEW_DISPLAY).
     updateImage writes a runtime-only, non-persisted cache and fires onImageUpdate; a panel that
     has not opened yet just reads the initial template `source`. No-op if MSA is absent or too old
     to expose updateImage (soft dependency)."""
@@ -927,9 +953,9 @@ def update_preview_images():
         g = _primary_api()
         if g is None or not hasattr(g, "updateImage"):
             return
-        calc_src, bar_src = preview_sources()
-        g.updateImage(LINKAGE, CALC_PREVIEW_KEY, calc_src)
-        g.updateImage(LINKAGE, BAR_PREVIEW_KEY, bar_src)
+        calc_src, calc_w, calc_h, bar_src, bar_w, bar_h = preview_sources()
+        g.updateImage(LINKAGE, CALC_PREVIEW_KEY, calc_src, calc_w, calc_h)
+        g.updateImage(LINKAGE, BAR_PREVIEW_KEY, bar_src, bar_w, bar_h)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -1302,10 +1328,10 @@ def _template():
     # after seed by update_preview_images() at register()); the containers reserve a stable slot so
     # a taller image swapping in never reflows the panel. Both carry a `None` sentinel slot in
     # settings_i18n.COL*_KEYS (no i18n text), so _sync_template_text's zip stays aligned.
-    calc_src, bar_src = preview_sources()
-    calc_preview = _image(calc_src, CALC_PREVIEW_KEY,
+    calc_src, calc_w, calc_h, bar_src, bar_w, bar_h = preview_sources()
+    calc_preview = _image(calc_src, CALC_PREVIEW_KEY, width=calc_w, height=calc_h,
                           container_w=_CALC_PREVIEW_W, container_h=_CALC_PREVIEW_H)
-    bar_preview = _image(bar_src, BAR_PREVIEW_KEY,
+    bar_preview = _image(bar_src, BAR_PREVIEW_KEY, width=bar_w, height=bar_h,
                          container_w=_BAR_PREVIEW_W, container_h=_BAR_PREVIEW_H)
     return {
         "modDisplayName": MOD_DISPLAY_NAME,

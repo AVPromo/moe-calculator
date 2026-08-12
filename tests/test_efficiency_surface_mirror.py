@@ -476,13 +476,13 @@ def test_the_per_icon_ink_gap_parity_overrides_are_pinned():
     """
     css = _css()
     assert _decl(css, ".mp-cap.dn .mp-ico.bm", "transform") == \
-        "translate(-1.253rem, -50%) translateY(-0.25rem)", \
+        "translate(-1.253rem, -50%) translateY(0.4rem)", \
         "bm's ink-gap-parity correction drifted off its tuned -1.253rem"
     assert _decl(css, ".mp-cap.dn .mp-ico.mk", "transform") == \
         "translate(1rem, -50%) translateY(0.25rem)", \
         "mk's ink-gap-parity correction (calibrated to mark_2) drifted off its tuned 1rem"
     assert _decl(css, ".mp-lg .mp-cap.dn .mp-ico.bm", "transform") == \
-        "translate(-1.671rem, -50%) translateY(-0.25rem)", \
+        "translate(-1.671rem, -50%) translateY(0.4rem)", \
         "bm's Large ink-gap-parity twin drifted off its tuned -1.671rem"
     assert _decl(css, ".mp-lg .mp-cap.dn .mp-ico.mk", "transform") == \
         "translate(1.333rem, -50%) translateY(0.25rem)", \
@@ -647,7 +647,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_js()) == (105, 318)
+    assert box == _v_surface_wh(_js()) == (109, 318)
 
 
 def test_the_vertical_shift_matches_progresss_and_is_pinned():
@@ -702,7 +702,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + padxr_large).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (149, 398)
+            iround_half_away(Decimal(default_h) * f)) == (153, 398)
 
 
 def _advances():
@@ -953,8 +953,13 @@ def test_the_surface_clears_the_minimap_at_every_size_index():
     assert match, "MoEEfficiencyVertical.css: body.mev.mp-lg #moe-bar-box rule not found"
     large_view_w = iround_half_away(Decimal(match.group(1)) * _size_factor("SIZE_F"))
 
-    _MARGIN_PX = 1   # this bar's achieved margin at EFFICIENCY_MM_GAP(_LARGE)(3), both sizes -- a
-                     # REAL margin, not the zero/negative clearance that shipped before either fix
+    _MARGIN_PX = -3  # NEGATIVE by design (2026-08-12, in-client): mm_size is the minimap's outer
+                     # FRAME (drop-shadow) edge; its real visible edge and its Ctrl-click area sit
+                     # inside that frame. The maintainer measured ~4px of non-interactive frame
+                     # margin, safe to consume, so the surface's right edge (and the flush backdrop)
+                     # advances 3px PAST mm_size to sit flush against the minimap ITSELF while still
+                     # clearing its clickable area. Guards the real contract: margin < -3 (further
+                     # into the minimap) fails here.
     _SPACE_X = 3000  # arbitrary: anchor_minimap's x does not depend on space_y/edge_y at all
 
     for idx, mm_size in enumerate(MINIMAP_SIZES):

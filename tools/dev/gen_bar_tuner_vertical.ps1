@@ -177,6 +177,14 @@ $tpl = @'
     image-rendering:pixelated;opacity:var(--dotop);-webkit-mask:var(--dotmask);mask:var(--dotmask)}
   .mpv-bd::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;background:var(--uggrad)}
   .mpv-bd-1{top:var(--bd1top)}.mpv-bd-2{top:var(--bd2top)}.mpv-bd-3{top:var(--bd3top)}.mpv-bd-4{top:var(--bd4top)}
+  /* PER-ROW WIDTH OVERRIDES (shipped MoEProgressVertical.css, 2026-08-12 backdrop-widen pass):
+     current-damage (bd-4) +50%, mark-req (bd-2) +25%, BOTH right-edge-pinned (new_left =
+     old_left - (new_width - old_width), so the minimap-facing edge never moves). Literal, not
+     slider-driven -- a one-off approved widen, not a tunable knob. */
+  .mpv-bd-4{left:var(--bd4left);width:var(--bd4w)}
+  .mpv-bd-2{left:var(--bd2left);width:var(--bd2w)}
+  .mpv-bd-3::before{-webkit-mask:var(--dotmaskwide);mask:var(--dotmaskwide)}
+  .mpv-bd-3::after{background:var(--uggradwide)}
   .mpv-track{position:relative;z-index:1;width:100%;height:100%;background:var(--trackbg)}
   /* Garage dash-grid + outset ring, cloned from the horizontal tuner (MoECalculator.css:277-296,
      see gen_bar_tuner.ps1 for the full mask-not-overlay history) -- ROTATED: the gradient direction
@@ -233,6 +241,14 @@ $tpl = @'
      see the anchor comment above; a non-zero default here would mean the anchor itself is wrong). */
   .mpv-capR{bottom:100%;padding-bottom:var(--gapr);padding-right:var(--gapp);
     transform:translateX(var(--capxr));font-size:var(--rfs);line-height:var(--rlh)}
+  /* THE ETA ROW SPLIT (shipped MoEProgressVertical.css HAND-EDIT 6/6, ported here so the tuner's
+     preview matches: the ETA numeral + battles icon moved to their OWN row, stacked directly
+     above capR via padding-bottom == capR's own box height (line-height + padding-bottom) plus a
+     6rem visual gap -- same right-anchor mechanism as capR, copied verbatim, plus the maintainer's
+     +3rem translateY row nudge. NOT wired to a slider (the shipped rule is a hand-edit, not an
+     emit output) -- literal, mirroring MoEProgressVertical.css:289-290 verbatim. */
+  .mpv-capEta{bottom:100%;padding-bottom:var(--etapb);padding-right:var(--gapp);
+    transform:translateX(var(--capxr)) translateY(var(--etaty));font-size:var(--rfs);line-height:var(--rlh)}
   /* capC (bottom, STATIC) now carries projAvg + the delta -- no bottom-tracking, so no transition
      is declared on it (it never had a moving `bottom` to animate; that was a leftover). */
   .mpv-capC{top:100%;margin-top:var(--gapc);padding-right:var(--gapp);
@@ -267,8 +283,12 @@ $tpl = @'
   .mpv-capP .mpv-ico{transform:translate(0,var(--icoyp))}
   .mpv-capC .mpv-ico{transform:translate(0,var(--icoyc))}
   .mpv-capR .mpv-ico{transform:translate(0,var(--icoyr))}
+  /* capEta's own copy of the SAME nudges (identical row line-height, so the same quantisation
+     holds for both) -- shipped MoEProgressVertical.css:352-355. */
+  .mpv-capEta .mpv-ico{transform:translate(0,var(--icoyr))}
   /* Numeral baseline Y nudge is PER CAPTION GROUP now -- never merge these three. */
-  .mpv-capR .mpv-v,.mpv-capR .mpv-eta{transform:translateY(var(--numyr))}
+  .mpv-capR .mpv-v{transform:translateY(var(--numyr))}
+  .mpv-capEta .mpv-eta{transform:translateY(var(--numyr))}
   .mpv-capC .mpv-v{transform:translateY(var(--numyc))}
   .mpv-capP .mpv-v{transform:translateY(var(--numyp))}
   .mpv-ico::before{content:"";position:absolute;left:50%;top:50%;z-index:-1;
@@ -288,9 +308,10 @@ $tpl = @'
   .mpv-ico.mk1::after{background-image:url(data:image/png;base64,__ICO_MK1__)}
   .mpv-ico.mk2::after{background-image:url(data:image/png;base64,__ICO_MK2__)}
   .mpv-ico.mk3::after{background-image:url(data:image/png;base64,__ICO_MK3__)}
-  /* etaGap is now the gap BETWEEN the two numeral+icon pairs (mark-icon -> eta-numeral), so it
-     lives on the eta numeral's margin-left; the battles icon keeps the plain uniform icoGap. */
-  .mpv-capR .mpv-eta{margin-left:var(--etagap)}
+  /* etaGap RETIRED (shipped MoEProgressVertical.css's own header, HAND-EDIT 6/6: "the old #6
+     retarget ... no longer applies: with the groups on separate rows there is no single shared
+     row left to retarget the gap onto"). .mpv-eta is now the FIRST child of its own row -- no
+     margin-left needed or shipped. */
   .mpv-ico.battles::before{background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
   .mpv-ico.battles::after{background-image:var(--battlesimg);background-size:var(--battlessz);filter:brightness(3)}
 
@@ -337,7 +358,8 @@ $tpl = @'
       <div class="mpv-tick mpv-end mpv-top"></div>
       <div class="mpv-cap mpv-capP"><span class="mpv-v">2,905</span><i class="mpv-ico dmgp"></i></div>
     </div>
-    <div class="mpv-cap mpv-capR"><span class="mpv-v">3,050</span><i class="mpv-ico mk mk2"></i><span class="mpv-eta">18</span><i class="mpv-ico battles"></i></div>
+    <div class="mpv-cap mpv-capEta"><span class="mpv-eta">18</span><i class="mpv-ico battles"></i></div>
+    <div class="mpv-cap mpv-capR"><span class="mpv-v">3,050</span><i class="mpv-ico mk mk2"></i></div>
     <div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num">+8</span>)</span><span class="mpv-v">2,913</span><i class="mpv-ico dmgc"></i></div>
   </div></div>
 </div></div>
@@ -515,7 +537,7 @@ $tpl = @'
       {id:"dmgPIco",label:"capP glyph",opts:["damage","barrel_mark"],val:"barrel_mark"},
       {id:"dmgCIco",label:"capC glyph",opts:["damage","barrel_mark"],val:"damage"},
       {id:"icoYP",label:"capP icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0},
-      {id:"icoYC",label:"capC icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:1},
+      {id:"icoYC",label:"capC icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0},
       {id:"icoYR",label:"capR icon Y offset (rem, signed)",min:-20,max:20,step:0.1,val:0.5},
       {id:"numYR",label:"capR numeral baseline Y nudge (rem)",min:-4,max:4,step:0.1,val:-0.5},
       {id:"numYC",label:"capC numeral baseline Y nudge (rem)",min:-4,max:4,step:0.1,val:-0.5},
@@ -533,22 +555,32 @@ $tpl = @'
       // surface (V_BOX_*/V_PAD_*) and these must move with it. Tops are per-row seeds the maintainer
       // converges in-client.
       {id:"bdStripLeft",label:"Strip left == surface left (rem)",min:-160,max:0,step:0.001,val:-104},
-      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:115},
+      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:119},
       {id:"bdStripLeftLg",label:"Strip left, Large (rem)",min:-200,max:0,step:0.001,val:-115.333},
-      {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:127.2},
+      {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:130.4},
       {id:"bdStripH",label:"Strip height, shared (rem)",min:6,max:120,step:1,val:30},
-      {id:"bd1T",label:"Strip 1 top (eta row, rem)",min:-160,max:240,step:0.5,val:-54},
+      {id:"bd1T",label:"Strip 1 top (eta row, rem)",min:-160,max:240,step:0.5,val:-50},
       {id:"bd2T",label:"Strip 2 top (req row, rem)",min:-160,max:240,step:0.5,val:-30},
-      {id:"bd3T",label:"Strip 3 top (proj row, rem)",min:-160,max:240,step:0.5,val:85},
+      // PREVIEW-ONLY RE-SEED (was 85, the shipped MoEProgressVertical.css literal -- left UNCHANGED
+      // there, this is a tuner-default adjustment only): at this tuner's own default preAvg/axis
+      // state, capP renders ~38-43px above where a top of 85 puts this strip (measured live,
+      // getBoundingClientRect) -- the shipped comment itself calls every bd*T value a "seed the
+      // maintainer converges", not a derived constant, so re-seeding it to actually sit behind
+      // capP AT THIS DEFAULT PREVIEW STATE is a tuner-accuracy fix, not a shipped-value change.
+      {id:"bd3T",label:"Strip 3 top (preAvg/capP row, rem)",min:-160,max:240,step:0.5,val:33},
       {id:"bd4T",label:"Strip 4 top (current row, rem)",min:-160,max:240,step:0.5,val:201},
       {id:"dotAlpha",label:"Dither strength (opacity)",min:0,max:1,step:0.01,val:0.1},
-      {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:112},
+      {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:56},
       {id:"dotRY",label:"Dither fade size Y (%)",min:0,max:250,step:1,val:110},
       {id:"dotIn",label:"Dither solid to (%)",min:0,max:100,step:1,val:0},
       {id:"dotOut",label:"Dither gone by (%)",min:0,max:120,step:1,val:67},
       {id:"dotAX",label:"Dither solid CORE x (%) - 100 = minimap edge, 0 = numerals",min:0,max:100,step:1,val:90},
       {id:"ugAX",label:"Radial underlay core x (%)",min:0,max:100,step:1,val:90},
-      {id:"ugRX",label:"Radial size X (%)",min:0,max:250,step:1,val:152},
+      // WIDE radii -- the capP strip (.mpv-bd-3) ONLY: its number sits farther from the minimap, so
+      // its dither reaches ~2x further left. Every OTHER strip uses the default dotRX/ugRX above.
+      {id:"dotRXWide",label:"WIDE dither fade X (%) - capP strip only",min:0,max:250,step:1,val:112},
+      {id:"ugRXWide",label:"WIDE radial X (%) - capP strip only",min:0,max:250,step:1,val:152},
+      {id:"ugRX",label:"Radial size X (%)",min:0,max:250,step:1,val:76},
       {id:"ugRY",label:"Radial size Y (%)",min:0,max:250,step:1,val:57},
       {id:"ug1a",label:"Radial inner alpha",min:0,max:1,step:0.01,val:0.35},
       {id:"ug1p",label:"Radial inner pos (%)",min:0,max:100,step:1,val:0},
@@ -612,8 +644,9 @@ $tpl = @'
   function bdrSh(u){return st.bdrOn?"0 0 0 "+u(st.bdrW)+" "+hexA(st.bdrCol,st.bdrA):"none";}
   function projSh(u,c){c=c||hexA(st.projGlowCol,st.projGlowA);
     return "0 0 "+u(st.projGlowB)+" "+c+",0 0 "+u(st.projGlowB2)+" "+c;}
-  function dotMask(){return "radial-gradient("+st.dotRX+"% "+st.dotRY+"% at "+st.dotAX+"% 50%,#000 "+st.dotIn+"%,transparent "+st.dotOut+"%)";}
-  function ugGrad(){return "radial-gradient("+st.ugRX+"% "+st.ugRY+"% at "+st.ugAX+"% 50%,rgba(0,0,0,"+st.ug1a+") "+st.ug1p+"%,rgba(0,0,0,"+st.ug2a+") "+st.ug2p+"%)";}
+  // rx defaults to the shared radius; the WIDENED rows (capP's strip) pass the wider dotRXWide/ugRXWide.
+  function dotMask(rx){return "radial-gradient("+(rx||st.dotRX)+"% "+st.dotRY+"% at "+st.dotAX+"% 50%,#000 "+st.dotIn+"%,transparent "+st.dotOut+"%)";}
+  function ugGrad(rx){return "radial-gradient("+(rx||st.ugRX)+"% "+st.ugRY+"% at "+st.ugAX+"% 50%,rgba(0,0,0,"+st.ug1a+") "+st.ug1p+"%,rgba(0,0,0,"+st.ug2a+") "+st.ug2p+"%)";}
   function textSh(){return "0px 0px "+rem(st.shBlur)+" "+hexA(st.shColor,st.shAlpha);}
   function total(){return st.fadeIn+st.hold+st.fadeOut;}
   function icoSz(bb){return (100/bb*st.icoFill).toFixed(1)+"%";}
@@ -669,6 +702,9 @@ $tpl = @'
     S.setProperty("--tickwproj",rem(st.tickWProj));S.setProperty("--tickhproj",rem(st.tickHProj));S.setProperty("--tickxproj",rem(st.tickXProj));
     S.setProperty("--gapr",rem(st.gapR));S.setProperty("--gapc",rem(st.gapC));S.setProperty("--gapp",rem(st.gapP+ovh));
     S.setProperty("--capxr",rem(st.capxR));S.setProperty("--capxc",rem(st.capxC));S.setProperty("--capxp",rem(st.capxP));
+    // THE ETA ROW SPLIT's own two literals (not slider-driven -- see .mpv-capEta's own comment):
+    // shipped MoEProgressVertical.css:289-290 verbatim (padding-bottom 30rem, translateY 3rem).
+    S.setProperty("--etapb",rem(30));S.setProperty("--etaty",rem(3));
     S.setProperty("--rfs",rem(st.rFS));S.setProperty("--cfs",rem(st.cFS));S.setProperty("--pfs",rem(st.pFS));
     S.setProperty("--rlh",rem(lh(st.rFS)));S.setProperty("--clh",rem(lh(st.cFS)));S.setProperty("--plh",rem(lh(st.pFS)));
     S.setProperty("--wt",st.wt);S.setProperty("--ls",st.ls+"em");S.setProperty("--textsh",textSh());
@@ -701,12 +737,17 @@ $tpl = @'
     S.setProperty("--bdleft",rem(st.bdLeft));S.setProperty("--bdw",rem(st.bdW));
     S.setProperty("--bdtop",rem(-st.bdBleedY));S.setProperty("--bdh",rem(st.barH+2*st.bdBleedY));
     S.setProperty("--bdstripleft",rem(st.bdStripLeft));S.setProperty("--bdstripw",rem(st.bdStripW));
+    // PER-ROW WIDTH OVERRIDES, literal (see the static rule's own comment): shipped
+    // MoEProgressVertical.css verbatim, right-edge-pinned to the shared strip's own edge (15rem).
+    S.setProperty("--bd4left",rem(-163.5));S.setProperty("--bd4w",rem(178.5));
+    S.setProperty("--bd2left",rem(-133.75));S.setProperty("--bd2w",rem(148.75));
     S.setProperty("--bdstriph",rem(st.bdStripH));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
     S.setProperty("--bd3top",rem(st.bd3T));S.setProperty("--bd4top",rem(st.bd4T));
     S.setProperty("--ckbg","url("+CKURI+")");
     S.setProperty("--cksize",(CKTILE*st.pxrem).toFixed(3)+"px "+(CKTILE*st.pxrem).toFixed(3)+"px");
     S.setProperty("--dotop",st.dotAlpha);S.setProperty("--dotmask",dotMask());S.setProperty("--uggrad",ugGrad());
+    S.setProperty("--dotmaskwide",dotMask(st.dotRXWide));S.setProperty("--uggradwide",ugGrad(st.ugRXWide));
     bd.style.display="none";
     root.querySelectorAll(".mpv-bd").forEach(function(e){e.style.display=st.bd?"block":"none";});
     root.style.outline=st.bounds?"1px dashed #ff5":"none";
@@ -796,6 +837,10 @@ $tpl = @'
     return ".mpv-lg #moe-bar-root { width: "+X43(st.trackW)+"rem; }\n"+
       ".mpv-lg .mpv-backdrop { left: "+X43(st.bdLeft)+"rem; width: "+X43(st.bdW)+"rem; }\n"+
       ".mpv-lg .mpv-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
+      // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css's `.mp-lg`
+      // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
+      ".mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n"+
+      ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
       tick("end",st.tickWEnd,st.tickXEnd)+tick("pre",st.tickWPre,st.tickXPre)+
       tick("proj",st.tickWProj,st.tickXProj)+
       ".mpv-lg .mpv-capR { padding-right: "+pr+"; transform: translateX("+X43(st.capxR)+"rem); }\n"+
@@ -833,6 +878,11 @@ $tpl = @'
       "  z-index: -1;\n  background: "+ugGrad()+";\n}\n"+
       ".mpv-bd-1 { top: "+st.bd1T+"rem; }\n.mpv-bd-2 { top: "+st.bd2T+"rem; }\n"+
       ".mpv-bd-3 { top: "+st.bd3T+"rem; }\n.mpv-bd-4 { top: "+st.bd4T+"rem; }\n"+
+      // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
+      // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
+      ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
+      ".mpv-bd-3::before { mask: "+dotMask(st.dotRXWide)+"; }\n"+
+      ".mpv-bd-3::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+
       "/* Garage dash grid, rotated (0deg == \"to top\", so the first stop sits at the BOTTOM edge).\n"+
       "   background-size: 100% <period>rem tiles the gradient from a single period-sized tile instead\n"+

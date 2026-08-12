@@ -88,7 +88,7 @@ body.mev #moe-bar-root {
    the fix for the invisible SURFACE reaching into the minimap's first column (see MoEEfficiency.js's
    own four-point note for the full derivation); it costs nothing visible, since no caption ink
    reaches that far right (every caption here is anchored to the LEFT). */
-body.mev #moe-bar-box { width: 105rem; height: 318rem; }
+body.mev #moe-bar-box { width: 109rem; height: 318rem; }
 /* .mev-backdrop is now the INVISIBLE surface bounding-box marker only (rule kept at V_BOX_* ==
    -40/-80/54/360 as the CSS cross-check of MoEEfficiency.js's surface constants, pinned by
    tests/test_efficiency_surface_mirror.py; its .mp-lg twin's `left` is also read by the caption-fit
@@ -109,10 +109,14 @@ body.mev #moe-bar-box { width: 105rem; height: 318rem; }
 .mev-bd {
   position: absolute;
   left: -92rem;
-  width: 105rem;
+  width: 109rem;
   height: 30rem;
   z-index: 0;
 }
+/* Per-index width overrides -- right edge PINNED at the shared strip's own right edge
+   (left+width == -92+109 == 17rem), growing LEFTWARD only, so the minimap-facing edge and
+   the surface hit-rect do not move. Same specificity as .mev-bd above; source order wins. */
+.mev-bd-5 { width: 163.5rem; left: -146.5rem; }
 .mev-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -120,19 +124,23 @@ body.mev #moe-bar-box { width: 105rem; height: 318rem; }
   background-size: auto;
   image-rendering: pixelated;
   opacity: 0.1;
-  mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%);
+  mask: radial-gradient(56% 110% at 90% 50%,#000 0%,transparent 67%);
 }
 .mev-bd::after {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   z-index: -1;
-  background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+  background: radial-gradient(76% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
 }
 .mev-bd-1 { top: -27rem; }
 .mev-bd-2 { top: 35rem; }
 .mev-bd-3 { top: 85rem; }
 .mev-bd-4 { top: 135rem; }
-.mev-bd-5 { top: 200rem; }
+.mev-bd-5 { top: 196.5rem; }
+/* r1/r2/r3 strips ONLY (.mev-bd-2/3/4) -- their numbers sit farther from the minimap, so their
+   dither reaches ~2x further left (wide X radius). tp/bt (.mev-bd-1/-5) keep the default above. */
+.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
+.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
 .mev-track {
   position: relative;
   z-index: 1;
@@ -297,7 +305,7 @@ body.mev #moe-bar-box { width: 105rem; height: 318rem; }
 .mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }
 .mev-cap.lf .mev-ico { transform: translateY(1rem); }
 .mev-cap.tp .mev-ico { transform: translateY(-0.25rem); }
-.mev-cap.bt .mev-ico { transform: translateY(0.5rem); }
+.mev-cap.bt .mev-ico { transform: translateY(1.5rem); }
 .mev-ico::before {
   content: "";
   position: absolute;
@@ -438,12 +446,15 @@ body.mev #moe-bar-box { width: 105rem; height: 318rem; }
    leave a real margin (1px to the minimap at the current gap, ~2.3px to the tick's own true right
    edge) instead of the backdrop's own flush zero-clearance edge. */
 body.mev.mp-lg #moe-bar-root { width: 4rem; }
-body.mev.mp-lg #moe-bar-box { width: 119.2rem; }
+body.mev.mp-lg #moe-bar-box { width: 122.4rem; }
 .mp-lg .mev-track { width: 4rem; }
 .mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }
 /* The strips' Large flush override: right edge at root x 10rem (surface's Large right edge); OWN
    literals (not *SIZE_XF). Per-row `top` is a y-length the root font scales -- no Large twin. */
-.mp-lg .mev-bd { left: -105.333rem; width: 119.2rem; }
+.mp-lg .mev-bd { left: -105.333rem; width: 122.4rem; }
+/* Large per-index width overrides -- right edge PINNED (left+width == -105.333+122.4 ==
+   17.067rem); same specificity as .mp-lg .mev-bd above, source order wins. */
+.mp-lg .mev-bd-5 { width: 183.6rem; left: -166.533rem; }
 .mp-lg .mev-tick.mev-req { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-tick.mev-cur { width: 12rem;

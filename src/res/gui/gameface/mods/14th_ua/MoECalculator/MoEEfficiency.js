@@ -288,14 +288,15 @@ const V_PAD_X_REM = 52;                              // the LEFT X slack, decoup
 // test_the_surface_does_not_clip_the_tick), at domain/constants.EFFICIENCY_MM_GAP(_LARGE) == 3/3:
 // Default clears the minimap by 1px (was 6px at the original shared gap of 8) and the tick by
 // 2px; Large by 1px (was 6px) and ~2.3px respectively.
-// GROWN (2026-08-10, in-client review) so the surface still reaches the minimap's 1px floor after
-// the placement gap was RESTORED to 8 (domain/constants.EFFICIENCY_MM_GAP(_LARGE)). Solved against
-// anchor_minimap's margin (== gap + overhang + edge_x - view_w == 1):
-//   Default: view_w == 8 + 3 + 95 - 1 == 105 -> padXR == 105 - V_BOX_W(54) - V_PAD_X(52) == -1
-//   Large:   view_w == 8 + 5 + 137 - 1 == 149 -> padXRLarge == 149/SIZE_F - boxW*xf(72) - 52
-//                                             == 119.2 - 124 == -4.8
-const V_PAD_XR_REM = -1;                             // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -4.8;                     // ...and Large -- its OWN literal, see above
+// ADVANCED 4 logical px into the minimap (2026-08-12, in-client): the previous margin==1 cleared the
+// minimap's DROP-SHADOW but left the backdrop 4px off the minimap's REAL edge -- that 4px is the
+// minimap's non-interactive frame margin, maintainer-confirmed safe to consume (Ctrl-click area is
+// further in). Surface right edge (and the flush strips) now at margin == -3, flush to the minimap:
+//   Default: view_w == 8 + 3 + 95 - (-3) == 109 -> padXR == 109 - V_BOX_W(54) - V_PAD_X(52) == 3
+//   Large:   view_w == 8 + 5 + 137 - (-3) == 153 -> padXRLarge == 153/SIZE_F - boxW*xf(72) - 52
+//                                             == 122.4 - 124 == -1.6
+const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -1.6;                     // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- see the sibling MoEProgress.js for the same three-value shape.
 //   PFX      the class prefix every selector and toggled class here is written in. The source spells

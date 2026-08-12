@@ -414,14 +414,19 @@ const V_PAD_X_REM = 70;                              // the LEFT X slack, decoup
 // neither is what clears it -- see the derivation above, computed directly, not scaled.
 // GROWN (2026-08-10, in-client review) so the surface still reaches the minimap's 1px floor after
 // the placement gap was RESTORED to 8 (domain/constants.PROGRESS_MM_GAP(_LARGE)). Solved directly
-// against anchor_minimap's margin (== gap + overhang + edge_x - view_w == 1):
-//   Default: view_w == 8 + 3 + 105 - 1 == 115 -> padXR == 115 - V_BOX_W(46) - V_PAD_X(70) == -1
-//   Large:   view_w == 8 + 5 + 147 - 1 == 159 -> padXRLarge == 159/SIZE_F - boxW*xf(61.333) - 70
-//                                             == 127.2 - 131.333 == -4.133
-// The visible TRACK sits further from the minimap than the surface's right edge (that daylight IS
-// this right pad); growing it only widened the surface toward the minimap, it did NOT move the track.
-const V_PAD_XR_REM = -1;                             // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -4.133;                   // ...and Large -- its OWN literal, see above
+// against anchor_minimap's margin (== gap + overhang + edge_x - view_w). ADVANCED 4 logical px into
+// the minimap (2026-08-12, in-client): the previous margin==1 cleared the minimap's DROP-SHADOW by
+// 1px but left the backdrop 4px off the minimap's REAL visible edge -- the maintainer confirmed that
+// 4px is the minimap's non-interactive frame margin and is safe to consume (the Ctrl-click area is
+// further in). So the surface's right edge (and the flush strips) now sit at margin == -3 (3px into
+// that frame margin), flush against the minimap itself:
+//   Default: view_w == 8 + 3 + 105 - (-3) == 119 -> padXR == 119 - V_BOX_W(46) - V_PAD_X(70) == 3
+//   Large:   view_w == 8 + 5 + 147 - (-3) == 163 -> padXRLarge == 163/SIZE_F - boxW*xf(61.333) - 70
+//                                             == 130.4 - 131.333 == -0.933
+// The visible TRACK is unaffected -- gap/overhang/edge_x are unchanged; only view_w (this right pad)
+// grew, which moves the surface's minimap-facing edge alone, not the track.
+const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
+const V_PAD_XR_REM_LARGE = -0.933;                   // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
 // together by goVertical() below and never touched again.
@@ -541,6 +546,10 @@ let tProj = root.querySelector(".mp-proj");
 let capP = root.querySelector(".mp-capP");
 let capC = root.querySelector(".mp-capC");
 let capR = root.querySelector(".mp-capR");
+// capP's backdrop strip (VERTICAL only) -- it must sit BEHIND capP, which rides the pre tick along
+// the axis (capP.style.bottom is rewritten every render), so a fixed CSS `top` can't stay behind it.
+// goVertical caches it and JS-tracks it to capP's own `bottom`; null (and untouched) horizontally.
+let capBd3 = null;
 let capD = capC.querySelector(".mp-d");
 let capDN = capC.querySelector(".mp-d-num");
 // The remaining-battles pair on capR. Its own classes, NOT a second .mp-v / an .mp-ico index: see the
@@ -579,6 +588,10 @@ function goVertical() {
     tPre = root.querySelector(".mpv-pre");
     tProj = root.querySelector(".mpv-proj");
     capP = root.querySelector(".mpv-capP");
+    // capP's strip: anchor it the SAME way capP is (bottom:% + translateY(50%)) so JS can drive its
+    // `bottom` to capP's own value each render and it stays centred behind the number at both sizes.
+    capBd3 = root.querySelector(".mpv-bd-3");
+    if (capBd3) { capBd3.style.top = "auto"; capBd3.style.transform = "translateY(50%)"; }
     capC = root.querySelector(".mpv-capC");
     capR = root.querySelector(".mpv-capR");
     capD = capC.querySelector(".mpv-d");
@@ -768,6 +781,7 @@ function paintStatic() {
     const pre = axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style[AX] = pre;
     capP.style[AX] = pre;
+    if (capBd3) capBd3.style.bottom = pre;   // keep capP's backdrop strip behind the moving number
     root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);
 }
 

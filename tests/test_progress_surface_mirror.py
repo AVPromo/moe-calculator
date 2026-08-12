@@ -180,7 +180,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_read("MoEProgress.js")) == (115, 320)
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (119, 320)
 
 
 def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
@@ -240,7 +240,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + _js_decimal_const(js, "V_PAD_XR_REM_LARGE")).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (159, 400)
+            iround_half_away(Decimal(default_h) * f)) == (163, 400)
 
 
 def _advances(js):
@@ -534,10 +534,16 @@ def test_the_surface_clears_the_minimap_at_every_size_index():
     assert match, "MoEProgressVertical.css: body.mpv.mp-lg #moe-bar-box rule not found"
     large_view_w = iround_half_away(Decimal(match.group(1)) * _size_factor("SIZE_F"))
 
-    _MARGIN_PX = 1   # both sizes' achieved margin now that the gap is solved per size -- see
-                     # test_the_surface_does_not_clip_the_tick for the OTHER edge this same
-                     # surface must clear; the two trade off against a single, small total slack
-                     # (fact 5)
+    _MARGIN_PX = -3  # NEGATIVE by design (2026-08-12, in-client): mm_size is the minimap's outer
+                     # FRAME (drop-shadow) edge, but its real visible edge -- and, further in, its
+                     # Ctrl-click/interactive area -- sit inside that frame. The maintainer measured
+                     # ~4px of non-interactive frame margin and confirmed it is safe to consume, so
+                     # the surface's right edge (and the flush backdrop) now advances 3px PAST
+                     # mm_size (margin -3) to sit flush against the minimap ITSELF while still
+                     # clearing its clickable area. This still guards the real contract: a change
+                     # that pushed the surface FURTHER into the minimap (margin < -3) fails here.
+                     # See test_the_surface_does_not_clip_the_tick for the OTHER edge this surface
+                     # must clear (which only got roomier as the surface grew).
     _SPACE_X = 3000  # arbitrary: anchor_minimap's x does not depend on space_y/edge_y at all
 
     for idx, mm_size in enumerate(MINIMAP_SIZES):
@@ -1428,22 +1434,23 @@ def test_the_large_centre_caption_icon_cancels_scale_only_their_gap():
             "SCALED %srem gap" % (cap, got, box, large_gap))
 
 
-def test_the_large_backdrop_stays_symmetric_about_the_track():
-    # LOAD-BEARING, and silent when it breaks: there is NO X compensation term in Python, so
-    # anchor_centred's `max_x // 2` only centres the bar because the backdrop brackets the track
-    # with EQUAL bleed each side. Break the symmetry under the large mode and X drifts by half the
-    # error at every resolution, with every other assertion still green.
-    # Tolerance is 0.002rem, not exact: each of the three values is independently rounded to the
-    # stylesheet's 3dp (bleed twice over), so the sum cannot close exactly. It is ~5 orders of
-    # magnitude below the smallest real error (a dropped x factor moves the bleed by 26.667rem).
+def test_the_backdrop_geometry_is_intentionally_asymmetric_user_approved():
+    # RETIRED CONTRACT: this bar's .mp-backdrop used to bracket the track with EQUAL bleed each
+    # side (the property `anchor_centred`'s `max_x // 2` relied on, since there is no X
+    # compensation term in Python). The maintainer approved moving the backdrop right and
+    # retiring that symmetry -- see MoEProgress.css's own comment above `.mp-backdrop` ("do not
+    # 'fix' it back to -80rem") -- in BOTH Default and Large, so this is now a plain regression
+    # pin of the new intentional geometry rather than a derived-symmetry check. The Efficiency
+    # bar's backdrop did NOT move and keeps its own symmetry test untouched.
     _base, large = _cascade("MoEProgress.css")
-    bleed = -_rem(large[_LG + ".mp-backdrop"], "left", "MoEProgress.css")
-    width = _rem(large[_LG + ".mp-backdrop"], "width", "MoEProgress.css")
-    track = _rem(large[_LG + "#moe-bar-root"], "width", "MoEProgress.css")
-    assert bleed > 0, "the backdrop must start LEFT of the track, not inside it"
-    assert abs(width - (track + 2 * bleed)) <= Decimal("0.002"), (
-        "the large backdrop is %srem around a %srem track with %srem of left bleed -- "
-        "asymmetric, so `max_x // 2` no longer centres the bar" % (width, track, bleed))
+    base_left = _rem(_base[".mp-backdrop"], "left", "MoEProgress.css")
+    base_width = _rem(_base[".mp-backdrop"], "width", "MoEProgress.css")
+    large_left = _rem(large[_LG + ".mp-backdrop"], "left", "MoEProgress.css")
+    large_width = _rem(large[_LG + ".mp-backdrop"], "width", "MoEProgress.css")
+    assert (base_left, base_width) == (-72, 360), \
+        "the base .mp-backdrop's left/width drifted off its approved -72rem/360rem"
+    assert (large_left, large_width) == (-96, 480), \
+        "the Large .mp-backdrop's left/width drifted off its approved -96rem/480rem"
 
 
 def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():

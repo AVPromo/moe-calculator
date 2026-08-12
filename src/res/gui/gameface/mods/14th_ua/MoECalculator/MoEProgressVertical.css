@@ -121,7 +121,7 @@ body.mpv #moe-bar-root {
    MoEProgress.js's V_CLIP_B_REM note -- it carries the whole derivation). This rule only keeps
    describing whatever the surface actually is. It stays a plain rem box either way, so it cannot
    reflow the composition when the surface shrinks past it. */
-body.mpv #moe-bar-box { width: 115rem; height: 320rem; }
+body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 /* .mpv-backdrop is now the INVISIBLE surface bounding-box marker only (its rule stays at
    V_BOX_* == -34/-80/46/360 as the CSS cross-check of MoEProgress.js's surface constants, pinned by
    tests/test_progress_surface_mirror.py). The visible dither moved to the per-row .mpv-bd strips
@@ -144,10 +144,15 @@ body.mpv #moe-bar-box { width: 115rem; height: 320rem; }
 .mpv-bd {
   position: absolute;
   left: -104rem;
-  width: 115rem;
+  width: 119rem;
   height: 30rem;
   z-index: 0;
 }
+/* Per-index width overrides -- right edge PINNED at the shared strip's own right edge
+   (left+width == -104+119 == 15rem), growing LEFTWARD only, so the minimap-facing edge and
+   the surface hit-rect do not move. Same specificity as .mpv-bd above; source order wins. */
+.mpv-bd-4 { width: 178.5rem; left: -163.5rem; }
+.mpv-bd-2 { width: 148.75rem; left: -133.75rem; }
 .mpv-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -156,18 +161,22 @@ body.mpv #moe-bar-box { width: 115rem; height: 320rem; }
   background-position: 0px 0px;
   image-rendering: pixelated;
   opacity: 0.1;
-  mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%);
+  mask: radial-gradient(56% 110% at 90% 50%,#000 0%,transparent 67%);
 }
 .mpv-bd::after {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   z-index: -1;
-  background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+  background: radial-gradient(76% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
 }
-.mpv-bd-1 { top: -54rem; }
+.mpv-bd-1 { top: -50.5rem; }
 .mpv-bd-2 { top: -30rem; }
 .mpv-bd-3 { top: 85rem; }
 .mpv-bd-4 { top: 201rem; }
+/* capP's strip ONLY (.mpv-bd-3) -- its number sits farther from the minimap, so its dither reaches
+   ~2x further left (wide X radius). Every other strip keeps the default radius above. */
+.mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
+.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
 .mpv-track {
   position: relative;
   z-index: 1;
@@ -536,13 +545,17 @@ body.mpv #moe-bar-box { width: 115rem; height: 320rem; }
    a real margin (1px to the minimap at the current gap, ~2.8px to the tick's own true right edge --
    MoEProgress.js's fact 5) instead of the backdrop's own flush zero-clearance edge. */
 body.mpv.mp-lg #moe-bar-root { width: 4rem; }
-body.mpv.mp-lg #moe-bar-box { width: 127.2rem; }
+body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
 .mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }
 /* The strips' Large flush override: right edge at root x 10rem (== surface's Large right edge),
    left/width their OWN literals (the surface's Large left is -(V_PAD_X_REM - V_BOX_LEFT_REM*SIZE_XF),
    not a clean *4/3 of the Default). Per-row `top` is a y-length the root font already scales, so it
    takes no Large twin -- same as the dash grid. */
-.mp-lg .mpv-bd { left: -115.333rem; width: 127.2rem; }
+.mp-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }
+/* Large per-index width overrides -- right edge PINNED (left+width == -115.333+130.4 ==
+   15.067rem); same specificity as .mp-lg .mpv-bd above, source order wins. */
+.mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }
+.mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }
 .mp-lg .mpv-tick.mpv-end { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-pre { width: 12rem;

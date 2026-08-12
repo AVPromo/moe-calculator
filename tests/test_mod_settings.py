@@ -1563,7 +1563,7 @@ def test_preview_sources_are_bare_relative_scaleform_paths():
     # (NOT the Gameface img:// scheme -- MSA's Image feeds a Flash UILoaderAlt that can't resolve
     # img://; it needs a plain path like MSA's own gui/maps/icons/aslainMenu/icon.png).
     mod_settings._seed(dict(DEFAULTS))
-    calc_src, bar_src = mod_settings.preview_sources()
+    calc_src, calc_w, calc_h, bar_src, bar_w, bar_h = mod_settings.preview_sources()
     for src in (calc_src, bar_src):
         assert src.startswith(u"gui/maps/icons/moe_calculator/previews/")
         assert not src.startswith(u"img://")
@@ -1571,6 +1571,51 @@ def test_preview_sources_are_bare_relative_scaleform_paths():
     # Defaults: countedAssist on -> 3-row calc, variant Efficiency + Horizontal -> eff_horizontal.
     assert calc_src.endswith(u"calc_assist_on.png")
     assert bar_src.endswith(u"bar_eff_horizontal.png")
+    # The dims must match _PREVIEW_DISPLAY for the default state (calc 125x73, bar 392x88 --
+    # the bar's soft backdrop is now revealed at a wider/taller extent).
+    assert (calc_w, calc_h) == mod_settings._PREVIEW_DISPLAY["calc_assist_on"] == (125, 73)
+    assert (bar_w, bar_h) == mod_settings._PREVIEW_DISPLAY["bar_eff_horizontal"] == (392, 88)
+
+
+def test_template_preview_images_carry_display_width_and_height():
+    # The _image descriptors for both preview keys must carry explicit width/height so MSA
+    # downscales the 4x-supersampled source -- a bare `source` with no dims was the pre-preview
+    # shape and would leave the panel showing the PNG at its raw 4x size.
+    mod_settings._seed(dict(DEFAULTS))
+    tmpl = mod_settings._template()
+    calc_img = _at(tmpl["column1"], mod_settings.CALC_PREVIEW_KEY)[0]
+    bar_img = _at(tmpl["column2"], mod_settings.BAR_PREVIEW_KEY)[0]
+    # width/height are the CURRENT source's display dims; containerWidth/Height reserve the
+    # max slot across every swappable image, so a taller/wider swap never reflows the panel.
+    assert (calc_img["width"], calc_img["height"]) == (125, 73)
+    assert (bar_img["width"], bar_img["height"]) == (392, 88)
+    assert (calc_img["containerWidth"], calc_img["containerHeight"]) == (
+        mod_settings._CALC_PREVIEW_W, mod_settings._CALC_PREVIEW_H)
+    assert (bar_img["containerWidth"], bar_img["containerHeight"]) == (
+        mod_settings._BAR_PREVIEW_W, mod_settings._BAR_PREVIEW_H)
+
+
+def test_update_preview_images_passes_the_display_dims_through(monkeypatch):
+    # update_preview_images() must forward the SAME (w, h) preview_sources() computed, not just
+    # the source path -- a regression here would silently drop back to an unscaled swap.
+    mod_settings._seed(dict(DEFAULTS))
+    calls = []
+
+    class _FakeImageMsa(object):
+        def updateImage(self, linkage, var_name, source, width, height):
+            calls.append((linkage, var_name, source, width, height))
+
+    fake = _FakeImageMsa()
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+    mod_settings.update_preview_images()
+    assert len(calls) == 2
+    for linkage, var_name, source, width, height in calls:
+        assert linkage == mod_settings.LINKAGE
+        assert isinstance(width, int) and isinstance(height, int)
+    calc_call = [c for c in calls if c[1] == mod_settings.CALC_PREVIEW_KEY][0]
+    bar_call = [c for c in calls if c[1] == mod_settings.BAR_PREVIEW_KEY][0]
+    assert (calc_call[3], calc_call[4]) == (125, 73)
+    assert (bar_call[3], bar_call[4]) == (392, 88)
 
 
 def test_template_steppers_are_bounded_manual_entry():

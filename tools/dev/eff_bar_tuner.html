@@ -274,7 +274,7 @@
      gets its OWN Y, like every per-role nudge in the shipped file. (0,4,0) beats .mp-cap.dn
      .mp-ico's (0,3,0), and it stays on the same transform: that transform is the stacking
      context scoping the ::before glow's z-index:-1. */
-  .mp-cap.dn .mp-ico.bm{transform:translate(-1.253rem,-50%) translateY(var(--icoybm))}
+  .mp-cap.dn .mp-ico.bm{transform:translate(var(--icoxbm),-50%) translateY(var(--icoybm))}
   /* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): the box-edge gap above is a
      uniform --icogapn, but each art asset's own zoom/canvas leaves a different INK gap, so these
      two literal X overrides equalise it instead -- (0,4,0) beats the (0,3,0) rules above on
@@ -285,13 +285,13 @@
      it, same convention both MA passes used). mk is calibrated to mark_2 ALONE (contain-scaled on
      a 24x24 canvas, box 16rem); mark_1/mark_3 land off it by +-2rem -- an accepted residual, same
      class as MoEProgress.css's own mark correction. */
-  .mp-cap.dn .mp-ico.mk{transform:translate(1rem,-50%) translateY(var(--icoyreq))}
+  .mp-cap.dn .mp-ico.mk{transform:translate(var(--icoxmk),-50%) translateY(var(--icoyreq))}
   /* PER-MARK, hand-tuned in tools/dev/icon_gap_tuner.html: r1/r2/r3 are three concurrent rows, so
      mark_1/mark_2/mark_3 no longer share one residual -- each gets its own full transform, tying
      .mk above on specificity ((0,4,0) each) and beating it by SOURCE ORDER instead. */
-  .mp-cap.dn .mp-ico.mk1{transform:translate(2rem,-50%) translateY(0.25rem)}
-  .mp-cap.dn .mp-ico.mk2{transform:translate(0rem,-50%) translateY(0.25rem)}
-  .mp-cap.dn .mp-ico.mk3{transform:translate(-1.5rem,-50%) translateY(0.25rem)}
+  .mp-cap.dn .mp-ico.mk1{transform:translate(var(--icoxmk1),-50%) translateY(var(--icoyreq))}
+  .mp-cap.dn .mp-ico.mk2{transform:translate(var(--icoxmk2),-50%) translateY(var(--icoyreq))}
+  .mp-cap.dn .mp-ico.mk3{transform:translate(var(--icoxmk3),-50%) translateY(var(--icoyreq))}
   .mp-ico::before{content:"";position:absolute;left:50%;top:50%;z-index:-1;width:106%;height:106%;
     transform:translate(-50%,-50%);
     background:radial-gradient(circle at 50% 50%,var(--icoglow) 0%,transparent 73%)}
@@ -632,7 +632,7 @@
       {id:"brqt",label:"brightness() -- quest_type cuts",min:1,max:6,step:0.1,val:3},
       {id:"brmk",label:"brightness() -- marksOnGun (deliberately 1)",min:1,max:6,step:0.1,val:1},
       {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.25},
-      {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:-0.25},
+      {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:0.4},
       {id:"icoyCur",label:"Current icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1.0}]],
     ["Backdrop",[
       {id:"ckCell",label:"Checker cell (game px @3840)",min:1,max:16,step:1,val:2},
@@ -820,6 +820,19 @@
     S.setProperty("--brqt",st.brqt);S.setProperty("--brmk",st.brmk);
     S.setProperty("--icoyreq",rem(st.icoyReq));S.setProperty("--icoycur",rem(st.icoyCur));
     S.setProperty("--icoybm",rem(st.icoyBm));
+    // PER-ROLE ICON X, hand-added (not slider-driven -- see the static rules' own comments) and
+    // MUST go through rem() like everything else here: a raw CSS `rem` literal in the <style>
+    // block resolves against the browser's OWN root font-size (16px), not this stage's simulated
+    // px-per-rem (st.pxrem, ~0.833 default) -- that mismatch was the live-preview bug (icons
+    // rendering ~19x too far from their caption), even though these exact numbers were already
+    // correct in cssOut()'s emitted string all along (the shipped CSS uses REAL rem, where
+    // 1rem == 1 logical px, so no conversion belongs there). Literal constants, mirroring the
+    // shipped MoEEfficiency.css verbatim (.mp-cap.dn .mp-ico.bm/.mk/.mk1/.mk2/.mk3).
+    S.setProperty("--icoxbm",rem(-1.253));
+    S.setProperty("--icoxmk",rem(1));
+    S.setProperty("--icoxmk1",rem(2.000));
+    S.setProperty("--icoxmk2",rem(0.000));
+    S.setProperty("--icoxmk3",rem(-1.500));
     // ---- backdrop
     S.setProperty("--bdleft",rem(-st.bdBleedX));
     S.setProperty("--bdw",rem(st.barW+2*st.bdBleedX));
@@ -1383,15 +1396,16 @@ JSON.stringify(meta,null,2)+"\n*/\n";
        cssD.indexOf("0 0 6rem rgba(90,154,211,1),")>=0 &&
        cssD.indexOf("rgba(237,230,217,0.3) 0%")>=0 &&
        /\.mp-cap \.mp-d \{[^}]*font-size: 12rem;/.test(cssD));
-    // ...including the barrel_mark's own Y, tuned to -0.25 -- so it OVERRIDES the .dn rule's
-    // 0.25rem and lifts that glyph ABOVE flat (translateY is CSS-signed: negative == up, the same
-    // convention the .mp-cap.up caption's lift uses). Both bottom-row Ys were raised 0.25rem in a
-    // live pass. Keep the second half anyway: it pins the knob, not the literal, the way the
-    // brmk/dY pairs do -- and it is the half that still holds if either default lands back on 0,
-    // where a DROPPED translateY() would look identical.
-    ok("fresh defaults raise both bottom-row glyphs (.dn 0.25rem, its barrel_mark -0.25rem)",
+    // ...including the barrel_mark's own Y, tuned to 0.4 -- it OVERRIDES the .dn rule's 0.25rem
+    // with its OWN, larger downward nudge (translateY is CSS-signed: positive == down). Re-tuned
+    // 2026-08-12 (ink-alignment pass against the sibling mark icons, converged via a live
+    // headless render, TASKS/settings-preview-images.md) from the old -0.25 (which lifted the
+    // glyph ABOVE flat) to 0.4 (which lowers it). Keep the second half anyway: it pins the knob,
+    // not the literal, the way the brmk/dY pairs do -- and it is the half that still holds if
+    // either default lands back on 0, where a DROPPED translateY() would look identical.
+    ok("fresh defaults raise the .dn glyphs 0.25rem and lower the barrel_mark 0.4rem",
        /\.mp-cap\.dn \.mp-ico \{ transform: translate\([^)]*\) translateY\(0\.25rem\); \}/.test(cssD) &&
-       /\.mp-cap\.dn \.mp-ico\.bm \{ transform: translate\([^)]*\) translateY\(-0\.25rem\); \}/.test(cssD));
+       /\.mp-cap\.dn \.mp-ico\.bm \{ transform: translate\([^)]*\) translateY\(0\.4rem\); \}/.test(cssD));
     var wasBm=st.icoyBm; st.icoyBm=-1.25; var cssBm=cssOut(); st.icoyBm=wasBm;
     ok("that barrel_mark Y is KNOB-driven (probed at -1.25rem)",
        /\.mp-cap\.dn \.mp-ico\.bm \{ transform: translate\([^)]*\) translateY\(-1\.25rem\); \}/.test(cssBm));

@@ -279,7 +279,7 @@ body { margin: 0; }
 /* The 100% cap's glyph is a DIFFERENT family from the three marks beside it, so it takes its
    own Y. (0,4,0) beats the rule above, and it stays on the same transform -- that transform is
    the stacking context that scopes the ::before glow's z-index:-1. */
-.mp-cap.dn .mp-ico.bm { transform: translate(-1.253rem, -50%) translateY(-0.25rem); }
+.mp-cap.dn .mp-ico.bm { transform: translate(-1.253rem, -50%) translateY(0.4rem); }
 /* PER-ICON INK-GAP PARITY (maintainer's ask, box sizes untouched): the box-edge gap above is a
    uniform --icoGap, but each art asset's own zoom/canvas leaves a different INK gap, so these
    two literal X overrides equalise it instead, calibrated off the real PNGs' alpha>32 bbox to a
@@ -498,7 +498,7 @@ body { margin: 0; }
 .mp-lg .mp-ico { transform: translate(-1.333rem, -50%); }
 .mp-lg .mp-cap.dn .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.up .mp-ico { transform: translate(-1.333rem, -50%) translateY(0.9rem); }
-.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(-0.25rem); }
+.mp-lg .mp-cap.dn .mp-ico.bm { transform: translate(-1.671rem, -50%) translateY(0.4rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk { transform: translate(1.333rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk1 { transform: translate(1.000rem, -50%) translateY(0.25rem); }
 .mp-lg .mp-cap.dn .mp-ico.mk2 { transform: translate(0.000rem, -50%) translateY(0.25rem); }

@@ -226,9 +226,20 @@ check("capP: numeral (.mpv-v) precedes its icon (.mpv-ico) in the DOM",
     /class="mpv-v"[\s\S]*?class="mpv-ico/.test(markup[1]));
 const capCMarkup = html.match(/<div class="mpv-cap mpv-capC">([\s\S]*?)<\/div>/)[1];
 check("capC: numeral precedes its icon in the DOM", /class="mpv-v"[\s\S]*?class="mpv-ico/.test(capCMarkup));
+// THE ETA ROW SPLIT (shipped MoEProgressVertical.css HAND-EDIT 6/6): the eta numeral + battles
+// icon moved OUT of capR into their own row, .mpv-capEta, stacked directly above capR. capR is
+// now JUST the mark numeral + mark icon. Updated from the old single-row assertion, which
+// expected both pairs inside ONE .mpv-capR element -- that shape no longer exists on either the
+// shipped stylesheet or (post-fix) this tuner.
 const capRMarkup = html.match(/<div class="mpv-cap mpv-capR">([\s\S]*?)<\/div>/)[1];
-check("capR: mark numeral precedes the mark icon, and eta numeral precedes the battles icon",
-    /class="mpv-v"[\s\S]*?class="mpv-ico mk[\s\S]*?class="mpv-eta"[\s\S]*?class="mpv-ico battles/.test(capRMarkup));
+check("capR: mark numeral precedes the mark icon (eta moved to its own row -- see capEta below)",
+    /class="mpv-v"[\s\S]*?class="mpv-ico mk/.test(capRMarkup));
+check("capR no longer contains the eta numeral or the battles icon (the row split is real, not partial)",
+    !/class="mpv-eta"/.test(capRMarkup) && !/class="mpv-ico battles/.test(capRMarkup));
+const capEtaMarkup = html.match(/<div class="mpv-cap mpv-capEta">([\s\S]*?)<\/div>/);
+assert.ok(capEtaMarkup, "no .mpv-capEta markup found -- the eta row split is missing");
+check("capEta: eta numeral precedes the battles icon in its OWN row",
+    /class="mpv-eta"[\s\S]*?class="mpv-ico battles/.test(capEtaMarkup[1]));
 
 // --- .mpv-capP's clamp holds at both axis extremes --------------------------------------------
 ctx.st.barH = 200;
