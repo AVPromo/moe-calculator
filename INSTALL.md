@@ -27,7 +27,7 @@ It uses the game's own mark art.
 
 | Requirement | Detail |
 |-------------|--------|
-| **Game** | World of Tanks **EU (Wargaming)** client, version **2.3.1.1**. Built and tested against this version. |
+| **Game** | World of Tanks **EU (Wargaming)** client, version **2.3.1.2**. Built and tested against this version. |
 | **Dependency** | **OpenWG GameFace** (required). The installer sets this up for you; for a manual install you add it yourself. |
 | **Optional** | **ModsSettingsAPI** — adds the in-game settings panel: the Garage and Battle widgets on/off, the centre-screen progress bar and its variant, and the Garage widget's position. The installer adds it if missing; without it the mod still runs with both widgets enabled and the progress bar off. |
 
@@ -58,7 +58,7 @@ installer. OpenWG GameFace and ModsSettingsAPI stay in place for other mods that
 2. Open your World of Tanks folder and the version-matched mods folder inside it:
 
    ```
-   <World of Tanks>\mods\2.3.1.1\
+   <World of Tanks>\mods\2.3.1.2\
    ```
 
    The folder name matches your installed client version. After a game update the version
@@ -70,7 +70,7 @@ installer. OpenWG GameFace and ModsSettingsAPI stay in place for other mods that
    get the in-game settings panel. Without it the mod runs with both widgets enabled.
 6. Fully restart the game client: exit completely and relaunch.
 
-The `mods\2.3.1.1\` folder then holds the OpenWG GameFace `.wotmod`,
+The `mods\2.3.1.2\` folder then holds the OpenWG GameFace `.wotmod`,
 `com.14th_ua.moe_calculator_3.0.0.wotmod`, and (optionally) the ModsSettingsAPI `.wotmod`.
 
 ---
@@ -131,7 +131,7 @@ Changes apply immediately.
 **The bar / overlay doesn't show up.**
 - Confirm OpenWG GameFace is installed in the same `mods\<version>\` folder.
 - Confirm the `.wotmod` is in the folder matching your client version (for example
-  `mods\2.3.1.1\`).
+  `mods\2.3.1.2\`).
 - Check that no loose copy of the mod sits under `res_mods\<version>\scripts\client\`, which
   would override the packaged mod. Keep only the `.wotmod` in `mods\<version>\`.
 - Fully restart the client after installing.
@@ -153,4 +153,4 @@ Remove the mod through its Windows **Apps & features** entry, or delete
 
 ---
 
-*Mod by 14th_ua. Built for WoT EU 2.3.1.1.*
+*Mod by 14th_ua. Built for WoT EU 2.3.1.2.*
