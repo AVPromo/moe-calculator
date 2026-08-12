@@ -401,7 +401,8 @@ _PANEL = {
             u"Mode Override Key", u"In-battle mode override",
             u"The key you press in battle to switch this vehicle's progress-bar mode "
             u"between Damage Efficiency and Moving Average. The mod remembers each "
-            u"vehicle's choice. Default: K."),
+            u"vehicle's choice. After you switch, the bar reloads and reappears after "
+            u"a few seconds. Default: K."),
     },
 
     u"de": {
@@ -520,7 +521,9 @@ _PANEL = {
             u"Modus-Wechseltaste", u"Modus-Wechsel im Gefecht",
             u"Die Taste, die du im Gefecht drückst, um den Fortschrittsleisten-Modus dieses "
             u"Fahrzeugs zwischen Schadenseffizienz und Gleitendem Durchschnitt "
-            u"umzuschalten. Der Mod merkt sich die Wahl für jedes Fahrzeug. Standard: K."),
+            u"umzuschalten. Der Mod merkt sich die Wahl für jedes Fahrzeug. Nach dem "
+            u"Wechsel lädt die Leiste neu und erscheint nach ein paar Sekunden wieder. "
+            u"Standard: K."),
     },
 
     u"fr": {
@@ -642,7 +645,8 @@ _PANEL = {
             u"Touche de changement de mode", u"Changement de mode en bataille",
             u"La touche que vous appuyez en bataille pour basculer le mode de la barre de "
             u"progression de ce véhicule entre Efficacité des dégâts et Moyenne glissante. "
-            u"Le mod mémorise le choix de chaque véhicule. Par défaut : K."),
+            u"Le mod mémorise le choix de chaque véhicule. Après le changement, la barre "
+            u"se recharge et réapparaît après quelques secondes. Par défaut : K."),
     },
 
     u"es": {
@@ -762,7 +766,8 @@ _PANEL = {
             u"Tecla de cambio de modo", u"Cambio de modo en combate",
             u"La tecla que pulsas en combate para alternar el modo de la barra de progreso "
             u"de este vehículo entre Eficiencia de daño y Media móvil. El mod recuerda la "
-            u"elección de cada vehículo. Predeterminada: K."),
+            u"elección de cada vehículo. Después de cambiar, la barra se recarga y "
+            u"reaparece tras unos segundos. Predeterminada: K."),
     },
 
     u"it": {
@@ -884,7 +889,8 @@ _PANEL = {
             u"Tasto di cambio modalità", u"Cambio modalità in battaglia",
             u"Il tasto che premi in battaglia per cambiare la modalità della barra di "
             u"progresso di questo veicolo tra Efficienza dei danni e Media mobile. Il mod "
-            u"ricorda la scelta di ogni veicolo. Predefinito: K."),
+            u"ricorda la scelta di ogni veicolo. Dopo il cambio, la barra si ricarica e "
+            u"riappare dopo alcuni secondi. Predefinito: K."),
     },
 
     u"pl": {
@@ -1002,7 +1008,8 @@ _PANEL = {
             u"Klawisz zmiany trybu", u"Zmiana trybu w bitwie",
             u"Klawisz, który naciskasz w bitwie, aby przełączyć tryb paska postępu tego "
             u"pojazdu między Efektywnością obrażeń a Średnią kroczącą. Mod zapamiętuje "
-            u"wybór dla każdego pojazdu. Domyślnie: K."),
+            u"wybór dla każdego pojazdu. Po zmianie pasek przeładowuje się i pojawia się "
+            u"ponownie po kilku sekundach. Domyślnie: K."),
     },
 
     u"cs": {
@@ -1113,7 +1120,8 @@ _PANEL = {
             u"Klávesa přepnutí režimu", u"Přepnutí režimu v bitvě",
             u"Klávesa, kterou v bitvě stiskneš pro přepnutí režimu lišty postupu tohoto "
             u"vozidla mezi Efektivitou poškození a Klouzavým průměrem. Mod si pamatuje "
-            u"volbu pro každé vozidlo. Výchozí: K."),
+            u"volbu pro každé vozidlo. Po přepnutí se lišta znovu načte a znovu se zobrazí "
+            u"po několika sekundách. Výchozí: K."),
     },
 
     u"ru": {
@@ -1233,7 +1241,8 @@ _PANEL = {
             u"Клавиша смены режима", u"Смена режима в бою",
             u"Клавиша, которую вы нажимаете в бою, чтобы переключить режим полосы "
             u"прогресса этой машины между Эффективностью урона и Скользящим средним. "
-            u"Мод запоминает выбор для каждой машины. По умолчанию: K."),
+            u"Мод запоминает выбор для каждой машины. После переключения полоса "
+            u"перезагружается и появляется снова через несколько секунд. По умолчанию: K."),
     },
 
     u"uk": {
@@ -1351,7 +1360,8 @@ _PANEL = {
             u"Клавіша зміни режиму", u"Зміна режиму в бою",
             u"Клавіша, яку ви натискаєте в бою, щоб перемкнути режим смуги прогресу цієї "
             u"машини між Ефективністю шкоди та Ковзним середнім. Мод запам'ятовує вибір "
-            u"для кожної машини. За замовчуванням: K."),
+            u"для кожної машини. Після перемикання смуга перезавантажується і з'являється "
+            u"знову через кілька секунд. За замовчуванням: K."),
     },
 
     u"hu": {
@@ -1465,7 +1475,8 @@ _PANEL = {
             u"Mód váltó billentyű", u"Mód váltás csatában",
             u"A billentyű, amelyet csatában megnyomva válthatsz e jármű haladási "
             u"sávjának módja között, Sebzéshatékonyság és Mozgóátlag közt. A mod "
-            u"megjegyzi az egyes járművek választását. Alapértelmezett: K."),
+            u"megjegyzi az egyes járművek választását. A váltás után a sáv újratöltődik, "
+            u"és néhány másodperc múlva jelenik meg újra. Alapértelmezett: K."),
     },
 
     u"tr": {
@@ -1580,7 +1591,8 @@ _PANEL = {
             u"Mod Değiştirme Tuşu", u"Savaşta mod değiştirme",
             u"Bu aracın ilerleme çubuğu modunu Hasar verimliliği ile Hareketli ortalama "
             u"arasında değiştirmek için savaşta bastığın tuş. Mod her aracın seçimini "
-            u"hatırlar. Varsayılan: K."),
+            u"hatırlar. Değiştirdikten sonra çubuk yeniden yüklenir ve birkaç saniye sonra "
+            u"yeniden görünür. Varsayılan: K."),
     },
 }
 
