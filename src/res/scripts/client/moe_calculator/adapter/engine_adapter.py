@@ -36,9 +36,17 @@ def build_snapshot():
         moe = _read_moe(int_cd)
         marks, percentile, avg_damage = moe[0], moe[1], moe[2]
         battles = moe[3] if len(moe) > 3 else 0
+        # Whether this read landed on a SYNCED items-cache (missing on an older/stubbed
+        # _read_moe -> default True, matching the pre-guard behavior those callers exercise).
+        synced = moe[4] if len(moe) > 4 else True
         # Snapshot the career baseline for the in-battle overlay -- the dossier this reads is
         # unavailable in battle, so battle_adapter falls back to this cache (see baseline_cache).
-        baseline_cache.remember(int_cd, percentile, avg_damage)
+        # Gated on `synced`: a read that raced IItemsCache's sync can come back silently
+        # all-zero (bit-identical to a genuine never-played tank), so an unsynced read must
+        # NOT mark the tank baseline_cache.seen() or battle_adapter would trust it as a real
+        # 0-career and project a wrong live-from-0 percent (see baseline_cache.remember).
+        if synced:
+            baseline_cache.remember(int_cd, percentile, avg_damage)
         # Ground truth for the prediction<->outcome recorder: this dossier read IS the actual
         # outcome, and it already runs on the post-battle items-cache sync. A no-op unless a
         # prediction for this tank is pending AND these values moved off its pre-battle ones
@@ -87,18 +95,23 @@ def _estimate_thresholds(percentile, avg_damage):
 
 def _read_moe(int_cd):
     """Read (marks 0-3, current percentile float, current moving-avg combined damage, career
-    battles) from the vehicle's TOTAL dossier. Guarded/fail-soft to (0, 0.0, 0, 0): a
-    never-played vehicle simply has no records (getRecordValue would KeyError). The battle
-    count is only recorded by the sample log (stronger prediction<->battle pairing); nothing
-    in the bar reads it."""
+    battles, items-cache synced) from the vehicle's TOTAL dossier. Guarded/fail-soft to
+    (0, 0.0, 0, 0, False): a never-played vehicle simply has no records (getRecordValue would
+    KeyError). The battle count is only recorded by the sample log (stronger
+    prediction<->battle pairing); nothing in the bar reads it. `synced` is
+    IItemsCache.items.dossiers.isSynced(), read BEFORE the dossier fetch below so a True value
+    means the read that follows is on synced data -- build_snapshot uses it to decide whether
+    this read is trustworthy enough to seed baseline_cache (a read that races the sync can come
+    back silently all-zero, indistinguishable from a genuine never-played tank)."""
     try:
         from helpers import dependency
         from skeletons.gui.shared import IItemsCache
         from dossiers2.ui.achievements import MARK_ON_GUN_RECORD, ACHIEVEMENT_BLOCK
         items = dependency.instance(IItemsCache).items
+        synced = _safe(lambda: items.dossiers.isSynced(), False)
         dossier = items.getVehicleDossier(int_cd)
         if dossier is None:
-            return 0, 0.0, 0, 0
+            return 0, 0.0, 0, 0, synced
         stats = dossier.getTotalStats()
         mog = stats.getAchievement(MARK_ON_GUN_RECORD)
         marks = _safe_int(lambda: mog.getValue(), 0)
@@ -107,7 +120,7 @@ def _read_moe(int_cd):
         avg_damage = _safe_int(
             lambda: dossier.getRecordValue(ACHIEVEMENT_BLOCK.TOTAL, "movingAvgDamage"), 0)
         battles = _safe_int(lambda: stats.getBattlesCount(), 0)
-        return marks, percentile, avg_damage, battles
+        return marks, percentile, avg_damage, battles, synced
     except Exception:
         LOG_CURRENT_EXCEPTION()
-        return 0, 0.0, 0, 0
+        return 0, 0.0, 0, 0, False

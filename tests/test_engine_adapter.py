@@ -124,6 +124,42 @@ def test_build_snapshot_tolerates_a_three_tuple_read(monkeypatch):
     assert calls == [(1073, 73.7, 1800, 0)]
 
 
+# --- cold-start guard: an unsynced read must not seed baseline_cache ----------
+# A pre-IItemsCache-sync garage read comes back silently all-zero, bit-identical to a
+# genuine never-played tank. build_snapshot must trust that ONLY when `synced` is True.
+
+def test_build_snapshot_unsynced_zero_read_does_not_seed_baseline(monkeypatch):
+    monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (0, 0.0, 0, 0, False))
+    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", lambda cd: {})
+    monkeypatch.setattr(ea.moe_wgapi, "needs_estimate", lambda cd: False)
+    ea.build_snapshot()
+    assert baseline_cache.seen(1073) is False
+    assert baseline_cache.get(1073) is None
+
+
+def test_build_snapshot_synced_zero_read_still_seeds_baseline(monkeypatch):
+    # Same all-zero career, but a genuinely synced read -- a real never-played tank must
+    # still be marked seen() so the battle overlay can project from a true 0 baseline.
+    monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (0, 0.0, 0, 0, True))
+    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds", lambda cd: {})
+    monkeypatch.setattr(ea.moe_wgapi, "needs_estimate", lambda cd: False)
+    ea.build_snapshot()
+    assert baseline_cache.seen(1073) is True
+    assert baseline_cache.get(1073) is None  # value not stored (all-zero), only the seen mark
+
+
+def test_build_snapshot_synced_real_career_still_stores_the_pair(monkeypatch):
+    monkeypatch.setattr(ea, "g_currentVehicle", _CV(present=True, item=_Veh()))
+    monkeypatch.setattr(ea, "_read_moe", lambda cd: (2, 73.7, 1800, 100, True))
+    monkeypatch.setattr(ea.moe_wgapi, "get_thresholds",
+                        lambda cd: {65: 1, 85: 2, 95: 3, 100: 4})
+    ea.build_snapshot()
+    assert baseline_cache.seen(1073) is True
+    assert baseline_cache.get(1073) == (73.7, 1800)
+
+
 def test_sample_log_raise_degrades_instead_of_propagating(monkeypatch):
     # The recorder call sits INSIDE build_snapshot's guarded body, so a raise degrades to a
     # hidden bar rather than propagating into the hangar mount (same contract as the tail guard
