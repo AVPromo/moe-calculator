@@ -45,6 +45,13 @@ _stub("frameworks.wulf", ViewModel=_StubViewModel, Array=_StubArray)
 _stub("openwg_gameface", gf_mod_inject=lambda *a, **k: None)
 
 from moe_calculator.bridge import gameface_bridge  # noqa: E402
+from moe_calculator.adapter import engine_adapter   # noqa: E402
+from moe_calculator.adapter import moe_wgapi         # noqa: E402
+from moe_calculator.adapter import baseline_cache    # noqa: E402
+
+
+def teardown_function(_):
+    baseline_cache.clear()
 
 
 class _WulfMap(object):
@@ -117,3 +124,118 @@ def test_never_raises_into_js(monkeypatch):
     monkeypatch.setattr(gameface_bridge.mod_settings, "set_position", _boom)
     # Must not raise.
     gameface_bridge._on_set_position({"x": 100, "y": 200, "w": 1920, "h": 1080})
+
+
+# --- widget-independent priming (decouple data-priming from the garage widget) ---------------
+# The two widget-independent hooks (_on_vehicle_changed / _on_sync_completed) must prime the
+# in-battle overlay's data -- seed the career baseline AND kick the WG threshold fetch -- even when
+# the garage widget is OFF, because then refresh()->push()->build_snapshot() (the usual prime path)
+# never runs. When the widget is ON that push path already primes, so the hook must NOT double-read.
+# engine_adapter.prime_current is the single side-effecting seam; we drive it through its own
+# stubbed reads (mirroring test_engine_adapter) and assert the observable effects at the bridge.
+
+class _Veh(object):
+    intCD = 1073
+    nationName = "germany"
+
+
+class _CV(object):
+    def __init__(self, present, item=None):
+        self._present = present
+        self.item = item
+
+    def isPresent(self):
+        return self._present
+
+
+def _prime_seams(monkeypatch):
+    """Stub engine_adapter's read seams so prime_current/build_snapshot run game-closed, recording
+    each dossier read (`reads`) and each threshold request (`thresh`). A synced 5-tuple read seeds
+    the baseline; a non-empty threshold dict keeps build_snapshot off the estimator branch."""
+    reads, thresh = [], []
+    monkeypatch.setattr(engine_adapter, "g_currentVehicle", _CV(present=True, item=_Veh()))
+    monkeypatch.setattr(engine_adapter, "_read_moe",
+                        lambda cd: reads.append(cd) or (2, 73.7, 1800, 100, True))
+    monkeypatch.setattr(engine_adapter.moe_wgapi, "get_thresholds",
+                        lambda cd: thresh.append(cd) or {65: 1, 85: 2, 95: 3, 100: 4})
+    monkeypatch.setattr(engine_adapter.sample_log, "resolve", lambda *a: False)
+    return reads, thresh
+
+
+def test_vehicle_changed_widget_off_primes_baseline_and_thresholds(monkeypatch):
+    # Widget OFF (_active is None) + a current vehicle selected -> _on_vehicle_changed's refresh()
+    # no-ops, so the hook itself must prime: seed the baseline AND request the threshold fetch, with
+    # NO widget ever mounted.
+    monkeypatch.setattr(gameface_bridge, "_active", None)
+    reads, thresh = _prime_seams(monkeypatch)
+    gameface_bridge._on_vehicle_changed()
+    assert baseline_cache.get(1073) == (73.7, 1800)   # baseline seeded
+    assert thresh == [1073]                            # threshold fetch requested
+    assert reads == [1073]                             # exactly one dossier read, no widget push
+
+
+def test_sync_completed_widget_off_primes_baseline_and_thresholds(monkeypatch):
+    # Same widget-OFF priming, driven by the items-cache sync hook (post-battle career update).
+    # The ownership-reconcile + scheduled refresh are neighbours out of scope here -> stubbed.
+    monkeypatch.setattr(gameface_bridge, "_active", None)
+    monkeypatch.setattr(moe_wgapi, "start", lambda: None)
+    monkeypatch.setattr(moe_wgapi, "reconcile_ownership", lambda: None)
+    monkeypatch.setattr(gameface_bridge, "_schedule_refresh", lambda: None)
+    reads, thresh = _prime_seams(monkeypatch)
+    gameface_bridge._on_sync_completed()
+    assert baseline_cache.get(1073) == (73.7, 1800)
+    assert thresh == [1073]
+    assert reads == [1073]
+
+
+def test_widget_on_does_not_double_prime(monkeypatch):
+    # Widget ON (_active set): refresh()->push()->build_snapshot() already primes once, so the hook's
+    # `if _active is None` guard must skip its own prime -> exactly ONE dossier read per event, not
+    # two. The full Wulf marshal path needs the live client (out of scope), so push stands in as
+    # build_snapshot -- which IS where the push path's prime happens.
+    reads, thresh = _prime_seams(monkeypatch)
+    monkeypatch.setattr(gameface_bridge, "_active", (object(), object()))
+    monkeypatch.setattr(gameface_bridge, "_host_alive", lambda: True)
+    monkeypatch.setattr(gameface_bridge, "push",
+                        lambda rvm, host_vm=None: engine_adapter.build_snapshot())
+    gameface_bridge._on_vehicle_changed()
+    assert reads == [1073]   # one read via the push path; the hook did NOT prime a second time
+
+
+def test_sync_ordering_keeps_the_persisted_fetch_list(monkeypatch, tmp_path):
+    # THE ordering fix: _on_sync_completed calls moe_wgapi.start() (which _load_list()s the persisted
+    # fetch list into _want) BEFORE reconcile_ownership() (which _save_list()s _want on a buy/sell).
+    # With the widget off, start() would otherwise never have run this session, so a reconcile that
+    # persists a freshly-bought tank into an EMPTY in-memory _want clobbers the on-disk list. Seed a
+    # prior-session list on disk, stage a buy for reconcile to persist, and assert the persisted ids
+    # survive. RED if start() is moved back after reconcile_ownership().
+    NOW = 1_700_000_000
+    monkeypatch.setattr(moe_wgapi, "data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: NOW)
+    # A prior session persisted these two owned tanks.
+    monkeypatch.setattr(moe_wgapi, "_want", {111: NOW, 222: NOW})
+    moe_wgapi._save_list()
+    # Fresh session: nothing loaded, an owned baseline from an earlier sync, and 333 freshly bought
+    # in the current garage so reconcile has a buy to persist.
+    monkeypatch.setattr(moe_wgapi, "_want", {})
+    monkeypatch.setattr(moe_wgapi, "_started", False)
+    monkeypatch.setattr(moe_wgapi, "_list_ready", False)
+    monkeypatch.setattr(moe_wgapi, "_owned", {111, 222})
+    monkeypatch.setattr(moe_wgapi.garage_roster, "owned_int_cds", lambda: [111, 222, 333])
+    monkeypatch.setattr(moe_wgapi.garage_roster, "recency_map",
+                        lambda ids: dict((cd, NOW) for cd in ids))
+    monkeypatch.setattr(moe_wgapi.garage_roster, "selected_int_cd", lambda: 111)
+    monkeypatch.setattr(moe_wgapi.garage_roster, "recent_int_cds", lambda n: [111, 222])
+    # Isolate the ordering from the network / scheduled-refresh / prime machinery.
+    monkeypatch.setattr(moe_wgapi, "_load_cache", lambda: None)
+    monkeypatch.setattr(moe_wgapi, "_enqueue", lambda ids: None)
+    monkeypatch.setattr(gameface_bridge, "_active", None)
+    monkeypatch.setattr(gameface_bridge, "_schedule_refresh", lambda: None)
+    monkeypatch.setattr(gameface_bridge.engine_adapter, "prime_current", lambda: None)
+
+    gameface_bridge._on_sync_completed()
+
+    persisted = moe_wgapi.valid_list(
+        moe_wgapi.read_json(moe_wgapi._list_store_path()), moe_wgapi.REGION)
+    assert 111 in moe_wgapi._want and 222 in moe_wgapi._want   # in-memory list preserved
+    assert 111 in persisted and 222 in persisted               # on-disk list not clobbered

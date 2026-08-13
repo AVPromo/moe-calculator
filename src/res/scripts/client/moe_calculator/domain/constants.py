@@ -53,10 +53,11 @@ STALE_WINDOW_SECONDS = 7 * 24 * 3600
 # fetch_list.needs_refetch (the "don't refetch every session" throttle). WG refreshes the MoE
 # distribution DAILY (officially confirmed) but publishes it with a ~1-2 day lag, so anchoring the
 # window to WG's own `updated_at` would leave the data >24h old on arrival and refetch on every
-# garage entry. We therefore anchor to when WE fetched: check at most once per day, which still
-# picks up WG's new daily distribution within ~24h. A fetch that reveals a changed WG `updated_at`
-# still forces a full refetch sooner (fetch_list.data_changed + moe_wgapi._poll).
-REVALIDATE_SECONDS = 24 * 3600
+# garage entry. We therefore anchor to when WE fetched: at 12h we re-check up to twice a day, so a
+# session started in the evening still picks up WG's new daily distribution without a day-long
+# lag. A fetch that reveals a changed WG `updated_at` still forces a full refetch sooner
+# (fetch_list.data_changed + moe_wgapi._poll).
+REVALIDATE_SECONDS = 12 * 3600
 
 # In-battle projected-rating (EWMA) coefficient. WG's Marks rating is a moving average
 # over "~50-100 battles"; we model it as an EWMA newAvg = prevAvg + k*(CD - prevAvg) with

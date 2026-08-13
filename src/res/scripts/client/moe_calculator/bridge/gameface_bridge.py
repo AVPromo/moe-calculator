@@ -105,6 +105,11 @@ def _on_vehicle_changed(*args, **kwargs):
     # get_thresholds() in the push below.
     try:
         refresh()
+        # Widget OFF (or never mounted) -> refresh() no-ops, so the in-battle overlay would miss
+        # this vehicle's baseline + thresholds. Prime them directly. When _active is set,
+        # refresh()->push()->build_snapshot() already primed (via prime_current) -- don't double-read.
+        if _active is None:
+            engine_adapter.prime_current()
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -147,7 +152,20 @@ def _on_sync_completed(*args, **kwargs):
     # unreliable across client versions, so we don't decode it). Then coalesce a refresh onto
     # the next tick so a burst collapses to one push and CurrentVehicle has rebuilt its item.
     try:
+        # start() BEFORE reconcile_ownership(): start() loads the persisted _want fetch list via
+        # _load_list(). If reconcile_ownership() runs first (common with the widget off, where
+        # attach()'s start() never fired) it can _save_list() the empty in-memory list, clobbering
+        # the on-disk one. start() is idempotent + fail-soft, so calling it here is safe.
+        moe_wgapi.start()
         moe_wgapi.reconcile_ownership()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+    try:
+        # Widget OFF -> _schedule_refresh()'s eventual push no-ops, so seed the current vehicle's
+        # baseline + fetch its thresholds directly (post-battle sync is when the career dossier
+        # updates). When _active is set, the scheduled refresh primes via prime_current instead.
+        if _active is None:
+            engine_adapter.prime_current()
     except Exception:
         LOG_CURRENT_EXCEPTION()
     try:

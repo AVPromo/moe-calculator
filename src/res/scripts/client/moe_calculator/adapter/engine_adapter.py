@@ -20,22 +20,26 @@ from moe_calculator.adapter import baseline_cache
 from moe_calculator.adapter import sample_log
 
 
-def build_snapshot():
-    """Read the selected vehicle into a MoESnapshot. Returns a snapshot with
-    has_vehicle=False (never None) when no vehicle is selected, so the bridge can hide
-    the bar uniformly."""
+def prime_current():
+    """Widget-INDEPENDENT priming for the selected vehicle: seed the in-battle career baseline
+    and kick its WG threshold fetch, so the in-battle overlay has accurate data by battle time
+    even when the garage widget is OFF (its push path never runs then). Called from the two
+    widget-independent bridge hooks (vehicle-changed / items-cache sync) AND -- reused, not
+    duplicated -- by build_snapshot on the widget-ON path, so the dossier is read once per event.
+
+    Returns (int_cd, nation, moe_tuple, thresholds) for build_snapshot to build its model from,
+    or None when no vehicle is selected. Fail-soft: never raises into a listener (a raise would
+    break the re-arm), degrading to None."""
     try:
         if not g_currentVehicle.isPresent():
-            return t.MoESnapshot(has_vehicle=False)
+            return None
         veh = g_currentVehicle.item
-
         int_cd = _safe_int(lambda: veh.intCD, 0)
         nation = _safe(lambda: veh.nationName, "") or ""
         # Tolerant unpack: _read_moe also reports battlesCount (a pairing aid for the sample
-        # recorder below), but callers/tests that stub it with the older 3-tuple still work.
+        # recorder) + a `synced` flag, but callers/tests stubbing the older 3-tuple still work.
         moe = _read_moe(int_cd)
-        marks, percentile, avg_damage = moe[0], moe[1], moe[2]
-        battles = moe[3] if len(moe) > 3 else 0
+        percentile, avg_damage = moe[1], moe[2]
         # Whether this read landed on a SYNCED items-cache (missing on an older/stubbed
         # _read_moe -> default True, matching the pre-guard behavior those callers exercise).
         synced = moe[4] if len(moe) > 4 else True
@@ -47,12 +51,29 @@ def build_snapshot():
         # 0-career and project a wrong live-from-0 percent (see baseline_cache.remember).
         if synced:
             baseline_cache.remember(int_cd, percentile, avg_damage)
+        thresholds = moe_wgapi.get_thresholds(int_cd)
+        return int_cd, nation, moe, thresholds
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return None
+
+
+def build_snapshot():
+    """Read the selected vehicle into a MoESnapshot. Returns a snapshot with
+    has_vehicle=False (never None) when no vehicle is selected, so the bridge can hide
+    the bar uniformly."""
+    try:
+        primed = prime_current()
+        if primed is None:
+            return t.MoESnapshot(has_vehicle=False)
+        int_cd, nation, moe, thresholds = primed
+        marks, percentile, avg_damage = moe[0], moe[1], moe[2]
+        battles = moe[3] if len(moe) > 3 else 0
         # Ground truth for the prediction<->outcome recorder: this dossier read IS the actual
         # outcome, and it already runs on the post-battle items-cache sync. A no-op unless a
         # prediction for this tank is pending AND these values moved off its pre-battle ones
         # (adapter/sample_log; diagnostics only, fully guarded).
         sample_log.resolve(int_cd, percentile, avg_damage, battles)
-        thresholds = moe_wgapi.get_thresholds(int_cd)
         # Fallback: if the WG request for this tank completed with no usable data (errored /
         # not in the API), extrapolate from the player's own dossier point (movingAvgDamage @
         # this percentile) via the offline estimator, so the bar still shows numbers rather

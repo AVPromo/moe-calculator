@@ -34,7 +34,7 @@ Fetch behavior -- a persistent, capped (100) working set of OWNED tank ids ("the
     commits it to the permanent list. Adds past the 100-cap evict the least-recently-played member.
   * On selection: get_thresholds() lazily fetches a single tank iff it's not already cached.
   * Results are cached in memory AND persisted, revalidated two ways: (a) a time throttle -- the
-    cache is served while now < OUR last-fetch time + 1 day (WG refreshes the distribution daily
+    cache is served while now < OUR last-fetch time + 12h (WG refreshes the distribution daily
     but publishes it with a ~1-2 day lag, so the window is anchored to when WE fetched, not to
     WG's own `updated_at`, which would leave the data >24h old on arrival and refetch every
     session) -- and (b) an updated_at-change trigger -- whenever any fetch returns an `updated_at`
@@ -43,8 +43,8 @@ Fetch behavior -- a persistent, capped (100) working set of OWNED tank ids ("the
     _table/_seen/_inflight dedup serves the cache: a still-fresh cache is adopted on load, and the
     batch enqueue then skips every id already held while still fetching any genuinely-missing one.
     Detection of (b) is opportunistic -- it rides whatever fetch naturally happens (a cache-miss
-    on select, a buy/sell, a battle in a new tank); the 1-day throttle covers the case where
-    nothing triggers a fetch, and picks up WG's new daily data within ~24h of our next session.
+    on select, a buy/sell, a battle in a new tank); the 12h throttle covers the case where
+    nothing triggers a fetch, and picks up WG's new daily data within ~12h of our next session.
   * If a request errors (or a tank has no WG data), needs_estimate() lets the caller fall back
     to the offline estimator (domain/moe_estimate) so the bar still shows extrapolated numbers.
 
@@ -186,7 +186,7 @@ def parse_response(text):
 def fresh_table(blob, now_epoch, region):
     """Return the cached {int_cd: {percentile: dmg}} table from a persisted envelope iff it is
     the current store version, same region, and still within the revalidation window
-    (now_epoch < fetched_at + 24h -- i.e. WE fetched it less than a day ago); otherwise {}
+    (now_epoch < fetched_at + 12h -- i.e. WE fetched it less than 12h ago); otherwise {}
     (stale -> refetch). The window is anchored to our own fetch time, not WG's `updated_at`,
     because WG publishes its daily distribution with a lag (see constants.REVALIDATE_SECONDS).
     Pure."""
@@ -370,7 +370,7 @@ def on_vehicle_bought(int_cd):
 
 def on_vehicle_sold(int_cd):
     """A vehicle left the garage -> drop it from the permanent list (and the temp set). Leaves
-    any cached thresholds in _table/_seen alone (harmless, bounded by the 1-day envelope). Guarded."""
+    any cached thresholds in _table/_seen alone (harmless, bounded by the 12h envelope). Guarded."""
     global _want
     try:
         cd = int(int_cd or 0)
@@ -545,9 +545,9 @@ def _poll():
                 _updated_at = upd
             # Freshness is anchored to OUR fetch time, not WG's updated_at. It is stored PER FILE
             # (one _fetched_at for the whole _table), not per row: any fetch re-stamps the window
-            # for every cached tank, so a lazy single-tank fetch at T+20h resets the 24h clock on
+            # for every cached tank, so a lazy single-tank fetch at T+8h resets the 12h clock on
             # rows cached at T. Accepted by design -- the updated_at-change trigger above is the
-            # primary invalidation (a genuine WG refresh drops the whole cache), and the 1-day
+            # primary invalidation (a genuine WG refresh drops the whole cache), and the 12h
             # window is only the fallback; the residual per-tank staleness is bounded by WG's own
             # accepted 1-2 day publish lag. Revisit with per-row fetched_at only if that lag bites.
             _fetched_at = _now_epoch()
@@ -712,7 +712,7 @@ def write_json(path, blob):
 # --- threshold cache persistence ---------------------------------------------
 
 def _now_epoch():
-    """Current wall-clock as epoch seconds (stamped as fetched_at; compared against fetched_at + 24h)."""
+    """Current wall-clock as epoch seconds (stamped as fetched_at; compared against fetched_at + 12h)."""
     import time
     return time.time()
 
@@ -723,7 +723,7 @@ def _store_path():
 
 
 def _load_cache():
-    """Adopt a still-fresh cache from disk into _table (fetched within the last 24h). If it's past
+    """Adopt a still-fresh cache from disk into _table (fetched within the last 12h). If it's past
     that window (or an outright invalid envelope), fresh_table() already says so by returning {};
     in that case, separately hold it in _stale_table (Race #2 -- see
     TASKS/fix-first-battle-of-day-baseline.md) PROVIDED it's still under the hard

@@ -5,12 +5,13 @@ Every rule from the spec is covered here without the game engine (the functions 
 now_epoch / recency_map / cap as args). Engine reads + persistence live in the adapter and are
 exercised in-client.
 """
+from moe_calculator.adapter import moe_wgapi
 from moe_calculator.domain import fetch_list
 from moe_calculator.domain import constants
 
 NOW = 1_700_000_000
 WINDOW = constants.STALE_WINDOW_SECONDS  # 7 days
-TTL = constants.REVALIDATE_SECONDS       # 1 day
+TTL = constants.REVALIDATE_SECONDS       # 12h
 
 
 # --- bootstrap_ids -----------------------------------------------------------
@@ -147,6 +148,19 @@ def test_needs_refetch_past_ttl_is_true():
 def test_needs_refetch_boundary_is_true():
     # now == fetched_at + ttl -> due (>= boundary).
     assert fetch_list.needs_refetch(NOW - TTL, NOW) is True
+
+
+# --- single-source revalidation TTL (12h) ------------------------------------
+# constants.REVALIDATE_SECONDS is THE one source; moe_wgapi._REVALIDATE_SECONDS and
+# fetch_list.needs_refetch's default ttl both alias it. Pin the value AND that the alias didn't
+# fork -- a future reverted literal (e.g. the old 24h) is caught from both sides of the boundary.
+
+def test_revalidate_ttl_is_one_12h_source():
+    assert constants.REVALIDATE_SECONDS == 12 * 3600
+    assert moe_wgapi._REVALIDATE_SECONDS == constants.REVALIDATE_SECONDS == 12 * 3600
+    # needs_refetch reads the SAME source (its default ttl): exactly 12h is due, just under is fresh.
+    assert fetch_list.needs_refetch(0, 12 * 3600) is True
+    assert fetch_list.needs_refetch(0, 12 * 3600 - 1) is False
 
 
 # --- data_changed ------------------------------------------------------------
