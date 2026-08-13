@@ -42,8 +42,10 @@ def test_the_text_less_spacer_rows_take_a_none_sentinel_slot():
     # heading the hold Slider and one heading "Layout"/catBarPosition.
     # +1 each at SETTINGS_VERSION 24->25 for the two preview Images' text-less None slots
     # (calcPreview in column 1, barPreview in column 2 -- see mod_settings's _image / _template).
-    assert S.COL1_KEYS.count(None) == 4
-    assert S.COL2_KEYS.count(None) == 5
+    # barPreview's sentinel MOVED from COL2_KEYS to COL1_KEYS at 26->27 (row moved columns), so
+    # column 1 gains a fifth None and column 2 drops back to four.
+    assert S.COL1_KEYS.count(None) == 5
+    assert S.COL2_KEYS.count(None) == 4
     # A sentinel must never collide with a real row, in any language.
     for code in S._PANEL:
         assert None not in S.build(code)
@@ -172,7 +174,7 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # header, the Transitions master, its two switches and the hold-duration slider. The TABLE KEY
     # `progressBar` never changed through any of those moves, so no translation was ever orphaned.
     #
-    # Pinned as a literal SIXTEEN-slot RUN (thirteen real keys + the three `None` sentinels that
+    # Pinned as a literal SEVENTEEN-slot RUN (fourteen real keys + the three `None` sentinels that
     # sit inside it), rather than filtering the sentinels out and asserting contiguity on what
     # remains -- that would silently accept a spacer landing anywhere in the run instead of exactly
     # where it belongs. It is now COL2_KEYS' own HEAD (the whole feature is column 2 in full), so
@@ -180,23 +182,27 @@ def test_progress_bar_group_is_the_whole_of_col2():
     #
     # v25->26 added VARIANT_HOTKEY_KEY right after VARIANT_KEY (the in-battle mode-override
     # HotKey control -- see mod_settings's SETTINGS_VERSION comment), growing the run 15 -> 16.
+    # v27->28 added progressAutoToggleThreshold right after VARIANT_HOTKEY_KEY (the Automatic
+    # Mode Toggle threshold Slider), growing the run 16 -> 17.
     assert u"progressBar" in S._PANEL[u"en"]
     start = S.COL2_KEYS.index(u"catBattleProgress")
-    tail = S.COL2_KEYS[start:start + 16]
+    tail = S.COL2_KEYS[start:start + 17]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
-                    None, S.VARIANT_KEY, S.VARIANT_HOTKEY_KEY, u"progressSize",
+                    None, S.VARIANT_KEY, S.VARIANT_HOTKEY_KEY,
+                    u"progressAutoToggleThreshold", u"progressSize",
                     None, u"catTransitions",
                     u"progressTransitions", u"progressTransEvents", u"progressTransManual",
                     None, u"progressHoldSeconds"), (
         u"the Battle Progress + Transitions categories (incl. all three spacers) are no longer one "
         u"run in COL2_KEYS: %r" % (S.COL2_KEYS,))
-    # ...and the "Layout" category (key catBarPosition, displayed text "Layout") IS the tail,
-    # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers.
-    # The trailing None is the barPreview Image's sentinel, appended at 24->25 (see mod_settings).
-    assert S.COL2_KEYS[start + 16:] == (
+    # ...and the "Layout" category (key catBarPosition, displayed text "Layout") IS the tail now,
+    # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers. The
+    # barPreview Image's trailing None sentinel that used to close COL2_KEYS (appended at 24->25)
+    # MOVED to COL1_KEYS's own tail at 26->27 -- see mod_settings's SETTINGS_VERSION history.
+    assert S.COL2_KEYS[start + 17:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
-        u"barPosX", u"barPosY", None), (
+        u"barPosX", u"barPosY"), (
         u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))
     assert S.VARIANT_KEY == u"progressVariant"
     # The column-3 key tuple is gone with the column -- a leftover would silently re-add a

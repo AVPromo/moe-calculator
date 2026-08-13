@@ -78,3 +78,50 @@ def test_variant_toggle_persists_and_reapplies(monkeypatch):
     battle_bridge._current_int_cd = 555
     battle_bridge._on_variant_toggle()
     assert calls["toggle"] == [(555, 0)] and calls["apply"] == 1
+
+
+# --- _maybe_auto_toggle: the automatic per-vehicle mode toggle, fired on mount -----------------
+
+def _wire_auto_toggle(monkeypatch, threshold, pct, effective, default_variant=0):
+    monkeypatch.setattr(mod_settings, "progress_auto_toggle_threshold", lambda: threshold)
+    monkeypatch.setattr(mod_settings, "progress_bar_variant", lambda: default_variant)
+    monkeypatch.setattr(battle_bridge.battle_adapter, "pre_percentile", lambda cd: pct)
+    monkeypatch.setattr(battle_bridge.variant_overrides, "effective", lambda cd, d: effective)
+
+
+def test_maybe_auto_toggle_noop_with_no_known_vehicle(monkeypatch):
+    calls = []
+    monkeypatch.setattr(battle_bridge.variant_overrides, "toggle",
+                        lambda icd, d: calls.append((icd, d)))
+    _wire_auto_toggle(monkeypatch, threshold=50, pct=90.0, effective=0)
+    battle_bridge._maybe_auto_toggle(None)
+    assert calls == []
+
+
+def test_maybe_auto_toggle_noop_below_threshold(monkeypatch):
+    calls = []
+    monkeypatch.setattr(battle_bridge.variant_overrides, "toggle",
+                        lambda icd, d: calls.append((icd, d)))
+    _wire_auto_toggle(monkeypatch, threshold=50, pct=49.9, effective=0)
+    battle_bridge._maybe_auto_toggle(555)
+    assert calls == []
+
+
+def test_maybe_auto_toggle_fires_once_when_qualifying(monkeypatch):
+    calls = []
+    monkeypatch.setattr(battle_bridge.variant_overrides, "toggle",
+                        lambda icd, d: calls.append((icd, d)) or 1)
+    _wire_auto_toggle(monkeypatch, threshold=50, pct=90.0, effective=0, default_variant=0)
+    battle_bridge._maybe_auto_toggle(555)
+    assert calls == [(555, 0)]
+
+
+def test_maybe_auto_toggle_is_idempotent_on_a_second_qualifying_mount(monkeypatch):
+    # THE key behavioral guarantee: once the vehicle is overridden, a REPEAT qualifying battle
+    # must not flip it back. effective now != default_variant -- should_auto_toggle's own guard.
+    calls = []
+    monkeypatch.setattr(battle_bridge.variant_overrides, "toggle",
+                        lambda icd, d: calls.append((icd, d)) or 1)
+    _wire_auto_toggle(monkeypatch, threshold=50, pct=90.0, effective=1, default_variant=0)
+    battle_bridge._maybe_auto_toggle(555)
+    assert calls == []

@@ -588,7 +588,7 @@
       // separate knobs, never merged.
       {id:"icoyReq",label:"marksOnGun icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1},
       {id:"icoyBm",label:"barrel_mark icon Y nudge -- own family (rem)",min:-8,max:8,step:0.25,val:-0.25},
-      {id:"icoyCur",label:"Current caption's icon Y nudge (rem)",min:-8,max:8,step:0.25,val:1.5}]],
+      {id:"icoyCur",label:"Current caption's icon Y nudge (rem)",min:-8,max:8,step:0.25,val:0.5}]],
     ["Backdrop",[
       {id:"ckCell",label:"Checker cell (game px @3840)",min:1,max:16,step:1,val:2},
       {id:"ckAlpha",label:"Checker opacity",min:0,max:0.6,step:0.005,val:0.1},
@@ -622,7 +622,7 @@
       {id:"bd2T",label:"Strip 2 top (r3 row, rem)",min:-160,max:260,step:0.5,val:35},
       {id:"bd3T",label:"Strip 3 top (r2 row, rem)",min:-160,max:260,step:0.5,val:85},
       {id:"bd4T",label:"Strip 4 top (r1 row, rem)",min:-160,max:260,step:0.5,val:135},
-      {id:"bd5T",label:"Strip 5 top (current row, rem)",min:-160,max:260,step:0.5,val:196.5},
+      {id:"bd5T",label:"Strip 5 top (current row, rem)",min:-160,max:260,step:0.5,val:199.5},
       {id:"stageCol",label:"Stage tint over the frame (preview only)",hex:true,val:"#0d0e10"},
       {id:"stageVig",label:"...alpha at the frame edges",min:0,max:1,step:0.01,val:0.25}]],
     ["Animation",[
@@ -733,6 +733,11 @@
       // twin, 2026-08-12 widen pass, right-edge-pinned to 17.067rem).
       ".mev-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }\n"+
       // bd-1's Large override REVERTED to the shared Large strip (no separate rule needed).
+      // Large twins of the mark-requirement narrowing, right edge pinned at 17.067rem (hand
+      // literals -- shipped `.mp-lg .mev-bd-2/3/4`, 2026-08-12 narrowing pass).
+      ".mev-lg .mev-bd-2 { left: -76.6rem; width: 81.6rem; }\n"+
+      ".mev-lg .mev-bd-3 { left: -76.6rem; width: 81.6rem; }\n"+
+      ".mev-lg .mev-bd-4 { left: -76.6rem; width: 81.6rem; }\n"+
 
       // NO dash-grid rule: the grid is 0deg, so its period is a y-length the root font already
       // scales -- unlike the horizontal .mp-lg block's 90deg twin, which owes SIZE_XF.
@@ -1020,6 +1025,11 @@
 // PER-ROW WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css, 2026-08-12 widen pass):
 // current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, right-edge-pinned.
 ".mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
+// Mark-requirement strips narrowed to 2/3 of the shared width, right edge still pinned at 17rem
+// (hand-picked literals, exempt from the four_thirds invariant like bd-5) -- shipped
+// MoEEfficiencyVertical.css, 2026-08-12 narrowing pass.
+".mev-bd-2 { width: 72.667rem; left: -63.167rem; }\n.mev-bd-3 { width: 72.667rem; left: -63.167rem; }\n"+
+".mev-bd-4 { width: 72.667rem; left: -63.167rem; }\n"+
 ".mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: "+ckMask(st.ckRXWide)+"; }\n"+
 ".mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
 ".mev-track {\n  position: relative;\n  z-index: 1;\n  height: 100%;\n  width: "+st.trackH+"rem;\n"+

@@ -310,7 +310,7 @@ assert.strictEqual(
     (onlyReq.match(/translateY\(0\.25rem\)/g) || []).length, 0,
     "moving icoyReq off its default must remove ITS OWN old literal");
 assert.ok(onlyReq.indexOf("translateY(-0.25rem)") >= 0, "icoyBm must stay at its own default while icoyReq moves");
-assert.ok(onlyReq.indexOf("translateY(1.5rem)") >= 0, "icoyCur must stay at its own default while icoyReq moves");
+assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its own default while icoyReq moves");
 
 // ================================================================================================
 // THE RE-TRIGGER TWIN + THE "LARGE" SIZE-MODE BLOCK, asserted as EMITTED VALUES. Comments are
@@ -408,7 +408,7 @@ assert.ok(onlyReq.indexOf("translateY(1.5rem)") >= 0, "icoyCur must stay at its 
     // --- 5. NOTHING y/uniform may appear under .mev-lg -- the root font already scales it, so a
     // rule here would DOUBLE-APPLY SIZE_F.
     const lgRules = emit.match(/\.mev-lg [^{}]*\{[^{}]*\}/g) || [];
-    // Exactly 20, and pinned: root, track, backdrop, the per-row STRIP flush override (.mev-bd,
+    // Exactly 23, and pinned: root, track, backdrop, the per-row STRIP flush override (.mev-bd,
     // an x-length left/width -- the visible dither's minimap-facing edge), the two ticks, the three
     // captions, the icon gap, its two per-icon ink-gap-parity twins (bm/mk), the delta gap -- PLUS
     // the six the icon_gap_tuner.html per-mark pass added: three per-row block-gap overrides
@@ -416,10 +416,12 @@ assert.ok(onlyReq.indexOf("translateY(1.5rem)") >= 0, "icoyCur must stay at its 
     // -- PLUS the one 2026-08-12 backdrop-widen pass added: .mev-bd-5's own Large left/width
     // override (current-damage +50%, right-edge-pinned -- see the static rule's own comment).
     // .mev-bd-1's own +25% Large override was REVERTED (2026-08-12 fine-tuning round, an overshoot)
-    // back to the shared .mev-lg .mev-bd rule, dropping the count from 21 to 20. A rule appearing
+    // back to the shared .mev-lg .mev-bd rule, dropping the count from 21 to 20. PLUS three more
+    // the 2026-08-12 mark-requirement NARROWING pass added: .mev-bd-2/3/4's own Large left/width
+    // overrides (2/3 width, right-edge-pinned), bringing the count from 20 to 23. A rule appearing
     // or vanishing beyond that must be deliberate.
-    assert.strictEqual(lgRules.length, 20,
-        "the .mev-lg block must declare exactly 20 rules, found " + lgRules.length);
+    assert.strictEqual(lgRules.length, 23,
+        "the .mev-lg block must declare exactly 23 rules, found " + lgRules.length);
     const lgDecls = lgRules.join("");
     assert.ok(!/(font-size|line-height|height:|padding|margin-top|margin-bottom|animation|background|translateY\(-?[0-9.]+rem\))/
         .test(lgDecls),

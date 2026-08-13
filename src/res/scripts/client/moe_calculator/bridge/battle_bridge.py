@@ -185,6 +185,25 @@ def _window_gates():
             (bar_on and variant == mod_settings.PROGRESS_VARIANT_EFFICIENCY, efficiency_view))
 
 
+def _maybe_auto_toggle(int_cd):
+    """Fire the automatic per-vehicle mode toggle for this mount, if it qualifies (see
+    variant_overrides.should_auto_toggle): the vehicle's pre-battle MoE percentile is at or
+    above the configured threshold and it is not already mode-overridden. No-ops with no known
+    vehicle. Called BEFORE _window_gates() is read on mount, so a flip here already lands on
+    THIS mount's open_window() calls -- no apply_settings() round-trip needed."""
+    if int_cd is None:
+        return
+    try:
+        threshold = mod_settings.progress_auto_toggle_threshold()
+        pct = battle_adapter.pre_percentile(int_cd)
+        default_variant = mod_settings.progress_bar_variant()
+        effective = variant_overrides.effective(int_cd, default_variant)
+        if variant_overrides.should_auto_toggle(threshold, pct, effective, default_variant):
+            variant_overrides.toggle(int_cd, default_variant)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
 # --- engine event subscriptions ---------------------------------------------
 # Handlers are module-level (stable identity) so the membership-checked _arm is idempotent.
 
@@ -197,6 +216,9 @@ def _on_mount_refresh(*args, **kwargs):
         _in_battle = True
         descr = battle_adapter._player_vehicle_descr()
         _current_int_cd = battle_adapter._player_vehicle_int_cd(descr) if descr else None
+        # Automatic mode toggle (see _maybe_auto_toggle): BEFORE _window_gates() is read below,
+        # so a flip here already lands on THIS mount's open_window() calls.
+        _maybe_auto_toggle(_current_int_cd)
         # SEED the orientation record for this battle's windows, so a flip made LATER in the battle
         # has something to be different from. Without this seed the very first settings change of a
         # session could BE the flip, find no record, and leave the bar drawing the old composition
@@ -774,7 +796,7 @@ def push_progress(rvm, snap, model):
         proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
         # hasData stays the MARK axis's verdict -- the display floor below must not change it.
         has_data = axis_hi > axis_lo
-        eta = battles_to_axis_hi(proj_avg, axis_hi)
+        eta = battles_to_axis_hi(proj_avg, model.combined_damage, axis_hi)
         if has_data:
             # Variant A: the pushed floor is where a ZERO-damage battle lands, not the held mark's
             # requirement -- the mark segment is hundreds-to-thousands of damage wide while one

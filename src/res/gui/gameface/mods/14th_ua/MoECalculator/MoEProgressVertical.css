@@ -153,6 +153,9 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    the surface hit-rect do not move. Same specificity as .mpv-bd above; source order wins. */
 .mpv-bd-4 { width: 178.5rem; left: -163.5rem; }
 .mpv-bd-2 { width: 148.75rem; left: -133.75rem; }
+/* preAvg strip narrowed to 2/3 of the shared width, right edge still pinned at 15rem (hand
+   literal, exempt from four_thirds). Separate from bd-3's ::before/::after mask rules below. */
+.mpv-bd-3 { width: 79.333rem; left: -68.733rem; }
 .mpv-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -172,7 +175,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 .mpv-bd-1 { top: -50.5rem; }
 .mpv-bd-2 { top: -30rem; }
 .mpv-bd-3 { top: 85rem; }
-.mpv-bd-4 { top: 201rem; }
+.mpv-bd-4 { top: 204rem; }
 /* capP's strip ONLY (.mpv-bd-3) -- its number sits farther from the minimap, so its dither reaches
    ~2x further left (wide X radius). Every other strip keeps the default radius above. */
 .mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
@@ -351,7 +354,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
   transform: translate(0rem, 0rem);
 }
 .mpv-capP .mpv-ico { transform: translate(0rem, 0rem); }
-.mpv-capC .mpv-ico { transform: translate(0rem, 1rem); }
+.mpv-capC .mpv-ico { transform: translate(0rem, 0rem); }
 .mpv-capR .mpv-ico { transform: translate(0rem, 0.5rem); }
 .mpv-capR .mpv-v { transform: translateY(-0.5rem); }
 /* capEta's own copy of the SAME nudge, same row line-height (18rem) -- so the identical
@@ -556,6 +559,8 @@ body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
    15.067rem); same specificity as .mp-lg .mpv-bd above, source order wins. */
 .mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }
 .mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }
+/* Large twin of the preAvg narrowing, right edge pinned at 15.067rem (hand literal). */
+.mp-lg .mpv-bd-3 { width: 86.933rem; left: -82.183rem; }
 .mp-lg .mpv-tick.mpv-end { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-pre { width: 12rem;

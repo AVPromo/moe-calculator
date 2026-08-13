@@ -71,6 +71,7 @@ def test_defaults_when_empty_or_none():
                         PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
                         PROGRESS_TRANS_MANUAL_KEY: True,
                         PROGRESS_HOLD_SECONDS_KEY: 5,
+                        mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY: 100,
                         POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                         mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_ANCHOR,
@@ -143,6 +144,7 @@ def test_overlays_known_keys():
                     PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
                     PROGRESS_TRANS_MANUAL_KEY: True,
                     PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
+                    mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY: 100,
                     POS_X_KEY: 640, POS_Y_KEY: 360, POS_W_KEY: 1920, POS_H_KEY: 1080,
                     mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
                     mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_ANCHOR,
@@ -948,6 +950,76 @@ def test_progress_hold_seconds_is_not_master_folded_by_the_transitions_switch():
     assert progress_transitions_manual() is False
 
 
+# --- the auto-toggle threshold Slider: a whole-percent int, defaulting to the DISABLE sentinel ---
+
+def test_clamp_auto_toggle_threshold_bounds_and_bool_trap():
+    # Mirrors clamp_hold_seconds exactly, including the bool trap: bool is an int SUBCLASS, so
+    # isinstance must be tested BEFORE int() or True/False would pass through as a legal 1%/0%.
+    assert mod_settings.clamp_auto_toggle_threshold(mod_settings.PROGRESS_AUTO_TOGGLE_MIN) == \
+        mod_settings.PROGRESS_AUTO_TOGGLE_MIN
+    assert mod_settings.clamp_auto_toggle_threshold(mod_settings.PROGRESS_AUTO_TOGGLE_MAX) == \
+        mod_settings.PROGRESS_AUTO_TOGGLE_MAX
+    assert mod_settings.clamp_auto_toggle_threshold(65) == 65
+    assert not isinstance(mod_settings.clamp_auto_toggle_threshold(65), bool)
+    # Numeric strings / floats coerce through int(), like clamp_hold_seconds.
+    assert mod_settings.clamp_auto_toggle_threshold("65") == 65
+    assert mod_settings.clamp_auto_toggle_threshold(65.9) == 65
+    # A bool ALWAYS falls back to the DEFAULT (100, the disable sentinel) -- never a legal 1%/0%.
+    assert mod_settings.clamp_auto_toggle_threshold(True) == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT
+    assert mod_settings.clamp_auto_toggle_threshold(False) == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT
+    for bad in (True, False):
+        got = mod_settings.clamp_auto_toggle_threshold(bad)
+        assert not isinstance(got, bool) or got != bad
+    # Garbage (None, a non-numeric string, a list, an object) also falls back to the DEFAULT.
+    for bad in (None, "x", [], {}, object()):
+        got = mod_settings.clamp_auto_toggle_threshold(bad)
+        assert got == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT, "%r leaked %r" % (bad, got)
+        assert not isinstance(got, bool)
+    # Merely OUT-OF-RANGE (a real int outside [MIN, MAX]) clamps to the nearest bound, not the
+    # default -- a stored 150 means "as high as possible", not "corrupt".
+    assert mod_settings.clamp_auto_toggle_threshold(mod_settings.PROGRESS_AUTO_TOGGLE_MIN - 1) == \
+        mod_settings.PROGRESS_AUTO_TOGGLE_MIN
+    assert mod_settings.clamp_auto_toggle_threshold(-100) == mod_settings.PROGRESS_AUTO_TOGGLE_MIN
+    assert mod_settings.clamp_auto_toggle_threshold(mod_settings.PROGRESS_AUTO_TOGGLE_MAX + 1) == \
+        mod_settings.PROGRESS_AUTO_TOGGLE_MAX
+    assert mod_settings.clamp_auto_toggle_threshold(10 ** 6) == mod_settings.PROGRESS_AUTO_TOGGLE_MAX
+
+
+def test_progress_auto_toggle_threshold_getter_defaults_tracks_and_reclamps():
+    # Ships at the DISABLE sentinel (100) so an existing user's bar never starts auto-toggling on
+    # update, and the getter re-clamps on read like every other radio/duration getter.
+    mod_settings._seed(dict(DEFAULTS))
+    assert mod_settings.progress_auto_toggle_threshold() == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT
+    mod_settings._apply({mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY: 65})
+    assert mod_settings.progress_auto_toggle_threshold() == 65
+    mod_settings._apply({mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY:
+                         mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT})
+    assert mod_settings.progress_auto_toggle_threshold() == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT
+    for junk in (True, False, 999, -5, None, "x"):
+        mod_settings._settings[mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY] = junk
+        got = mod_settings.progress_auto_toggle_threshold()
+        assert not isinstance(got, bool)
+        assert mod_settings.PROGRESS_AUTO_TOGGLE_MIN <= got <= mod_settings.PROGRESS_AUTO_TOGGLE_MAX
+    # Absent key -> the DISABLE sentinel default, not 0.
+    del mod_settings._settings[mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY]
+    assert mod_settings.progress_auto_toggle_threshold() == mod_settings.PROGRESS_AUTO_TOGGLE_DEFAULT
+
+
+def test_auto_toggle_slider_descriptor_has_the_0_to_100_range():
+    # THE structural pin the implementer's positional/order tests don't cover: the Slider's own
+    # minimum/maximum, which Aslain folds into its _settingsStructure signature. A wrong range here
+    # is invisible to every "which slot is it in" assertion.
+    col2 = mod_settings._template()["column2"]
+    slider, _ = _at(col2, mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY)
+    assert slider["type"] == "Slider"
+    assert slider["minimum"] == 0
+    assert slider["maximum"] == 100
+    assert slider["value"] == DEFAULTS[mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY] == 100
+    # STANDALONE like its Mode/HotKey/Scale siblings -- describes another way the mode can change,
+    # not when the bar shows, so it must stay readable while the Progress Bar master is off.
+    assert "masterVarName" not in slider and "conditions" not in slider
+
+
 def test_slider_descriptor_shape_and_tipless_omission():
     # The Slider descriptor's shape mirrors _stepper's (a plain dict, no gui.aslainMenu import): a
     # `minimum`/`maximum`/`snapInterval` triple Aslain folds into its _settingsStructure signature,
@@ -1190,7 +1262,17 @@ def test_template_settings_version_pins_the_current_layout():
     # Bumped 25 -> 26 for the in-battle mode-override HotKey control (progress_variant_hotkey),
     # spliced into column 2 right after the Mode radio -- a new varName AND a new component type,
     # either structural on its own. See mod_settings's own SETTINGS_VERSION comment.
-    assert SETTINGS_VERSION == 26
+    # Bumped 26 -> 27 for a pure ROW MOVE: the barPreview Image left the tail of column 2's
+    # "Layout"/catBarPosition category and now closes column 1 (right after calcPreview), so both
+    # live previews sit in the same column. No varName/control/option changed shape and barPreview
+    # is not a stored setting (absent from DEFAULTS), but register()'s saved-truthy path never
+    # calls setModTemplate on an existing install, so only a forward bump moves the row there.
+    # Bumped 27 -> 28 for the "Automatic Mode Toggle" threshold Slider
+    # (progress_auto_toggle_threshold): a new varName AND a new template row, spliced into
+    # column 2 right after the HotKey mode-override control and before the Scale radio. The new
+    # key takes its fresh 100 default -- the DISABLE sentinel -- so no existing user's bar starts
+    # auto-toggling on update.
+    assert SETTINGS_VERSION == 28
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1201,11 +1283,12 @@ def test_template_column1_is_the_calculator_and_garage_groups():
     # column 2 -- see test_template_column2_is_four_categories_each_a_label_then_its_group.
     tmpl = mod_settings._template()
     col1 = tmpl["column1"]
-    # FIFTEEN controls: "Battle Calculator" + [In-Battle master, Alt child, counted-assist
+    # SIXTEEN controls: "Battle Calculator" + [In-Battle master, Alt child, counted-assist
     # child], the calcPreview Image (24->25 -- closes the calculator group), an Empty spacer, then
     # "Garage Widget" + [the standalone garage master -- no children of its own], a SECOND Empty
     # spacer, then the garage's "Layout" group -- its own bold header, Follow Carousel, a THIRD
-    # Empty spacer, the non-bold "Position" sub-label, then the X/Y numeric steppers.
+    # Empty spacer, the non-bold "Position" sub-label, then the X/Y numeric steppers, and finally
+    # the barPreview Image (26->27 -- moved here from the tail of column 2's "Layout" category).
     assert [c["type"] for c in col1] == [
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Image",
@@ -1214,17 +1297,19 @@ def test_template_column1_is_the_calculator_and_garage_groups():
         "Empty",
         "Label", "CheckBox",
         "Empty",
-        "Label", "NumericStepper", "NumericStepper"]
+        "Label", "NumericStepper", "NumericStepper",
+        "Image"]
     # The varName-bearing controls, in order (a Label header / an Empty spacer has no varName).
-    # The calcPreview Image DOES carry a varName -- it is an updateImage addressing handle, not a
-    # stored value (absent from DEFAULTS; see mod_settings.CALC_PREVIEW_KEY) -- so it sits in this
-    # list right after countedAssist, closing the calculator group.
+    # Both preview Images DO carry a varName -- they are updateImage addressing handles, not
+    # stored values (absent from DEFAULTS; see mod_settings.CALC_PREVIEW_KEY / BAR_PREVIEW_KEY) --
+    # so calcPreview sits right after countedAssist and barPreview closes the whole column.
     assert [c["varName"] for c in col1 if "varName" in c] == [
         BATTLE_KEY, BATTLE_ALT_KEY, COUNTED_ASSIST_KEY,
         mod_settings.CALC_PREVIEW_KEY,
         GARAGE_KEY,
         FOLLOW_CAROUSEL_KEY,
-        POS_X_KEY, POS_Y_KEY]
+        POS_X_KEY, POS_Y_KEY,
+        mod_settings.BAR_PREVIEW_KEY]
     # ...and the four Label rows carry no varName at all -- and they are the ONLY four, so no
     # group can quietly grow a header row of its own.
     assert ("varName" not in col1[0] and "varName" not in col1[6]
@@ -1242,6 +1327,11 @@ def test_template_column1_is_the_calculator_and_garage_groups():
     assert col1[4]["type"] == "Image" and col1[4]["varName"] == mod_settings.CALC_PREVIEW_KEY
     assert col1[4]["source"].startswith(u"gui/maps/icons/") and col1[4]["source"].endswith(u".png")
     assert col1[4]["containerWidth"] and col1[4]["containerHeight"]
+    # The barPreview Image closes the column (index 15, right after the position steppers) --
+    # same shape, same reasoning, moved here from column 2 as of SETTINGS_VERSION 26->27.
+    assert col1[15]["type"] == "Image" and col1[15]["varName"] == mod_settings.BAR_PREVIEW_KEY
+    assert col1[15]["source"].startswith(u"gui/maps/icons/") and col1[15]["source"].endswith(u".png")
+    assert col1[15]["containerWidth"] and col1[15]["containerHeight"]
     # All THREE Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Garage Widget"; the second heads "Layout"; the third heads "Position".
@@ -1288,7 +1378,10 @@ def test_template_variant_radio_shape(monkeypatch):
     assert index == _at(col2, PROGRESS_SHOW_ALWAYS_KEY)[1] + 2
     # v26: the HotKey mode-override control now sits directly between Mode and Scale.
     assert index + 1 == _at(col2, PROGRESS_VARIANT_HOTKEY_KEY)[1]
-    assert index + 2 == _at(col2, PROGRESS_SIZE_KEY)[1]
+    # v28: the Automatic Mode Toggle threshold Slider sits directly between the HotKey control
+    # and Scale.
+    assert index + 2 == _at(col2, mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY)[1]
+    assert index + 3 == _at(col2, PROGRESS_SIZE_KEY)[1]
     assert radio["type"] == "RadioButtonGroup"
     assert radio["varName"] == PROGRESS_VARIANT_KEY
     assert radio["value"] == DEFAULTS[PROGRESS_VARIANT_KEY] == 0
@@ -1441,80 +1534,78 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     # garage-related groups (test_template_column1_is_the_calculator_and_garage_groups).
     tmpl = mod_settings._template()
     col2 = tmpl["column2"]
-    # TWENTY-THREE controls = FOUR CATEGORIES separated by Empty spacers, each a bare Label header
-    # followed by that feature's controls: "Battle Progress" + [Progress Bar master + its three
-    # VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the Mode radio, its HotKey
-    # mode-override sibling (v26), and the Scale radio -- all three standalone], then a THIRD Empty
-    # spacer and "Transitions" -- its OWN header since the hold-duration Slider arrived -- +
+    # TWENTY-THREE controls (v28, grew from 22) = FOUR CATEGORIES separated by Empty spacers, each
+    # a bare Label header followed by that feature's controls: "Battle Progress" + [Progress Bar
+    # master + its three VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the Mode
+    # radio, its HotKey mode-override sibling (v26), the Automatic Mode Toggle threshold Slider
+    # (v28), and the Scale radio -- all four standalone], then a THIRD Empty spacer and
+    # "Transitions" -- its OWN header since the hold-duration Slider arrived -- +
     # [Transitions master, Events child, Alt Press child] + a FOURTH Empty spacer (ahead of the
     # Slider) + the UNGROUPED hold Slider, which hangs off that header rather than the master (its
     # masterVarName absence is pinned in test_slider_descriptor_shape_and_tipless_omission), and
     # finally a FIFTH Empty spacer and "Layout" (header text; i18n key stays catBarPosition) +
-    # [the standalone Orientation/Alignment radios, ABOVE the two standalone position steppers],
-    # then the barPreview Image APPENDED at the tail (24->25). The header names the feature, which
-    # is why every master reads just "Enabled".
+    # [the standalone Orientation/Alignment radios, ABOVE the two standalone position steppers].
+    # The barPreview Image that used to be APPENDED at the tail (24->25) MOVED to column 1's tail
+    # as of SETTINGS_VERSION 26->27 (see test_template_column1_is_the_calculator_and_garage_groups).
+    # The header names the feature, which is why every master reads just "Enabled".
     assert [c["type"] for c in col2] == [
         "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
-        "RadioButtonGroup", "HotKey", "RadioButtonGroup",
+        "RadioButtonGroup", "HotKey", "Slider", "RadioButtonGroup",
         "Empty",
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
         "Slider",
         "Empty",
-        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper",
-        "Image"]
-    # The varName-bearing controls, in order (a Label header / an Empty spacer has no varName). The
-    # barPreview Image DOES carry a varName -- an updateImage addressing handle, not a stored value
-    # (absent from DEFAULTS; see mod_settings.BAR_PREVIEW_KEY) -- so it closes this list.
+        "Label", "RadioButtonGroup", "RadioButtonGroup", "NumericStepper", "NumericStepper"]
+    # The varName-bearing controls, in order (a Label header / an Empty spacer has no varName).
     assert [c["varName"] for c in col2 if "varName" in c] == [
         PROGRESS_BAR_KEY,
         PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
-        PROGRESS_VARIANT_KEY, PROGRESS_VARIANT_HOTKEY_KEY, PROGRESS_SIZE_KEY,
+        PROGRESS_VARIANT_KEY, PROGRESS_VARIANT_HOTKEY_KEY,
+        mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY, PROGRESS_SIZE_KEY,
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
         PROGRESS_HOLD_SECONDS_KEY,
         PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
-        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY,
-        mod_settings.BAR_PREVIEW_KEY]
+        mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
     # ...and the two category headers carry no varName at all -- and they are the ONLY two here.
-    assert "varName" not in col2[0] and "varName" not in col2[10] and "varName" not in col2[17]
-    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 10, 17]
+    assert "varName" not in col2[0] and "varName" not in col2[11] and "varName" not in col2[18]
+    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 11, 18]
     # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
     # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
     assert col2[0]["text"] == u"<b>Battle Progress</b>" and col2[0]["useHTML"] is True
-    assert col2[10]["text"] == u"<b>Transitions</b>" and col2[10]["useHTML"] is True
-    assert col2[17]["text"] == u"<b>Layout</b>" and col2[17]["useHTML"] is True
+    assert col2[11]["text"] == u"<b>Transitions</b>" and col2[11]["useHTML"] is True
+    assert col2[18]["text"] == u"<b>Layout</b>" and col2[18]["useHTML"] is True
     # All FOUR Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Mode"; the second heads "Transitions"; the third heads the hold Slider;
     # the fourth heads "Layout".
     assert col2[5] == {"type": "Empty"}
-    assert col2[9] == {"type": "Empty"}
-    assert col2[14] == {"type": "Empty"}
-    assert col2[16] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 9, 14, 16]
-    # The Mode/HotKey/Scale trio are STANDALONE -- no masterVarName, no conditions -- so they stay
-    # readable and editable while the Progress Bar master is off, exactly like column 1's steppers
-    # used to be before they were gated.
-    for control in col2[6:9]:
+    assert col2[10] == {"type": "Empty"}
+    assert col2[15] == {"type": "Empty"}
+    assert col2[17] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 10, 15, 17]
+    # The Mode/HotKey/AutoToggle/Scale quartet are STANDALONE -- no masterVarName, no conditions --
+    # so they stay readable and editable while the Progress Bar master is off, exactly like
+    # column 1's steppers used to be before they were gated.
+    for control in col2[6:10]:
         assert "masterVarName" not in control and "conditions" not in control
     assert col2[6]["varName"] == PROGRESS_VARIANT_KEY
     assert col2[7]["type"] == "HotKey" and col2[7]["varName"] == PROGRESS_VARIANT_HOTKEY_KEY
-    assert col2[8]["varName"] == PROGRESS_SIZE_KEY
+    assert (col2[8]["type"] == "Slider"
+            and col2[8]["varName"] == mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY)
+    assert col2[9]["varName"] == PROGRESS_SIZE_KEY
     # The two Orientation/Alignment radios are ALSO STANDALONE -- see above. The two position
     # steppers ARE gated: see test_template_position_steppers_are_gated_on_alignment_free below.
-    for control in col2[18:20]:
+    for control in col2[19:21]:
         assert "masterVarName" not in control and "conditions" not in control
     # The two radios sit directly between the "Layout" header and the two steppers.
-    assert col2[18]["varName"] == PROGRESS_ORIENTATION_KEY
-    assert col2[19]["varName"] == PROGRESS_ALIGNMENT_KEY
-    assert col2[20]["varName"] == mod_settings.BAR_POS_X_KEY
-    assert col2[21]["varName"] == mod_settings.BAR_POS_Y_KEY
-    # The barPreview Image closes the column (index 22): source path, addressing-handle varName and
-    # a reserved container sized for the widest/tallest bar so a swap never reflows the panel.
-    assert col2[22]["type"] == "Image" and col2[22]["varName"] == mod_settings.BAR_PREVIEW_KEY
-    assert col2[22]["source"].startswith(u"gui/maps/icons/") and col2[22]["source"].endswith(u".png")
-    assert col2[22]["containerWidth"] and col2[22]["containerHeight"]
+    assert col2[19]["varName"] == PROGRESS_ORIENTATION_KEY
+    assert col2[20]["varName"] == PROGRESS_ALIGNMENT_KEY
+    assert col2[21]["varName"] == mod_settings.BAR_POS_X_KEY
+    assert col2[22]["varName"] == mod_settings.BAR_POS_Y_KEY
+    # ...and the position steppers are the LAST controls in this column now (barPreview moved out).
+    assert len(col2) == 23
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -1530,7 +1621,11 @@ def _find_desc(tmpl, key):
 
 
 def test_settings_version_bumped_for_hotkey_control():
-    assert mod_settings.SETTINGS_VERSION == 26
+    # The hotkey control landed at v26; SETTINGS_VERSION has since bumped further (see
+    # test_template_settings_version_pins_the_current_layout for the full history) -- this test
+    # only needs to keep passing that the version has moved on FROM the hotkey's own bump, not
+    # pin the exact current number a second time.
+    assert mod_settings.SETTINGS_VERSION >= 26
 
 
 def test_template_includes_hotkey_descriptor():
@@ -1571,10 +1666,10 @@ def test_preview_sources_are_bare_relative_scaleform_paths():
     # Defaults: countedAssist on -> 3-row calc, variant Efficiency + Horizontal -> eff_horizontal.
     assert calc_src.endswith(u"calc_assist_on.png")
     assert bar_src.endswith(u"bar_eff_horizontal.png")
-    # The dims must match _PREVIEW_DISPLAY for the default state (calc 125x73, bar 392x88 --
-    # the bar's soft backdrop is now revealed at a wider/taller extent).
+    # The dims must match _PREVIEW_DISPLAY for the default state (calc 125x73, bar 276x323 --
+    # the previews are now multi-range composites, so the default eff_horizontal is taller).
     assert (calc_w, calc_h) == mod_settings._PREVIEW_DISPLAY["calc_assist_on"] == (125, 73)
-    assert (bar_w, bar_h) == mod_settings._PREVIEW_DISPLAY["bar_eff_horizontal"] == (392, 88)
+    assert (bar_w, bar_h) == mod_settings._PREVIEW_DISPLAY["bar_eff_horizontal"] == (276, 323)
 
 
 def test_template_preview_images_carry_display_width_and_height():
@@ -1584,15 +1679,20 @@ def test_template_preview_images_carry_display_width_and_height():
     mod_settings._seed(dict(DEFAULTS))
     tmpl = mod_settings._template()
     calc_img = _at(tmpl["column1"], mod_settings.CALC_PREVIEW_KEY)[0]
-    bar_img = _at(tmpl["column2"], mod_settings.BAR_PREVIEW_KEY)[0]
+    bar_img = _at(tmpl["column1"], mod_settings.BAR_PREVIEW_KEY)[0]
     # width/height are the CURRENT source's display dims; containerWidth/Height reserve the
     # max slot across every swappable image, so a taller/wider swap never reflows the panel.
     assert (calc_img["width"], calc_img["height"]) == (125, 73)
-    assert (bar_img["width"], bar_img["height"]) == (392, 88)
+    assert (bar_img["width"], bar_img["height"]) == (276, 323)
     assert (calc_img["containerWidth"], calc_img["containerHeight"]) == (
         mod_settings._CALC_PREVIEW_W, mod_settings._CALC_PREVIEW_H)
     assert (bar_img["containerWidth"], bar_img["containerHeight"]) == (
         mod_settings._BAR_PREVIEW_W, mod_settings._BAR_PREVIEW_H)
+    # The composite previews fill the width, so no alignment is passed (MSA ignored `align` anyway);
+    # the bar slot reserves the max bar dims. Neither Image carries an `align` key.
+    assert bar_img["containerWidth"] == 332
+    assert "align" not in bar_img
+    assert "align" not in calc_img
 
 
 def test_update_preview_images_passes_the_display_dims_through(monkeypatch):
@@ -1615,7 +1715,49 @@ def test_update_preview_images_passes_the_display_dims_through(monkeypatch):
     calc_call = [c for c in calls if c[1] == mod_settings.CALC_PREVIEW_KEY][0]
     bar_call = [c for c in calls if c[1] == mod_settings.BAR_PREVIEW_KEY][0]
     assert (calc_call[3], calc_call[4]) == (125, 73)
-    assert (bar_call[3], bar_call[4]) == (392, 88)
+    assert (bar_call[3], bar_call[4]) == (276, 323)
+
+
+def test_on_live_change_reads_the_passed_settings_not_the_getters(monkeypatch):
+    # The internal live-preview callback must compute the sources from the LIVE settings dict MSA
+    # hands it (pre-Apply), NOT from the stored getters (which only update on Apply). Seed the store
+    # to the defaults (countedAssist on / Efficiency / Horizontal -> calc_assist_on + eff_horizontal)
+    # then feed a live dict that flips all three: the swap must follow the DICT, not the store.
+    mod_settings._seed(dict(DEFAULTS))
+    calls = []
+
+    class _FakeImageMsa(object):
+        def updateImage(self, linkage, var_name, source, width, height):
+            calls.append((var_name, source))
+
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: _FakeImageMsa())
+    mod_settings._on_live_change(mod_settings.LINKAGE, {
+        COUNTED_ASSIST_KEY: False,
+        PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,
+        PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,
+    })
+    sources = dict(calls)
+    assert sources[mod_settings.CALC_PREVIEW_KEY].endswith(u"calc_assist_off.png")
+    assert sources[mod_settings.BAR_PREVIEW_KEY].endswith(u"bar_ma_vertical.png")
+    # A foreign linkage is ignored (MSA's channel is global).
+    calls[:] = []
+    mod_settings._on_live_change("com.someone.else", {COUNTED_ASSIST_KEY: False})
+    assert calls == []
+
+
+def test_template_bakes_a_seeded_vertical_orientation_into_the_bar_preview():
+    # Root-cause regression for "cold first panel open shows the wrong bar preview": register()
+    # must seed _settings from the STORED dict BEFORE calling _template() (see register()), so
+    # the Image descriptor it bakes -- read via preview_sources() -- reflects the user's ACTUAL
+    # stored orientation from the very first render, not whatever _settings happened to be
+    # beforehand. Simulate that ordering directly: seed a stored VERTICAL orientation, then build
+    # the template, and assert the INITIAL bar preview's baked source is the vertical image, not
+    # the horizontal DEFAULTS one.
+    mod_settings._seed(_defaults_with({PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL}))
+    tmpl = mod_settings._template()
+    bar_img = _at(tmpl["column1"], mod_settings.BAR_PREVIEW_KEY)[0]
+    assert bar_img["source"].endswith(u"bar_eff_vertical.png")
+    assert not bar_img["source"].endswith(u"bar_eff_horizontal.png")
 
 
 def test_template_steppers_are_bounded_manual_entry():
@@ -2433,6 +2575,10 @@ class _FakeMsaApi(object):
         self.updated = 0
         self.registered_cb = None
         self.template_cb = None
+        # Captures the template register() actually handed each call with, so a test can inspect
+        # the baked Image preview descriptor as MSA itself would have received it.
+        self.last_get_template = None
+        self.last_set_template = None
 
     # The host walks a FIXED column1..column4 (Aslain MSA _constants.py:33), NOT just the columns
     # this mod happens to use -- so the fake walks all four too. Do NOT trim this to the two we
@@ -2452,6 +2598,7 @@ class _FakeMsaApi(object):
         return d
 
     def getModSettings(self, linkage, template=None):
+        self.last_get_template = template
         cur = (self.state.get("settings") or {}).get(linkage)
         if cur is None:
             return None
@@ -2460,6 +2607,7 @@ class _FakeMsaApi(object):
         return cur
 
     def setModTemplate(self, linkage, template, callback):
+        self.last_set_template = template
         self.template_cb = callback
         defaults = self._defaults_from_template(template)
         prev = (self.state.get("settings") or {}).get(linkage) or {}
@@ -2495,6 +2643,30 @@ def _run_register(monkeypatch):
 
     yield _run
     mod_settings._registered = saved_registered
+
+
+def test_register_bakes_the_stored_orientation_before_calling_getModSettings(_run_register):
+    # Root-cause regression, saved-truthy (existing-install, no bump) path: register() must seed
+    # _settings from the on-disk store BEFORE building the template it hands to getModSettings --
+    # not after -- so the very template object MSA receives already carries the correct bar
+    # preview for a stored VERTICAL orientation, not the module-load DEFAULTS' horizontal one.
+    stored = {"enabled": True, PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL}
+    api = _FakeMsaApi(stored=stored, stored_version=SETTINGS_VERSION)
+    _run_register(api)
+    bar_img = _at(api.last_get_template["column1"], mod_settings.BAR_PREVIEW_KEY)[0]
+    assert bar_img["source"].endswith(u"bar_eff_vertical.png")
+
+
+def test_register_bakes_the_stored_orientation_before_setModTemplate(_run_register):
+    # Same regression on the version-bump / migration branch: the template handed to
+    # setModTemplate must already bake the pre-bump stored Orientation's preview.
+    # PROGRESS_SHOW_EVENTS_KEY marks this as a >= v13 store, so the variant index isn't flipped.
+    old = {"enabled": True, PROGRESS_SHOW_EVENTS_KEY: True,
+           PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL}
+    api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
+    _run_register(api)
+    bar_img = _at(api.last_set_template["column1"], mod_settings.BAR_PREVIEW_KEY)[0]
+    assert bar_img["source"].endswith(u"bar_eff_vertical.png")
 
 
 def test_migration_preserves_user_values_drops_removed_key_and_seeds_new_default(_run_register):
@@ -2588,10 +2760,12 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     # three keys existed before v21/v22 -- their value is DERIVED by _migrate_pre_v21_layout /
     # _migrate_pre_v22_pos_frame, not carried across like every other key here, so they are
     # checked separately below instead of by this "must differ" loop. PROGRESS_VARIANT_HOTKEY_KEY
-    # is likewise absent -- it postdates this store and has no migration wiring yet (a later task).
+    # and PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY are likewise absent -- both postdate this store and
+    # have no dedicated migration wiring, each taking its fresh default (enumerated from DEFAULTS).
     for key in DEFAULTS:
         if key in (PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
-                   mod_settings.PROGRESS_POS_FRAME_KEY, PROGRESS_VARIANT_HOTKEY_KEY):
+                   mod_settings.PROGRESS_POS_FRAME_KEY, PROGRESS_VARIANT_HOTKEY_KEY,
+                   mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY):
             continue
         assert old[key] != DEFAULTS[key], "%s must differ from its default to prove anything" % key
     api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
@@ -2913,6 +3087,9 @@ def test_migration_collapses_pre_v23_alignment_across_every_default_key(_run_reg
             old[key] = 1   # the pre-v23 "Minimap" index
         elif key == mod_settings.PROGRESS_POS_FRAME_KEY:
             continue   # genuinely absent pre-v22 too; seeded by its own migration
+        elif key == mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY:
+            old[key] = default - 1   # its ceiling IS the default (100); default+1 would be
+                                      # out-of-range and clamp back to 100, masking a real wipe
         elif isinstance(default, bool):
             old[key] = not default
         elif isinstance(default, int):
@@ -2957,7 +3134,16 @@ def test_fresh_install_yields_defaults_without_spurious_persist(_run_register):
 
 def test_same_version_load_does_not_migrate(_run_register):
     # getModSettings returns the stored dict (version matches) -> saved-truthy branch runs
-    # (_seed + registerCallback), and the migration/setModTemplate else-branch is never entered.
+    # (_seed + setModTemplate self-heal), and the migration/wipe overlay is never entered.
+    #
+    # Root-cause regression for "cold-open panel shows a stale preview/orientation": the panel
+    # paints from MSA's OWN persisted copy (state['templates'][LINKAGE]), and only setModTemplate
+    # ever writes that copy -- a bare registerCallback (the old behavior here) left it frozen at
+    # whatever the last version bump wrote, since compareTemplates/_settingsStructure ignore an
+    # Image's `source` and never flag it as changed. setModTemplate on a same-structure template
+    # lands in MSA's same-structure self-heal branch (refreshes the stored template + defaults in
+    # place, never settings/version) and DOUBLES as registerCallback, so registerCallback itself
+    # must NOT also fire (that would risk the change-Event double-registering the handler).
     stored = {"enabled": True, GARAGE_KEY: False, BATTLE_ALT_KEY: True,
               POS_X_KEY: 700, POS_Y_KEY: 300}
     api = _FakeMsaApi(stored=stored, stored_version=SETTINGS_VERSION)
@@ -2965,8 +3151,9 @@ def test_same_version_load_does_not_migrate(_run_register):
     assert mod_settings.garage_enabled() is False
     assert mod_settings.battle_alt_key_enabled() is True
     assert mod_settings.pos_x() == 700 and mod_settings.pos_y() == 300
-    assert api.registered_cb is mod_settings._on_changed
-    assert api.template_cb is None
+    assert api.last_set_template == mod_settings._template()
+    assert api.template_cb is mod_settings._on_changed
+    assert api.registered_cb is None
     assert api.updated == 0
     assert api.saved == 0
 
@@ -2985,3 +3172,71 @@ def test_a_mount_never_zeroes_the_stored_bar_position(_run_register):
     assert (bar_pos_x(), bar_pos_y()) == (900, 500)
     assert mod_settings.progress_bar_alignment() == PROGRESS_ALIGN_FREE
     assert api.updated == 0
+
+
+# --- _on_changed re-bakes the persisted template on every SAVED change -- root-cause fix for a
+# same-session panel REOPEN painting a STALE preview: register() only bakes state['templates']
+# ONCE, at the start of the session, and MSA's self-heal never replays a live updateImage cache
+# into a freshly-opened window. See the _rebaking_template guard in mod_settings.py. -------------
+
+class _FakeRebakeApi(object):
+    """Purpose-built for this one regression, distinct from _FakeMsaApi above: THAT fake models
+    the settingsVersion-BUMP wipe (setModTemplate resets state['settings'] to fresh template
+    defaults), which is exactly the behavior a same-structure rebake must NOT have. This one
+    instead mirrors the documented same-structure self-heal branch (setModTemplate only ever
+    (over)writes state['templates'][LINKAGE], never state['settings']), and can optionally
+    re-fire the registered callback ONCE, synchronously, from inside setModTemplate -- exercising
+    the re-entrancy guard the way the real host apparently can."""
+
+    def __init__(self, stored):
+        self.state = {"settings": {LINKAGE: dict(stored)}, "templates": {}}
+        self.refire = False
+        self.set_template_calls = 0
+        self.callback = None
+
+    def getModSettings(self, linkage, template=None):
+        return dict(self.state["settings"].get(linkage) or {})
+
+    def setModTemplate(self, linkage, template, callback):
+        self.set_template_calls += 1
+        self.callback = callback
+        self.state["templates"][linkage] = template
+        if self.refire:
+            callback(linkage, dict(self.state["settings"].get(linkage) or {}))
+        return dict(self.state["settings"].get(linkage) or {})
+
+    def updateModSettings(self, linkage, data):
+        self.state.setdefault("settings", {})[linkage] = dict(data)
+
+    def saveState(self):
+        pass
+
+
+def test_on_changed_rebakes_persisted_template_and_guards_reentrancy(_run_register):
+    stored = {"enabled": True, PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL}
+    api = _FakeRebakeApi(stored)
+    _run_register(api)
+    assert api.set_template_calls == 1
+
+    bar_img, _ = _at(api.state["templates"][LINKAGE]["column1"], mod_settings.BAR_PREVIEW_KEY)
+    assert bar_img["source"].endswith(u"bar_eff_horizontal.png"), (
+        "register() must bake the horizontal preview from the stored orientation")
+    settings_before = dict(api.state["settings"][LINKAGE])
+
+    # Exercise the guard: make the fake re-fire onSettingsChanged synchronously from inside
+    # setModTemplate, as the real host apparently can -- without _rebaking_template this would
+    # recurse without end (each rebake's setModTemplate would re-fire another rebake).
+    api.refire = True
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL})
+
+    bar_img, _ = _at(api.state["templates"][LINKAGE]["column1"], mod_settings.BAR_PREVIEW_KEY)
+    assert bar_img["source"].endswith(u"bar_eff_vertical.png"), (
+        "a saved change must re-bake the persisted template's preview, not leave it frozen")
+    # BOUNDED: exactly one MORE setModTemplate call (the rebake) despite the synchronous re-fire
+    # -- the guard stops the re-fired call from issuing a second, unbounded rebake of its own.
+    assert api.set_template_calls == 2
+
+    # The rebake must never touch user-facing state -- only the template moves. (This mod stores
+    # no separate settingsVersion int in state['settings'] -- see PROGRESS_VARIANT_KEY's sibling
+    # comment / the moe-settings skill -- so an unperturbed settings dict already covers it.)
+    assert api.state["settings"][LINKAGE] == settings_before

@@ -117,6 +117,11 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
    (left+width == -92+109 == 17rem), growing LEFTWARD only, so the minimap-facing edge and
    the surface hit-rect do not move. Same specificity as .mev-bd above; source order wins. */
 .mev-bd-5 { width: 163.5rem; left: -146.5rem; }
+/* Mark-requirement strips narrowed to 2/3 of the shared width, right edge still pinned at 17rem
+   (hand-picked literals, exempt from the four_thirds invariant like bd-5). */
+.mev-bd-2 { width: 72.667rem; left: -63.167rem; }
+.mev-bd-3 { width: 72.667rem; left: -63.167rem; }
+.mev-bd-4 { width: 72.667rem; left: -63.167rem; }
 .mev-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -136,7 +141,7 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
 .mev-bd-2 { top: 35rem; }
 .mev-bd-3 { top: 85rem; }
 .mev-bd-4 { top: 135rem; }
-.mev-bd-5 { top: 196.5rem; }
+.mev-bd-5 { top: 199.5rem; }
 /* r1/r2/r3 strips ONLY (.mev-bd-2/3/4) -- their numbers sit farther from the minimap, so their
    dither reaches ~2x further left (wide X radius). tp/bt (.mev-bd-1/-5) keep the default above. */
 .mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
@@ -305,7 +310,7 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
 .mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }
 .mev-cap.lf .mev-ico { transform: translateY(1rem); }
 .mev-cap.tp .mev-ico { transform: translateY(-0.25rem); }
-.mev-cap.bt .mev-ico { transform: translateY(1.5rem); }
+.mev-cap.bt .mev-ico { transform: translateY(0.5rem); }
 .mev-ico::before {
   content: "";
   position: absolute;
@@ -455,6 +460,10 @@ body.mev.mp-lg #moe-bar-box { width: 122.4rem; }
 /* Large per-index width overrides -- right edge PINNED (left+width == -105.333+122.4 ==
    17.067rem); same specificity as .mp-lg .mev-bd above, source order wins. */
 .mp-lg .mev-bd-5 { width: 183.6rem; left: -166.533rem; }
+/* Large twins of the mark-requirement narrowing, right edge pinned at 17.067rem (hand literals). */
+.mp-lg .mev-bd-2 { width: 81.6rem; left: -76.6rem; }
+.mp-lg .mev-bd-3 { width: 81.6rem; left: -76.6rem; }
+.mp-lg .mev-bd-4 { width: 81.6rem; left: -76.6rem; }
 .mp-lg .mev-tick.mev-req { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-tick.mev-cur { width: 12rem;

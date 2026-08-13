@@ -53,6 +53,19 @@ def effective(int_cd, default_variant):
     return load().get(int(int_cd), default_variant)
 
 
+def should_auto_toggle(threshold, pct, effective_variant, default_variant):
+    """True if the automatic mode-toggle should fire this mount. Engine-free, pure.
+
+    threshold >= 100 is the DISABLE sentinel (no percentile can reach past it). A missing
+    percentile never fires. Fires only while the vehicle is NOT already overridden (a repeat
+    qualifying battle must not re-flip it back -- idempotent by construction)."""
+    if threshold >= 100:
+        return False
+    if pct is None or pct < threshold:
+        return False
+    return effective_variant == default_variant
+
+
 def toggle(int_cd, default_variant):
     """Flip this vehicle's effective variant, persist, and return the new value.
     When the new value equals `default_variant`, DROP the entry (space rule)."""

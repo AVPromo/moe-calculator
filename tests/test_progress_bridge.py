@@ -206,14 +206,16 @@ def test_push_writes_eta_battles_from_the_domain_function(monkeypatch):
     # recomputes inline -- fake the function out and prove the pushed value came from it.
     calls = []
 
-    def _fake_eta(proj_avg, axis_hi):
-        calls.append((proj_avg, axis_hi))
+    def _fake_eta(proj_avg, cd, axis_hi):
+        calls.append((proj_avg, cd, axis_hi))
         return 7
 
     monkeypatch.setattr(battle_bridge, "battles_to_axis_hi", _fake_eta)
     props = _push()
     assert props["etaBattles"] == 7
     assert len(calls) == 1
+    # the pushed count came from this battle's combined damage, not just (proj_avg, axis_hi)
+    assert calls[0][1] == _model().combined_damage
 
 
 def test_push_gates_ctrl_held_on_free_alignment_regardless_of_which_visibility_switch_is_on(

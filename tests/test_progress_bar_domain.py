@@ -9,7 +9,7 @@ from moe_calculator.domain.battle_builder import (
     battles_to_axis_hi, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
 from moe_calculator.domain.constants import (
     EWMA_K, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_Y_SHIFT,
-    PROGRESS_ETA_CAP, PROGRESS_ETA_MARGIN)
+    PROGRESS_ETA_CAP)
 from moe_calculator.domain.positioning import anchor_centred, anchor_centred_reduced, anchor_offset
 
 # The shape battle_adapter fills from moe_wgapi.get_thresholds(): D65 / D85 / D95 / D100, keyed
@@ -209,55 +209,72 @@ def test_axis_lo_floors_at_zero_and_never_goes_negative():
 
 # --- battles_to_axis_hi ---------------------------------------------------------
 
-def test_eta_is_monotone_non_increasing_as_the_battle_gets_worse():
-    # THE property the whole model exists to satisfy: a worse battle (lower proj_avg) must never
-    # read as FEWER remaining battles. A signed linear extrapolation was tried and rejected
-    # precisely because it fails this; this sweep is the guard against it coming back.
+def test_eta_is_monotone_non_increasing_as_cd_grows():
+    # THE property the new model exists to satisfy: every future battle repeats THIS battle's
+    # combined damage cd, so a bigger overshoot (larger cd above axis_hi) converges the EWMA on the
+    # goal FASTER -- the count must never INCREASE as cd grows. proj_avg is derived from the SAME
+    # ewma fold the bridge uses; pre held at 0 so proj stays below axis_hi across the whole sweep.
     axis_hi = 4400.0
-    steps = [axis_hi * i / 500.0 for i in range(500)]  # 0 .. just under axis_hi
-    values = [battles_to_axis_hi(p, axis_hi) for p in steps]
+    cds = [axis_hi + 1.0 + i * 200.0 for i in range(400)]  # just above axis_hi upward
+    values = [battles_to_axis_hi(ewma_project_raw(0.0, cd), cd, axis_hi) for cd in cds]
+    assert all(v >= 1 for v in values)  # every step lands in the reachable branch
     for prev, cur in zip(values, values[1:]):
         assert cur <= prev
 
 
+def test_eta_blanks_when_cd_is_at_or_below_the_goal():
+    # NEW unreachable case: repeating this battle converges the average on cd, so a cd at or below
+    # axis_hi never reaches the mark -- render BLANK via the -1 no-data sentinel, not a pinned cap.
+    axis_hi = 4400.0
+    assert battles_to_axis_hi(1000.0, axis_hi, axis_hi) == -1        # cd == axis_hi exactly
+    assert battles_to_axis_hi(1000.0, axis_hi - 1.0, axis_hi) == -1  # cd just below
+    assert battles_to_axis_hi(1000.0, 500.0, axis_hi) == -1          # cd well below
+
+
 def test_eta_sentinels():
-    assert battles_to_axis_hi(1000.0, 0.0) == -1
-    assert battles_to_axis_hi(1000.0, -5.0) == -1
-    assert battles_to_axis_hi(4400.0, 4400.0) == 0
-    assert battles_to_axis_hi(5000.0, 4400.0) == 0
+    # axis_hi <= 0 -> no-data -1 (cd irrelevant); proj_avg >= axis_hi -> mark already made 0,
+    # checked BEFORE the cd branch so an at-or-below-goal cd can't turn a made mark into a blank.
+    assert battles_to_axis_hi(1000.0, 6000.0, 0.0) == -1
+    assert battles_to_axis_hi(1000.0, 6000.0, -5.0) == -1
+    assert battles_to_axis_hi(4400.0, 4400.0, 4400.0) == 0
+    assert battles_to_axis_hi(5000.0, 3000.0, 4400.0) == 0
 
 
 def test_eta_never_raises_across_the_full_sweep():
     axis_hi = 4400.0
     for i in range(-100, 600):
-        battles_to_axis_hi(axis_hi * i / 500.0, axis_hi)
+        proj = axis_hi * i / 500.0
+        for cd in (0.0, 2000.0, 4400.0, 6000.0, 20000.0):
+            battles_to_axis_hi(proj, cd, axis_hi)
 
 
-@pytest.mark.parametrize("bad_axis_hi,bad_proj", [
-    (float("nan"), 1000.0),
-    (4400.0, float("nan")),
+@pytest.mark.parametrize("bad_proj,bad_cd,bad_axis_hi", [
+    (1000.0, 6000.0, float("nan")),
+    (float("nan"), 6000.0, 4400.0),
+    (1000.0, float("nan"), 4400.0),
 ])
-def test_eta_degenerates_to_the_cap_rather_than_raising(bad_axis_hi, bad_proj):
-    assert battles_to_axis_hi(bad_proj, bad_axis_hi) == PROGRESS_ETA_CAP
+def test_eta_degenerates_to_the_cap_rather_than_raising(bad_proj, bad_cd, bad_axis_hi):
+    assert battles_to_axis_hi(bad_proj, bad_cd, bad_axis_hi) == PROGRESS_ETA_CAP
 
 
 def test_eta_degenerates_to_the_cap_on_a_k_that_never_converges():
     # k == 1.0 makes ln(1 - k) == ln(0), which raises inside the fold -- the caller must still
     # get a number back.
-    assert battles_to_axis_hi(1000.0, 4400.0, k=1.0) == PROGRESS_ETA_CAP
+    assert battles_to_axis_hi(1000.0, 6000.0, 4400.0, k=1.0) == PROGRESS_ETA_CAP
 
 
 def test_eta_clamps_at_the_cap_and_returns_at_least_one_short_of_the_goal():
-    assert battles_to_axis_hi(0.0, 4400.0) <= PROGRESS_ETA_CAP
-    for proj in (0.0, 100.0, 2000.0, 4399.0):
-        assert battles_to_axis_hi(proj, 4400.0) >= 1
+    # cd a hair above the goal converges glacially -> pinned at the cap.
+    assert battles_to_axis_hi(0.0, 4401.0, 4400.0) == PROGRESS_ETA_CAP
+    for cd in (4500.0, 6000.0, 10000.0, 50000.0):
+        assert battles_to_axis_hi(ewma_project_raw(0.0, cd), cd, 4400.0) >= 1
 
 
 def test_eta_reads_its_defaults_from_the_constants_module():
-    # Pin against the CONSTANTS, not a hardcoded 99 / 0.10, so a knob change can't leave a
-    # stale-but-green test: an explicit-args call must match the bare-defaults call exactly.
-    proj_avg, axis_hi = 1200.0, 4400.0
-    assert (battles_to_axis_hi(proj_avg, axis_hi)
-            == battles_to_axis_hi(proj_avg, axis_hi, EWMA_K, PROGRESS_ETA_MARGIN, PROGRESS_ETA_CAP))
+    # Pin against the CONSTANTS, not a hardcoded 99, so a knob change can't leave a stale-but-green
+    # test: an explicit-args call must match the bare-defaults call exactly.
+    proj_avg, cd, axis_hi = 1200.0, 6000.0, 4400.0
+    assert (battles_to_axis_hi(proj_avg, cd, axis_hi)
+            == battles_to_axis_hi(proj_avg, cd, axis_hi, EWMA_K, PROGRESS_ETA_CAP))
     # And the cap is genuinely reachable at the constant's value, not some other number.
-    assert battles_to_axis_hi(4399.999999, 4400.0) <= PROGRESS_ETA_CAP
+    assert battles_to_axis_hi(0.0, 4401.0, 4400.0) <= PROGRESS_ETA_CAP

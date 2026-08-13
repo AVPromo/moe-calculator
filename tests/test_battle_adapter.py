@@ -228,3 +228,25 @@ def test_minimap_size_index_fails_soft_to_the_top_when_the_read_raises(monkeypat
     assert ba.read_minimap_size_index() == _TOP
 
 
+# --- pre_percentile: the automatic mode-toggle trigger's ONE read ---------------------------
+# Must never fire the trigger off an untrustworthy baseline, so it returns None (not 0.0)
+# whenever _pre_battle_baseline says the baseline isn't known -- see battle_bridge._maybe_auto_toggle.
+
+def test_pre_percentile_returns_the_float_when_baseline_is_known(monkeypatch):
+    monkeypatch.setattr(ba, "_pre_battle_baseline", lambda cd: (73.7, 1800, True))
+    assert ba.pre_percentile(1073) == 73.7
+
+
+def test_pre_percentile_none_when_baseline_not_known(monkeypatch):
+    # e.g. a replay/relogin tank never opened in the garage this session -- BUG B.
+    monkeypatch.setattr(ba, "_pre_battle_baseline", lambda cd: (0.0, 0, False))
+    assert ba.pre_percentile(1073) is None
+
+
+def test_pre_percentile_none_on_a_read_error(monkeypatch):
+    def _boom(cd):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(ba, "_pre_battle_baseline", _boom)
+    assert ba.pre_percentile(1073) is None
+
+

@@ -30,10 +30,13 @@ adding, removing or merely re-wording an option reaches an EXISTING install only
 
 The panel is grouped into five CATEGORIES, each a label header row followed by that feature's
 controls and separated by an ``Empty`` spacer row. Column 1 now holds the In-Battle Calculator
-(``catBattleCalc``) plus EVERY garage-related group: the Garage Widget master (``catGarage``)
-and its "Layout" positioning group (``positioning``). Column 2 holds the WHOLE Progress Bar
-feature: ``catBattleProgress``, the standalone Mode/Scale radios, ``catTransitions`` and the
-Progress Bar's own "Layout" group (``catBarPosition``). A category row carries no ``varName``,
+(``catBattleCalc``, with the calcPreview live preview Image after its controls) plus EVERY
+garage-related group: the Garage Widget master (``catGarage``) and its "Layout" positioning group
+(``positioning``), with the barPreview live preview Image closing the column (moved here from
+column 2 as of ``mod_settings.SETTINGS_VERSION`` 26->27, so both previews sit together). Column 2
+holds the WHOLE Progress Bar feature: ``catBattleProgress``, the standalone Mode/Scale radios,
+``catTransitions`` and the Progress Bar's own "Layout" group (``catBarPosition``). A category row
+carries no ``varName``,
 and most are text-only (no tooltip -- their ``_row`` is a label alone and ``_render`` emits no
 ``tooltip`` key); ``catBarPosition`` is the exception, and carries the Ctrl+drag prose for the
 label-only controls below it, exactly as column 1's "Layout" header (``positioning``) does for
@@ -143,8 +146,9 @@ VARIANT_HOTKEY_KEY = u"variantHotkey"
 # than a key: the sync walk's `if not rendered: continue` then skips it for free, with no
 # type-sniffing branch and with the alignment intact.
 #
-# FIFTEEN slots (14 after the 23->24 column swap, +1 for the calcPreview Image's None sentinel at
-# 24->25; see mod_settings's SETTINGS_VERSION history).
+# SIXTEEN slots (14 after the 23->24 column swap, +1 for the calcPreview Image's None sentinel at
+# 24->25, +1 for the barPreview Image's trailing None sentinel moving in from column 2 at 26->27;
+# see mod_settings's SETTINGS_VERSION history).
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
              None,                                   # calcPreview Image (no i18n text)
              None,                                   # Empty spacer
@@ -152,15 +156,17 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None,
              u"positioning", u"followCarousel",
              None,
-             u"positionSub", u"posX", u"posY")
-# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally. TWENTY-
-# THREE slots (21 after the 23->24 column swap, +1 for the barPreview Image's trailing None
-# sentinel at 24->25, +1 for the variantHotkey HotKey control spliced in right after VARIANT_KEY
-# at 25->26; see COL1_KEYS above).
+             u"positionSub", u"posX", u"posY",
+             None)                                   # barPreview Image (no i18n text)
+# Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally.
+# TWENTY-THREE slots (21 after the 23->24 column swap, +1 for the variantHotkey HotKey control
+# spliced in right after VARIANT_KEY at 25->26, +1 for the progressAutoToggleThreshold Slider
+# spliced in right after it at 27->28; the barPreview Image's trailing None sentinel that briefly
+# lived here at 24->25 MOVED to COL1_KEYS's tail at 26->27; see COL1_KEYS above).
 COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
              None,
-             VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressSize",
+             VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressAutoToggleThreshold", u"progressSize",
              None,
              u"catTransitions", u"progressTransitions",
              u"progressTransEvents", u"progressTransManual",
@@ -168,8 +174,7 @@ COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressHoldSeconds",
              None,
              u"catBarPosition", u"progressOrientation", u"progressAlignment",
-             u"barPosX", u"barPosY",
-             None)                                   # barPreview Image (no i18n text)
+             u"barPosX", u"barPosY")
 
 # The six CATEGORY/GROUP header keys that render BOLD (see build()). "positionSub"
 # ("Position") is deliberately EXCLUDED -- it is the non-bold sub-label under "Layout", and
@@ -403,6 +408,11 @@ _PANEL = {
             u"between Damage Efficiency and Moving Average. The mod remembers each "
             u"vehicle's choice. After you switch, the bar reloads and reappears after "
             u"a few seconds. Default: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Automatic Mode Toggle", u"Automatic mode toggle",
+            u"When a vehicle's mark progress reaches this percent before battle, its bar "
+            u"mode switches automatically, the same as pressing the override key above. "
+            u"Only fires once per vehicle. 100% turns this off."),
     },
 
     u"de": {
@@ -524,6 +534,12 @@ _PANEL = {
             u"umzuschalten. Der Mod merkt sich die Wahl für jedes Fahrzeug. Nach dem "
             u"Wechsel lädt die Leiste neu und erscheint nach ein paar Sekunden wieder. "
             u"Standard: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Automatische Modusumschaltung", u"Automatische Modusumschaltung",
+            u"Wenn der Markenfortschritt eines Fahrzeugs vor dem Gefecht diesen "
+            u"Prozentsatz erreicht, wechselt der Leistenmodus automatisch, genauso wie "
+            u"mit der Wechseltaste oben. Wirkt nur einmal pro Fahrzeug. 100 % schaltet "
+            u"dies aus."),
     },
 
     u"fr": {
@@ -647,6 +663,12 @@ _PANEL = {
             u"progression de ce véhicule entre Efficacité des dégâts et Moyenne glissante. "
             u"Le mod mémorise le choix de chaque véhicule. Après le changement, la barre "
             u"se recharge et réapparaît après quelques secondes. Par défaut : K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Changement de mode automatique", u"Changement de mode automatique",
+            u"Lorsque la progression des marques d'un véhicule atteint ce pourcentage "
+            u"avant la bataille, le mode de la barre change automatiquement, comme avec "
+            u"la touche de changement ci-dessus. Ne se déclenche qu'une fois par "
+            u"véhicule. 100 % désactive cette fonction."),
     },
 
     u"es": {
@@ -768,6 +790,12 @@ _PANEL = {
             u"de este vehículo entre Eficiencia de daño y Media móvil. El mod recuerda la "
             u"elección de cada vehículo. Después de cambiar, la barra se recarga y "
             u"reaparece tras unos segundos. Predeterminada: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Cambio de modo automático", u"Cambio de modo automático",
+            u"Cuando el progreso de marcas de un vehículo alcanza este porcentaje antes "
+            u"de la batalla, el modo de la barra cambia automáticamente, igual que con "
+            u"la tecla de cambio de arriba. Solo se activa una vez por vehículo. 100 % "
+            u"lo desactiva."),
     },
 
     u"it": {
@@ -891,6 +919,12 @@ _PANEL = {
             u"progresso di questo veicolo tra Efficienza dei danni e Media mobile. Il mod "
             u"ricorda la scelta di ogni veicolo. Dopo il cambio, la barra si ricarica e "
             u"riappare dopo alcuni secondi. Predefinito: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Cambio modalità automatico", u"Cambio modalità automatico",
+            u"Quando il progresso dei marchi di un veicolo raggiunge questa percentuale "
+            u"prima della battaglia, la modalità della barra cambia automaticamente, "
+            u"come con il tasto di cambio sopra. Si attiva solo una volta per veicolo. "
+            u"Il 100% lo disattiva."),
     },
 
     u"pl": {
@@ -1010,6 +1044,11 @@ _PANEL = {
             u"pojazdu między Efektywnością obrażeń a Średnią kroczącą. Mod zapamiętuje "
             u"wybór dla każdego pojazdu. Po zmianie pasek przeładowuje się i pojawia się "
             u"ponownie po kilku sekundach. Domyślnie: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Automatyczna zmiana trybu", u"Automatyczna zmiana trybu",
+            u"Gdy postęp znaków pojazdu przed bitwą osiągnie ten procent, tryb paska "
+            u"zmienia się automatycznie, tak jak za pomocą klawisza zmiany powyżej. "
+            u"Działa tylko raz na pojazd. 100% wyłącza tę funkcję."),
     },
 
     u"cs": {
@@ -1122,6 +1161,11 @@ _PANEL = {
             u"vozidla mezi Efektivitou poškození a Klouzavým průměrem. Mod si pamatuje "
             u"volbu pro každé vozidlo. Po přepnutí se lišta znovu načte a znovu se zobrazí "
             u"po několika sekundách. Výchozí: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Automatické přepnutí režimu", u"Automatické přepnutí režimu",
+            u"Když postup známek vozidla před bitvou dosáhne tohoto procenta, režim "
+            u"lišty se automaticky přepne, stejně jako klávesou přepnutí výše. Spustí "
+            u"se jen jednou na vozidlo. 100 % tuto funkci vypne."),
     },
 
     u"ru": {
@@ -1243,6 +1287,11 @@ _PANEL = {
             u"прогресса этой машины между Эффективностью урона и Скользящим средним. "
             u"Мод запоминает выбор для каждой машины. После переключения полоса "
             u"перезагружается и появляется снова через несколько секунд. По умолчанию: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Автоматическое переключение режима", u"Автоматическое переключение режима",
+            u"Когда прогресс отметок машины перед боем достигает этого процента, режим "
+            u"полосы переключается автоматически, так же как клавишей переключения "
+            u"выше. Срабатывает только один раз на машину. 100% отключает эту функцию."),
     },
 
     u"uk": {
@@ -1362,6 +1411,11 @@ _PANEL = {
             u"машини між Ефективністю шкоди та Ковзним середнім. Мод запам'ятовує вибір "
             u"для кожної машини. Після перемикання смуга перезавантажується і з'являється "
             u"знову через кілька секунд. За замовчуванням: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Автоматичне перемикання режиму", u"Автоматичне перемикання режиму",
+            u"Коли прогрес позначок машини перед боєм досягає цього відсотка, режим "
+            u"смуги перемикається автоматично, так само як клавішею перемикання вище. "
+            u"Спрацьовує лише один раз на машину. 100% вимикає цю функцію."),
     },
 
     u"hu": {
@@ -1477,6 +1531,11 @@ _PANEL = {
             u"sávjának módja között, Sebzéshatékonyság és Mozgóátlag közt. A mod "
             u"megjegyzi az egyes járművek választását. A váltás után a sáv újratöltődik, "
             u"és néhány másodperc múlva jelenik meg újra. Alapértelmezett: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Automatikus mód váltás", u"Automatikus mód váltás",
+            u"Amikor egy jármű jelhaladása a csata előtt eléri ezt a százalékot, a sáv "
+            u"módja automatikusan átvált, ugyanúgy, mint a fenti váltóbillentyűvel. "
+            u"Csak egyszer lép életbe járművenként. A 100% kikapcsolja ezt."),
     },
 
     u"tr": {
@@ -1593,6 +1652,11 @@ _PANEL = {
             u"arasında değiştirmek için savaşta bastığın tuş. Mod her aracın seçimini "
             u"hatırlar. Değiştirdikten sonra çubuk yeniden yüklenir ve birkaç saniye sonra "
             u"yeniden görünür. Varsayılan: K."),
+        u"progressAutoToggleThreshold": _row(
+            u"Otomatik Mod Değiştirme", u"Otomatik mod değiştirme",
+            u"Bir aracın işaret ilerlemesi savaştan önce bu yüzdeye ulaştığında, çubuk "
+            u"modu yukarıdaki değiştirme tuşuyla aynı şekilde otomatik olarak değişir. "
+            u"Araç başına yalnızca bir kez tetiklenir. %100 bunu kapatır."),
     },
 }
 

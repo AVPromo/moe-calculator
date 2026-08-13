@@ -568,7 +568,7 @@ $tpl = @'
       // maintainer converges", not a derived constant, so re-seeding it to actually sit behind
       // capP AT THIS DEFAULT PREVIEW STATE is a tuner-accuracy fix, not a shipped-value change.
       {id:"bd3T",label:"Strip 3 top (preAvg/capP row, rem)",min:-160,max:240,step:0.5,val:33},
-      {id:"bd4T",label:"Strip 4 top (current row, rem)",min:-160,max:240,step:0.5,val:201},
+      {id:"bd4T",label:"Strip 4 top (current row, rem)",min:-160,max:240,step:0.5,val:204},
       {id:"dotAlpha",label:"Dither strength (opacity)",min:0,max:1,step:0.01,val:0.1},
       {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:56},
       {id:"dotRY",label:"Dither fade size Y (%)",min:0,max:250,step:1,val:110},
@@ -617,6 +617,7 @@ $tpl = @'
       tPre=root.querySelector(".mpv-pre"), tProj=root.querySelector(".mpv-proj"),
       capP=root.querySelector(".mpv-capP"),
       capC=root.querySelector(".mpv-capC"), capR=root.querySelector(".mpv-capR"),
+      capEta=root.querySelector(".mpv-eta"),
       bd=root.querySelector(".mpv-backdrop"), mm=document.getElementById("mmMock"),
       stageEl=document.getElementById("stage"),
       dyn=document.createElement("style");
@@ -677,7 +678,10 @@ $tpl = @'
     capDN.textContent=(d>0?"+":d<0?"-":"")+fmt(Math.abs(d));
     if(!revealed)return;
     var glows=Math.round(Math.abs(d))!==0;
-    [capV(capC),capDN,fill,tProj].forEach(function(e){
+    // capEta rides the SAME test as the delta, mirroring shipped MoEProgress.js's showVal() --
+    // omitting it here (2026-08-12 fix) left the ETA numeral perpetually plain/white in this
+    // tuner while the shipped widget colours it up/down like every other glowing element.
+    [capV(capC),capDN,fill,tProj,capEta].forEach(function(e){
       e.classList.toggle("mpv-up",glows&&d>0);e.classList.toggle("mpv-down",glows&&d<0);});
   }
 
@@ -841,6 +845,9 @@ $tpl = @'
       // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
       ".mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n"+
       ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
+      // Large twin of the preAvg narrowing, right edge pinned at 15.067rem (hand literal --
+      // shipped `.mp-lg .mpv-bd-3`, 2026-08-12 narrowing pass).
+      ".mpv-lg .mpv-bd-3 { left: -82.183rem; width: 86.933rem; }\n"+
       tick("end",st.tickWEnd,st.tickXEnd)+tick("pre",st.tickWPre,st.tickXPre)+
       tick("proj",st.tickWProj,st.tickXProj)+
       ".mpv-lg .mpv-capR { padding-right: "+pr+"; transform: translateX("+X43(st.capxR)+"rem); }\n"+
@@ -881,6 +888,10 @@ $tpl = @'
       // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
       // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
       ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
+      // preAvg strip (bd-3) narrowed to 2/3 of the shared width, right edge still pinned at
+      // 15rem (hand literal, exempt from four_thirds -- shipped MoEProgressVertical.css,
+      // 2026-08-12 narrowing pass).
+      ".mpv-bd-3 { width: 79.333rem; left: -68.733rem; }\n"+
       ".mpv-bd-3::before { mask: "+dotMask(st.dotRXWide)+"; }\n"+
       ".mpv-bd-3::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+

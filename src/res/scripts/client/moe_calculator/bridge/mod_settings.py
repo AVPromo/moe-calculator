@@ -314,7 +314,27 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # describes the bar, not when it shows. The migration branch carries every saved value across
 # unchanged (enumerated from DEFAULTS, not hand-listed) and the new key takes its fresh [37]
 # (Keys.KEY_K) default, matching progress_variant_hotkey()'s own fallback.
-SETTINGS_VERSION = 26
+# Bumped 26 -> 27 to move the barPreview Image from the tail of column 2's "Layout"
+# (catBarPosition) category to the tail of column 1, right after calcPreview -- so both live
+# previews sit together in one column. A template ROW moving position is structural (same
+# reasoning as the 23->24 column swap): register()'s saved-truthy path never calls
+# setModTemplate on an existing install, so the new column assignment (and the COL1_KEYS/
+# COL2_KEYS None-sentinel move _sync_template_text's positional zip relies on) reaches nobody
+# without a forward bump. barPreview is not a stored setting (absent from DEFAULTS -- an
+# updateImage addressing handle only, see CALC_PREVIEW_KEY), so the migration branch carries
+# every real value across unchanged; there is nothing to remap.
+# Bumped 27 -> 28 to add the "Automatic Mode Toggle" threshold Slider
+# (progress_auto_toggle_threshold): a new varName AND a new template ROW, spliced into column 2
+# right after the HotKey mode-override control and before the Scale radio -- either alone is
+# structural (Aslain also folds the Slider's minimum/maximum/snapInterval into its
+# _settingsStructure signature), so only a forward bump reaches an existing install --
+# register()'s saved-truthy path never calls setModTemplate. The control is deliberately
+# STANDALONE (no masterVarName), matching the Mode/HotKey/Scale controls it sits beside: it
+# describes another way the bar's mode can change, not when the bar shows. The migration branch
+# carries every saved value across unchanged (enumerated from DEFAULTS, not hand-listed) and the
+# new key takes its fresh 100 default -- the DISABLE sentinel, so no existing user's bar starts
+# auto-toggling on update.
+SETTINGS_VERSION = 28
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -410,6 +430,17 @@ PROGRESS_HOLD_SECONDS_KEY = "progress_hold_seconds"
 PROGRESS_HOLD_MIN = 1
 PROGRESS_HOLD_MAX = 30
 PROGRESS_HOLD_DEFAULT = 5
+
+# Automatic per-vehicle mode toggle: when the selected vehicle's PRE-BATTLE MoE percentile is at
+# or above this threshold, and the vehicle is not already mode-overridden (see
+# variant_overrides.py), the bar's mode is flipped ONCE via the same per-vehicle override
+# mechanism the hotkey above uses -- idempotent, so a repeat qualifying battle never re-flips it
+# back. 100 is the DISABLE sentinel (no percentile can reach past 100), so the feature ships OFF
+# by default -- an existing user sees no behaviour change until they lower the slider.
+PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY = "progress_auto_toggle_threshold"
+PROGRESS_AUTO_TOGGLE_MIN = 0
+PROGRESS_AUTO_TOGGLE_MAX = 100
+PROGRESS_AUTO_TOGGLE_DEFAULT = 100
 
 # Draggable garage-widget position, stored as two on-screen PIXEL coordinates (the widget's
 # top-LEFT anchor): posX (left px) + posY (top px). Both default to 0, meaning "auto" -- the
@@ -513,17 +544,19 @@ _PREVIEW_DIR = "gui/maps/icons/moe_calculator/previews/"
 # width/height. Revisit if the live panel shows a cropped or unscaled preview.
 _PREVIEW_DISPLAY = {
     "calc_assist_on": (125, 73),
-    "calc_assist_off": (125, 52),
-    "bar_eff_horizontal": (392, 88),
-    "bar_eff_vertical": (92, 212),
-    "bar_ma_horizontal": (310, 68),
-    "bar_ma_vertical": (75, 232),
+    "calc_assist_off": (125, 73),
+    "bar_eff_horizontal": (276, 323),
+    "bar_eff_vertical": (332, 210),
+    "bar_ma_horizontal": (244, 216),
+    "bar_ma_vertical": (311, 231),
 }
-# Reserved layout slot = MAX display dims across each swappable set, so the panel never jumps when a
-# differently-sized PNG swaps in: the calc box holds the taller 3-row image (125x73), the bar box
-# holds the widest (Efficiency horizontal, 392) and tallest (Moving Average vertical, 232) bars.
+# Reserved layout slot: the calc box holds a uniform 3-row/2-row image (both 125x73 -- the 2-row PNG
+# is re-rendered to the same box so the calc slot never jumps). The bar box reserves the MAX of the
+# swappable bar set -- width 332 (Efficiency vertical) x height 323 (Efficiency horizontal) -- so no
+# orientation/variant swap reflows the panel. The previews are now multi-range composites that FILL
+# the width, so the old align='right' is moot (and MSA ignored it anyway) -- dropped from _template.
 _CALC_PREVIEW_W, _CALC_PREVIEW_H = 125, 73
-_BAR_PREVIEW_W, _BAR_PREVIEW_H = 392, 232
+_BAR_PREVIEW_W, _BAR_PREVIEW_H = 332, 323
 
 # Sanity MAGNITUDE limit for a stored pixel coordinate (well past any real screen size); a
 # typed / echoed value is clamped into [-POS_MAX, POS_MAX], with 0/0 meaning "auto / unseeded".
@@ -550,6 +583,7 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
             PROGRESS_TRANS_MANUAL_KEY: True,
             PROGRESS_HOLD_SECONDS_KEY: PROGRESS_HOLD_DEFAULT,
+            PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY: PROGRESS_AUTO_TOGGLE_DEFAULT,
             POS_X_KEY: 0, POS_Y_KEY: 0, POS_W_KEY: 0, POS_H_KEY: 0,
             BAR_POS_X_KEY: 0, BAR_POS_Y_KEY: 0,
             PROGRESS_POS_FRAME_KEY: POS_FRAME_ANCHOR,
@@ -599,26 +633,35 @@ def clamp_variant(v, max_index=PROGRESS_VARIANT_MOVING_AVERAGE):
     return 0
 
 
-def clamp_hold_seconds(v):
-    """Coerce the stored hold duration to a whole number of seconds in
-    [PROGRESS_HOLD_MIN, PROGRESS_HOLD_MAX]. Pure + engine-free (unit-tested).
-
-    Third trust boundary alongside clamp_pos / clamp_variant, and the same bool trap: bool is an
-    int subclass, so isinstance must be tested FIRST or True would pass through as a legal 1
-    second. Garbage (a bool, a non-numeric) falls back to the template DEFAULT; a merely
-    OUT-OF-RANGE number is clamped to the nearest bound, like clamp_pos -- the user asked for
-    "as long as possible", not for 5."""
+def _clamp_int(v, lo, hi, default):
+    """Shared body for clamp_hold_seconds / clamp_auto_toggle_threshold: bool-guard first (bool
+    is an int subclass, so isinstance must be tested FIRST or True would pass through as a legal
+    1), coerce to int, fall back to `default` on garbage, else clamp to [lo, hi]. Pure +
+    engine-free (unit-tested via the two public wrappers)."""
     if isinstance(v, bool):
-        return PROGRESS_HOLD_DEFAULT
+        return default
     try:
         v = int(v)
     except (TypeError, ValueError):
-        return PROGRESS_HOLD_DEFAULT
-    if v < PROGRESS_HOLD_MIN:
-        return PROGRESS_HOLD_MIN
-    if v > PROGRESS_HOLD_MAX:
-        return PROGRESS_HOLD_MAX
+        return default
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
     return v
+
+
+def clamp_hold_seconds(v):
+    """Coerce the stored hold duration to a whole number of seconds in
+    [PROGRESS_HOLD_MIN, PROGRESS_HOLD_MAX]. Pure + engine-free (unit-tested)."""
+    return _clamp_int(v, PROGRESS_HOLD_MIN, PROGRESS_HOLD_MAX, PROGRESS_HOLD_DEFAULT)
+
+
+def clamp_auto_toggle_threshold(v):
+    """Coerce the stored auto-toggle threshold to a whole percent in
+    [PROGRESS_AUTO_TOGGLE_MIN, PROGRESS_AUTO_TOGGLE_MAX]. Pure + engine-free (unit-tested)."""
+    return _clamp_int(v, PROGRESS_AUTO_TOGGLE_MIN, PROGRESS_AUTO_TOGGLE_MAX,
+                      PROGRESS_AUTO_TOGGLE_DEFAULT)
 
 # Live flag state (seeded from MSA in register(); defaults until then / if MSA is absent).
 _settings = dict(DEFAULTS)
@@ -638,12 +681,20 @@ _registered = False
 # _derive_layout entirely. See TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 1(c).
 _deriving = False
 
+# True only WHILE _on_changed's post-save template re-bake (setModTemplate, below) is in flight.
+# Mirrors _deriving's shape but guards a DIFFERENT re-entrancy: setModTemplate may itself fire a
+# synchronous onSettingsChanged, which would otherwise recurse into this same re-bake forever.
+# While set, a re-entrant _on_changed just skips issuing a SECOND setModTemplate -- one rebake per
+# real user change is enough, since the nested call carries nothing new to bake in.
+_rebaking_template = False
+
 
 def _coerce(key, value):
     """Coerce a saved value to the type this key stores: the position coords are clamped ints,
     the progress-bar variant/size/orientation/alignment are clamped radio INDEXes, the hold
-    duration a clamped second count, the pos-frame marker one of two known strings, the hotkey
-    chord passed through as-is, everything else a bool. Pure + engine-free.
+    duration a clamped second count, the auto-toggle threshold a clamped percent, the pos-frame
+    marker one of two known strings, the hotkey chord passed through as-is, everything else a
+    bool. Pure + engine-free.
 
     Every non-bool branch is load-bearing: falling through to bool() would turn a radio's
     index 1 into True and index 0 into False (and the hold's 5 into True, or a "legacy" string
@@ -660,6 +711,8 @@ def _coerce(key, value):
         return clamp_variant(value, PROGRESS_ALIGN_FREE)
     if key == PROGRESS_HOLD_SECONDS_KEY:
         return clamp_hold_seconds(value)
+    if key == PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY:
+        return clamp_auto_toggle_threshold(value)
     if key == PROGRESS_POS_FRAME_KEY:
         return value if value == POS_FRAME_LEGACY else POS_FRAME_ANCHOR
     if key == PROGRESS_VARIANT_HOTKEY_KEY:
@@ -810,6 +863,17 @@ def progress_hold_seconds():
     return clamp_hold_seconds(_settings.get(PROGRESS_HOLD_SECONDS_KEY, PROGRESS_HOLD_DEFAULT))
 
 
+def progress_auto_toggle_threshold():
+    """The pre-battle MoE percentile (0-100) at or above which a vehicle's bar mode auto-toggles
+    once (default 100 -- the DISABLE sentinel, since no percentile can reach past it).
+
+    An int, NOT a bool -- re-clamp on read (mirroring progress_hold_seconds) and never let a
+    corrupt store leak a bool or an out-of-range percent to the trigger
+    (variant_overrides.should_auto_toggle)."""
+    return clamp_auto_toggle_threshold(
+        _settings.get(PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY, PROGRESS_AUTO_TOGGLE_DEFAULT))
+
+
 def pos_x():
     """The pinned widget top-left x (px), or 0 for auto (CSS bottom-right default)."""
     return clamp_pos(_settings.get(POS_X_KEY, 0))
@@ -940,24 +1004,93 @@ def preview_sources():
     return calc_src, calc_w, calc_h, bar_src, bar_w, bar_h
 
 
-def update_preview_images():
-    """Swap the two MSA preview Images to match the current driving settings (guarded, fail-soft).
+def _push_previews(g, calc, bar):
+    """updateImage both preview handles from two base names -- the source->updateImage step the
+    Apply-path update_preview_images() and the live callback _on_live_change() SHARE. Passes each
+    source's explicit display width/height so MSA downscales the 4x-supersampled PNG (see
+    _PREVIEW_DISPLAY)."""
+    calc_src, calc_w, calc_h = _preview_entry(calc)
+    bar_src, bar_w, bar_h = _preview_entry(bar)
+    g.updateImage(LINKAGE, CALC_PREVIEW_KEY, calc_src, calc_w, calc_h)
+    g.updateImage(LINKAGE, BAR_PREVIEW_KEY, bar_src, bar_w, bar_h)
 
-    Wired as a change listener (see mod_moe_calculator) so a settings change swaps the preview
-    live, and called once at register() so the first panel open is correct on an existing install.
-    Passes the explicit display width/height so MSA downscales each 4x source (see _PREVIEW_DISPLAY).
+
+def update_preview_images():
+    """Swap the two MSA preview Images to match the current STORED driving settings (guarded,
+    fail-soft) -- the Apply-path / fallback update.
+
+    Wired as a change listener (see mod_moe_calculator) so a settings change (on Apply) swaps the
+    preview, and called once at register() so the first panel open is correct on an existing install.
     updateImage writes a runtime-only, non-persisted cache and fires onImageUpdate; a panel that
     has not opened yet just reads the initial template `source`. No-op if MSA is absent or too old
-    to expose updateImage (soft dependency)."""
+    to expose updateImage (soft dependency).
+
+    This reads the STORED getters, which only update on Apply. The LIVE (pre-Apply) update rides
+    MSA's internal channel instead -- see _on_live_change / _wire_live_preview -- and falls back to
+    THIS on Apply if that internal channel is unavailable."""
     try:
         g = _primary_api()
         if g is None or not hasattr(g, "updateImage"):
             return
-        calc_src, calc_w, calc_h, bar_src, bar_w, bar_h = preview_sources()
-        g.updateImage(LINKAGE, CALC_PREVIEW_KEY, calc_src, calc_w, calc_h)
-        g.updateImage(LINKAGE, BAR_PREVIEW_KEY, bar_src, bar_w, bar_h)
+        calc, bar = preview_source_names(counted_assistance_enabled(),
+                                         progress_bar_variant(), progress_bar_orientation())
+        _push_previews(g, calc, bar)
     except Exception:
         LOG_CURRENT_EXCEPTION()
+
+
+def _on_live_change(linkage, settings):
+    """MSA INTERNAL per-control LIVE-preview callback (see _wire_live_preview). Fires as the user
+    toggles a control in the panel, BEFORE Apply, carrying the FULL current live settings dict
+    (registered with fullsettings=True).
+
+    Compute the preview sources from THESE live values, NOT the stored getters
+    (counted_assistance_enabled() etc.) -- the getters read persisted settings that do NOT update
+    until Apply, so using them here would show a stale preview. Each of the three driving keys is
+    read from the live dict when present (coerced to its type), else it falls back to that one key's
+    stored getter. Guarded/fail-soft: a missing/renamed internal API never gets here, and any error
+    is swallowed so it can't break the panel."""
+    try:
+        if linkage != LINKAGE:
+            return
+        g = _primary_api()
+        if g is None or not hasattr(g, "updateImage"):
+            return
+        s = settings if isinstance(settings, dict) else {}
+        counted = _coerce(COUNTED_ASSIST_KEY, s[COUNTED_ASSIST_KEY]) \
+            if COUNTED_ASSIST_KEY in s else counted_assistance_enabled()
+        variant = _coerce(PROGRESS_VARIANT_KEY, s[PROGRESS_VARIANT_KEY]) \
+            if PROGRESS_VARIANT_KEY in s else progress_bar_variant()
+        orientation = _coerce(PROGRESS_ORIENTATION_KEY, s[PROGRESS_ORIENTATION_KEY]) \
+            if PROGRESS_ORIENTATION_KEY in s else progress_bar_orientation()
+        calc, bar = preview_source_names(counted, variant, orientation)
+        _push_previews(g, calc, bar)
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _wire_live_preview():
+    """Subscribe _on_live_change to MSA's INTERNAL per-control channel so the settings-panel
+    previews update as the user toggles a control, BEFORE Apply.
+
+    DEPENDS ON MSA's INTERNAL IModsSettingsApiInternal.registerLiveSettingsChange -- NOT the public
+    g_modsSettingsApi facade. It is undocumented and may be renamed/removed on an MSA update, so it
+    is reached through the DI skeleton and wired as a SOFT dependency: if the interface, the DI
+    slot or the method is absent/changed, this is a clean no-op and the Apply-path
+    update_preview_images() (wired as a normal change listener) still updates the previews on Apply.
+    Never raises into register()."""
+    try:
+        from helpers import dependency
+        from gui.aslainMenu.skeleton import IModsSettingsApiInternal
+        api = dependency.instance(IModsSettingsApiInternal)
+        if api is not None and hasattr(api, "registerLiveSettingsChange"):
+            api.registerLiveSettingsChange(LINKAGE, _on_live_change, fullsettings=True)
+            LOG_DEBUG("[moe] live preview channel wired (MSA internal)")
+        else:
+            LOG_DEBUG("[moe] MSA internal live channel absent -> previews update on Apply")
+    except Exception:
+        # Undocumented internal API absent/renamed -> the Apply-path fallback stays intact.
+        LOG_DEBUG("[moe] MSA internal live channel unavailable -> previews update on Apply")
 
 
 def _seed(saved):
@@ -965,6 +1098,26 @@ def _seed(saved):
     defaults for any key it omits. Used where `saved` fully defines our state."""
     global _settings
     _settings = merge_settings(saved)
+
+
+def _raw_stored_settings(api):
+    """The mod's raw, unmigrated on-disk dict straight from the host's own state
+    (`api.state['settings'][LINKAGE]`), or {} if unavailable/unrecognized (izeberg's legacy
+    shape isn't supported here; any error degrades to {}). Reading it neither mutates nor
+    persists anything.
+
+    Shared by register()'s two uses: seeding _settings BEFORE the template is built (so the
+    baked preview Image descriptor -- see _template()/preview_sources() -- reflects the user's
+    ACTUAL stored orientation/variant/assist from the very first render, not the module-load
+    DEFAULTS), and the version-bump branch's `old_raw` snapshot (taken before setModTemplate
+    wipes the stored dict)."""
+    try:
+        state = getattr(api, "state", None)
+        if isinstance(state, dict):
+            return dict((state.get("settings") or {}).get(LINKAGE) or {})
+    except Exception:
+        pass
+    return {}
 
 
 def _apply(saved):
@@ -1038,37 +1191,45 @@ def _stepper(key, rendered):
     return control
 
 
-def _slider(key, rendered):
-    """One MSA Slider descriptor -- the hold duration, in whole SECONDS. `varName` matches a
-    DEFAULTS key so the returned int maps straight through merge_settings, and `snapInterval: 1`
-    keeps the value an int (see clamp_hold_seconds for why a fraction is not wanted).
+def _slider(key, rendered, minimum=PROGRESS_HOLD_MIN, maximum=PROGRESS_HOLD_MAX,
+           fmt="{{value}} s"):
+    """One MSA Slider descriptor. `varName` matches a DEFAULTS key so the returned int maps
+    straight through merge_settings, and `snapInterval: 1` keeps the value an int (see
+    clamp_hold_seconds / clamp_auto_toggle_threshold for why a fraction is not wanted).
+
+    `minimum`/`maximum`/`fmt` default to the hold-duration slider's own bounds and unit ("5 s"),
+    the control's original and only caller until the auto-toggle threshold slider (0-100,
+    "{{value}}%") joined it -- pass the other bounds/format for a different-ranged slider rather
+    than adding a second near-identical helper.
 
     Built as a plain dict rather than through Aslain's templates.createSlider, for the same reason
     every other helper here is (see _radio): it keeps _template() a pure, unit-testable dict with
     no gui.aslainMenu import, and MSA does no descriptor validation at all, so the dict IS what
     that helper emits -- createSlider is createStepper(SLIDER, ...) plus a `format` key, i.e.
     exactly _stepper's shape minus canManualInput. An API that does not know the Slider type at all
-    just skips the row (the AS3 panel logs "Unexpected type of component:"), leaving the three
-    Transitions checkboxes above it working and progress_hold_seconds() on its 5 s default.
+    just skips the row (the AS3 panel logs "Unexpected type of component:"), leaving the rest of
+    the panel working and each slider's own getter on its default.
 
-    NO `masterVarName`, and never one: this control is deliberately NOT a child of the Transitions
-    master (see _template() and progress_hold_seconds()), so it is emitted top-level and un-indented.
-    Nothing here sets the key -- only _grouped_column1 does, and this descriptor is never passed to
-    it -- so the key is genuinely ABSENT rather than present-and-None (MSA reads the key's presence,
-    so a None would still bind it to a master named None).
+    NO `masterVarName`, and never one for the hold-duration caller (see _template() and
+    progress_hold_seconds()): that control is deliberately NOT a child of the Transitions master,
+    so it is emitted top-level and un-indented. Nothing here sets the key -- only _grouped_column1
+    does, and this descriptor is never passed to it -- so the key is genuinely ABSENT rather than
+    present-and-None (MSA reads the key's presence, so a None would still bind it to a master
+    named None).
 
-    `{{value}}` is MSA's own substitution token, so the panel renders "5 s" rather than a bare
-    number. `tooltip` is OMITTED, never emitted empty, exactly like _checkbox / _radio / _label --
-    a hard index there is what killed the WHOLE settings panel once (a KeyError inside _template(),
-    i.e. inside register()'s guarded try, so the only symptom was no panel at all)."""
+    `{{value}}` is MSA's own substitution token, so the panel renders e.g. "5 s" or "100%" rather
+    than a bare number. `tooltip` is OMITTED, never emitted empty, exactly like _checkbox / _radio
+    / _label -- a hard index there is what killed the WHOLE settings panel once (a KeyError
+    inside _template(), i.e. inside register()'s guarded try, so the only symptom was no panel at
+    all)."""
     control = {
         "type": "Slider",
         "text": rendered["text"],
         "value": DEFAULTS[key],
-        "minimum": PROGRESS_HOLD_MIN,
-        "maximum": PROGRESS_HOLD_MAX,
+        "minimum": minimum,
+        "maximum": maximum,
         "snapInterval": 1,
-        "format": "{{value}} s",
+        "format": fmt,
         "varName": key,
     }
     tooltip = rendered.get("tooltip")
@@ -1176,7 +1337,7 @@ def _empty():
 
 
 def _image(source, var_name, width=None, height=None, container_w=None, container_h=None,
-           collapsed=False, label=None, tooltip=None):
+           collapsed=False, label=None, tooltip=None, align=None):
     """One MSA Image descriptor -- a pre-baked widget preview swapped live via updateImage.
 
     Hand-built like every other helper here (see _radio) so _template() stays import-free and
@@ -1197,6 +1358,8 @@ def _image(source, var_name, width=None, height=None, container_w=None, containe
         control["containerWidth"] = container_w
     if container_h is not None:
         control["containerHeight"] = container_h
+    if align is not None:
+        control["align"] = align
     if collapsed:
         control["collapsed"] = True
     if label:
@@ -1276,12 +1439,15 @@ def _template():
     SETTINGS_VERSION history), so a category is not a column but a bare Label header row followed
     by that feature's controls, and categories are separated by an "Empty" spacer row.
     Column 1: "Battle Calculator" (the In-Battle Widget master + its "Alt Press" and "Counted
-    Assistance Row" children), then EVERY garage-related group -- "Garage Widget" (the standalone
-    garage master, no children of its own) and its own "Layout" group (a header, Follow Carousel,
-    an Empty spacer, a "Position" sub-label, then the X/Y numeric steppers).
+    Assistance Row" children), the calcPreview live preview Image, then EVERY garage-related
+    group -- "Garage Widget" (the standalone garage master, no children of its own) and its own
+    "Layout" group (a header, Follow Carousel, an Empty spacer, a "Position" sub-label, then the
+    X/Y numeric steppers) -- and finally the barPreview live preview Image, closing the column
+    (moved here from column 2 as of SETTINGS_VERSION 26->27, so both previews now sit together).
     Column 2: the WHOLE Progress Bar feature -- "Battle Progress" (the Progress Bar master + its
     three VISIBILITY children, an Empty spacer, the standalone Mode radio, its HotKey mode-override
-    sibling, and the Scale radio), then a SECOND Empty spacer and "Transitions" (its own header +
+    sibling, the Automatic Mode Toggle threshold slider (v28) and the Scale radio), then a SECOND
+    Empty spacer and "Transitions" (its own header +
     the Transitions master with its
     Events, Alt Press children, a spacer, then the UNGROUPED Hold Duration slider), then a THIRD
     Empty spacer and "Layout" (header text; i18n key stays catBarPosition -- its own header + the
@@ -1303,6 +1469,12 @@ def _template():
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
     progress_orientation = _radio(PROGRESS_ORIENTATION_KEY, t["progressOrientation"])
     progress_alignment = _radio(PROGRESS_ALIGNMENT_KEY, t["progressAlignment"])
+    # Automatic Mode Toggle (v28): the SAME _slider helper as the hold-duration one below, but its
+    # own 0-100 percent range/format -- see _slider's docstring for why one helper serves both
+    # rather than a second near-identical one.
+    auto_toggle = _slider(PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY, t["progressAutoToggleThreshold"],
+                          minimum=PROGRESS_AUTO_TOGGLE_MIN, maximum=PROGRESS_AUTO_TOGGLE_MAX,
+                          fmt="{{value}}%")
     trans_master = _checkbox(PROGRESS_TRANSITIONS_KEY, t["progressTransitions"])
     trans_events = _checkbox(PROGRESS_TRANS_EVENTS_KEY, t["progressTransEvents"])
     trans_manual = _checkbox(PROGRESS_TRANS_MANUAL_KEY, t["progressTransManual"])
@@ -1327,10 +1499,14 @@ def _template():
     # The two live preview Images. Their initial `source` matches the CURRENT settings (corrected
     # after seed by update_preview_images() at register()); the containers reserve a stable slot so
     # a taller image swapping in never reflows the panel. Both carry a `None` sentinel slot in
-    # settings_i18n.COL*_KEYS (no i18n text), so _sync_template_text's zip stays aligned.
+    # settings_i18n.COL*_KEYS (no i18n text), so _sync_template_text's zip stays aligned. BOTH sit
+    # at the tail of column 1 as of SETTINGS_VERSION 26->27 (barPreview moved out of column 2's
+    # "Layout"/catBarPosition category to join calcPreview).
     calc_src, calc_w, calc_h, bar_src, bar_w, bar_h = preview_sources()
     calc_preview = _image(calc_src, CALC_PREVIEW_KEY, width=calc_w, height=calc_h,
                           container_w=_CALC_PREVIEW_W, container_h=_CALC_PREVIEW_H)
+    # The preview fills its slot (multi-range composite), so no alignment is passed -- MSA ignored
+    # `align` anyway. containerWidth/Height reserve the max bar slot so a swap never reflows the panel.
     bar_preview = _image(bar_src, BAR_PREVIEW_KEY, width=bar_w, height=bar_h,
                          container_w=_BAR_PREVIEW_W, container_h=_BAR_PREVIEW_H)
     return {
@@ -1348,7 +1524,9 @@ def _template():
         # NOT bold, so the weight difference marks it as a sub-level under "Layout" rather than a
         # THIRD header. The steppers and Follow Carousel are all STANDALONE (no masterVarName), so
         # they keep working -- and stay ungreyed -- while the garage widget is off. Steppers show 0
-        # (auto) until a drag / edit pins a px; Follow Carousel ships ON.
+        # (auto) until a drag / edit pins a px; Follow Carousel ships ON. barPreview closes the
+        # column (SETTINGS_VERSION 26->27 -- moved here from the tail of column 2's "Layout"
+        # category, so it now sits in the same column as calcPreview).
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL1_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
@@ -1359,7 +1537,8 @@ def _template():
                        _empty(), _label("positioning", t["positioning"]),
                        _checkbox(FOLLOW_CAROUSEL_KEY, t["followCarousel"]),
                        _empty(), _label("positionSub", t["positionSub"]),
-                       _stepper(POS_X_KEY, t["posX"]), _stepper(POS_Y_KEY, t["posY"])]),
+                       _stepper(POS_X_KEY, t["posX"]), _stepper(POS_Y_KEY, t["posY"]),
+                       bar_preview]),
         # column2: the WHOLE Progress Bar feature (moved here from the old column 1 -- see
         # SETTINGS_VERSION 23->24), in its previous internal order.
         #
@@ -1381,6 +1560,11 @@ def _template():
         # The HotKey mode-override control (v26) sits between Mode and Scale, ALSO standalone for
         # the same reason: it describes the bar (which key overrides it mid-battle), not when it
         # shows, so it must stay readable and editable while the feature is off.
+        #
+        # The Automatic Mode Toggle threshold Slider (v28) sits right after the HotKey control,
+        # ALSO standalone for the identical reason: it describes another way the bar's mode can
+        # change (a pre-battle percentile crossing), not when the bar shows, and 100 (the shipped
+        # default) already disables it, so it must stay readable while the feature is off.
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL2_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
@@ -1409,17 +1593,18 @@ def _template():
         # column-1 pair. The two STEPPERS carry an enableWhen-shaped gate on Alignment == Free
         # instead (see _gate_enable above) -- a coordinate only means something once there IS a
         # free-floating position to hold. All four are still APPENDED at the very end, so no
-        # earlier control's positional pairing moves.
+        # earlier control's positional pairing moves. The barPreview Image that used to close this
+        # column moved to column 1's tail as of SETTINGS_VERSION 26->27 (see that history entry).
         "column2": ([_label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
-                    + [_empty(), progress_variant, progress_variant_hotkey, progress_size,
+                    + [_empty(), progress_variant, progress_variant_hotkey, auto_toggle,
+                       progress_size,
                        _empty(), _label("catTransitions", t["catTransitions"])]
                     + _grouped_column1(trans_master, [trans_events, trans_manual])
                     + [_empty(), trans_hold,
                        _empty(), _label("catBarPosition", t["catBarPosition"]),
                        progress_orientation, progress_alignment,
-                       bar_pos_x_stepper, bar_pos_y_stepper,
-                       bar_preview]),
+                       bar_pos_x_stepper, bar_pos_y_stepper]),
     }
 
 
@@ -1662,44 +1847,63 @@ def register():
         LOG_DEBUG("[moe] ModsSettingsAPI absent -> both widgets default enabled")
         return
     try:
+        # Seed _settings from whatever is ALREADY on disk BEFORE the template is built, for BOTH
+        # branches below. _template()'s two preview Images bake their `source`/`width`/`height`
+        # from the CURRENT getters (see preview_sources()), and MSA only ever patches a control's
+        # plain `value` back from a saved dict -- never these custom Image fields -- so if
+        # _settings were still the module-load DEFAULTS at build time, the FIRST panel open would
+        # show the wrong bar/orientation/assist preview until the user touched a control (the
+        # correction only ever landed on the NEXT change, via update_preview_images() below /
+        # _on_changed). Pre-seeding here makes the descriptor correct from the moment it exists,
+        # so nothing downstream needs to patch a frozen copy after the fact.
+        #
+        # Safe even mid a version bump: reused below as `old_raw` for the migration, this is the
+        # SAME raw dict a pre-bump store already has for our three preview-driving keys (counted
+        # assistance, variant, orientation) in every case except a pre-v13 variant index, which
+        # is unreachable by any install still active today (every real store has long since
+        # passed v13) and self-corrects the instant update_preview_images() runs below.
+        raw = _raw_stored_settings(g_modsSettingsApi)
+        _seed(raw)
         template = _template()
         saved = g_modsSettingsApi.getModSettings(LINKAGE, template)
         if saved:
             _seed(saved)
-            g_modsSettingsApi.registerCallback(LINKAGE, _on_changed)
+            # setModTemplate, not registerCallback: MSA paints the panel from its OWN persisted
+            # copy of the template (state['templates'][LINKAGE]), which only setModTemplate ever
+            # writes. That copy still bakes in the previews' Image `source` from the last version
+            # bump -- compareTemplates/`_settingsStructure` ignore an Image's `source`, so it never
+            # self-corrects on its own. Re-submitting the freshly-built (pre-seeded, so
+            # already-correct) template here lands in MSA's same-structure self-heal branch, which
+            # only overwrites the stored template + defaults, never `state['settings']` (user
+            # values) or `settingsVersion` -- and doubles as registerCallback (onSettingsChanged
+            # dedupes on += against this same stable module-level function, so no double-fire).
+            g_modsSettingsApi.setModTemplate(LINKAGE, template, _on_changed)
         else:
             # Fresh-install OR settingsVersion-bump path: getModSettings returned None. On a
             # bump Aslain's setModTemplate resets every stored value to the template defaults,
-            # which would silently wipe the user's saved checkboxes. Migrate: capture the raw
-            # stored dict from THIS api BEFORE setModTemplate runs -- getModSettings reports None
-            # on the bump, but the old values are still readable at api.state['settings'][LINKAGE]
-            # (reading state does not mutate/persist; only setModTemplate wipes). izeberg's state
-            # layout differs; only Aslain is supported -- an unrecognized shape falls back cleanly
-            # to a plain fresh install.
-            old_raw = {}
-            try:
-                _state = getattr(g_modsSettingsApi, "state", None)
-                if isinstance(_state, dict):
-                    old_raw = dict((_state.get("settings") or {}).get(LINKAGE) or {})
-            except Exception:
-                old_raw = {}
+            # which would silently wipe the user's saved checkboxes. Migrate: `raw` (fetched
+            # above, before setModTemplate runs) is the pre-bump snapshot -- getModSettings
+            # reports None on the bump, but the old values were still readable at
+            # api.state['settings'][LINKAGE] (reading state does not mutate/persist; only
+            # setModTemplate wipes). izeberg's state layout differs; only Aslain is supported --
+            # an unrecognized shape falls back cleanly to a plain fresh install (raw == {}).
             # Register the new template. On a bump this resets the stored dict to fresh v-current
             # defaults; _settings is DEFAULTS here, so _seed just re-affirms them.
             _seed(g_modsSettingsApi.setModTemplate(LINKAGE, template, _on_changed))
-            # MIGRATE: a non-empty old_raw means this is an UPDATE (settingsVersion bump), not a
+            # MIGRATE: a non-empty raw means this is an UPDATE (settingsVersion bump), not a
             # fresh install. Overlay the surviving user values onto the fresh defaults and
             # persist, so the transient reset never lands on disk (MSA debounces saveState to the
             # next tick, so the reset + this overlay coalesce into one write). _apply drops keys
             # removed from DEFAULTS and clamps the rest; keys NEW to this template keep their
-            # fresh default (old_raw lacks them). Fail-soft: any error leaves the mod on fresh
+            # fresh default (raw lacks them). Fail-soft: any error leaves the mod on fresh
             # defaults and registration still completes below.
-            if old_raw:
+            if raw:
                 try:
-                    _migrate_pre_v13_variant(old_raw)
-                    _migrate_pre_v21_layout(old_raw)
-                    _migrate_pre_v22_pos_frame(old_raw)
-                    _migrate_pre_v23_alignment(old_raw)
-                    _apply(old_raw)
+                    _migrate_pre_v13_variant(raw)
+                    _migrate_pre_v21_layout(raw)
+                    _migrate_pre_v22_pos_frame(raw)
+                    _migrate_pre_v23_alignment(raw)
+                    _apply(raw)
                     g_modsSettingsApi.updateModSettings(
                         LINKAGE, _full_settings_for_write(g_modsSettingsApi))
                     try:
@@ -1717,10 +1921,15 @@ def register():
         # existing install whose stored template is a stale language). No-op on a fresh one.
         for api in _candidate_apis():
             _sync_template_text(api)
-        # Seed the two preview Images to the JUST-SEEDED settings: the template's initial `source`
-        # was built before _seed ran, so on an existing install it reflects DEFAULTS, not the
-        # user's saved values. updateImage corrects it so the first panel open is right.
+        # Re-push the two preview Images via the LIVE updateImage cache too: the template's
+        # initial `source` (baked above, now already correct -- see the pre-seed comment at the
+        # top of this function) covers the FIRST panel open; this covers every later re-open
+        # after a live settings change, whose runtime cache this same call also refreshes.
         update_preview_images()
+        # Wire MSA's INTERNAL live-preview channel so the panel previews update BEFORE Apply.
+        # Soft dependency (see _wire_live_preview): a no-op if the internal API is absent/changed,
+        # leaving update_preview_images() (the change listener) to update on Apply as the fallback.
+        _wire_live_preview()
         _registered = True
         LOG_DEBUG("[moe] settings registered -> %r" % (_settings,))
     except Exception:
@@ -1761,7 +1970,10 @@ def _derive_layout(pre, post):
 
 def _on_changed(linkage, new_settings):
     """MSA onSettingsChanged callback: overlay our keys, settle Orientation/Position via
-    _derive_layout, and fan out to the feature bridges so a checkbox change applies live.
+    _derive_layout, fan out to the feature bridges so a checkbox change applies live, and
+    re-bake the persisted template so the frozen preview Image tracks the store (see the
+    _rebaking_template block below -- root-cause fix for a same-session panel REOPEN showing a
+    stale preview; register() only bakes the template once, at the START of the session).
 
     Linkage-scoped: MSA broadcasts this callback GLOBALLY (it fires for every mod's change, not
     just ours), so ignore events for other mods -- mirrors _on_reset. Even without the guard the
@@ -1793,7 +2005,7 @@ def _on_changed(linkage, new_settings):
     onSettingsChanged of its own. No extra flag is needed for THAT pass -- the echo carries
     exactly what we just wrote, `_derive_layout` on a fixed point returns its input unchanged, so
     the echoed pass finds nothing dirty and no-ops."""
-    global _deriving
+    global _deriving, _rebaking_template
     try:
         if linkage != LINKAGE:
             return
@@ -1829,6 +2041,24 @@ def _on_changed(linkage, new_settings):
                     LOG_CURRENT_EXCEPTION()
                 finally:
                     _deriving = False
+        # RE-BAKE THE PERSISTED TEMPLATE (root-cause fix for a stale preview on same-session
+        # REOPEN): the panel paints from MSA's OWN copy at state['templates'][LINKAGE], which only
+        # setModTemplate ever writes, and register() bakes it just ONCE per session -- from
+        # whatever was on disk at launch. A saved change (this callback) is the only other place
+        # that copy can be refreshed, so re-submit the freshly-built (now-current) template here,
+        # exactly as register()'s own saved-truthy branch does. This lands in MSA's same-structure
+        # self-heal branch (see register()'s comment): it rewrites only the stored template +
+        # defaults, never state['settings'] (user values) or settingsVersion.
+        if not _rebaking_template:
+            g = _primary_api()
+            if g is not None:
+                _rebaking_template = True
+                try:
+                    g.setModTemplate(LINKAGE, _template(), _on_changed)
+                except Exception:
+                    LOG_CURRENT_EXCEPTION()
+                finally:
+                    _rebaking_template = False
         LOG_DEBUG("[moe] settings changed -> %r" % (_settings,))
         _notify()
     except Exception:

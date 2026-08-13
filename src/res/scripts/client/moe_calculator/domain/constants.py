@@ -72,7 +72,6 @@ EWMA_K = 2.0 / (EWMA_N + 1)
 # (battle_builder.progress_axis_lo) and the delta caption carries a battles-remaining count
 # (battle_builder.battles_to_axis_hi). Values as prototyped in tools/dev/progress_bar_variant_a.html.
 PROGRESS_AXIS_MIN_WINDOW = 200.0   # combined damage; keeps the axis from collapsing
-PROGRESS_ETA_MARGIN = 0.10         # reference level sits this far above the requirement
 PROGRESS_ETA_CAP = 99              # readout ceiling (2 digits, see the clipping budget)
 
 # In-battle overlay window anchor, in FIXED logical-GUI-space px. WG's efficiency panel is

@@ -550,6 +550,11 @@ let capR = root.querySelector(".mp-capR");
 // the axis (capP.style.bottom is rewritten every render), so a fixed CSS `top` can't stay behind it.
 // goVertical caches it and JS-tracks it to capP's own `bottom`; null (and untouched) horizontally.
 let capBd3 = null;
+// The 0%/floor axis-end tick (VERTICAL only: .mpv-end.mpv-bottom). It marks "no progress" and must
+// show ONLY while the current value is 0 -- once the bar has any fill it reads as clutter under the
+// fill's own bottom edge. goVertical caches it; null (and untouched) horizontally, where the axis-end
+// ticks are mp-left/mp-right and carry no such rule.
+let tBottom = null;
 let capD = capC.querySelector(".mp-d");
 let capDN = capC.querySelector(".mp-d-num");
 // The remaining-battles pair on capR. Its own classes, NOT a second .mp-v / an .mp-ico index: see the
@@ -592,6 +597,7 @@ function goVertical() {
     // `bottom` to capP's own value each render and it stays centred behind the number at both sizes.
     capBd3 = root.querySelector(".mpv-bd-3");
     if (capBd3) { capBd3.style.top = "auto"; capBd3.style.transform = "translateY(50%)"; }
+    tBottom = root.querySelector(".mpv-bottom");
     capC = root.querySelector(".mpv-capC");
     capR = root.querySelector(".mpv-capR");
     capD = capC.querySelector(".mpv-d");
@@ -782,6 +788,8 @@ function paintStatic() {
     tPre.style[AX] = pre;
     capP.style[AX] = pre;
     if (capBd3) capBd3.style.bottom = pre;   // keep capP's backdrop strip behind the moving number
+    // The floor tick shows ONLY at zero progress (vertical only; null-guarded == no-op horizontally).
+    if (tBottom) tBottom.style.display = cur.projAvg > 0 ? "none" : "";
     root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);
 }
 

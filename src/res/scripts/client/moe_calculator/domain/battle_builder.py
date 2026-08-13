@@ -23,7 +23,7 @@ import math
 from moe_calculator.domain import battle_types as bt
 from moe_calculator.domain.constants import (
     EFFICIENCY_BAR_STOPS, EWMA_K, MARK_PERCENTS,
-    PROGRESS_AXIS_MIN_WINDOW, PROGRESS_ETA_CAP, PROGRESS_ETA_MARGIN)
+    PROGRESS_AXIS_MIN_WINDOW, PROGRESS_ETA_CAP)
 from moe_calculator.domain.rounding import iround_half_away
 
 
@@ -279,36 +279,41 @@ def progress_axis_lo(axis_hi, pre_avg, k=EWMA_K, min_window=PROGRESS_AXIS_MIN_WI
     return max(0.0, min(floor, float(axis_hi or 0.0) - min_window))
 
 
-def battles_to_axis_hi(proj_avg, axis_hi, k=EWMA_K,
-                       margin=PROGRESS_ETA_MARGIN, cap=PROGRESS_ETA_CAP):
-    """Repeats of this battle needed for the average to reach axis_hi.
+def battles_to_axis_hi(proj_avg, cd, axis_hi, k=EWMA_K, cap=PROGRESS_ETA_CAP):
+    """Repeats of THIS battle needed for the average to reach axis_hi.
 
-    Modelled as an EWMA converging on a REFERENCE level L a `margin` above the requirement -- the
-    count depends on this battle only through proj_avg, never through a bare cd term:
-        L = axis_hi * (1 + margin)
-        n = ceil( ln((axis_hi - L) / (proj_avg - L)) / ln(1 - k) )
-    which is what makes it MONOTONE NON-INCREASING in proj_avg -- a worse battle yields a LARGER
-    count, the whole point of the readout. (A signed linear extrapolation (hi - proj)/(proj - pre)
-    was tried and rejected: its magnitude SHRINKS as the battle worsens.)
+    Models the future as "every future battle repeats this battle's combined damage `cd`". The
+    EWMA folding `cd` each step converges geometrically on `cd` itself
+    (avg_n - cd = (1 - k)^n * (proj_avg - cd)); setting avg_n = axis_hi and solving:
+        n = ln((axis_hi - cd) / (proj_avg - cd)) / ln(1 - k)
+    The count is MONOTONE NON-INCREASING in `cd` for cd > axis_hi -- a bigger overshoot converges
+    FASTER, so a worse (smaller) cd yields a LARGER count -- and then BLANKS (returns -1) once
+    cd <= axis_hi, rather than climbing toward `cap`.
 
-    Sign check, so the log is asserted rather than trusted: proj_avg < axis_hi < L, so both
-    (axis_hi - L) and (proj_avg - L) are negative and |axis_hi - L| < |proj_avg - L|, i.e. the
-    ratio sits in (0, 1), its ln is negative, and dividing by the also-negative ln(1 - k) gives a
-    positive n.
+    Sign check, so the log is asserted rather than trusted: branch 2 ruled out proj_avg >= axis_hi
+    and branch 4's guard is cd > axis_hi, so proj_avg < axis_hi < cd. Both (axis_hi - cd) and
+    (proj_avg - cd) are negative with |axis_hi - cd| < |proj_avg - cd|, i.e. the ratio sits in
+    (0, 1), its ln is negative, and dividing by the also-negative ln(1 - k) gives a positive n.
 
-    Returns -1 when axis_hi <= 0 (no-data sentinel; the caller's hasData already gates rendering,
-    so it should be unreachable), 0 when proj_avg >= axis_hi (the mark is already made), otherwise
-    a positive int capped at `cap`. Runs per damage event in battle, so the degenerate
-    proj_avg == L and any non-finite input degrade to `cap` rather than raising."""
+    Returns:
+      -1 when axis_hi <= 0 (no-data sentinel; the caller's hasData already gates rendering).
+      0 when proj_avg >= axis_hi (the mark is already made).
+      -1 when cd <= axis_hi (UNREACHABLE by design: repeating this battle converges the average on
+        cd, which is at or below the goal, so the mark never comes -- render BLANK via the same JS
+        no-data gate, not a pinned cap).
+      otherwise a positive int capped at `cap`. Runs per damage event in battle, so any non-finite
+      or degenerate input degrades to `cap` rather than raising."""
     if float(axis_hi or 0.0) <= 0.0:
         return -1
     hi = float(axis_hi)
     proj = float(proj_avg or 0.0)
     if proj >= hi:
         return 0
-    level = hi * (1.0 + margin)
+    dmg = float(cd or 0.0)
+    if dmg <= hi:
+        return -1
     try:
-        n = math.log((hi - level) / (proj - level)) / math.log(1.0 - k)
+        n = math.log((hi - dmg) / (proj - dmg)) / math.log(1.0 - k)
         return min(cap, max(1, int(math.ceil(n))))
     except (ValueError, ZeroDivisionError, OverflowError):
         return cap

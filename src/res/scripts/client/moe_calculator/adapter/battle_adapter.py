@@ -311,6 +311,50 @@ def _in_battle():
         return True
 
 
+def _pre_battle_baseline(int_cd):
+    """(pre_percentile, pre_avg, baseline_known) for `int_cd` -- the career baseline. The dossier
+    engine_adapter._read_moe uses is a LOBBY resource (getVehicleDossier returns None in battle,
+    so this reads (0, 0.0) here); falls back to the baseline snapshotted while the tank was in
+    the garage (see baseline_cache). Indexed (not unpacked) so a trailing field added to
+    _read_moe -- it also reports the career battle count now -- doesn't ripple in here; we only
+    ever wanted these two.
+
+    THE ONE COPY of this fallback logic -- both build_battle_snapshot() and the public
+    pre_percentile() below call this rather than re-reading the dossier/cache separately."""
+    moe = engine_adapter._read_moe(int_cd)
+    pre_percentile, pre_avg = moe[1], moe[2]
+    # A real >0 in-battle read (rare) trusts itself; otherwise the baseline is trusted iff
+    # the garage read this tank this session -- including a genuine 0-career freshly-bought
+    # tank (baseline_cache.seen), which the >0 value cache alone can't record. Only a tank
+    # never opened in the garage (replay / relogin) stays untrusted -> BUG B dashes it.
+    baseline_known = ((pre_percentile or 0) > 0 or (pre_avg or 0) > 0
+                      or baseline_cache.seen(int_cd))
+    if (pre_percentile or 0) <= 0 and (pre_avg or 0) <= 0:
+        cached = baseline_cache.get(int_cd)
+        if cached is not None:
+            pre_percentile, pre_avg = cached
+            LOG_DEBUG("[moe-battle] baseline from garage cache: pct=%.2f avg=%d"
+                     % (pre_percentile, pre_avg))
+        elif baseline_known:
+            LOG_DEBUG("[moe-battle] genuine 0 baseline (tank seen in garage, 0 career)")
+        else:
+            LOG_DEBUG("[moe-battle] no baseline (tank not seen in garage this session)")
+    return pre_percentile, pre_avg, baseline_known
+
+
+def pre_percentile(int_cd):
+    """The pre-battle MoE percentile (float) for `int_cd`, or None when there is no trustworthy
+    baseline at all (the tank was never opened in the garage this session -- see
+    _pre_battle_baseline's baseline_known) or the read fails. Used by the automatic mode-toggle
+    trigger (battle_bridge), which must never fire off an untrustworthy 0."""
+    try:
+        pct, _avg, known = _pre_battle_baseline(int_cd)
+        return pct if known else None
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return None
+
+
 def build_battle_snapshot():
     """Read the live battle into a BattleSnapshot. Returns has_vehicle=False (never None)
     when the player vehicle is unreadable, so the bridge hides the overlay uniformly."""
@@ -322,29 +366,7 @@ def build_battle_snapshot():
 
         damage, assist, stun = _read_efficiency()
         track_assist, spot_assist = _read_assist_split()
-        # Career baseline. The dossier engine_adapter._read_moe uses is a LOBBY resource --
-        # getVehicleDossier returns None in battle, so this reads (0, 0.0) here. Fall back to
-        # the baseline snapshotted while the tank was in the garage (see baseline_cache).
-        # Indexed (not unpacked) so a trailing field added to _read_moe -- it also reports the
-        # career battle count now -- doesn't ripple in here; we only ever wanted these two.
-        moe = engine_adapter._read_moe(int_cd)
-        pre_percentile, pre_avg = moe[1], moe[2]
-        # A real >0 in-battle read (rare) trusts itself; otherwise the baseline is trusted iff
-        # the garage read this tank this session -- including a genuine 0-career freshly-bought
-        # tank (baseline_cache.seen), which the >0 value cache alone can't record. Only a tank
-        # never opened in the garage (replay / relogin) stays untrusted -> BUG B dashes it.
-        baseline_known = ((pre_percentile or 0) > 0 or (pre_avg or 0) > 0
-                          or baseline_cache.seen(int_cd))
-        if (pre_percentile or 0) <= 0 and (pre_avg or 0) <= 0:
-            cached = baseline_cache.get(int_cd)
-            if cached is not None:
-                pre_percentile, pre_avg = cached
-                LOG_DEBUG("[moe-battle] baseline from garage cache: pct=%.2f avg=%d"
-                         % (pre_percentile, pre_avg))
-            elif baseline_known:
-                LOG_DEBUG("[moe-battle] genuine 0 baseline (tank seen in garage, 0 career)")
-            else:
-                LOG_DEBUG("[moe-battle] no baseline (tank not seen in garage this session)")
+        pre_percentile, pre_avg, baseline_known = _pre_battle_baseline(int_cd)
         thresholds = moe_wgapi.get_thresholds(int_cd)
         # Same fallback the garage path takes (engine_adapter.build_snapshot): a tank whose WG
         # request COMPLETED with no usable data extrapolates from the career point instead. Without
