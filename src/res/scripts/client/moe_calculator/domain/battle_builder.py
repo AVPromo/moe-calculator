@@ -159,6 +159,11 @@ def build_battle_model(snapshot):
                          getattr(snapshot, "spot_assist", 0), snapshot.stun,
                          snapshot.team_damage, merged_assist=merged_assist)
     proj = ewma_project(snapshot.pre_avg_damage, cd)
+    # RAW (un-rounded) projection for the percentile lookup only. Rounding proj to a whole
+    # damage value before f() shifts the interpolated percent enough to flip the 2-decimal
+    # display by 0.01 (e.g. 682 -> 18.4574 vs 681.84 -> 18.4531); the rounded `proj` above
+    # stays the DISPLAYED integer damage, `proj_raw` feeds only cur_percent below.
+    proj_raw = ewma_project_raw(snapshot.pre_avg_damage, cd)
 
     # Whether we have a CAREER baseline to project from. A >0 pre_avg/pre_percentile is an
     # obvious yes; a GENUINE 0 baseline also counts when the garage read the tank this session
@@ -191,7 +196,7 @@ def build_battle_model(snapshot):
     fit = _fit_from_thresholds(thresholds)
     has_data = fit is not None
     if has_data:
-        cur_percent = _clamp(_smooth_percent(proj, fit), 0.0, 100.0)
+        cur_percent = _clamp(_smooth_percent(proj_raw, fit), 0.0, 100.0)
         pct_delta = cur_percent - float(snapshot.pre_percentile or 0.0)
     else:
         cur_percent = 0.0

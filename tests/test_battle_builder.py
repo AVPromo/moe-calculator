@@ -6,7 +6,7 @@ import pytest
 
 from moe_calculator.domain import battle_types as bt
 from moe_calculator.domain.battle_builder import (
-    combined_damage, counted_assistance, ewma_project,
+    combined_damage, counted_assistance, ewma_project, ewma_project_raw,
     build_battle_model, battle_bar_visible, _fit_from_thresholds, _smooth_percent)
 from moe_calculator.domain.constants import EWMA_K, MARK_PERCENTS
 
@@ -514,9 +514,10 @@ def test_build_battle_model_four_metrics():
     # 2) projected average: 1800 + k*(2500-1800)
     assert m.proj_avg_damage == int(round(1800 + EWMA_K * 700))           # 1814
     # 3) current percent is UN-ANCHORED: f(proj) directly, no pre_percentile stamp involved
-    # (see build_battle_model's comment for why the anchor was dropped).
+    # (see build_battle_model's comment for why the anchor was dropped). f(proj) is evaluated
+    # at the RAW (un-rounded) projection, not the displayed rounded proj_avg_damage.
     fit = _fit_from_thresholds(_THR)
-    f_proj = _smooth_percent(m.proj_avg_damage, fit)
+    f_proj = _smooth_percent(ewma_project_raw(1800, 2500), fit)
     f_pre_avg = _smooth_percent(1800, fit)
     assert f_proj > f_pre_avg                                             # above-avg battle
     assert m.cur_percent == pytest.approx(f_proj, abs=1e-9)
@@ -603,7 +604,9 @@ def test_the_worst_possible_battle_is_capped_by_one_ewma_step(thr):
     d0 = int(round(_damage_at_percent(thr, band)))
     m = build_battle_model(_bsnap(damage=0, assist=0, stun=0, team_damage=0,
                                   pre_avg_damage=d0, pre_percentile=band, thresholds=thr))
-    floor = _reference_percent(int(round(d0 * (1 - EWMA_K))), thr) - band
+    # RAW projection (no rounding to a whole damage value before the percentile lookup) --
+    # cur_percent interpolates ewma_project_raw, not the displayed rounded proj_avg_damage.
+    floor = _reference_percent(d0 * (1 - EWMA_K), thr) - band
     assert m.pct_delta == pytest.approx(floor, abs=1e-9)
     assert -2.0 < m.pct_delta < 0.0
     # ...and nothing can beat that floor: an even "worse" battle cannot exist (cd is clamped).
@@ -633,12 +636,29 @@ def test_build_battle_model_cur_percent_minus_delta_equals_pre_percentile():
     assert m.cur_percent - m.pct_delta == pytest.approx(70.0, abs=1e-9)
 
 
+def test_build_battle_model_cur_percent_uses_the_raw_unrounded_projection():
+    # THE guard against reverting cur_percent to the rounded proj: pick inputs where
+    # ewma_project_raw is clearly non-integer (proj_raw=1039.604... vs the rounded proj=1040), so
+    # f(raw) and f(rounded) land on materially different percentiles on _THR's 1000-2000 segment
+    # (slope 0.02 pp/damage). Must go RED if cur_percent is computed from the rounded proj again.
+    proj_raw = ewma_project_raw(1000, 3000)
+    assert proj_raw != int(round(proj_raw))          # sanity: genuinely non-integer
+    m = build_battle_model(_bsnap(damage=3000, assist=0, stun=0, team_damage=0,
+                                  pre_avg_damage=1000, pre_percentile=0.0))
+    fit = _fit_from_thresholds(_THR)
+    assert m.proj_avg_damage == ewma_project(1000, 3000)          # displayed damage stays rounded
+    assert m.cur_percent == _smooth_percent(ewma_project_raw(1000, 3000), fit)
+    assert m.cur_percent != _smooth_percent(ewma_project(1000, 3000), fit)
+
+
 def test_build_battle_model_cur_percent_matches_reconstruction_at_proj():
-    # The end-of-battle number IS f(proj) -- exactly, not approximately, since both sides are the
-    # SAME computation with no anchor arithmetic in between.
+    # The end-of-battle number IS f(proj_raw) -- exactly, not approximately, since both sides
+    # are the SAME computation with no anchor arithmetic in between. proj_raw, NOT the displayed
+    # rounded proj_avg_damage: rounding the projection to a whole damage value before the
+    # percentile lookup is the premature-rounding bug this fix removed.
     m = build_battle_model(_bsnap())
     fit = _fit_from_thresholds(_THR)
-    assert m.cur_percent == _smooth_percent(m.proj_avg_damage, fit)
+    assert m.cur_percent == _smooth_percent(ewma_project_raw(1800, 2500), fit)
 
 
 def test_build_battle_model_pct_delta_is_the_gain_from_pre_percentile():
@@ -647,7 +667,7 @@ def test_build_battle_model_pct_delta_is_the_gain_from_pre_percentile():
     # disagreed with lebwa (see build_battle_model's comment).
     m = build_battle_model(_bsnap())
     fit = _fit_from_thresholds(_THR)
-    expected = _smooth_percent(m.proj_avg_damage, fit) - 70.0
+    expected = _smooth_percent(ewma_project_raw(1800, 2500), fit) - 70.0
     assert m.pct_delta == pytest.approx(expected, abs=1e-9)
 
 
@@ -707,7 +727,7 @@ def test_build_battle_model_zero_damage_drags_below_career():
                                   pre_avg_damage=1800, pre_percentile=84.7))
     assert m.proj_avg_damage == int(round(1800 * (1 - EWMA_K)))           # 1764
     fit = _fit_from_thresholds(_THR)
-    f_proj = _smooth_percent(m.proj_avg_damage, fit)
+    f_proj = _smooth_percent(ewma_project_raw(1800, 0), fit)
     f_pre_avg = _smooth_percent(1800, fit)
     assert f_proj < f_pre_avg                                             # 0-damage drags down
     assert m.cur_percent == pytest.approx(f_proj, abs=1e-9)
