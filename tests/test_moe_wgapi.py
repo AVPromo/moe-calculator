@@ -499,6 +499,101 @@ def test_threshold_cache_load_without_a_file_is_a_noop(monkeypatch, tmp_path):
     assert moe_wgapi._table == {}
 
 
+# --- Race #2 STEP 2: stale-serve while a threshold refetch is in flight ------
+# A disk cache past _REVALIDATE_SECONDS but under the hard _STALE_SERVE_SECONDS cap is held in
+# _stale_table (never _table, so _enqueue's dedup still fires the refetch) and get_thresholds
+# falls back to it on a _table miss. Past the cap, nothing is adopted / served at all.
+
+def test_load_cache_adopts_stale_but_capped_into_stale_table(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    monkeypatch.setattr(moe_wgapi, "_stale_table", {})
+    monkeypatch.setattr(moe_wgapi, "_stale_fetched_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_table", {69153: {65: 1, 85: 2, 95: 3, 100: 4}})
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
+    moe_wgapi._save_cache()
+
+    monkeypatch.setattr(moe_wgapi, "_table", {})
+    now = _FETCHED + moe_wgapi._REVALIDATE_SECONDS + 1     # stale for _table...
+    assert now - _FETCHED < moe_wgapi._STALE_SERVE_SECONDS  # ...but still under the hard cap
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: now)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {}                          # fresh-table dedup must still fire
+    assert moe_wgapi._stale_table == {69153: {65: 1, 85: 2, 95: 3, 100: 4}}
+    assert moe_wgapi._stale_fetched_at == _FETCHED
+
+
+def test_load_cache_does_not_adopt_stale_beyond_the_hard_cap(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    monkeypatch.setattr(moe_wgapi, "_stale_table", {})
+    monkeypatch.setattr(moe_wgapi, "_stale_fetched_at", 0)
+    monkeypatch.setattr(moe_wgapi, "_table", {69153: {65: 1, 85: 2, 95: 3, 100: 4}})
+    monkeypatch.setattr(moe_wgapi, "_fetched_at", _FETCHED)
+    moe_wgapi._save_cache()
+
+    monkeypatch.setattr(moe_wgapi, "_table", {})
+    now = _FETCHED + moe_wgapi._STALE_SERVE_SECONDS + 1     # past the hard cap entirely
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: now)
+    moe_wgapi._load_cache()
+    assert moe_wgapi._table == {}
+    assert moe_wgapi._stale_table == {}
+    assert moe_wgapi._stale_fetched_at == 0
+
+
+def _reset_get_thresholds_state(monkeypatch, now, table=None, stale_table=None,
+                                stale_fetched_at=0, app_id="app-id"):
+    monkeypatch.setattr(moe_wgapi, "APP_ID", app_id)
+    monkeypatch.setattr(moe_wgapi, "_started", True)        # skip start(): drive get_thresholds only
+    monkeypatch.setattr(moe_wgapi, "_list_ready", True)      # no-op _ensure_list_ready
+    monkeypatch.setattr(moe_wgapi, "_table", dict(table or {}))
+    monkeypatch.setattr(moe_wgapi, "_stale_table", dict(stale_table or {}))
+    monkeypatch.setattr(moe_wgapi, "_stale_fetched_at", stale_fetched_at)
+    monkeypatch.setattr(moe_wgapi, "_seen", set())
+    monkeypatch.setattr(moe_wgapi, "_inflight", set())
+    monkeypatch.setattr(moe_wgapi, "_queue", [])
+    monkeypatch.setattr(moe_wgapi, "_now_epoch", lambda: now)
+    # _pump would spin up a real fetch thread; stub it so we can assert the queue state it would
+    # have consumed, without touching the network.
+    calls = []
+    monkeypatch.setattr(moe_wgapi, "_pump", lambda: calls.append(1))
+    return calls
+
+
+def test_get_thresholds_serves_stale_row_on_table_miss_within_cap_and_enqueues_refetch(monkeypatch):
+    now = 2000
+    stale_fetched_at = now - (moe_wgapi._STALE_SERVE_SECONDS - 1)   # just inside the cap
+    pump_calls = _reset_get_thresholds_state(monkeypatch, now, stale_table={69153: _ROW},
+                                             stale_fetched_at=stale_fetched_at)
+    assert moe_wgapi.get_thresholds(69153) == _ROW
+    # ...and a real refetch was enqueued, not just a served stale value -- a no-op enqueue would
+    # leave both empty.
+    assert 69153 in moe_wgapi._inflight
+    assert moe_wgapi._queue == [([69153], 0)]
+    assert pump_calls == [1]
+
+
+def test_get_thresholds_blanks_when_stale_row_is_beyond_the_cap(monkeypatch):
+    now = 2000
+    stale_fetched_at = now - (moe_wgapi._STALE_SERVE_SECONDS + 1)   # just past the cap
+    _reset_get_thresholds_state(monkeypatch, now, stale_table={69153: _ROW},
+                                stale_fetched_at=stale_fetched_at)
+    assert moe_wgapi.get_thresholds(69153) == {}
+    assert 69153 in moe_wgapi._inflight   # still enqueues the refetch, just serves nothing meanwhile
+
+
+def test_poll_evicts_only_the_superseded_stale_row(monkeypatch):
+    # Two stale rows on file; a fetch result covering only one of them must drop that one from
+    # _stale_table (superseded by fresh data) and leave the other's stale fallback intact.
+    _reset_fetch_state(monkeypatch, inflight=(69153,))
+    monkeypatch.setattr(moe_wgapi, "_stale_table", {69153: {65: 1, 85: 2, 95: 3, 100: 4}, 1: _ROW})
+    row = dict(_EIGHT)
+    monkeypatch.setattr(moe_wgapi, "_thread",
+                        _FakeThread([69153], ok=True, result={69153: row}, updated_at=123, attempt=0))
+    moe_wgapi._poll()
+    assert moe_wgapi._table[69153] == row
+    assert 69153 not in moe_wgapi._stale_table   # superseded -> dropped
+    assert moe_wgapi._stale_table == {1: _ROW}   # the other tank's stale fallback survives
+
+
 def test_fetch_list_save_load_round_trip(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
     monkeypatch.setattr(moe_wgapi, "_want", {69153: 1700000000, 1: 1699999999})

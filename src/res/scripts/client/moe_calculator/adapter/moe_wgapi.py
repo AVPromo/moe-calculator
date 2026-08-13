@@ -104,11 +104,21 @@ _LIST_VERSION = 1                                    # on-disk fetch-list envelo
 # _poll; this is the fallback for sessions where no fetch happens to reveal the change. Single
 # source (shared with domain/fetch_list.needs_refetch) lives in constants.
 _REVALIDATE_SECONDS = constants.REVALIDATE_SECONDS
+# Hard cap on how old _stale_table's disk-loaded rows may be before get_thresholds serves them as
+# "stale but directionally useful" (Race #2, see TASKS/fix-first-battle-of-day-baseline.md)
+# instead of blanking. MoE anchors move slowly, so a few days behind is fine; a table this old (a
+# long absence) is not worth showing. Tunable.
+_STALE_SERVE_SECONDS = 7 * 24 * 3600  # 7 days
 
 # --- module state (main-thread only) -----------------------------------------
 _table = {}            # int_cd -> {percentile: dmg} (the 8 anchors; 65/85/95/100 guaranteed)
 _updated_at = 0        # WG data `updated_at` (epoch s) of the newest fetch/adopted cache
 _fetched_at = 0        # OUR wall-clock (epoch s) at the newest fetch/adopted cache -- freshness anchor
+# Race #2 stale-serve fallback (see TASKS/fix-first-battle-of-day-baseline.md): a disk cache past
+# _REVALIDATE_SECONDS at load time is kept HERE, not in _table, so _enqueue's `cd not in _table`
+# dedup still fires the normal refetch. get_thresholds falls back to this only on a _table miss.
+_stale_table = {}      # int_cd -> {percentile: dmg}, held only while age < _STALE_SERVE_SECONDS
+_stale_fetched_at = 0  # the disk blob's fetched_at this was loaded from
 _loaded = False        # something is showable (a fetch completed, or the cache adopted)
 _started = False       # start() has run (caches loaded + fast-paint enqueued)
 _want = {}             # int_cd -> recency epoch: the persistent fetch list (owned tanks only)
@@ -223,7 +233,15 @@ def valid_list(blob, region):
 def get_thresholds(int_cd):
     """Return {percentile: dmg} for a vehicle, or {} if unknown / not fetched yet. Kicks off the
     one-time start() on first call; on a cache miss, enqueues a single-tank fetch (the ready
-    listener re-pushes to reveal the labels when it lands)."""
+    listener re-pushes to reveal the labels when it lands).
+
+    A fresh _table hit always wins. On a _table MISS, fall back to _stale_table (a disk cache
+    that was past _REVALIDATE_SECONDS at load time -- Race #2, see
+    TASKS/fix-first-battle-of-day-baseline.md) while it's still under the hard _STALE_SERVE_SECONDS
+    cap: MoE anchors move slowly, so serving yesterday's row is directionally useful while the
+    refetch below lands; past the cap it's too old to trust and this degrades to the normal miss
+    path (enqueue + blank). Either way a refetch is enqueued exactly as on a genuine miss, so a
+    stale serve self-heals within the session once it lands."""
     if not _started:
         start()
     else:
@@ -239,6 +257,9 @@ def get_thresholds(int_cd):
         return row
     if cd not in _seen:
         _enqueue([cd])
+    stale_row = _stale_table.get(cd)
+    if stale_row and _stale_fetched_at and (_now_epoch() - _stale_fetched_at) < _STALE_SERVE_SECONDS:
+        return stale_row
     return {}
 
 
@@ -518,6 +539,8 @@ def _poll():
                 _table.clear()
                 _seen.clear()
             _table.update(result)  # the just-fetched rows are current under the new updated_at
+            for cd in result:
+                _stale_table.pop(cd, None)  # superseded by fresh data -- drop the stale fallback
             if upd:
                 _updated_at = upd
             # Freshness is anchored to OUR fetch time, not WG's updated_at. It is stored PER FILE
@@ -700,14 +723,22 @@ def _store_path():
 
 
 def _load_cache():
-    """Adopt a still-fresh cache from disk into _table (fetched within the last 24h). Guarded ->
-    no-op on any error / stale envelope."""
-    global _updated_at, _fetched_at
+    """Adopt a still-fresh cache from disk into _table (fetched within the last 24h). If it's past
+    that window (or an outright invalid envelope), fresh_table() already says so by returning {};
+    in that case, separately hold it in _stale_table (Race #2 -- see
+    TASKS/fix-first-battle-of-day-baseline.md) PROVIDED it's still under the hard
+    _STALE_SERVE_SECONDS cap, so get_thresholds can serve it on a _table miss without blocking the
+    normal refetch (_enqueue dedupes on `cd not in _table`, never _stale_table). Reuses
+    fresh_table() itself for the stale parse too (called with now_epoch=fetched_at, which trivially
+    satisfies its own window check) so the version/region validation + row parsing is never
+    duplicated. Guarded -> no-op on any error / invalid envelope."""
+    global _updated_at, _fetched_at, _stale_fetched_at
     try:
         blob = read_json(_store_path())
         if blob is None:
             return
-        table = fresh_table(blob, _now_epoch(), REGION)
+        now = _now_epoch()
+        table = fresh_table(blob, now, REGION)
         if table:
             _table.update(table)
             try:
@@ -719,6 +750,19 @@ def _load_cache():
             except (TypeError, ValueError):
                 pass
             LOG_DEBUG("[moe] wgapi cache adopted: %d tanks (fresh)" % len(table))
+            return
+        try:
+            fetched_at = int(blob.get("fetched_at"))
+        except (TypeError, ValueError):
+            return
+        age = now - fetched_at
+        if not (0 < age < _STALE_SERVE_SECONDS):
+            return  # invalid envelope, clock skew, or past the hard cap -- not worth holding
+        stale = fresh_table(blob, fetched_at, REGION)  # same validation+parsing, TTL forced open
+        if stale:
+            _stale_table.update(stale)
+            _stale_fetched_at = fetched_at
+            LOG_DEBUG("[moe] wgapi cache adopted: %d tanks (stale, age=%ds)" % (len(stale), age))
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
