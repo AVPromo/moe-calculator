@@ -4,11 +4,12 @@
 The four in-battle readouts (see TASKS/in-battle-moe-panel.md):
   1. live combined damage  C = damage + max(track, spot, stun) - team_damage   (WG #15060: MAX)
   2. projected moving-average combined damage  avgWithCD = prevAvg + k*(C - prevAvg)  (EWMA)
-  3. current percent  = WG's real career standing (pre_percentile) + this battle's increment
-     f(avgWithCD) - f(prevAvg), where f maps combined damage to percentile by piecewise-LINEAR
-     interpolation over the tank's percentile anchors plus a (0, 0) origin -- which is EXACTLY
-     how WG computes damageRating itself (see _fit_from_thresholds).
-  4. percent delta    = current percent - pre-battle standing percentile   (signed)
+  3. current percent  = f(avgWithCD): our reconstruction of WG's damageRating evaluated DIRECTLY
+     at the projected moving average, where f maps combined damage to percentile by piecewise-LINEAR
+     interpolation over the tank's percentile anchors plus a (0, 0) origin -- EXACTLY how WG
+     computes damageRating itself (see _fit_from_thresholds). NOT anchored on WG's stamped
+     pre_percentile any more (see build_battle_model for why the anchor was dropped).
+  4. percent delta    = f(avgWithCD) - f(prevAvg)   (signed; == current percent - f(prevAvg))
 
 Metrics 2-4 ride on the EWMA coefficient k (community-reverse-engineered, not WG-confirmed).
 The assist component of combined damage is the HIGHER of tracking / spotting / stun (see
@@ -169,26 +170,27 @@ def build_battle_model(snapshot):
                     or (snapshot.pre_avg_damage or 0) > 0
                     or bool(getattr(snapshot, "baseline_known", False)))
 
-    # The live percent is ALWAYS anchored to WG's REAL career standing (pre_percentile, from
-    # the dossier's getDamageRating) plus ONLY this battle's increment f(proj) - f(pre_avg). At
-    # battle start proj == prev*(1-k), so the increment is slightly negative and we open just
-    # BELOW WG's number: the honest projection of an uncommitted (0-damage) battle, climbing as
-    # damage accrues.
+    # The live percent is our reconstruction evaluated DIRECTLY at the projection: cur = f(proj).
+    # At battle start proj == prev*(1-k), so f(proj) opens just BELOW f(pre_avg): the honest
+    # projection of an uncommitted (0-damage) battle, climbing as damage accrues.
     #
-    # KEEP THE ANCHORED FORM. f now reproduces WG's damageRating rather than approximating it, so
-    # the anchor's job is no longer accuracy -- it is UI CONTINUITY: WG's anchor table drifts
-    # DAILY, so f(pre_avg) computed off today's table differs slightly from the pre_percentile the
-    # dossier recorded under an older one. Anchoring guarantees the overlay opens on exactly the
-    # number the garage just showed, and the drift cancels in the increment. Do not "simplify" it
-    # into a bare f(proj).
+    # UN-ANCHORED, deliberately (was: pre_percentile + f(proj) - f(pre_avg)). WG's getDamageRating
+    # is a server-STAMPED stored value; our f reconstructs the same curve from the public anchors,
+    # but WG's stamp and our f(pre_avg) are not bit-equal (e.g. stamp 55.62 vs f(pre_avg) 55.39).
+    # Anchoring on the stamp while MOVING by f carried that constant ~0.23pp offset all the way into
+    # the end-of-battle number, so the overlay's finish sat above the garage. f now reproduces WG's
+    # damageRating faithfully, so f(proj) at end matches the garage to within reconstruction error;
+    # displaying it directly removes the offset. The delta stays f(proj) - f(pre_avg), so
+    # cur - delta == f(pre_avg) (both on the SAME reconstruction curve). pre_percentile is still
+    # LOGGED by the sample recorder as the WG baseline, but no longer drives the displayed number.
     #
     # A table with no usable anchor at all degrades to 'no percent' (has_data False), never a crash.
     fit = _fit_from_thresholds(thresholds)
     has_data = fit is not None
     if has_data:
-        inc = (_smooth_percent(proj, fit)
-               - _smooth_percent(snapshot.pre_avg_damage, fit))
-        cur_percent = _clamp(float(snapshot.pre_percentile or 0.0) + inc, 0.0, 100.0)
+        f_proj = _smooth_percent(proj, fit)
+        inc = f_proj - _smooth_percent(snapshot.pre_avg_damage, fit)
+        cur_percent = _clamp(f_proj, 0.0, 100.0)
         pct_delta = inc
     else:
         cur_percent = 0.0
