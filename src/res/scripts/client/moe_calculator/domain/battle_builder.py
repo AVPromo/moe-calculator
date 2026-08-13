@@ -9,7 +9,8 @@ The four in-battle readouts (see TASKS/in-battle-moe-panel.md):
      interpolation over the tank's percentile anchors plus a (0, 0) origin -- EXACTLY how WG
      computes damageRating itself (see _fit_from_thresholds). NOT anchored on WG's stamped
      pre_percentile any more (see build_battle_model for why the anchor was dropped).
-  4. percent delta    = f(avgWithCD) - f(prevAvg)   (signed; == current percent - f(prevAvg))
+  4. percent delta    = current percent - pre_percentile   (signed gain from WG's stamped
+     career standing getDamageRating; so current percent - delta == pre_percentile, the WG stamp)
 
 Metrics 2-4 ride on the EWMA coefficient k (community-reverse-engineered, not WG-confirmed).
 The assist component of combined damage is the HIGHER of tracking / spotting / stun (see
@@ -174,24 +175,24 @@ def build_battle_model(snapshot):
     # At battle start proj == prev*(1-k), so f(proj) opens just BELOW f(pre_avg): the honest
     # projection of an uncommitted (0-damage) battle, climbing as damage accrues.
     #
-    # UN-ANCHORED, deliberately (was: pre_percentile + f(proj) - f(pre_avg)). WG's getDamageRating
-    # is a server-STAMPED stored value; our f reconstructs the same curve from the public anchors,
-    # but WG's stamp and our f(pre_avg) are not bit-equal (e.g. stamp 55.62 vs f(pre_avg) 55.39).
-    # Anchoring on the stamp while MOVING by f carried that constant ~0.23pp offset all the way into
-    # the end-of-battle number, so the overlay's finish sat above the garage. f now reproduces WG's
-    # damageRating faithfully, so f(proj) at end matches the garage to within reconstruction error;
-    # displaying it directly removes the offset. The delta stays f(proj) - f(pre_avg), so
-    # cur - delta == f(pre_avg) (both on the SAME reconstruction curve). pre_percentile is still
-    # LOGGED by the sample recorder as the WG baseline, but no longer drives the displayed number.
+    # UN-ANCHORED cur_percent, deliberately (was: pre_percentile + f(proj) - f(pre_avg)). WG's
+    # getDamageRating is a server-STAMPED stored value; our f reconstructs the same curve from the
+    # public anchors, and now reproduces WG's damageRating faithfully, so f(proj) at end matches the
+    # garage to within reconstruction error; displaying it directly removes the old offset.
+    #
+    # The delta, however, measures gain from WG's REAL stamped career standing pre_percentile
+    # (getDamageRating), NOT from our reconstruction f(pre_avg). Measuring from f(pre_avg) folded in
+    # the reconstruction offset f(pre_avg) - pre_percentile, which flips sign per tank and made the
+    # delta disagree with lebwa (e.g. Strv 107-12: cur 18.24, pre_percentile 19.03 -> real delta
+    # -0.79, but cur - f(pre_avg) gave -0.37). So pct_delta = cur - pre_percentile, and the invariant
+    # is cur - delta == pre_percentile (WG's stamp), matching lebwa.
     #
     # A table with no usable anchor at all degrades to 'no percent' (has_data False), never a crash.
     fit = _fit_from_thresholds(thresholds)
     has_data = fit is not None
     if has_data:
-        f_proj = _smooth_percent(proj, fit)
-        inc = f_proj - _smooth_percent(snapshot.pre_avg_damage, fit)
-        cur_percent = _clamp(f_proj, 0.0, 100.0)
-        pct_delta = inc
+        cur_percent = _clamp(_smooth_percent(proj, fit), 0.0, 100.0)
+        pct_delta = cur_percent - float(snapshot.pre_percentile or 0.0)
     else:
         cur_percent = 0.0
         pct_delta = 0.0

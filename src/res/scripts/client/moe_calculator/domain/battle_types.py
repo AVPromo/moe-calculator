@@ -75,14 +75,15 @@ class BattleMoEModel(object):
     - `assist_kind`     : which stream that is -- 'track' | 'spot' | 'stun', or 'assist' when
                           `counted_assist` is 0 (row is hidden then). Selects the row's icon.
     - `proj_avg_damage` : projected moving-average combined damage folding in this CD (EWMA).
-    - `cur_percent`     : "where you'd stand if the battle ended now" (0.0..100.0), ANCHORED
-                          to WG's real career standing: pre_percentile + this battle's interp
-                          increment (interp(proj) - interp(pre_avg)), clamped 0..100. Opens just
-                          BELOW pre_percentile with 0 damage (the folded 0-damage projection) and
-                          moves with the battle. 0.0 when thresholds unknown.
-    - `pct_delta`       : the signed battle increment interp(proj) - interp(pre_avg) -- how far
-                          this battle moves your standing, on a self-consistent interp scale
-                          (NOT mixed against WG's rating). 0.0 when thresholds are unknown.
+    - `cur_percent`     : "where you'd stand if the battle ended now" (0.0..100.0), our
+                          reconstruction f evaluated DIRECTLY at the projection: interp(proj),
+                          clamped 0..100 (UN-anchored). Opens just BELOW interp(pre_avg) with 0
+                          damage (the folded 0-damage projection) and moves with the battle. 0.0
+                          when thresholds unknown.
+    - `pct_delta`       : the signed battle increment cur_percent - pre_percentile -- how far this
+                          battle moves your standing measured from WG's real stamped career percent
+                          (getDamageRating). So cur_percent - pct_delta == pre_percentile (the WG
+                          stamp), matching lebwa. 0.0 when thresholds are unknown.
     - `has_data`        : True when the per-tank threshold table was usable (percent/delta real).
     - `has_baseline`    : True when a CAREER baseline (pre_avg / pre_percentile) was available to
                           project from. False on the replay / relogin-into-battle path where the

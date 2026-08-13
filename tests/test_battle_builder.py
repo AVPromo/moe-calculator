@@ -518,12 +518,13 @@ def test_build_battle_model_four_metrics():
     fit = _fit_from_thresholds(_THR)
     f_proj = _smooth_percent(m.proj_avg_damage, fit)
     f_pre_avg = _smooth_percent(1800, fit)
-    inc = f_proj - f_pre_avg
-    assert inc > 0                                                        # above-avg battle
+    assert f_proj > f_pre_avg                                             # above-avg battle
     assert m.cur_percent == pytest.approx(f_proj, abs=1e-9)
     assert m.cur_percent > f_pre_avg
-    # 4) delta is STILL the increment (unchanged by the anchor removal)
-    assert round(m.pct_delta, 2) == round(inc, 2)
+    # 4) delta measures gain from WG's stamped career standing pre_percentile (70.0 here), NOT
+    # from our reconstruction f(pre_avg) -- see build_battle_model's comment on why the anchor
+    # moved off the reconstruction.
+    assert m.pct_delta == pytest.approx(f_proj - 70.0, abs=1e-9)
     assert m.has_data is True
 
 
@@ -596,13 +597,13 @@ def test_the_worst_possible_battle_is_capped_by_one_ewma_step(thr):
     # The floor on a single battle's damage: combined damage clamps at 0, so proj can fall no
     # further than prev*(1-k) -- about one and a bit percentile points at the 70th on these
     # tables, never an alarming plunge. Checked against the INDEPENDENT reference, so this pins
-    # the value rather than restating the implementation.
+    # the value rather than restating the implementation. The floor is measured from the
+    # WG-stamped `band` (pre_percentile) now, not from the reconstruction f(d0).
     band = 70.0
     d0 = int(round(_damage_at_percent(thr, band)))
     m = build_battle_model(_bsnap(damage=0, assist=0, stun=0, team_damage=0,
                                   pre_avg_damage=d0, pre_percentile=band, thresholds=thr))
-    floor = (_reference_percent(int(round(d0 * (1 - EWMA_K))), thr)
-             - _reference_percent(d0, thr))
+    floor = _reference_percent(int(round(d0 * (1 - EWMA_K))), thr) - band
     assert m.pct_delta == pytest.approx(floor, abs=1e-9)
     assert -2.0 < m.pct_delta < 0.0
     # ...and nothing can beat that floor: an even "worse" battle cannot exist (cd is clamped).
@@ -612,21 +613,24 @@ def test_the_worst_possible_battle_is_capped_by_one_ewma_step(thr):
 
 
 # --- THE UN-ANCHORING CONTRACT (see build_battle_model's comment) -----------
-# cur_percent is now f(proj) directly, no longer pre_percentile + (f(proj) - f(pre_avg)).
-# pct_delta is UNCHANGED. The consequence: cur_percent - pct_delta == f(pre_avg), not
-# pre_percentile -- these three tests pin exactly that, and go RED against the old formula.
+# cur_percent is f(proj) directly, UN-ANCHORED (unchanged). pct_delta now measures gain from
+# WG's REAL stamped career standing pre_percentile, not from our reconstruction f(pre_avg) --
+# measuring from f(pre_avg) folded in the reconstruction offset f(pre_avg) - pre_percentile,
+# which flips sign per tank and disagreed with lebwa. The consequence: cur_percent - pct_delta
+# == pre_percentile (WG's own stamp), NOT f(pre_avg) any more -- these tests pin exactly that,
+# and go RED against the superseded `f(proj) - f(pre_avg)` delta.
 
-def test_build_battle_model_cur_percent_minus_delta_equals_fit_of_pre_avg():
-    # THE core consistency invariant of the new contract: cur_percent and pct_delta both live on
-    # OUR reconstruction curve, so subtracting the delta back out must land on f(pre_avg) -- NOT
-    # on the WG-stamped pre_percentile (70.0 here, deliberately off the curve: _THR maps 1800
-    # damage to 81.0, not 70.0). Against the superseded `pre_percentile + inc` formula this
-    # reduces to pre_percentile (70.0) and fails.
+def test_build_battle_model_cur_percent_minus_delta_equals_pre_percentile():
+    # THE core consistency invariant of the new contract: subtracting pct_delta back out of
+    # cur_percent must land on WG's stamped pre_percentile (70.0) -- NOT on our reconstruction
+    # f(pre_avg) (_THR maps 1800 damage to 81.0, deliberately different from 70.0 so this bites).
+    # Against the superseded `f(proj) - f(pre_avg)` delta this reduces to f(pre_avg) (81.0) and
+    # fails.
     m = build_battle_model(_bsnap())
     fit = _fit_from_thresholds(_THR)
     f_pre_avg = _smooth_percent(1800, fit)
-    assert f_pre_avg != pytest.approx(70.0, abs=0.5)   # sanity: the stamp really disagrees
-    assert m.cur_percent - m.pct_delta == pytest.approx(f_pre_avg, abs=1e-9)
+    assert f_pre_avg != pytest.approx(70.0, abs=0.5)   # sanity: reconstruction really disagrees
+    assert m.cur_percent - m.pct_delta == pytest.approx(70.0, abs=1e-9)
 
 
 def test_build_battle_model_cur_percent_matches_reconstruction_at_proj():
@@ -637,13 +641,14 @@ def test_build_battle_model_cur_percent_matches_reconstruction_at_proj():
     assert m.cur_percent == _smooth_percent(m.proj_avg_damage, fit)
 
 
-def test_build_battle_model_pct_delta_unchanged_by_the_unanchoring():
-    # Guard against someone "fixing" the delta too: it stays f(proj) - f(pre_avg), independent of
-    # whatever pre_percentile says.
+def test_build_battle_model_pct_delta_is_the_gain_from_pre_percentile():
+    # The delta measures gain from WG's REAL stamped career standing pre_percentile
+    # (getDamageRating) -- NOT from our reconstruction f(pre_avg), which flips sign per tank and
+    # disagreed with lebwa (see build_battle_model's comment).
     m = build_battle_model(_bsnap())
     fit = _fit_from_thresholds(_THR)
-    expected_inc = _smooth_percent(m.proj_avg_damage, fit) - _smooth_percent(1800, fit)
-    assert m.pct_delta == pytest.approx(expected_inc, abs=1e-9)
+    expected = _smooth_percent(m.proj_avg_damage, fit) - 70.0
+    assert m.pct_delta == pytest.approx(expected, abs=1e-9)
 
 
 def test_build_battle_model_projects_with_baked_k():
@@ -654,10 +659,11 @@ def test_build_battle_model_projects_with_baked_k():
 
 def test_build_battle_model_cur_percent_equals_fit_when_proj_equals_pre_avg():
     # If this battle's combined damage equals the career average, the EWMA fold is a no-op
-    # (proj == pre_avg), so the increment is exactly 0 -- and, UN-ANCHORED, cur_percent now
-    # sits on OUR reconstruction curve at pre_avg (f(pre_avg)), NOT on WG's stamped
-    # pre_percentile (73.5 here is deliberately NOT what the fit would say for 1800 damage,
-    # pinning that the stamp no longer drives the number at all).
+    # (proj == pre_avg), and, UN-ANCHORED, cur_percent sits on OUR reconstruction curve at
+    # pre_avg (f(pre_avg)), NOT on WG's stamped pre_percentile (73.5 here is deliberately NOT
+    # what the fit would say for 1800 damage, pinning that the stamp no longer drives cur_percent
+    # at all). pct_delta, however, is NOT 0 here -- it still measures gain from WG's real stamp,
+    # so at this no-op battle it is exactly the reconstruction offset f(pre_avg) - pre_percentile.
     fit = _fit_from_thresholds(_THR)
     f_pre_avg = _smooth_percent(1800, fit)
     assert f_pre_avg != pytest.approx(73.5, abs=0.5)   # sanity: the stamp really disagrees
@@ -665,8 +671,8 @@ def test_build_battle_model_cur_percent_equals_fit_when_proj_equals_pre_avg():
                                   pre_avg_damage=1800, pre_percentile=73.5))
     assert m.combined_damage == 1800
     assert m.proj_avg_damage == 1800
-    assert m.pct_delta == pytest.approx(0.0, abs=1e-9)
     assert m.cur_percent == pytest.approx(f_pre_avg, abs=1e-9)
+    assert m.pct_delta == pytest.approx(f_pre_avg - 73.5, abs=1e-9)
 
 
 def test_build_battle_model_counted_assist_from_split():
@@ -694,19 +700,19 @@ def test_build_battle_model_counted_assist_merged_fallback():
 
 def test_build_battle_model_zero_damage_drags_below_career():
     # No damage yet (cd=0) -> proj = prev*(1-k) < pre_avg -> f(proj) sits just below f(pre_avg)
-    # (honest 'if it ended now'). pre_percentile (84.7, deliberately not on the curve) no longer
-    # takes part at all -- cur_percent is f(proj) directly, not pre_percentile + inc.
+    # (honest 'if it ended now'). cur_percent is f(proj) directly (UN-ANCHORED, unchanged); the
+    # delta measures gain from WG's stamped pre_percentile (84.7, deliberately not on the curve),
+    # i.e. f(proj) - 84.7, not f(proj) - f(pre_avg).
     m = build_battle_model(_bsnap(damage=0, assist=0, stun=0,
                                   pre_avg_damage=1800, pre_percentile=84.7))
     assert m.proj_avg_damage == int(round(1800 * (1 - EWMA_K)))           # 1764
     fit = _fit_from_thresholds(_THR)
     f_proj = _smooth_percent(m.proj_avg_damage, fit)
     f_pre_avg = _smooth_percent(1800, fit)
-    inc = f_proj - f_pre_avg
-    assert inc < 0                                                        # 0-damage drags down
+    assert f_proj < f_pre_avg                                             # 0-damage drags down
     assert m.cur_percent == pytest.approx(f_proj, abs=1e-9)
     assert m.cur_percent < f_pre_avg
-    assert round(m.pct_delta, 2) == round(inc, 2)
+    assert m.pct_delta == pytest.approx(f_proj - 84.7, abs=1e-9)
 
 
 def test_build_battle_model_clamps_cur_percent_to_100():
