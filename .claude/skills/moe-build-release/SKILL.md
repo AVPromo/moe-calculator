@@ -22,11 +22,11 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 2.0.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 3.1.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
-- The **client** version `2.3.1.1` is deliberately excluded from the check (a `(?!\.\d)` lookahead skips the 4-part client version).
+- The **client** version `2.3.1.2` is deliberately excluded from the check (a `(?!\.\d)` lookahead skips the 4-part client version).
 
 ## Release must stay silent (no unconditional logging)
 
@@ -95,20 +95,44 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v2.0.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v2.0.0 (2026-08-06) is the current Latest** — a game-upgrade release retargeting the mod to
+**v0.1.0 through v3.1.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v3.1.0 (2026-08-14) is the current Latest** — an ordinary feature/minor release cut on top of
+v3.0.0 (merged the `v3.0.0` tag into `main` so it inherited the client-retarget pointers, then
+bumped `3.0.0 → 3.1.0`; client target **unchanged at EU 2.3.1.2**). `SETTINGS_VERSION` went
+**23 → 28** across the feature's five bumps (24 = the Progress-Bar-to-column-2 swap, 25 = two
+live MSA panel widget-preview `Image` controls, 26 = the per-vehicle Mode-override `HotKey`
+control (a new MSA `HotKey` component type, default **K**), 27 = moving the bar preview Image
+next to the calculator preview in column 1, 28 = the "Automatic Mode Toggle" threshold `Slider`).
+User-facing surface added since v3.0.0/v2.0.0: **vertical orientation** for both centre-screen
+in-battle bars (Moving Average + Damage Efficiency), each with its own per-mark caption geometry,
+per-number backdrop, and a closed-form minimap-facing edge; **Alignment collapsed to Fixed/Free**
+(replacing the old three-way Damage-Log/Minimap/Free model), with Orientation/Alignment/Position
+no longer mutually auto-set (all cross-derivation was deleted, not just inert); a **per-vehicle
+Mode override HotKey** (default K) plus an **Automatic Mode Toggle** percentile threshold that
+flips a vehicle's bar mode automatically; **in-panel widget previews** — the MSA panel now shows
+live `Image` previews of both in-battle widgets, updating as driving settings change; the
+**Progress Bar feature moved to settings column 2** (the v23→24 column swap, with column 1 now
+holding Battle Calculator + every garage-related group); an **ETA-in-battles rework** on the
+vertical bars with caption/backdrop geometry tuning; and a batch of in-battle MoE-projection
+accuracy fixes (interpolating the raw projection for `cur_percent`, measuring the delta from WG's
+stamped career percent, priming baseline/thresholds independently of the garage widget, serving a
+stale threshold table during a refetch, and no longer seeding the baseline from a pre-sync garage
+read).
+
+**v3.0.0 (2026-08-12) was the prior Latest** — a game-upgrade release retargeting the mod to WoT
+client **EU 2.3.1.2** (up from 2.3.1.1), major bump per convention, with **zero functional/code
+changes**.
+
+**v2.0.0 (2026-08-06) was the Latest before that** — a game-upgrade release retargeting the mod to
 WoT client **EU 2.3.1.1** (#910, up from 2.3.1.0 #903), major bump per convention, with **zero
 divergences found and no functional/code changes**. The `upgrade-analyzer` pass resolved all
 198 gathered seams (monkey-patch targets, subscribed Events, Wulf ViewModel API, `img://` art
 paths) present and unchanged in the new client's packed `.pyc` — **this was a static resolve, not
 a live one; no WoT client was launched during this upgrade.** Vendor deps (OpenWG GameFace 1.1.6,
 Aslain ModsSettingsAPI 1.6.4, Mods List API 1.7.8) were kept unchanged but were **not** live-verified
-on 2.3.1.1. The live **CONFIRM is still owed**: vendor deps not init-terminating the client, the
-garage widget mounting + re-arming on vehicle switch, the in-battle overlay mounting + re-arming
-after a battle, an MSA settings-panel round-trip, and that the WG API actually returns MoE
-thresholds at runtime.
+on 2.3.1.1.
 
-**v1.8.0 (2026-08-03) was the prior Latest** (v1.7.0 was the Latest before that, 2026-08-01),
+**v1.8.0 (2026-08-03) was the Latest before that** (v1.7.0 was the Latest before that, 2026-08-01),
 carrying the in-battle progress bar's Ctrl+drag reposition + Bar Position X/Y fields, a
 configurable Hold Duration, the Moving Average bar's ETA-in-battles readout, the relabelled
 Transitions master, and the shrunk Large mode. The **1.0.0** release retargeted the mod to WoT

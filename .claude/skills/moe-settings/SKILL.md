@@ -1,6 +1,6 @@
 ---
 name: moe-settings
-description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its six bold category/group headers, Empty spacers, the four column-1 grouped/standalone categories (In-Battle Widget, Progress Bar + its three visibility children, Transitions + its Events/Alt Press/Hold Duration slider children, "Layout" (i18n key catBarPosition) + its Orientation/Alignment radios and its two shared X/Y steppers for the Ctrl+drag reposition) and the four standalone inline int-valued radios (Mode, Scale, Orientation, Alignment), the column-2 garage widget + layout group, the flag getters the feature bridges read (including the master-folded transition getters, the "Always"-folded visibility getters, and the position getters/setter), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod-msa-settings; for the panel prose translation see wotmod-i18n-settings; for feature internals see moe-garage / moe-battle.
+description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its six bold category/group headers, Empty spacers, column 1 (Battle Calculator + a calcPreview Image, then the WHOLE Garage Widget group + its "Layout"/positioning group + a barPreview Image, as of the SETTINGS_VERSION 23→24 column swap) and column 2 (the WHOLE Progress Bar feature: Battle Progress + its three visibility children, the standalone Mode/HotKey-override/Automatic-Mode-Toggle/Scale controls, Transitions + its Events/Alt Press/Hold Duration slider children, and "Layout" (i18n key catBarPosition) + its Orientation/Alignment radios and its two shared X/Y steppers for the Ctrl+drag reposition), the standalone inline int-valued radios (Mode, Scale, Orientation, Alignment), the per-vehicle Mode-override HotKey and Automatic Mode Toggle threshold slider, the two live MSA preview Images, the flag getters the feature bridges read (including the master-folded transition getters, the "Always"-folded visibility getters, and the position getters/setter), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod-msa-settings; for the panel prose translation see wotmod-i18n-settings; for feature internals see moe-garage / moe-battle.
 ---
 
 # MoE Calculator — settings panel (feature)
@@ -15,9 +15,11 @@ This skill is only the mod's concretes. All paths under `src/res/scripts/client/
 
 Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `adapter/settings_i18n.py`.
 
-## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair in column 1)
+## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair + one standalone HotKey + one standalone threshold slider + two live preview Images)
 
-`SETTINGS_VERSION = 23`. Each `varName` == the `DEFAULTS` key, so the dict MSA returns maps
+`SETTINGS_VERSION = 28` (was 23 as of the previous v3.0.0-era pass over this skill; five bumps
+shipped between them — see "The column swap (v24)" section below). Each `varName` ==
+the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
 migration branch carries the user's values across) — localizing plain label/tooltip text is
@@ -38,25 +40,48 @@ categories. Because the header names the feature, each master's own label is jus
 (was "Show" before v14).
 Built in `_template()`:
 
-- **column1 = two categories, two groups and four standalone radios spliced together.** Each group
-  is its own `_grouped_column1()` call (→ `templates.createControlsGroup(master, children,
-  indent=True)`, with a feature-detect fallback that sets `masterVarName` by hand for older MSA /
-  izeberg):
+**`SETTINGS_VERSION` 23 → 24 SWAPPED the two columns** (see "The column swap (v24) and what rode
+in after it" below) — column 1 is now the Battle Calculator + everything garage-related, column 2
+is the WHOLE Progress Bar feature. The bullet list below is in **current (post-v28) column order**;
+where a sub-bullet's own history predates the swap it still says "column1" for what is now
+column 2 — read those as **feature-relative**, not literal-column, until the swap section.
+
+- **column1 = one category (Battle Calculator), one live preview Image, then the WHOLE Garage
+  Widget feature (its own master + "Layout" group) and a second live preview Image.**
   1. `Label` **"Battle Calculator"**, then the `battle_widget_enabled` master + two indented
      children ("Alt Press", "Counted Assistance Row");
-  2. `_empty()`, `Label` **"Battle Progress"**, then the `progress_bar_enabled` master + its three
+  2. the **`calcPreview` live `Image`** (v25) — a pre-baked PNG preview of the in-battle corner
+     overlay, swapped via `updateImage` as the driving settings (Counted Assistance, live values)
+     change; not a stored setting (absent from `DEFAULTS`);
+  3. `_empty()`, `Label` **"Garage Widget"**, the standalone `garage_widget_enabled` master, an
+     `_empty()`, then the **"Layout"** group (`positioning`) — a `Label` header, the "Follow
+     Carousel Mode" checkbox, a non-bold **"Position"** sub-label, and the `posX`/`posY`
+     `NumericStepper`s;
+  4. the **`barPreview` live `Image`** (added in column 2 at v25, MOVED here at v26→27 so both
+     previews sit together) — a preview of whichever centre-screen bar Mode currently selects,
+     also not a stored setting.
+- **column2 = the WHOLE Progress Bar feature** (moved here from column 1 at v23→24), one group,
+  one grouped-Transitions splice, four standalone radios/controls, and a "Layout" group:
+  1. `Label` **"Battle Progress"**, then the `progress_bar_enabled` master + its three
      **VISIBILITY** children ("Events", "Alt Press", "Always") — the first two then **trade** the
      group binding for an **AND gate** via `_gate_and()` (see below);
-  3. the two **standalone `inline` radios** ("Mode", "Scale") — deliberately ungated;
-  4. `_empty()`, `Label` **"Transitions"**, then the `progress_transitions_enabled` master + THREE
+  2. the standalone `inline` **"Mode"** radio, then (v26) the standalone **`HotKey`** control
+     "Mode Override" (`progress_variant_hotkey`, default chord `[37]` = `Keys.KEY_K`) — the
+     in-battle chord that flips the current vehicle's bar Mode — then (v28) the standalone
+     **"Automatic Mode Toggle"** `Slider` (`progress_auto_toggle_threshold`, 0–100, default
+     **100 = the DISABLE sentinel** since no percentile can reach past it) — the pre-battle MoE
+     percentile at/above which a vehicle's bar Mode auto-toggles once — then the standalone
+     `inline` **"Scale"** radio. All four are deliberately **ungated** (describe the bar itself,
+     not when it shows), matching the pre-v13 reasoning for Mode/Scale;
+  3. `_empty()`, `Label` **"Transitions"**, then the `progress_transitions_enabled` master + THREE
      children: two label-only checkboxes ("Events", "Alt Press") and, as of v17, a `Slider`
      ("Hold Duration (s)") — `progress_hold_seconds`, 1-30s, `snapInterval: 1`, `format:
      "{{value}} s"`, default 5. Its master's own label reads **"Enabled"** now, same as the
      other three masters (was "Transitions" before v17), but the `varName` is deliberately
      unchanged;
-  5. `_empty()`, `Label` **"Layout"** (i18n key `catBarPosition`, header text renamed from "Bar
+  4. `_empty()`, `Label` **"Layout"** (i18n key `catBarPosition`, header text renamed from "Bar
      Position" at v21 — the key is unchanged, a rename buys nothing since it's positional in
-     `COL1_KEYS`), then two more **standalone `inline` radios** — "Orientation"
+     `COL2_KEYS`), then two more **standalone `inline` radios** — "Orientation"
      (`progress_bar_orientation`: Horizontal `0` default / Vertical `1`) and "Alignment"
      (`progress_bar_alignment`: **Fixed `0` default / Free `1`** — collapsed from three options
      [Damage Log `0` / Minimap `1` / Free `2`] to two at v23, see "The Fixed-alignment redesign
@@ -66,22 +91,35 @@ Built in `_template()`:
      readable/editable while the feature is off. **The position steppers are NOT standalone as of
      v23** — they carry a hand-built `enableWhen`-shaped gate (`_gate_enable`,
      `mod_settings.py:1031`) against `progress_bar_alignment == PROGRESS_ALIGN_FREE`, so they grey
-     out (never hide — a stepper that vanishes would reflow the rest of column 1, and MSA stores +
+     out (never hide — a stepper that vanishes would reflow the rest of column 2, and MSA stores +
      pushes a greyed control's value regardless) whenever Alignment is Fixed. **One shared radio
      pair and one shared stepper pair serve BOTH bar variants** (they're mutually exclusive at
      runtime); the steppers store LOGICAL GUI px (interface-scale invariant, no `posW`/`posH`
-     viewport pinning like the garage pair below). Under **Fixed** the pair is still an
+     viewport pinning like the garage pair above). Under **Fixed** the pair is still an
      anchor-relative OFFSET composed via `anchor_offset` on top of whichever internal anchor
      Orientation selects (see "The Fixed-alignment redesign (v23)"); under **Free** the pair is an
      **anchor point**, not an offset, and the exact pair `(0, 0)` under Free still resolves to the
      orientation's default anchor (`bar_window.py:346-353`) — see `progress_bar_alignment()` below.
-     Both this pair's steppers and the garage `posX`/`posY` pair below run
+     Both this pair's steppers and the garage `posX`/`posY` pair above run
      **`-POS_MAX .. POS_MAX`** (was `0 .. POS_MAX` before v20) — the on-screen edge clamp was
      removed so a bar may be dragged past any screen edge; see the memory
      `[[unclamping-drag-is-constrained-by-the-auto-placement-sentinel]]`.
-- **column2 = `Label` "Garage Widget", the standalone `garage_widget_enabled` master, an
-  `_empty()`, then the "Layout" group** — a `Label` header, the posX / posY `NumericStepper`s, and
-  the "Follow Carousel Mode" checkbox.
+
+### The column swap (v24) and what rode in after it
+
+**`SETTINGS_VERSION` 23 → 24** was a pure column swap: no `varName`, control type or option
+changed shape, only which column each feature's rows render in — but `register()`'s saved-truthy
+path never calls `setModTemplate` on an existing install, so the new column assignment (and the
+`COL1_KEYS`/`COL2_KEYS` positional pairing `_sync_template_text` relies on) reaches nobody without
+a forward bump. Four more bumps rode in after it, all confined to column 2 or the two preview
+Images: **25** added the `calcPreview` / `barPreview` live preview `Image`s (`calcPreview` in
+column 1's calculator group, `barPreview` originally at the tail of column 2's "Layout"); **26**
+added the `progress_variant_hotkey` `HotKey` control (the first control here of that MSA component
+type) right after the Mode radio; **27** moved `barPreview` out of column 2 to sit beside
+`calcPreview` at the tail of column 1, so both live previews now share one column; **28** added the
+`progress_auto_toggle_threshold` `Slider` right after the HotKey control and before Scale. See
+`mod_settings.py`'s `SETTINGS_VERSION` comment block (the fullest in the file) for the full
+reasoning behind each.
 
 **The two near-identical child pairs are DIFFERENT AXES and the resemblance is deliberate:** the
 visibility trio decides **WHEN** the bar comes up, the Transitions pair only **HOW** it moves once
@@ -89,62 +127,87 @@ it does. Don't conflate them.
 
 | Control (EN label) | key / `varName` | column | default | getter | consumed by |
 |---|---|---|---|---|---|
-| *Garage Widget* (header, **bold**) | — | column2 `Label` | — | — | — |
-| Enabled | `garage_widget_enabled` | column2 (standalone) | ON | `garage_enabled()` | `bridge/gameface_bridge.py` (garage widget presence) |
 | *Battle Calculator* (header, **bold**) | — | column1 `Label` | — | — | — |
 | Enabled | `battle_widget_enabled` | column1 group-1 master | ON | `battle_enabled()` | `bridge/battle_bridge.py` (overlay hard gate) |
 | Alt Press | `battle_widget_alt_key` | column1 group-1 child | OFF | `battle_alt_key_enabled()` | `bridge/battle_bridge.py` peek modifier |
 | Counted Assistance Row | `counted_assistance_enabled` | column1 group-1 child | **ON** (flipped in v13) | `counted_assistance_enabled()` | `battle_bridge` → `BattleMoEVM.assistVisible` → JS row 3 |
-| *Battle Progress* (header, **bold**) | — | column1 `Label` | — | — | — |
-| Enabled | `progress_bar_enabled` | column1 group-2 master | OFF | `progress_bar_enabled()` | `battle_bridge` (centre-screen transient, hard gate) |
-| ↳ Events | `progress_show_events` | column1 group-2 child (**AND-gated**) | ON | `progress_show_events()` | `battle_bridge` — whether a damage/efficiency tick raises the bar |
-| ↳ Alt Press | `progress_show_alt_key` | column1 group-2 child (**AND-gated**) | ON | *(none — folded into `progress_alt_held()`)* | — |
-| ↳ Always | `progress_show_always` | column1 group-2 child | OFF | *(none — folded into BOTH getters)* | — |
-| Mode — Damage Efficiency / Moving Average | `progress_bar_variant` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` = Damage Efficiency | `progress_bar_variant()` | `battle_bridge` — picks which centre-screen window opens |
-| Scale — Default / Large | `progress_bar_size` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` | `progress_bar_size()` | both bars' `barSize` → `MoEBarTransient.applySize` (root-font 1.5× + `.mp-lg`) |
-| Enabled (Transitions master) | `progress_transitions_enabled` | column1 group-3 **master** | ON | *(none — folded in below)* | never pushed to JS |
-| ↳ Events | `progress_transitions_events` | column1 group-3 child | ON | `progress_transitions_events()` | `ProgressVM.transEvents` / `EfficiencyVM.transEvents` → `applyAnim` |
-| ↳ Alt Press | `progress_transitions_manual` | column1 group-3 child | ON | `progress_transitions_manual()` | `…VM.transManual` → `applyAnim` (the Alt peek) |
-| ↳ Hold Duration (s) | `progress_hold_seconds` | column1 group-3 child, `Slider` (1-30, int) | `5` | `progress_hold_seconds()` — **NOT** master-folded (a duration, not a flag) | both bars' `MoEBarTransient` hold timer |
-| *Layout* (header, **bold**, v18, header text renamed from "Bar Position" at v21, key `catBarPosition` unchanged) | — | column1 `Label` | — | — | — |
-| Orientation — Horizontal / Vertical | `progress_bar_orientation` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21) | `0` = Horizontal | `progress_bar_orientation()` | `bar_window.BarHost._resolve` (orientation branch), front-end DOM build branch |
-| Alignment — Fixed / Free | `progress_bar_alignment` | column1 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21; collapsed 3→2 options at v23) | `0` = Fixed | `progress_bar_alignment()` | `bar_window.BarHost._resolve` (Fixed resolves internally by Orientation to the Damage-Log or Minimap anchor; Free is its own branch), `bar_window.BarHost.drag` (refuses the gesture outright unless Free) |
-| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column1 `NumericStepper`s, range `-POS_MAX..POS_MAX` (v20); **`enableWhen`-gated on Alignment==Free as of v23** (`_gate_enable`) | 0 = anchor-relative offset under Fixed; under **Free**, the pair is an anchor point and the exact 0/0 means AUTO (the orientation's default anchor) | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
-| *Layout* (header, **bold**) | — | column2 `Label` | — | — | — |
-| Follow Carousel Mode | `followCarousel` | column2 (sits ABOVE the steppers as of v14) | ON | `follow_carousel()` | garage widget carousel nudge |
-| *Position* (sub-label, **not bold** — deliberately excluded from `HEADER_KEYS`) | — | column2 `Label` | — | — | — |
-| Horizontal (left X) / Vertical (top Y) | `posX`, `posY` (+ non-user `posW`, `posH`) | column2, range `-POS_MAX..POS_MAX` (v20) | 0 = auto | `pos_x()` … `pos_h()` | garage widget placement / rescale |
+| calcPreview (live preview `Image`, no label) | `calcPreview` | column1, **not a stored setting** (v25) | — | `preview_sources()` | MSA `updateImage` — a baked PNG of the corner overlay |
+| *Garage Widget* (header, **bold**) | — | column1 `Label` (moved here from column2 at v23→24) | — | — | — |
+| Enabled | `garage_widget_enabled` | column1 (standalone) | ON | `garage_enabled()` | `bridge/gameface_bridge.py` (garage widget presence) |
+| *Layout* (header, **bold**) | — | column1 `Label` | — | — | — |
+| Follow Carousel Mode | `followCarousel` | column1 (sits ABOVE the steppers as of v14) | ON | `follow_carousel()` | garage widget carousel nudge |
+| *Position* (sub-label, **not bold** — deliberately excluded from `HEADER_KEYS`) | — | column1 `Label` | — | — | — |
+| Horizontal (left X) / Vertical (top Y) | `posX`, `posY` (+ non-user `posW`, `posH`) | column1, range `-POS_MAX..POS_MAX` (v20) | 0 = auto | `pos_x()` … `pos_h()` | garage widget placement / rescale |
+| barPreview (live preview `Image`, no label) | `barPreview` | column1, **not a stored setting** (added v25 in column2, moved here v26→27) | — | `preview_sources()` | MSA `updateImage` — a baked PNG of whichever centre-screen bar Mode selects |
+| *Battle Progress* (header, **bold**) | — | column2 `Label` (moved here from column1 at v23→24) | — | — | — |
+| Enabled | `progress_bar_enabled` | column2 group-2 master | OFF | `progress_bar_enabled()` | `battle_bridge` (centre-screen transient, hard gate) |
+| ↳ Events | `progress_show_events` | column2 group-2 child (**AND-gated**) | ON | `progress_show_events()` | `battle_bridge` — whether a damage/efficiency tick raises the bar |
+| ↳ Alt Press | `progress_show_alt_key` | column2 group-2 child (**AND-gated**) | ON | *(none — folded into `progress_alt_held()`)* | — |
+| ↳ Always | `progress_show_always` | column2 group-2 child | OFF | *(none — folded into BOTH getters)* | — |
+| Mode — Damage Efficiency / Moving Average | `progress_bar_variant` | column2 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` = Damage Efficiency | `progress_bar_variant()` | `battle_bridge` — picks which centre-screen window opens |
+| Mode Override (HotKey chord) | `progress_variant_hotkey` | column2 **standalone**, `HotKey` (v26) | `[37]` = `Keys.KEY_K` | `progress_variant_hotkey()` | `bridge/battle_input.py` / `battle_bridge` — in-battle chord flips this vehicle's Mode |
+| Automatic Mode Toggle (percentile threshold) | `progress_auto_toggle_threshold` | column2 **standalone**, `Slider` (0-100, int, v28) | `100` (the DISABLE sentinel) | `progress_auto_toggle_threshold()` | `variant_overrides.should_auto_toggle` — auto-flips a vehicle's Mode once at/above this pre-battle MoE percentile |
+| Scale — Default / Large | `progress_bar_size` | column2 **standalone**, `inline` (**RadioButtonGroup**, **int**) | `0` | `progress_bar_size()` | both bars' `barSize` → `MoEBarTransient.applySize` (root-font 1.5× + `.mp-lg`) |
+| Enabled (Transitions master) | `progress_transitions_enabled` | column2 group-3 **master** | ON | *(none — folded in below)* | never pushed to JS |
+| ↳ Events | `progress_transitions_events` | column2 group-3 child | ON | `progress_transitions_events()` | `ProgressVM.transEvents` / `EfficiencyVM.transEvents` → `applyAnim` |
+| ↳ Alt Press | `progress_transitions_manual` | column2 group-3 child | ON | `progress_transitions_manual()` | `…VM.transManual` → `applyAnim` (the Alt peek) |
+| ↳ Hold Duration (s) | `progress_hold_seconds` | column2 group-3 child, `Slider` (1-30, int) | `5` | `progress_hold_seconds()` — **NOT** master-folded (a duration, not a flag) | both bars' `MoEBarTransient` hold timer |
+| *Layout* (header, **bold**, v18, header text renamed from "Bar Position" at v21, key `catBarPosition` unchanged) | — | column2 `Label` | — | — | — |
+| Orientation — Horizontal / Vertical | `progress_bar_orientation` | column2 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21) | `0` = Horizontal | `progress_bar_orientation()` | `bar_window.BarHost._resolve` (orientation branch), front-end DOM build branch |
+| Alignment — Fixed / Free | `progress_bar_alignment` | column2 **standalone**, `inline` (**RadioButtonGroup**, **int**, v21; collapsed 3→2 options at v23) | `0` = Fixed | `progress_bar_alignment()` | `bar_window.BarHost._resolve` (Fixed resolves internally by Orientation to the Damage-Log or Minimap anchor; Free is its own branch), `bar_window.BarHost.drag` (refuses the gesture outright unless Free) |
+| Horizontal (left X) / Vertical (top Y) | `progress_bar_pos_x`, `progress_bar_pos_y` | column2 `NumericStepper`s, range `-POS_MAX..POS_MAX` (v20); **`enableWhen`-gated on Alignment==Free as of v23** (`_gate_enable`) | 0 = anchor-relative offset under Fixed; under **Free**, the pair is an anchor point and the exact 0/0 means AUTO (the orientation's default anchor) | `bar_pos_x()` / `bar_pos_y()` | `bar_window.BarHost.apply_position` (both bars, via `battle_bridge.apply_settings` → `progress_view`/`efficiency_view.apply_position()`) |
 
 ```python
+# Column 1: Battle Calculator + EVERY garage-related group (moved here from column2 at v23->24),
+# plus the two live preview Images (calcPreview at v25, barPreview moved in from column2 at v26->27).
+# SIXTEEN slots.
 COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist",
-             None,                                    # Empty spacer
-             u"catBattleProgress", u"progressBar",
+             None,                                   # calcPreview Image (no i18n text)
+             None,                                   # Empty spacer
+             u"catGarage", u"garageWidget",
+             None,
+             u"positioning", u"followCarousel",
+             None,
+             u"positionSub", u"posX", u"posY",
+             None)                                   # barPreview Image (no i18n text)
+# Column 2: the WHOLE Progress Bar feature (moved here from column1 at v23->24), plus the HotKey
+# mode-override control (v26) and the Automatic Mode Toggle slider (v28). TWENTY-THREE slots.
+COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
-             None,                                    # Empty spacer
-             VARIANT_KEY, u"progressSize",
-             None,                                    # Empty spacer
+             None,
+             VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressAutoToggleThreshold", u"progressSize",
+             None,
              u"catTransitions", u"progressTransitions",
              u"progressTransEvents", u"progressTransManual",
-             None,                                    # Empty spacer (v20)
+             None,
              u"progressHoldSeconds",
-             None,                                    # Empty spacer
+             None,
              u"catBarPosition", u"progressOrientation", u"progressAlignment",
-             u"barPosX", u"barPosY")               # 26 slots (v21, grew from 24 at v20)
-COL2_KEYS = (u"catGarage", u"garageWidget", None, u"positioning", u"followCarousel",
-             None, u"positionSub", u"posX", u"posY")                                    # 9 slots
+             u"barPosX", u"barPosY")
 ```
 
-**Both counts are UNCHANGED at v23** (still 26 / 9, `tipless == 8`, `spacers == 7`) — the v22 bump's
-only new key, `progress_bar_pos_frame`, is a hidden marker with no MSA control and so no
-`COL1_KEYS`/`COL2_KEYS` slot at all; the v23 bump only shrinks the Alignment radio's *option list*
-(3 → 2), a fixed row that costs no slot either way — see the "The Fixed-alignment redesign (v23)"
-section below for why each bump is still owed despite the layout not moving.
+**Current counts (v28): `COL1_KEYS` 16 slots, `COL2_KEYS` 23 slots, `tipless == 8`, `spacers == 9`.**
+Growth since v23 (26 / 9 at the time, described by the pre-swap layout further below): the v24
+column swap itself changed only which keys sit in which tuple, not the total row count; v25 added
+one `None` slot to each tuple (the two preview Images' sentinels); v26 added one slot to `COL2_KEYS`
+(`VARIANT_HOTKEY_KEY`); v27 moved one `None` slot from `COL2_KEYS` to the tail of `COL1_KEYS`
+(`barPreview`); v28 added one more slot to `COL2_KEYS` (`progressAutoToggleThreshold`). `spacers`
+grew 7 → 9 across this span (the two preview Images' own sentinels); `tipless` (8) is unchanged —
+neither preview Image nor the HotKey/threshold controls are tooltip-less.
 
+**Pre-v24, for historical reference, column 2 held the whole Garage Widget feature and column 1
+held Battle Calculator + the WHOLE Progress Bar feature — the reverse of today.** Every paragraph
+from here through "The Fixed-alignment redesign (v23)" below uses `COL1_KEYS` / `COL2_KEYS` **as
+they applied AT THAT TIME** (pre-v24): `COL1_KEYS` meant Battle Calculator + Progress Bar (now
+`COL2_KEYS`'s content, minus Battle Calculator which stayed in `COL1_KEYS`), `COL2_KEYS` meant
+Garage Widget (now folded into `COL1_KEYS`). The v24 bump is what swapped which tuple holds which
+feature; read "The column swap (v24)" section above for the swap itself.
 **v14 grew `COL2_KEYS` 7 → 8**: Follow Carousel moved to sit right under the (now bold) "Layout"
 header, and a new varName-less `"positionSub"` (**"Position"**) sub-label was inserted ahead of the
 two steppers — deliberately **excluded** from `HEADER_KEYS` (below) so its lighter weight reads as a
-sub-level under "Layout" rather than a third header. **`COL2_KEYS` has since grown 8 → 9** (a second
-`Empty` spacer now heads "Position" the same way the first one heads "Battle Progress").
+sub-level under "Layout" rather than a third header. **`COL2_KEYS` (garage) had grown 8 → 9** by
+v20 (a second `Empty` spacer heading "Position" the same way the first one headed "Battle
+Progress") — this is the tuple that is now `COL1_KEYS`'s garage-related tail, post-v24.
 
 **v17 added a `catTransitions` `Label` header** ahead of the Transitions master (previously the
 group rode inside the "Battle Progress" category with no header of its own) plus the
@@ -424,8 +487,8 @@ bare category headers (Battle Calculator / Battle Progress / Transitions / Garag
 Transitions group's two children (Events / Alt Press), and the two "Layout" steppers (`barPosX` /
 `barPosY` — the header above them carries the Ctrl+drag tooltip instead, so the header itself is
 NOT in this count; the v21 Orientation/Alignment radios both carry their own tooltip, so they
-don't add to `tipless` either) — alongside `spacers == 7` (v21, grew from 6) for the
-`None`-sentinel `Empty` rows.
+don't add to `tipless` either) — alongside `spacers == 9` (v21 shipped 7; the two preview Images'
+own `None` sentinels at v25/v27 grew it to 9) for the `None`-sentinel `Empty`/Image rows.
 
 The getters import NOTHING from the sibling bridges, so `gameface_bridge` / `battle_bridge` read
 them without a cycle. Live state seeds from MSA in `register()`; defaults until then / if MSA absent.
@@ -609,8 +672,10 @@ term is never reached.
 
 Every visible label/tooltip comes from `adapter/settings_i18n.panel_text()` at the client's active
 language (English master + per-key fallback; `COL1_KEYS` / `COL2_KEYS` are the wire order MSA and
-`_sync_template_text` walk in lockstep — **26** and **9** slots (v21, `COL1_KEYS` grew from 24),
-several of which are `None` sentinels for the `Empty` spacers. 11 language blocks. The six
+`_sync_template_text` walk in lockstep — **16** and **23** slots as of v28 (26 and 9 immediately
+pre-v24; the v24 column swap reassigned which tuple holds which feature, and v25/v26/v27/v28 each
+grew one tuple by one slot — see "The column swap (v24)" above), several of which are `None`
+sentinels for the `Empty` spacers and the two preview Images. 11 language blocks. The six
 `HEADER_KEYS` entries come out of
 `build()` pre-wrapped in `<b>...</b>` — see the `HEADER_KEYS` section above for why that wrap must
 live nowhere else.
@@ -635,7 +700,7 @@ Engine-free pytest (Python 3.13) — run the suite per `moe-build-release`:
 
 - `tests/test_mod_settings.py` — `_coerce` / `clamp_variant` / `merge_settings` / `_apply`, the
   built template's per-column type + `varName` order, the label-only-tooltip regressions, and the
-  `tipless == 8` / `spacers == 7` lockstep walk (the spacer branch also asserts the `None`-sentinel
+  `tipless == 8` / `spacers == 9` lockstep walk (the spacer branch also asserts the `None`-sentinel
   rows were left untouched).
 - `tests/test_settings_i18n.py` — the `COL1_KEYS` / `COL2_KEYS` ↔ `_PANEL` partition and the
   untranslated-leak diagnostic.

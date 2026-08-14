@@ -29,16 +29,21 @@ WHAT IT DOES
     with the change versus where you started the battle.
 
     It can also show a transient bar in the centre of the screen
-    during battle (OFF by default, turn it on in the settings panel).
-    It fades in, holds for a few seconds (five by default, adjustable)
+    during battle (OFF by default, turn it on in the settings panel),
+    drawn either horizontally or vertically beside the minimap. It
+    fades in, holds for a few seconds (five by default, adjustable)
     and fades out on its own; hold Alt to bring it up at any time (or
     turn on "Always" in settings to keep it up permanently). Pick one
     of two bars: Damage Efficiency (the default; this battle's damage
     against the 65 / 85 / 95 / 100 % requirements) or Moving Average
     (your projected average between the mark you hold and the next
     mark's requirement, plus this battle's contribution and an ETA in
-    battles to the next mark). Ctrl+drag it to reposition it anywhere
-    on screen (shared by both bars).
+    battles to the next mark). Press K in battle (rebindable in
+    settings) to flip the current vehicle's bar mode, or let it switch
+    automatically once a vehicle's mark progress crosses a percentage
+    you set. By default the bar sits at a built-in spot; switch
+    Alignment to Free in settings to Ctrl+drag it anywhere on screen
+    (shared by both bars).
 
 INSTALL  (2 steps)
     1) Extract this archive into your World of Tanks folder, so the
@@ -56,10 +61,10 @@ DEPENDENCIES
 
     ModsSettingsAPI is OPTIONAL - it adds the in-game settings panel
     where you turn the Garage and Battle widgets on or off, enable the
-    centre-screen bar and pick its variant, and set the Garage widget's
-    position. Without it the mod still works with both widgets enabled
-    and the centre-screen bar off. Keep your existing copy if you
-    already run it.
+    centre-screen bar and pick its variant, orientation and position,
+    and set the Garage widget's position. Without it the mod still
+    works with both widgets enabled and the centre-screen bar off.
+    Keep your existing copy if you already run it.
 
 UNINSTALL
     Delete com.14th_ua.moe_calculator_{VERSION}.wotmod from
@@ -85,15 +90,21 @@ UNINSTALL
     відносно початку бою.
 
     Також може показувати тимчасову смугу в центрі екрана під час бою
-    (ВИМКНЕНО за замовчуванням, увімкніть у панелі налаштувань). Вона
-    з'являється, тримається кілька секунд (п'ять за замовчуванням,
+    (ВИМКНЕНО за замовчуванням, увімкніть у панелі налаштувань),
+    намальовану горизонтально або вертикально поруч із мінікартою.
+    Вона з'являється, тримається кілька секунд (п'ять за замовчуванням,
     налаштовується) і зникає сама; утримуйте Alt, щоб показати її
     будь-коли (або увімкніть "Завжди" в налаштуваннях, щоб тримати її
     сталою). Виберіть одну з двох смуг: Ефективність шкоди (за
     замовчуванням; шкода цього бою відносно вимог 65 / 85 / 95 / 100 %)
     або Ковзне середнє (ваша прогнозована середня між наявною
     позначкою та вимогою наступної, плюс внесок цього бою та прогноз
-    у боях до наступної позначки). Ctrl+перетягування переміщує її в
+    у боях до наступної позначки). Натисніть K у бою (можна
+    перепризначити в налаштуваннях), щоб перемкнути режим смуги
+    поточної машини, або дозвольте їй перемикатися автоматично, щойно
+    прогрес знаків машини перевищить вказаний вами відсоток. За
+    замовчуванням смуга розташована у вбудованій точці; перемкніть
+    Прив'язку на Вільну в налаштуваннях, щоб перетягувати її Ctrl'ом у
     будь-яке місце екрана (спільно для обох смуг).
 
 ВСТАНОВЛЕННЯ  (2 кроки)
@@ -112,10 +123,10 @@ UNINSTALL
 
     ModsSettingsAPI НЕОБОВ'ЯЗКОВИЙ - додає ігрову панель налаштувань,
     де можна вмикати/вимикати віджети в Ангарі та в бою, увімкнути
-    смугу в центрі екрана й вибрати її варіант, а також задати позицію
-    віджета в Ангарі. Без нього мод працює з обома увімкненими
-    віджетами й вимкненою смугою в центрі екрана. Якщо він уже стоїть,
-    лишіть свою копію.
+    смугу в центрі екрана й вибрати її варіант, орієнтацію та позицію,
+    а також задати позицію віджета в Ангарі. Без нього мод працює з
+    обома увімкненими віджетами й вимкненою смугою в центрі екрана.
+    Якщо він уже стоїть, лишіть свою копію.
 
 ВИДАЛЕННЯ
     Видаліть com.14th_ua.moe_calculator_{VERSION}.wotmod з

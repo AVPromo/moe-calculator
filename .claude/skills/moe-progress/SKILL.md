@@ -288,7 +288,7 @@ pin them against real geometry.
 
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
-`SETTINGS_VERSION=23`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
+`SETTINGS_VERSION=28`. Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
 `progress_bar_enabled()` (`mod_settings.py:516`). Variant `PROGRESS_VARIANT_KEY=
 "progress_bar_variant"` (:548, 0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
 "progress_bar_size"` (:559, 0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=
