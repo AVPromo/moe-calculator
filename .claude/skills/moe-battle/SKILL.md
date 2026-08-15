@@ -85,14 +85,20 @@ destroys it. `battle_view.open_window()`/`close_window()` keep a `_active` singl
     `pre_avg < 0.3·D65` (max error 11.9 pp) — nearly all its error, band-localised. Never drop it.
   - Independently corroborated by `tv.lebwa.gunmarks` (`linierInterpretator` over the same 8
     stops), which we already matched on `EWMA_K` and on the combined-damage formula.
-- **The readout is ANCHORED, and the anchor is now UI CONTINUITY — not accuracy.**
-  `cur_percent = clamp(pre_percentile + inc, 0, 100)` with `inc = f(proj) − f(pre_avg)` (and
-  `pct_delta = inc`). Since `f` now reproduces `damageRating`, the anchor's job is that WG's anchor
-  table **drifts daily**: `f(pre_avg)` off today's table differs slightly from the `pre_percentile`
-  the dossier recorded under an older one, so anchoring guarantees the overlay opens on exactly the
-  number the garage just showed and the drift cancels in the increment. **Keep it both ways** —
-  don't remove it chasing accuracy (unanchored is only marginally better *centred*: mean +0.002 vs
-  +0.045, and it would visibly jump at battle start), and don't remove it as redundant.
+- **The readout is ANCHORED on `pre_percentile` (2026-08-15, reversing a 2026-08-13
+  un-anchoring — see `TASKS/shipped/` history if it's there, and
+  `[[in-battle-percent-anchored-both-terms-same-curve]]`):**
+  `move = f(proj_raw) − f(pre_avg_damage)` — **both terms evaluated on the SAME fitted curve
+  `f`**, never mixing `f` with WG's stamped `pre_percentile`. Then
+  `cur_percent = clamp(pre_percentile + move, 0, 100)` and `pct_delta = move`. `proj_raw` stays
+  the unrounded `ewma_project_raw(pre_avg, cd)` (see the Projection bullet above — never the
+  rounded `proj_avg_damage`). **Invariant:** `cur_percent − pct_delta == pre_percentile` always.
+  The brief 2026-08-13 un-anchored form (`pct_delta = f(proj_raw) − pre_percentile`) mixed our
+  curve with WG's stamp: the reconstruction gap `f(pre_avg) − pre_percentile` (mean ~0.05pp, max
+  ~0.24pp) leaked straight into the delta, and at low per-battle damage that fixed gap could
+  outweigh the real move and flip `pct_delta`'s sign opposite the damage delta. Anchoring both
+  terms on one curve cancels that gap and guarantees the percent delta agrees in sign with the
+  damage delta — the trade is giving up exact lebwa delta-parity by up to ~0.24pp.
 - **Deleted with the old model:** the per-segment `(mu, sigma)` solve, `moe_estimate.norm_cdf`, and
   before it a global OLS fit over the 4 stops. `moe_estimate.inv_norm_cdf` and `fit_mu_sigma` (with
   their `MIN_Z_SPREAD` / `Sxx<=0` guards) **are still live**, but ONLY for

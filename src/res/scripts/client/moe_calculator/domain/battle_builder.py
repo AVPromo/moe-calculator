@@ -4,13 +4,14 @@
 The four in-battle readouts (see TASKS/in-battle-moe-panel.md):
   1. live combined damage  C = damage + max(track, spot, stun) - team_damage   (WG #15060: MAX)
   2. projected moving-average combined damage  avgWithCD = prevAvg + k*(C - prevAvg)  (EWMA)
-  3. current percent  = f(avgWithCD): our reconstruction of WG's damageRating evaluated DIRECTLY
-     at the projected moving average, where f maps combined damage to percentile by piecewise-LINEAR
-     interpolation over the tank's percentile anchors plus a (0, 0) origin -- EXACTLY how WG
-     computes damageRating itself (see _fit_from_thresholds). NOT anchored on WG's stamped
-     pre_percentile any more (see build_battle_model for why the anchor was dropped).
-  4. percent delta    = current percent - pre_percentile   (signed gain from WG's stamped
-     career standing getDamageRating; so current percent - delta == pre_percentile, the WG stamp)
+  3. current percent  = pre_percentile + move, RE-ANCHORED on WG's stamped career standing, where
+     move = f(proj_raw) - f(pre_avg_damage) is a SINGLE-CURVE delta over our reconstruction f (f
+     maps combined damage to percentile by piecewise-LINEAR interpolation over the tank's
+     percentile anchors plus a (0, 0) origin -- EXACTLY how WG computes damageRating itself; see
+     _fit_from_thresholds). See build_battle_model for why re-anchoring beats reading f(proj_raw)
+     directly.
+  4. percent delta    = move (the same quantity as above), so current percent - pct_delta ==
+     pre_percentile EXACTLY (not just to within reconstruction error).
 
 Metrics 2-4 ride on the EWMA coefficient k (community-reverse-engineered, not WG-confirmed).
 The assist component of combined damage is the HIGHER of tracking / spotting / stun (see
@@ -176,28 +177,33 @@ def build_battle_model(snapshot):
                     or (snapshot.pre_avg_damage or 0) > 0
                     or bool(getattr(snapshot, "baseline_known", False)))
 
-    # The live percent is our reconstruction evaluated DIRECTLY at the projection: cur = f(proj).
-    # At battle start proj == prev*(1-k), so f(proj) opens just BELOW f(pre_avg): the honest
-    # projection of an uncommitted (0-damage) battle, climbing as damage accrues.
+    # RE-ANCHORED: cur_percent = pre_percentile + move, where `move` is a SINGLE-CURVE delta --
+    # f(proj_raw) minus f(pre_avg_damage), both evaluated on the SAME fit -- rather than f(proj_raw)
+    # read directly off our reconstruction. pct_delta = move, so the invariant
+    # cur_percent - pct_delta == pre_percentile (WG's real stamped career standing, getDamageRating)
+    # holds EXACTLY, not just to within reconstruction error.
     #
-    # UN-ANCHORED cur_percent, deliberately (was: pre_percentile + f(proj) - f(pre_avg)). WG's
-    # getDamageRating is a server-STAMPED stored value; our f reconstructs the same curve from the
-    # public anchors, and now reproduces WG's damageRating faithfully, so f(proj) at end matches the
-    # garage to within reconstruction error; displaying it directly removes the old offset.
+    # Un-anchoring (commit fecb890) mixed our fitted curve f with WG's server-stamped pre_percentile:
+    # pct_delta = f(proj_raw) - pre_percentile carried the reconstruction gap
+    # f(pre_avg_damage) - pre_percentile (mean ~0.05pp, max ~0.24pp over the 118-battle backtest --
+    # see _fit_from_thresholds). At low damage that gap dominates the real damage-driven move and can
+    # flip pct_delta's sign against the damage delta -- the overlay reads a NEGATIVE percent move on
+    # a battle that gained damage. Computing the move on one curve makes that gap cancel exactly, so
+    # pct_delta always agrees in sign with the damage delta.
     #
-    # The delta, however, measures gain from WG's REAL stamped career standing pre_percentile
-    # (getDamageRating), NOT from our reconstruction f(pre_avg). Measuring from f(pre_avg) folded in
-    # the reconstruction offset f(pre_avg) - pre_percentile, which flips sign per tank and made the
-    # delta disagree with lebwa (e.g. Strv 107-12: cur 18.24, pre_percentile 19.03 -> real delta
-    # -0.79, but cur - f(pre_avg) gave -0.37). So pct_delta = cur - pre_percentile, and the invariant
-    # is cur - delta == pre_percentile (WG's stamp), matching lebwa.
+    # Trade-off: cur_percent itself now carries the SAME reconstruction gap relative to lebwa's (and
+    # WG's own) damageRating -- up to ~0.24pp -- that the un-anchored form existed to remove. Accepted
+    # deliberately: sign agreement with the damage row matters more than sub-pp parity with lebwa, and
+    # the anchor still guarantees the overlay opens on exactly the number the garage just showed.
     #
     # A table with no usable anchor at all degrades to 'no percent' (has_data False), never a crash.
     fit = _fit_from_thresholds(thresholds)
     has_data = fit is not None
     if has_data:
-        cur_percent = _clamp(_smooth_percent(proj_raw, fit), 0.0, 100.0)
-        pct_delta = cur_percent - float(snapshot.pre_percentile or 0.0)
+        move = (_smooth_percent(proj_raw, fit)
+                - _smooth_percent(float(snapshot.pre_avg_damage or 0.0), fit))
+        cur_percent = _clamp(float(snapshot.pre_percentile or 0.0) + move, 0.0, 100.0)
+        pct_delta = move
     else:
         cur_percent = 0.0
         pct_delta = 0.0
