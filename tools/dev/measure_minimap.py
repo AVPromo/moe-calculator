@@ -72,7 +72,6 @@ Self-check (no screenshots needed, synthesizes images with PIL):
 """
 import argparse
 import json
-import sys
 
 from PIL import Image, ImageChops
 
