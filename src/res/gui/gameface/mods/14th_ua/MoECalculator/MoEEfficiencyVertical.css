@@ -117,11 +117,12 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
    (left+width == -92+109 == 17rem), growing LEFTWARD only, so the minimap-facing edge and
    the surface hit-rect do not move. Same specificity as .mev-bd above; source order wins. */
 .mev-bd-5 { width: 163.5rem; left: -146.5rem; }
-/* Mark-requirement strips narrowed to 2/3 of the shared width, right edge still pinned at 17rem
-   (hand-picked literals, exempt from the four_thirds invariant like bd-5). */
-.mev-bd-2 { width: 72.667rem; left: -63.167rem; }
-.mev-bd-3 { width: 72.667rem; left: -63.167rem; }
-.mev-bd-4 { width: 72.667rem; left: -63.167rem; }
+/* Mark-requirement strips narrowed to 2/3 of the shared width, right edge at 17rem
+   (hand-picked literals, exempt from the four_thirds invariant like bd-5), +0.25rem
+   (1 monitor-px) to close a gap to the minimap. */
+.mev-bd-2 { width: 72.917rem; left: -63.167rem; }
+.mev-bd-3 { width: 72.917rem; left: -63.167rem; }
+.mev-bd-4 { width: 72.917rem; left: -63.167rem; }
 .mev-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -460,10 +461,11 @@ body.mev.mp-lg #moe-bar-box { width: 122.4rem; }
 /* Large per-index width overrides -- right edge PINNED (left+width == -105.333+122.4 ==
    17.067rem); same specificity as .mp-lg .mev-bd above, source order wins. */
 .mp-lg .mev-bd-5 { width: 183.6rem; left: -166.533rem; }
-/* Large twins of the mark-requirement narrowing, right edge pinned at 17.067rem (hand literals). */
-.mp-lg .mev-bd-2 { width: 81.6rem; left: -76.6rem; }
-.mp-lg .mev-bd-3 { width: 81.6rem; left: -76.6rem; }
-.mp-lg .mev-bd-4 { width: 81.6rem; left: -76.6rem; }
+/* Large twins of the mark-requirement narrowing, right edge at 17.067rem (hand literals),
+   +0.2rem (1 monitor-px) to close a gap to the minimap. */
+.mp-lg .mev-bd-2 { width: 81.8rem; left: -76.6rem; }
+.mp-lg .mev-bd-3 { width: 81.8rem; left: -76.6rem; }
+.mp-lg .mev-bd-4 { width: 81.8rem; left: -76.6rem; }
 .mp-lg .mev-tick.mev-req { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mev-tick.mev-cur { width: 12rem;
@@ -476,18 +478,16 @@ body.mev.mp-lg #moe-bar-box { width: 122.4rem; }
 .mp-lg .mev-cap.lf.r1 { transform: translateY(50%) translateX(-3.000rem); }
 .mp-lg .mev-cap.lf.r2 { transform: translateY(50%) translateX(-5.000rem); }
 .mp-lg .mev-cap.lf.r3 { transform: translateY(50%) translateX(-7.000rem); }
-/* NUDGE CANCELLED, LARGE INCLUDED (2026-08-10, third correction): the maintainer's follow-up
-   request -- "top block 4px RIGHT, bottom block 7px RIGHT" on Large -- is the EXACT opposite of
-   the un-halved LEFT nudge this file carried a moment ago (4px / 7px LEFT, restored two corrections
-   back). Verified with Decimal, not assumed: the un-halved Large values were 11.467 (.tp) /
-   11.733 (.bt); a same-magnitude RIGHT move, expressed the same way the original nudge was (device
-   px / SIZE_F(1.25) == logical rem: 4/1.25==3.2, 7/1.25==5.6), lands EXACTLY back on the pre-nudge
-   HEAD literals: 11.467+3.200==14.667 and 11.733+5.600==17.333, both exact in Decimal, no residue.
-   So this is a full cancellation, not a delta application -- Large now carries NO nudge either,
-   byte-identical to both HEAD and the tuner's own fresh emit (X43(11)==14.667, X43(13)==17.333).
-   Default already carries none (see above). */
-.mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(14.667rem); }
-.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }
+/* CAPTION-POSITION NUDGE (2026-08-17, corrected): 100%-requirement (.tp) moved 4px LEFT,
+   current-damage (.bt) moved 7px LEFT (monitor px), recalibrated from an in-client probe. These
+   captions follow NORMAL CSS -- increasing translateX moves RIGHT, decreasing moves LEFT (a prior
+   "right-anchored, so increase = left" belief was backwards and inverted this nudge; corrected
+   here). Factor is 0.4 rem per monitor-px (1 rem == 2.5 monitor-px under Large on this
+   maintainer's setup). Only the SECOND translateX moves -- the leading translateX(-4rem) is
+   unrelated block-gap positioning. .tp: 4px left is -1.6rem off HEAD's 14.667 = 13.067rem. .bt:
+   7px left is -2.8rem off HEAD's 17.333 = 14.533rem. */
+.mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(13.067rem); }
+.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(14.533rem); }
 .mp-lg .mev-cap .mev-ico { margin-left: 1.333rem; }
 /* The Large twins of the per-icon ink-gap-parity overrides above: literal, SIZE_XF (4/3)
    applied by hand to the Default literal, never re-derived from the shared margin-left knob. */

@@ -29,9 +29,9 @@
    the root could never reach it; `body.mpv ...` is also (1,1,1) so it out-specifies the horizontal
    sheet's own `.mp-lg #moe-bar-root` (1,1,0) outright rather than winning on source order.
 
-   THE SHIPPED FILE IS THE EMIT PLUS SIX DELIBERATE HAND-EDITS -- never copy an -EmitCss output
+   THE SHIPPED FILE IS THE EMIT PLUS EIGHT DELIBERATE HAND-EDITS -- never copy an -EmitCss output
    over it (the repo lesson `emitcss-is-not-the-whole-shipped-stylesheet`; MoEProgress.css carries
-   the same warning for its own four). Each one is marked HAND-EDIT n/6 at its site:
+   the same warning for its own four). Each one is marked HAND-EDIT n/8 at its site:
      1  the root rule: the tuner stage's `position: relative` becomes the shipped
         `position: absolute; left: 0; top: 0` + z-index/pointer-events, and the selector is scoped.
      2  #moe-bar-box, the sizing shim -- not emitted at all (the tuner has no surface).
@@ -65,9 +65,16 @@
             is calibrated against; nothing about it moves.
         The old #6 retarget (`.mpv-capR .mpv-eta` margin-left -> `.mpv-v`) no longer applies: with
         the groups on separate rows there is no single shared row left to retarget the gap onto.
+     7  `.mp-lg .mpv-capC` -- a Large-only caption-position nudge (current-damage moved 4px right,
+        monitor px, recalibrated 2026-08-17), right-anchored so right is a NEGATIVE translateX
+        delta; factor is monitor_px / 8 (1 rem == 8 monitor-px under Large on this maintainer's
+        setup).
+     8  `.mpv-bd.none { display: none; }` -- MoEProgress.js toggles class `none` on `.mpv-bd-1`
+        (capEtaBd) when `showEta` is false, mirroring the existing `.mpv-ico.none` idiom; without
+        this rule no CSS defines what `none` does to a `.mpv-bd` strip, so it never hides.
    Anything else diverging from a fresh emit is drift, not intent. */
 
-/* HAND-EDIT 1/6. Emitted as a bare `#moe-bar-root { position: relative; ... }` -- the tuner stage
+/* HAND-EDIT 1/8. Emitted as a bare `#moe-bar-root { position: relative; ... }` -- the tuner stage
    flows the bar inside an .mpv-anchor wrapper, whereas the shipped bar IS the document: absolute at
    the origin (MoEBarTransient's mount then writes the rigid left/top shift into the surface),
    z-index above the HUD, and pointer-events:none because this bar is pure info and must never be an
@@ -85,7 +92,7 @@ body.mpv #moe-bar-root {
   text-align: center;
   opacity: 0;
 }
-/* HAND-EDIT 2/6 -- THE SIZING SHIM, the vertical twin of MoEProgress.css's own. #moe-bar-root is
+/* HAND-EDIT 2/8 -- THE SIZING SHIM, the vertical twin of MoEProgress.css's own. #moe-bar-root is
    position:absolute and contributes ZERO content size, so #moe-bar-box (declared in
    MoEProgressView.html, NOT JS-created -- it must exist at the FIRST layout pass) is what gives the
    document in-flow content. IT DOES NOT STOP THE ENGINE'S SIZE TIMEOUT -- that was re-measured live
@@ -153,9 +160,10 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    the surface hit-rect do not move. Same specificity as .mpv-bd above; source order wins. */
 .mpv-bd-4 { width: 178.5rem; left: -163.5rem; }
 .mpv-bd-2 { width: 148.75rem; left: -133.75rem; }
-/* preAvg strip narrowed to 2/3 of the shared width, right edge still pinned at 15rem (hand
-   literal, exempt from four_thirds). Separate from bd-3's ::before/::after mask rules below. */
-.mpv-bd-3 { width: 79.333rem; left: -68.733rem; }
+/* preAvg strip narrowed to 2/3 of the shared width, right edge at 15rem (hand literal, exempt
+   from four_thirds), +0.25rem (1 monitor-px) to close a gap to the minimap. Separate from
+   bd-3's ::before/::after mask rules below. */
+.mpv-bd-3 { width: 79.583rem; left: -68.733rem; }
 .mpv-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
@@ -180,6 +188,10 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    ~2x further left (wide X radius). Every other strip keeps the default radius above. */
 .mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
 .mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
+/* HAND-EDIT 8/8: MoEProgress.js toggles class `none` on `.mpv-bd-1` (capEtaBd) when `showEta` is
+   false, mirroring the `.mpv-ico.none` idiom below -- without this rule no CSS defined what `none`
+   does to a `.mpv-bd` strip, so it never hid. */
+.mpv-bd.none { display: none; }
 .mpv-track {
   position: relative;
   z-index: 1;
@@ -193,7 +205,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    device px instead of a crisp 2 (the sibling MoEEfficiencyVertical.css carries the identical fix,
    and used to have the identical defect before today). The period is still a Y-length the root
    font already scales via SIZE_F, which is why the .mp-lg block below declares no twin for it.
-   HAND-EDIT 3/6: THE GAP STRIPE IS ALPHA 1, where the tuner's `gapA` default is 0.5 (inherited from
+   HAND-EDIT 3/8: THE GAP STRIPE IS ALPHA 1, where the tuner's `gapA` default is 0.5 (inherited from
    the horizontal tuner's). The garage look this clones is a MASK over the solid fill
    (`garage-progress-bar-fill-is-a-mask`): at 0.5 the fill shows through and the grid reads as a
    tint, so a gap looks lighter on the filled side of the edge than on the empty side. The shipped
@@ -282,7 +294,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    the track. */
 .mpv-capR { bottom: 100%; padding-bottom: 6rem; padding-right: 6rem;
             transform: translateX(15rem); font-size: 14rem; line-height: 18rem; }
-/* HAND-EDIT 6/6: the ETA row, stacked directly above capR (maintainer's call: "move the ETA on
+/* HAND-EDIT 6/8: the ETA row, stacked directly above capR (maintainer's call: "move the ETA on
    top of the next mark requirement"). Same right-anchor mechanism as capR, copied verbatim --
    both rows shared it identically before the split. `padding-bottom: 30rem` == capR's own box
    height (18rem line-height + 6rem padding-bottom == 24) plus a 6rem visual gap off it, the same
@@ -406,7 +418,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 .mpv-ico.mk1::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_1.png); }
 .mpv-ico.mk2::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_2.png); }
 .mpv-ico.mk3::after { background-image: url(img://gui/maps/icons/library/marksOnGun/mark_3.png); }
-/* PER-ICON MARGIN CORRECTIONS (2026-08-08 redo of the HAND-EDIT 6/6 ink-gap pass -- boxes are back
+/* PER-ICON MARGIN CORRECTIONS (2026-08-08 redo of the HAND-EDIT 6/8 ink-gap pass -- boxes are back
    at their pre-039a58c sizes above: "icon sizes must stay the same, adjust paddings individually").
    Every icon here is framed by a FIXED background-size, so its ink WIDTH is a fixed fraction of
    its own box, independent of margin -- re-measured live off the real PNGs' alpha>32 bbox
@@ -521,11 +533,11 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    a bar length, a tick thickness, a vertical gap or a keyframe here: the root font already has
    them and restating one would DOUBLE-APPLY SIZE_F. The dash grid is a y-period on this bar
    (0deg == "to top"), unlike the horizontal bar's 90deg twin, so it takes no rule either.
-   HAND-EDIT 4/6: the tuner emits this block under `.mpv-lg`; the class MoEBarTransient.applySize
+   HAND-EDIT 4/8: the tuner emits this block under `.mpv-lg`; the class MoEBarTransient.applySize
    actually writes on the body is `.mp-lg`, shared by both orientations (the SIZE flag is
    orientation-independent), so every selector below is rewritten to it. Do not "restore" .mpv-lg
    -- nothing would ever match it. */
-/* HAND-EDIT 5/6: these two are the emit's `.mpv-lg #moe-bar-root` plus the shim rule the tuner
+/* HAND-EDIT 5/8: these two are the emit's `.mpv-lg #moe-bar-root` plus the shim rule the tuner
    never emits, both scoped `body.mpv.mp-lg` (1,2,1) so they out-specify the horizontal sheet's
    own `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is the
    PRE-SIZE_F quantity MoEBarTransient.applySize computes before its own final `* f`:
@@ -559,8 +571,9 @@ body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
    15.067rem); same specificity as .mp-lg .mpv-bd above, source order wins. */
 .mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }
 .mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }
-/* Large twin of the preAvg narrowing, right edge pinned at 15.067rem (hand literal). */
-.mp-lg .mpv-bd-3 { width: 86.933rem; left: -82.183rem; }
+/* Large twin of the preAvg narrowing, right edge at 15.067rem (hand literal), +0.2rem
+   (1 monitor-px) to close a gap to the minimap. */
+.mp-lg .mpv-bd-3 { width: 87.133rem; left: -82.183rem; }
 .mp-lg .mpv-tick.mpv-end { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-tick.mpv-pre { width: 12rem;
@@ -568,23 +581,24 @@ body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
 .mp-lg .mpv-tick.mpv-proj { width: 12rem;
   transform: translate(-50%, 50%) translateX(0rem); }
 .mp-lg .mpv-capR { padding-right: 8rem; transform: translateX(17rem); }
-/* HAND-EDIT 6/6's Large twin of the new capEta rule -- byte-identical to capR's own Large
+/* HAND-EDIT 6/8's Large twin of the new capEta rule -- byte-identical to capR's own Large
    values above, same as the Default pair. NOTE: as of the icon_gap_tuner.html per-mark pass,
    17rem is no longer capR's own Default (15rem) times 4/3 (that would be 20rem) -- it is the
    hand-tuned Large value reported by the tuner directly (see MoEProgress.css's own note on the
    literal-vs-normalised reading), byte-identical to capR's above on purpose. */
 .mp-lg .mpv-capEta { padding-right: 8rem; transform: translateX(17rem) translateY(2.4rem); }
-/* NUDGE RESTORED TO ORIGINAL, UN-HALVED (2026-08-10, second correction, see the Default rule's own
-   note above): the prior halving pass assumed Large's nudge had shipped with the SAME 2x-overshoot
-   the Default rule did, and halved it on that (since-disproven) basis. That halving is undone here:
-   the pre-nudge Large value was 21.333 (16rem's X4/3); the maintainer's ORIGINAL nudge moved it to
-   15.733, which is what this rule restores. Default carries NO nudge at all (see above). */
-.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(15.733rem); }
+/* HAND-EDIT 7/8 (2026-08-17, corrected again): current-damage caption's true target is 7px
+   (monitor) RIGHT of its HEAD baseline -- the maintainer confirmed the earlier 7px-LEFT
+   direction was wrong for this one caption. These captions follow NORMAL CSS -- increasing
+   translateX moves RIGHT, decreasing moves LEFT. Factor is 0.4 rem per monitor-px (1 rem == 2.5
+   monitor-px under Large on this maintainer's setup). A 7px right nudge is +2.8rem off the HEAD
+   baseline: 15.733 + 2.8 = 18.533rem. */
+.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(18.533rem); }
 .mp-lg .mpv-capP { padding-right: 8rem;
   transform: translateY(50%) translateX(0rem); }
 .mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }
 .mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }
-/* HAND-EDIT 6/6's Large twins of the four per-icon margin corrections above -- SIZE_XF (4/3), same
+/* HAND-EDIT 6/8's Large twins of the four per-icon margin corrections above -- SIZE_XF (4/3), same
    as the shared base's own 1rem -> 1.333rem twin, NOT SIZE_F (1.25): margin is a screen-x length
    on this bar, same as every other x-length in this .mp-lg block. */
 .mp-lg .mpv-cap .mpv-ico.dmgp { margin-left: 1.671rem; }    /* 1.253 * 4/3 */

@@ -562,6 +562,9 @@ let capDN = capC.querySelector(".mp-d-num");
 // two groups; see V_MARKUP and capMkIco below).
 let capEtaIco = capR.querySelector(".mp-ico.battles");
 let capEta = capR.querySelector(".mp-eta");
+// The ETA row's decorative backdrop strip -- null (and untouched) horizontally, where there are no
+// .mpv-bd-* strips at all. Gated the same as capEtaIco/capEta below (see goVertical/paintStatic).
+let capEtaBd = null;
 // ...and the MARK glyph, the one icon setIco() ever rewrites -- CAPTURED HERE, ONCE, exactly like
 // capEtaIco, because it is the only addressing that survives BOTH the two compositions' opposite DOM
 // orders AND setIco's own wholesale className reassignment (which drops any marker class the moment
@@ -606,6 +609,7 @@ function goVertical() {
     // capR itself -- scoped off `root`, since both classes are unique across the whole document.
     capEtaIco = root.querySelector(".mpv-ico.battles");
     capEta = root.querySelector(".mpv-eta");
+    capEtaBd = root.querySelector(".mpv-bd-1");
     capMkIco = capR.querySelector(".mpv-ico.none");
 }
 
@@ -783,6 +787,7 @@ function paintStatic() {
     const showEta = cur.eta >= 1;
     capEtaIco.classList.toggle("none", !showEta);
     capEta.textContent = showEta ? fmt(cur.eta) : "";
+    if (capEtaBd) capEtaBd.classList.toggle("none", !showEta);
     capV(capP).textContent = fmt(cur.preAvg);
     const pre = axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style[AX] = pre;
