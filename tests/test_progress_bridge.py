@@ -98,8 +98,14 @@ def _model(**over):
 def _fresh_battle(monkeypatch):
     """A fresh battle with the Moving Average bar enabled and no scoreboard up, and the settings
     cache restored afterwards (these tests SEED it rather than patching the getters, so the
-    master-folding logic under test is the shipped one)."""
+    master-folding logic under test is the shipped one).
+
+    `progress_view.has_placed()` defaults True here -- the real module-level BarHost has never
+    placed a window under pytest (no live client), so leaving it unpatched would force `visible`
+    False for every test in this file that isn't specifically exercising the has_placed() gate
+    itself (see that gate's own tests below)."""
     monkeypatch.setattr(battle_bridge, "_open_overlays", set())
+    monkeypatch.setattr(battle_bridge.progress_view, "has_placed", lambda: True)
     saved = dict(mod_settings._settings)
     mod_settings._apply({mod_settings.PROGRESS_BAR_KEY: True})
     yield
@@ -124,6 +130,24 @@ def test_push_writes_exactly_every_view_model_property():
     assert set(_push()) == _VM_PROPS
     assert "vertical" in _VM_PROPS
     assert len(_VM_PROPS) == 16
+
+
+# --- push_progress's own has_placed() gate (the corner-flash fix) -----------------------------
+
+def test_the_bar_is_hidden_while_the_host_has_never_placed(monkeypatch):
+    # THE CORNER-FLASH FIX: bar_window.BarHost.has_placed() is False until this host's FIRST
+    # window.move() has succeeded (see bar_window._place) -- while it is still False, the window
+    # sits at the far-sentinel/minimap corner, so `visible` must stay forced False even though
+    # every OTHER gate here (master on, has_baseline) says show.
+    monkeypatch.setattr(battle_bridge.progress_view, "has_placed", lambda: False)
+    assert _push()["visible"] is False
+
+
+def test_the_bar_is_visible_once_the_host_has_placed(monkeypatch):
+    # Transparent the moment the host HAS placed -- visible then follows the pre-existing gates'
+    # own verdict exactly as before this gate existed.
+    monkeypatch.setattr(battle_bridge.progress_view, "has_placed", lambda: True)
+    assert _push()["visible"] is True
 
 
 def test_push_writes_the_two_transition_flags_master_folded():

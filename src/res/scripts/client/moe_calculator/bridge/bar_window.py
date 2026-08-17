@@ -89,6 +89,17 @@ from moe_calculator.domain.positioning import (anchor_centred_reduced, anchor_mi
 # read back the movable extent (= logical space - windowSize) and place proportionally.
 _FAR = 1 << 20
 
+# The engine can NATIVELY destroy one of our windows out from under us. A WindowFlags.TOOLTIP
+# window (see _BarWindow) is disposable to Wulf: clicking an alternative-equipment slot on the
+# battle countdown makes the engine destroy the bar's window AND its view -- windowStatus and
+# viewStatus go DESTROYING/DESTROYED and View._cFini nulls the viewModel -- with NO Python call to
+# destroy(). Nothing re-opened it before this, because open_window's `_active is not None` guard has
+# no liveness check: the dead (window, view) tuple stays non-None, active_view() keeps handing it
+# back, and every push then no-ops on its None viewModel, so the bar silently stops updating for the
+# rest of the battle. These are the frameworks/wulf DESTROYING(4)/DESTROYED(5) status values
+# (gui_constants.WindowStatus, view.View); read numerically so this stays engine-free / unit-testable.
+_DEAD_STATUS = (4, 5)   # WindowStatus/View DESTROYING, DESTROYED
+
 
 def _cursor_position():
     """The mouse cursor's live position as the engine reports it, or None.
@@ -317,6 +328,12 @@ class BarHost(object):
         self._layout_id = ModDynAccessor(item_id)   # deferred; -1 until OpenWG validates it
         self._active = None                         # (window, view) while open
         self._extent_cache = None                   # memoized movable extent; see _extent
+        # The last position a real window.move() applied WITHOUT raising -- ONE per host, same as
+        # `_active`, because a host only ever drives one open window at a time (see the class
+        # docstring). _place's fail-safe restores here instead of a guessed corner; see _place.
+        # It ALSO IS "has this host ever placed successfully" -- see has_placed(): set only on
+        # success, never cleared, so its mere presence is the whole signal.
+        self._last_good = None
         # True once THIS window's surface has been resized past the engine's 256x256 size-timeout
         # fallback at least once (see _BarWindow._on_size_changed) -- the materialise-on-mount
         # gate _materialise needs, reset back to False by open_window on every fresh window.
@@ -471,16 +488,52 @@ class BarHost(object):
         THE CACHE INVALIDATION POINT for _extent, and the only one needed: every reason the extent
         can move -- the first placement, the JS's resize (onSizeChanged, i.e. a Default<->Large
         flip), an interface-scale change and a minimap resize (both apply_position) -- already
-        routes through here. _space's own extent read is free, having been warmed one line above."""
+        routes through here. _space's own extent read is free, having been warmed one line above.
+
+        A FAILURE HERE MUST NOT STRAND THE WINDOW ON THE FAR SENTINEL, NOR AT THE SCREEN ORIGIN.
+        _extent() already moved the window to (_FAR, _FAR) before _space/_resolve ever run, and
+        that sentinel corner IS the minimap's own corner (both anchor bottom-right) -- so any
+        exception between that measuring move and the real window.move() below would otherwise
+        leave the bar sitting on top of the minimap, looking exactly like a placement bug and
+        logged only once, silently. (0, 0) is no better: the bar must appear ONLY near the
+        minimap, never top-left. So the fallback is LAST-GOOD-POSITION restore instead: on
+        failure, move back to the last position a `window.move()` here actually applied without
+        raising (`_last_good`, updated below on every success) -- that needs no recompute, so it
+        cannot re-raise the same fault, and it is by definition a real anchor this bar has already
+        stood at (possibly one layout stale -- orientation/size/minimap-size may have changed
+        since, but it is still near the minimap, and the next successful _place corrects it). Only
+        when NO last-good position exists yet (the very first placement this host has ever
+        attempted) is there nothing to restore to -- do nothing further: the VM `visible` flag
+        defaults False and battle_bridge's push gates it on has_placed() (below), which stays
+        False until a LATER _place succeeds, so nothing shows the corner meanwhile. The JS's
+        post-deadline SURFACE_REASSERT_MS re-assert (see the module docstring) fires
+        onSizeChanged again shortly after mount regardless of this failure, re-running _place."""
         try:
             self._extent_cache = None
             max_x, max_y = self._extent(window)
             space_x, space_y = self._space(window)
             x, y = self._resolve(max_x, max_y, space_x, space_y)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
+            self._last_good = (x, y)
             self._materialise(x, y, space_x - max_x, space_y - max_y)
         except Exception:
             LOG_CURRENT_EXCEPTION()
+            try:
+                if self._last_good is not None:
+                    lx, ly = self._last_good
+                    window.move(lx, ly, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
+            except Exception:
+                LOG_CURRENT_EXCEPTION()
+
+    def has_placed(self):
+        """True once this host has completed at least one successful `_place` (a real
+        `window.move()` that did not raise) -- exactly `_last_good is not None` (see its own
+        comment in __init__). battle_bridge's push_progress/push_efficiency AND this into the
+        pushed `visible` so the FIRST-ever placement failure -- window still sitting at the
+        far-sentinel/minimap corner, no `_last_good` yet -- can never flash on screen before the
+        retry re-places it (the VM `visible` also defaults False, belt-and-braces). Transparent
+        forever after the first success: `_last_good` is never cleared."""
+        return self._last_good is not None
 
     def _materialise(self, x, y, surface_w, surface_h):
         """Write the just-resolved on-screen point back as Free's stored ANCHOR POINT, ONCE --
@@ -652,11 +705,45 @@ class BarHost(object):
             return
         self._place(self._active[0])
 
+    def _is_dead(self):
+        """True if the engine destroyed our cached (window, view) out from under us -- the native
+        WindowFlags.TOOLTIP teardown described at module top (_DEAD_STATUS). The cached handle is
+        DEAD if the window's windowStatus or the view's viewStatus is DESTROYING/DESTROYED, or the
+        view's viewModel has been nulled (native View._cFini). Checked on the per-tick open path so
+        a dead handle is dropped and re-mounted instead of trusted forever.
+
+        Fail-soft to ALIVE: an unreadable status must NOT thrash a window we cannot prove is dead --
+        a false 'dead' would tear down and re-mount a healthy bar every tick."""
+        if self._active is None:
+            return False
+        window, view = self._active
+        try:
+            if getattr(window, "windowStatus", None) in _DEAD_STATUS:
+                return True
+            if getattr(view, "viewStatus", None) in _DEAD_STATUS:
+                return True
+            return view.viewModel is None
+        except Exception:
+            return False
+
     def open_window(self):
         """Idempotently open this bar's window. Returns its _BarView (read ``.viewModel`` to push
-        into), or None on failure / res_map not yet registered."""
+        into), or None on failure / res_map not yet registered.
+
+        ALSO SELF-HEALS a handle the engine destroyed out from under us (see _is_dead / the module
+        docstring): a dead cached handle is DROPPED and re-mounted through the normal path below,
+        rather than trusted forever -- which is what silently killed the bar for the rest of a
+        battle after an alternative-equipment-slot click on the countdown. The re-mount re-runs the
+        SAME code the first mount does (fresh view + window, re-armed onSizeChanged, re-placed to
+        _last_good), so the bar returns to its last position. battle_bridge.refresh() re-drives this
+        every tick for each gated-on window, which is what actually TRIGGERS the re-mount (open_window
+        is not otherwise called mid-battle) -- once re-created it is alive again and this returns
+        early, so there is no busy re-create loop."""
         if self._active is not None:
-            return self._active[1]
+            if not self._is_dead():
+                return self._active[1]
+            LOG_DEBUG("%s handle destroyed by the engine -- re-mounting" % self._tag)
+            self._active = None   # drop the dead handle; the fresh mount below resets _sized too
         try:
             layout = self._layout_id()
             if layout is None or layout < 0:

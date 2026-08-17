@@ -111,12 +111,18 @@ def _model(combined_damage=0, **over):
 @pytest.fixture(autouse=True)
 def _fresh_battle(monkeypatch):
     """A fresh battle with the Damage Efficiency bar selected: no scoreboard up, and the settings
-    reading through the real gate functions (monkeypatched per test)."""
+    reading through the real gate functions (monkeypatched per test).
+
+    `efficiency_view.has_placed()` defaults True here -- the real module-level BarHost has never
+    placed a window under pytest (no live client), so leaving it unpatched would force `visible`
+    False for every test in this file that isn't specifically exercising the has_placed() gate
+    itself (see that gate's own tests below)."""
     monkeypatch.setattr(battle_bridge, "_open_overlays", set())
     monkeypatch.setattr(mod_settings, "progress_bar_enabled", lambda: True)
     monkeypatch.setattr(mod_settings, "progress_bar_variant",
                         lambda: mod_settings.PROGRESS_VARIANT_EFFICIENCY)
     monkeypatch.setattr(mod_settings, "battle_enabled", lambda: False)
+    monkeypatch.setattr(battle_bridge.efficiency_view, "has_placed", lambda: True)
 
 
 @pytest.fixture
@@ -231,6 +237,22 @@ def test_the_bar_is_hidden_while_the_master_is_off(monkeypatch):
 
 
 def test_the_bar_is_visible_with_the_master_on_and_the_variant_selected():
+    assert _push(2000)["visible"] is True
+
+
+def test_the_bar_is_hidden_while_the_host_has_never_placed(monkeypatch):
+    # THE CORNER-FLASH FIX: bar_window.BarHost.has_placed() is False until this host's FIRST
+    # window.move() has succeeded (see bar_window._place) -- while it is still False, the window
+    # sits at the far-sentinel/minimap corner, so `visible` must stay forced False even though
+    # every OTHER gate here says show.
+    monkeypatch.setattr(battle_bridge.efficiency_view, "has_placed", lambda: False)
+    assert _push(2000)["visible"] is False
+
+
+def test_the_bar_is_visible_once_the_host_has_placed(monkeypatch):
+    # Transparent the moment the host HAS placed -- visible then follows battle_bar_visible's own
+    # verdict exactly as before this gate existed.
+    monkeypatch.setattr(battle_bridge.efficiency_view, "has_placed", lambda: True)
     assert _push(2000)["visible"] is True
 
 

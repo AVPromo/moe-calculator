@@ -88,6 +88,11 @@ class _FakeWindow(object):
             self.position = (x, y)
 
 
+class _FakeView(object):
+    def __init__(self):
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _reset_settings():
     mod_settings._seed(dict(mod_settings.DEFAULTS))
@@ -121,7 +126,7 @@ def _host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SHIFT, 
                               PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                               PROGRESS_MM_GAP_BOTTOM, "[test]")
     window = _FakeWindow(max_x, max_y)
-    host._active = (window, object())
+    host._active = (window, _FakeView())
     host._place(window)
     del window.moves[:]
     return host, window
@@ -139,7 +144,7 @@ def _cold_host(max_x, max_y, y_frac=0.865, x_off=0, y_shift=PROGRESS_ANCHOR_Y_SH
                               PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                               PROGRESS_MM_GAP_BOTTOM, "[test]")
     window = _FakeWindow(max_x, max_y)
-    host._active = (window, object())
+    host._active = (window, _FakeView())
     return host, window
 
 
@@ -860,6 +865,86 @@ def test_materialise_converts_a_legacy_pre_v22_pin_exactly_once(monkeypatch):
     assert len(calls) == 1   # not converted a second time
 
 
+def test_a_place_failure_never_strands_the_window_at_the_far_sentinel_corner(monkeypatch):
+    # _extent() teleports the window to the far sentinel (bar_window._FAR) BEFORE _space/_resolve
+    # ever run -- and that sentinel corner IS the minimap's own corner (both anchor bottom-right).
+    # Any exception between that measuring move and the real window.move() in _place would
+    # otherwise strand the bar sitting on top of the minimap: indistinguishable from a genuine
+    # placement bug, and silent (LOG_CURRENT_EXCEPTION only logs). _place must move it clear --
+    # part (a) below is the same scenario, pinning WHERE it moves to.
+    host, window = _host(1664, 824)
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(host, "_resolve", _boom)
+    host._place(window)
+    assert window.moves[-1] != (bar_window._FAR, bar_window._FAR), (
+        "a _place failure left the window parked on the far-sentinel/minimap corner")
+    assert window.moves[-1] != (0, 0), (
+        "a _place failure must never fall back to the screen origin -- the bar must appear only "
+        "near the minimap")
+
+
+def test_a_place_failure_after_a_prior_success_restores_the_last_good_position(monkeypatch):
+    # (a) THE ACCEPTANCE CASE: _host's own setup already ran one successful _place, so `_last_good`
+    # is the position that placement landed at. A raise on the NEXT _place must restore exactly
+    # that -- no recompute (so it cannot re-raise the same fault), never the far sentinel, never
+    # (0, 0).
+    host, window = _host(1664, 824)
+    last_good = host._last_good
+    assert last_good is not None and last_good != (bar_window._FAR, bar_window._FAR)
+
+    monkeypatch.setattr(host, "_resolve", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    host._place(window)
+    assert window.moves[-1] == last_good, (
+        "a _place failure with a last-good position on record must restore exactly there")
+    assert window.moves[-1] != (bar_window._FAR, bar_window._FAR)
+    assert window.moves[-1] != (0, 0)
+
+
+def test_a_place_failure_with_no_last_good_position_leaves_has_placed_false(monkeypatch):
+    # (b) NO prior success exists (the very first placement this host has ever attempted, e.g. the
+    # engine's 256x256 size-timeout fallback surface at _onReady) -- there is nothing to restore
+    # to, so the except branch now does NOTHING further: has_placed() (== `_last_good is not
+    # None`) is what keeps the bar off-screen, at the push site (battle_bridge), not here. Built
+    # on _cold_host (never placed), so `_last_good` really is still None going in.
+    host, window = _cold_host(1664, 824)
+    assert host.has_placed() is False
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(host, "_resolve", _boom)
+    host._place(window)
+    assert host.has_placed() is False
+    # And it must not have moved the window anywhere claiming to be a real placement -- only the
+    # far-sentinel measuring move from _extent() is expected here.
+    assert [m for m in window.moves if m != (bar_window._FAR, bar_window._FAR)] == []
+
+
+def test_a_subsequent_success_flips_has_placed_true_and_records_a_new_last_good_position(
+        monkeypatch):
+    # (c) The very first placement can still fail; the NEXT successful _place must flip
+    # has_placed() True and record its own last-good position, with no extra retry machinery
+    # needed on top of the ordinary onSizeChanged re-arm (see _place's docstring) -- this test
+    # drives that "next success" call directly, exactly as onSizeChanged would.
+    host, window = _cold_host(1664, 824)
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(host, "_resolve", _boom)
+    host._place(window)
+    assert host.has_placed() is False
+
+    monkeypatch.undo()   # restore the real _resolve for the "next success"
+    host._place(window)
+    assert host.has_placed() is True
+    assert host._last_good == window.moves[-1]
+    assert host._last_good not in ((bar_window._FAR, bar_window._FAR), (0, 0))
+
+
 def test_resolve_stored_offset_composes_on_top_of_every_alignment():
     # anchor_offset applies uniformly regardless of which base anchor was selected -- proven here
     # against the Damage-Log branch (the other two are exercised at (0, 0) offset above).
@@ -1023,6 +1108,107 @@ def test_the_moving_average_bars_track_sits_2px_right_of_damage_efficiencys(monk
         "the Moving Average bar's track must sit 2px RIGHT of Damage Efficiency's -- a recorded "
         "in-game measurement (two independent Ctrl+drags, two geometries), not a bug to fix back "
         "to equality")
+
+
+# --- SELF-HEAL A NATIVELY-DESTROYED HANDLE (BarHost._is_dead / open_window re-mount) ------------
+# The engine can destroy one of our WindowFlags.TOOLTIP bar windows out from under us (clicking an
+# alternative-equipment slot on the battle countdown): windowStatus/viewStatus go
+# DESTROYING/DESTROYED and View._cFini nulls the viewModel, with NO Python destroy() call. Before
+# this, open_window's `_active is not None` guard trusted the dead handle forever, active_view()
+# kept handing it back, and every push no-op'd on its None viewModel -- the bar silently stopped
+# updating for the rest of the battle. open_window() must now DROP a dead handle and re-mount, while
+# leaving a LIVE handle untouched (no needless re-create).
+
+
+class _StatusHandle(object):
+    """A fake window/view exposing exactly the liveness fields BarHost._is_dead reads. Doubles as
+    both roles of the (window, view) tuple -- _is_dead reads window.windowStatus and
+    view.viewStatus / view.viewModel, so one object with all three serves both slots."""
+
+    def __init__(self, window_status=3, view_status=3, view_model="vm"):
+        self.windowStatus = window_status   # LOADED == 3 by default
+        self.viewStatus = view_status
+        self.viewModel = view_model
+
+
+def _bare_host():
+    return bar_window.BarHost("test.item", lambda: object(), 0.865, 0,
+                              PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+                              PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
+                              PROGRESS_MM_GAP_BOTTOM, "[test]")
+
+
+def test_is_dead_is_false_for_a_live_handle_and_when_none():
+    host = _bare_host()
+    assert host._is_dead() is False              # no window open
+    live = _StatusHandle(window_status=3, view_status=3, view_model="vm")
+    host._active = (live, live)
+    assert host._is_dead() is False
+
+
+def test_is_dead_is_true_when_the_engine_destroyed_the_window_or_view():
+    for kw in ({"window_status": 4}, {"window_status": 5}, {"view_status": 4},
+               {"view_status": 5}, {"view_model": None}):
+        host = _bare_host()
+        h = _StatusHandle(**kw)
+        host._active = (h, h)
+        assert host._is_dead() is True, kw
+
+
+def test_is_dead_fails_soft_to_alive_on_an_unreadable_status():
+    # A false 'dead' would tear down and re-mount a healthy bar every tick -- so an unreadable
+    # status must read as ALIVE, not dead.
+    class _Boom(object):
+        @property
+        def windowStatus(self):
+            raise RuntimeError("boom")
+    host = _bare_host()
+    host._active = (_Boom(), _Boom())
+    assert host._is_dead() is False
+
+
+class _FakeMount(object):
+    """Stands in for both _BarView and _BarWindow so open_window()'s real mount path runs without
+    the live client: it has load()/destroy()/detach() and the liveness fields _is_dead reads."""
+
+    def __init__(self, *a, **k):
+        self.windowStatus = 3
+        self.viewStatus = 3
+        self.viewModel = "vm"
+
+    def load(self):
+        pass
+
+    def destroy(self):
+        pass
+
+    def detach(self):
+        pass
+
+
+def test_open_window_re_mounts_a_destroyed_handle_but_leaves_a_live_one(monkeypatch):
+    host = _bare_host()
+    monkeypatch.setattr(host, "_layout_id", lambda: 7)   # a resolvable res_map layout
+    monkeypatch.setattr(bar_window, "_BarView", _FakeMount)
+    monkeypatch.setattr(bar_window, "_BarWindow", _FakeMount)
+
+    v1 = host.open_window()
+    assert v1 is not None
+    # A LIVE handle is NOT needlessly re-created -- open_window returns the same view.
+    assert host.open_window() is v1
+    assert host.active_view() is v1
+
+    host._sized = True   # a real mount would have flipped this via onSizeChanged
+    # The engine destroys it the way it really does (View._cFini nulls the viewModel).
+    host._active[1].viewModel = None
+    assert host._is_dead() is True
+
+    # The next open_window() (what battle_bridge.refresh() re-drives every tick) drops the dead
+    # handle and re-mounts a fresh one -- and _sized is reset for a clean mount.
+    v2 = host.open_window()
+    assert v2 is not None and v2 is not v1
+    assert host._sized is False
+    assert host._is_dead() is False
 
 
 # DELETED (v23, the Fixed-alignment redesign): the RULE 5 vertical + Damage Log right-edge

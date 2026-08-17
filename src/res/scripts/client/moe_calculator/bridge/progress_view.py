@@ -36,3 +36,4 @@ close_window = _host.close_window
 active_view = _host.active_view
 apply_position = _host.apply_position
 drag = _host.drag
+has_placed = _host.has_placed

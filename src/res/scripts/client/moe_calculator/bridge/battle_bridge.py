@@ -710,7 +710,22 @@ def refresh():
     efficiency tick must cost a single recompute, not one per window.
 
     The windows are hard-named rather than registered: keep the early-return below in lockstep
-    with them, or a window whose two siblings are switched off never gets pushed at all."""
+    with them, or a window whose two siblings are switched off never gets pushed at all.
+
+    SELF-HEAL A WINDOW THE ENGINE DESTROYED OUT FROM UNDER US FIRST. A WindowFlags.TOOLTIP bar
+    window (see bar_window._BarWindow / BarHost._is_dead) is disposable to Wulf: clicking an
+    alternative-equipment slot on the battle countdown makes the engine NATIVELY destroy it, and
+    the stale dead handle used to be trusted forever, so the bar silently stopped updating for the
+    rest of the battle. open_window() now drops a dead handle and re-mounts; re-driving it here on
+    the per-tick path re-opens any gated-on window whose live handle is gone (a no-op for a live
+    one). Only while in battle, and only for the gates that say the window should exist."""
+    if _in_battle:
+        try:
+            for enabled, module in _window_gates():
+                if enabled:
+                    module.open_window()
+        except Exception:
+            LOG_CURRENT_EXCEPTION()
     view = battle_view.active_view()
     bar = progress_view.active_view()
     eff = efficiency_view.active_view()
@@ -778,6 +793,11 @@ def push_progress(rvm, snap, model):
     (replay / relogin, BUG B) pre_avg is a false 0 and the axis position would be nonsense, so the
     bar stays hidden entirely rather than dashing values out like the overlay does.
 
+    ALSO ANDed with progress_view.has_placed() (bar_window.BarHost.has_placed()) so the FIRST-EVER
+    placement failure -- the window still sitting at the far-sentinel/minimap corner, no
+    `_last_good` yet -- can never flash on screen for the sub-second before the retry re-places
+    it. Transparent after the first successful _place (has_placed() then stays True forever).
+
     projAvg is pushed UNROUNDED (ewma_project_raw + a Real VM property), unlike the overlay's
     integer `projAvgDamage`: the bar's only show-trigger is the JS change-detect comparing
     successive pushes, and at k ~= 0.02 an integer proj moves ~2 steps across a whole battle, so
@@ -791,7 +811,8 @@ def push_progress(rvm, snap, model):
         visible = (battle_bar_visible(snap.in_battle, snap.has_vehicle, snap.is_spectating,
                                       overlay_open=bool(_open_overlays),
                                       enabled=mod_settings.progress_bar_enabled())
-                   and model.has_baseline)
+                   and model.has_baseline
+                   and progress_view.has_placed())
         pre_avg = snap.pre_avg_damage or 0
         proj_avg = ewma_project_raw(pre_avg, model.combined_damage)
         # hasData stays the MARK axis's verdict -- the display floor below must not change it.
@@ -863,6 +884,10 @@ def push_efficiency(rvm, snap, model):
     relogin, BUG B) costs this bar nothing. hasData is the only data gate -- and snap.thresholds
     is all-or-nothing upstream, so it is genuinely all four requirements or none.
 
+    ALSO ANDed with efficiency_view.has_placed() -- see push_progress's own note on the same gate;
+    it stops the FIRST-ever placement failure from flashing the window at the far-sentinel/minimap
+    corner before the retry re-places it.
+
     The bar's "last increment" is NOT pushed: MoEEfficiency.js derives it from successive `damage`
     values and latches it itself (it already compares the two pushes for its change-detect). What IS
     pushed for it is `battleEpoch` -- the per-battle counter that tells the JS latch a NEW BATTLE
@@ -874,12 +899,13 @@ def push_efficiency(rvm, snap, model):
         stops = efficiency_stops(snap.thresholds)
         has_data = stops is not None
         damage = int(model.combined_damage or 0)
-        visible = battle_bar_visible(
+        visible = (battle_bar_visible(
             snap.in_battle, snap.has_vehicle, snap.is_spectating,
             overlay_open=bool(_open_overlays),
             enabled=(mod_settings.progress_bar_enabled()
                      and variant_overrides.effective(_current_int_cd, mod_settings.progress_bar_variant())
                      == mod_settings.PROGRESS_VARIANT_EFFICIENCY))
+                   and efficiency_view.has_placed())
         r = stops if has_data else (0.0, 0.0, 0.0, 0.0, 0.0)
         bar_x = efficiency_bar_x(damage, stops)
         band = efficiency_band(damage, stops)
