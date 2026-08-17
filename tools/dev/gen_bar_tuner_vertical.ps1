@@ -845,10 +845,12 @@ $tpl = @'
       // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
       ".mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n"+
       ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
-      // Large twin of the preAvg narrowing, right edge at 15.067rem (hand literal --
-      // shipped `.mp-lg .mpv-bd-3`, 2026-08-12 narrowing pass), +0.2rem (1 monitor-px)
-      // to close a gap to the minimap.
-      ".mpv-lg .mpv-bd-3 { left: -82.183rem; width: 87.133rem; }\n"+
+      // bd-3 (preAvg) no longer gets its own Large override -- 2026-08-17 crop fix: the prior
+      // narrowing (left -82.183rem) left the checker-dither taper too tight against this row's
+      // own left edge (box-relative % mask, so narrowing the box narrows the taper's absolute
+      // reach too). Reverted to the shared `.mpv-lg .mpv-bd` box (-115.333rem/130.4rem) above,
+      // which both restores the taper's full reach AND happens to land right edge at 15.067rem
+      // -- the SAME flush edge this row's right-edge-pinned override was already targeting.
       tick("end",st.tickWEnd,st.tickXEnd)+tick("pre",st.tickWPre,st.tickXPre)+
       tick("proj",st.tickWProj,st.tickXProj)+
       ".mpv-lg .mpv-capR { padding-right: "+pr+"; transform: translateX("+X43(st.capxR)+"rem); }\n"+
@@ -889,12 +891,15 @@ $tpl = @'
       // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
       // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
       ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
-      // preAvg strip (bd-3) narrowed to 2/3 of the shared width, right edge pinned at 15rem
-      // (hand literal, exempt from four_thirds -- shipped MoEProgressVertical.css, 2026-08-12
-      // narrowing pass), +0.25rem (1 monitor-px) to close a gap to the minimap. width corrected
-      // 2026-08-17 (79.583rem -> 83.733rem): the narrowing pass's width left the right edge at
-      // 10.85rem, 4.15rem short of the other strips' shared 15rem edge -- 15 - (-68.733) = 83.733.
-      ".mpv-bd-3 { width: 83.733rem; left: -68.733rem; }\n"+
+      // bd-3 (preAvg) no longer gets its own width/left override -- 2026-08-17 crop fix: the
+      // 2026-08-12 narrowing pass (then 79.583rem -> 83.733rem right-edge correction in
+      // 98ab7ea) shrank this row's own box while leaving the WIDE checker-dither mask's
+      // percentages unchanged; since that mask is box-relative, narrowing the box also narrowed
+      // the taper's absolute reach, leaving too little room for it to complete before this row's
+      // own (now much closer) left edge -- a hard cut instead of a fade to a point. Reverting to
+      // the shared `.mpv-bd` box (bdStripLeft/-104rem, bdStripW/119rem) restores the room the
+      // mask needs AND keeps the right edge flush at 15rem (bd-3 needed no override to be flush
+      // -- narrowing it there is what broke both properties at once).
       ".mpv-bd-3::before { mask: "+dotMask(st.dotRXWide)+"; }\n"+
       ".mpv-bd-3::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+

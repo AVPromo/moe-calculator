@@ -1,8 +1,9 @@
 /* check_vertical_css_handedits.js -- the emit-vs-shipped DIFFER for the two vertical stylesheets
  * (MoEProgressVertical.css, MoEEfficiencyVertical.css). Each shipped file is its tuner's emit PLUS
- * exactly its own marked hand-edits (see each file's own header, "HAND-EDIT n/N" -- both
- * MoEProgressVertical.css and MoEEfficiencyVertical.css carry SIX as of the .mev-bd-2/3/4 width
- * edit, MoEEfficiencyVertical.css was FIVE before it); until now those were enforced only by a comment, so
+ * exactly its own marked hand-edits (see each file's own header, "HAND-EDIT n/N" --
+ * MoEEfficiencyVertical.css is back down to FIVE as of the 2026-08-17 .mev-bd-2/3/4 crop fix,
+ * which dropped the .mev-bd-2/3/4 width/left override entirely rather than retargeting it);
+ * until now those were enforced only by a comment, so
  * a careless re-emit-and-paste silently reverts them with no signal. This makes them a real gate: it
  * re-derives EACH hand-edit from a FRESH emit via a pinned, ordered text edit (the same
  * anchor-and-replace idiom the two check_*_js.js gates use for their MUTATIONS tables), then asserts
@@ -15,9 +16,8 @@
  *   node tools/dev/check_vertical_css_handedits.js --list-mutations
  *
  * WHAT THIS ENFORCES. That the shipped MoEProgressVertical.css / MoEEfficiencyVertical.css equal
- * "a fresh tuner emit, with exactly the documented hand-edits applied and nothing else" (SIX for
- * MoEProgressVertical.css, SIX for MoEEfficiencyVertical.css as of the .mev-bd-2/3/4 width edit
- * below -- was five before it).
+ * "a fresh tuner emit, with exactly the documented hand-edits applied and nothing else" (FIVE for
+ * MoEEfficiencyVertical.css as of the 2026-08-17 .mev-bd-2/3/4 crop fix below).
  *
  * WHAT THIS DELIBERATELY DOES NOT ENFORCE.
  *   - It does not re-derive the six edits' VALUES from any other source of truth (the shim sizes,
@@ -294,22 +294,15 @@ const EFFICIENCY_EDITS = [
      'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 122.4rem; }',
      '4/6+5/6 Large block (root/box)'],
     ['.mev-lg ', '.mp-lg ', '4/6 remaining Large-block rename', "all"],
-    // Large twins of the SAME never-before-modelled mark-strip narrowing pass (see HAND-EDIT 6/6
-    // below) -- values already match the shipped file exactly (81.8rem / 183.6rem, the 2026-08-12
-    // narrowing pass's Large literals), only the PROPERTY ORDER differs: the tuner emits
-    // `left; width;`, the shipped file has `width; left;`.
+    // Large twin of bd-5's narrowing (the SAME pass as HAND-EDIT 6/6 below) -- value already
+    // matches the shipped file exactly (183.6rem, the 2026-08-12 narrowing pass's Large literal),
+    // only the PROPERTY ORDER differs: the tuner emits `left; width;`, the shipped file has
+    // `width; left;`. bd-2/3/4's OWN Large overrides no longer exist at all (2026-08-17 crop fix
+    // dropped them from the tuner too -- see HAND-EDIT 6/6 below), so there is nothing left to
+    // reorder for them.
     ['.mp-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }',
      '.mp-lg .mev-bd-5 { width: 183.6rem; left: -166.533rem; }',
      '5j/6 Large bd-5 property order'],
-    ['.mp-lg .mev-bd-2 { left: -76.6rem; width: 81.8rem; }',
-     '.mp-lg .mev-bd-2 { width: 81.8rem; left: -76.6rem; }',
-     '5j/6 Large bd-2 property order'],
-    ['.mp-lg .mev-bd-3 { left: -76.6rem; width: 81.8rem; }',
-     '.mp-lg .mev-bd-3 { width: 81.8rem; left: -76.6rem; }',
-     '5j/6 Large bd-3 property order'],
-    ['.mp-lg .mev-bd-4 { left: -76.6rem; width: 81.8rem; }',
-     '.mp-lg .mev-bd-4 { width: 81.8rem; left: -76.6rem; }',
-     '5j/6 Large bd-4 property order'],
     // 5i: the backdrop's OWN Large width, overridden with a LITERAL 98, not the tuner's own
     // X43(54)==72 (already renamed to .mp-lg by the edit above; V_BOX_W_REM's trim to 54 is
     // live-measurement-confirmed correct -- see MoEEfficiency.js's fact 3, keep it). The naive *4/3
@@ -330,16 +323,17 @@ const EFFICIENCY_EDITS = [
     ['.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }',
      '.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(14.533rem); }',
      '5h/6 bt Large-only nudge'],
-    // HAND-EDIT 6/6 (the mark-strip narrowing pass, never previously modelled here -- this checker's
-    // 5-edit table predates it and has never actually reproduced the shipped file byte-for-byte for
-    // this block). The tuner's fresh emit puts the .mev-bd-5/.mev-bd-1 width/left overrides AFTER
-    // .mev-bd::before/::after; the shipped file moves the row-narrowing overrides (.mev-bd-5 and
-    // .mev-bd-2/3/4) BEFORE them instead, and DROPS the tuner's own .mev-bd-1 override entirely --
-    // .mev-bd-1 (the r4/tp row) keeps the shared base .mev-bd geometry (17rem right edge), unlike the
-    // tuner's narrower 136.25rem-wide candidate. On top of the reorder/drop, the Default
-    // `.mev-bd-2/3/4` width is retargeted 72.917rem -> 80.167rem (left unchanged at -63.167rem)
-    // (2026-08-17), so their right edge lands at 17.0rem, flush with bd-1/bd-5's shared minimap-facing
-    // edge (Large's `.mp-lg .mev-bd-2/3/4` already match the shipped file exactly and need no edit).
+    // HAND-EDIT 6/6 (the mark-strip narrowing pass). The tuner's fresh emit puts the
+    // .mev-bd-5/.mev-bd-1 width/left overrides AFTER .mev-bd::before/::after; the shipped file
+    // moves the .mev-bd-5 override BEFORE them instead, and DROPS the tuner's own .mev-bd-1
+    // override entirely -- .mev-bd-1 (the r4/tp row) keeps the shared base .mev-bd geometry
+    // (17rem right edge), unlike the tuner's narrower 136.25rem-wide candidate.
+    // 2026-08-17 crop fix: the tuner no longer emits ANY .mev-bd-2/3/4 width/left override at
+    // all (the 2026-08-12 narrowing pass that shrank them left the box-relative WIDE
+    // checker-dither mask below too little room to taper to a point before their own left edge --
+    // a crop, not a fix), so the shipped file no longer carries one either -- both now fall back
+    // to the shared `.mev-bd` box (17rem right edge, same as bd-1) with no edit needed for that
+    // part.
     ['.mev-bd {\n  position: absolute;\n  left: -92rem;\n  width: 109rem;\n  height: 30rem;\n  z-index: 0;\n}\n' +
      '.mev-bd::before {\n  content: "";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n' +
      '  background: url(checker.png) repeat;\n  background-size: auto;\n  image-rendering: pixelated;\n' +
@@ -349,14 +343,10 @@ const EFFICIENCY_EDITS = [
      '.mev-bd-1 { top: -27rem; }\n.mev-bd-2 { top: 35rem; }\n.mev-bd-3 { top: 85rem; }\n.mev-bd-4 { top: 135rem; }\n' +
      '.mev-bd-5 { top: 199.5rem; }\n.mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n' +
      '.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n' +
-     '.mev-bd-2 { width: 72.917rem; left: -63.167rem; }\n.mev-bd-3 { width: 72.917rem; left: -63.167rem; }\n' +
-     '.mev-bd-4 { width: 72.917rem; left: -63.167rem; }\n' +
      '.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
      '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
      '.mev-bd {\n  position: absolute;\n  left: -92rem;\n  width: 109rem;\n  height: 30rem;\n  z-index: 0;\n}\n' +
      '.mev-bd-5 { width: 163.5rem; left: -146.5rem; }\n' +
-     '.mev-bd-2 { width: 80.167rem; left: -63.167rem; }\n.mev-bd-3 { width: 80.167rem; left: -63.167rem; }\n' +
-     '.mev-bd-4 { width: 80.167rem; left: -63.167rem; }\n' +
      '.mev-bd::before {\n  content: "";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n' +
      '  background: url(checker.png) repeat;\n  background-size: auto;\n  image-rendering: pixelated;\n' +
      '  opacity: 0.1;\n  mask: radial-gradient(56% 110% at 90% 50%,#000 0%,transparent 67%);\n}\n' +
@@ -366,7 +356,7 @@ const EFFICIENCY_EDITS = [
      '.mev-bd-5 { top: 199.5rem; }\n' +
      '.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
      '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
-     '6/6 mark-strip narrowing: reorder + drop bd-1 override + Default width retarget'],
+     '6/6 mark-strip narrowing: reorder + drop bd-1 override (bd-2/3/4 override also dropped, no edit needed)'],
 ];
 
 function applyEdits(css, edits) {
@@ -429,7 +419,7 @@ function run(mutation) {
 
     eq("MoEProgressVertical.css == fresh emit + exactly its 6 hand-edits",
         normalize(editedP), normalize(progressShipped));
-    eq("MoEEfficiencyVertical.css == fresh emit + exactly its 6 hand-edits",
+    eq("MoEEfficiencyVertical.css == fresh emit + exactly its 5 hand-edits",
         normalize(editedE), normalize(efficiencyShipped));
 
     // Named absence checks, comments stripped first (.mpv-lg/.mev-lg are legitimately named INSIDE

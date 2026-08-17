@@ -733,12 +733,11 @@
       // twin, 2026-08-12 widen pass, right-edge-pinned to 17.067rem).
       ".mev-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }\n"+
       // bd-1's Large override REVERTED to the shared Large strip (no separate rule needed).
-      // Large twins of the mark-requirement narrowing, right edge at 17.067rem (hand
-      // literals -- shipped `.mp-lg .mev-bd-2/3/4`, 2026-08-12 narrowing pass), +0.2rem
-      // (1 monitor-px) to close a gap to the minimap.
-      ".mev-lg .mev-bd-2 { left: -76.6rem; width: 81.8rem; }\n"+
-      ".mev-lg .mev-bd-3 { left: -76.6rem; width: 81.8rem; }\n"+
-      ".mev-lg .mev-bd-4 { left: -76.6rem; width: 81.8rem; }\n"+
+      // bd-2/3/4's Large overrides REVERTED the same way, 2026-08-17 crop fix: their old
+      // literal (left -76.6rem, width 81.8rem) put the right edge at 5.2rem, ~11.87rem SHORT of
+      // the 17.067rem edge every other Large row shares, on top of the same box-relative
+      // mask-taper crop the Default rows had. Falling back to the shared .mev-lg .mev-bd box
+      // above fixes both at once.
 
       // NO dash-grid rule: the grid is 0deg, so its period is a y-length the root font already
       // scales -- unlike the horizontal .mp-lg block's 90deg twin, which owes SIZE_XF.
@@ -1026,12 +1025,13 @@
 // PER-ROW WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css, 2026-08-12 widen pass):
 // current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, right-edge-pinned.
 ".mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
-// Mark-requirement strips narrowed to 2/3 of the shared width, right edge still pinned at 17rem
-// (hand-picked literals, exempt from the four_thirds invariant like bd-5) -- shipped
-// MoEEfficiencyVertical.css, 2026-08-12 narrowing pass, +0.25rem (1 monitor-px) to
-// close a gap to the minimap.
-".mev-bd-2 { width: 72.917rem; left: -63.167rem; }\n.mev-bd-3 { width: 72.917rem; left: -63.167rem; }\n"+
-".mev-bd-4 { width: 72.917rem; left: -63.167rem; }\n"+
+// Mark-requirement strips (bd-2/3/4) no longer get their own width/left override -- 2026-08-17
+// crop fix: the 2026-08-12 narrowing pass shrank these rows' own box while leaving the WIDE
+// checker-dither mask below (box-relative percent size/position) unchanged, so the taper's
+// absolute reach narrowed right along with the box, leaving too little room for it to fade to a
+// point before these rows' own (much closer) left edge -- a hard cut instead of a taper. Falling
+// back to the shared .mev-bd box above (bdStripLeft/bdStripW) restores the room the mask needs
+// AND keeps the right edge flush at 17rem (these rows never needed a narrower box to be flush).
 ".mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: "+ckMask(st.ckRXWide)+"; }\n"+
 ".mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
 ".mev-track {\n  position: relative;\n  z-index: 1;\n  height: 100%;\n  width: "+st.trackH+"rem;\n"+
