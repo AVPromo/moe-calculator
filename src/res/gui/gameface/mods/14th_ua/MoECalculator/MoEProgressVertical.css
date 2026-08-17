@@ -162,8 +162,10 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 .mpv-bd-2 { width: 148.75rem; left: -133.75rem; }
 /* preAvg strip narrowed to 2/3 of the shared width, right edge at 15rem (hand literal, exempt
    from four_thirds), +0.25rem (1 monitor-px) to close a gap to the minimap. Separate from
-   bd-3's ::before/::after mask rules below. */
-.mpv-bd-3 { width: 79.583rem; left: -68.733rem; }
+   bd-3's ::before/::after mask rules below. width corrected 2026-08-17 (79.583rem -> 83.733rem):
+   the narrowing pass's width left the right edge at 10.85rem, 4.15rem short of the other
+   strips' shared 15rem edge -- 15 - (-68.733) = 83.733. */
+.mpv-bd-3 { width: 83.733rem; left: -68.733rem; }
 .mpv-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;

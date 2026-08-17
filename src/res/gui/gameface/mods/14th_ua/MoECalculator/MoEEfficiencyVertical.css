@@ -24,8 +24,8 @@
    out-specifies the horizontal sheet's own `.mp-lg #moe-bar-root` (1,1,0) outright rather than
    winning on source order.
 
-   THE SHIPPED FILE IS THE EMIT PLUS FIVE DELIBERATE HAND-EDITS -- never copy an emit over it (the
-   repo lesson `emitcss-is-not-the-whole-shipped-stylesheet`). Each is marked HAND-EDIT n/5:
+   THE SHIPPED FILE IS THE EMIT PLUS SIX DELIBERATE HAND-EDITS -- never copy an emit over it (the
+   repo lesson `emitcss-is-not-the-whole-shipped-stylesheet`). Each is marked HAND-EDIT n/6:
      1  `#mev-bar-root` is normalised to the shipped `#moe-bar-root` THROUGHOUT (the tuner uses its
         own id purely so a candidate can never collide with the shipped bar).
      2  the root rule drops the tuner's `right: 639px; bottom: 28px` minimap-placement PREVIEW --
@@ -34,6 +34,10 @@
      3  #moe-bar-box, the sizing shim -- not emitted at all (the tuner has no surface).
      4  `.mev-lg` becomes `.mp-lg` -- the body class MoEBarTransient.applySize actually writes.
      5  the two Large rules whose subject is #moe-bar-root / #moe-bar-box are scoped `body.mev.mp-lg`.
+     6  the Default `.mev-bd-2/3/4` width is retargeted 72.917rem -> 80.167rem (left unchanged at
+        -63.167rem), so their right edge lands at 17.0rem, flush with bd-1/bd-5's shared minimap-
+        facing edge (the tuner's own cssOut() hardcodes the pre-change 72.917rem literal, so this
+        is a real hand-edit over the fresh emit, not a value the tuner already produces correctly).
    NOT a hand-edit here, unlike the sibling MoEProgressVertical.css: this tuner ALREADY emits the
    dash grid's gap stripe opaque (rgba(13,14,16,1)), pinned by check_eff_vertical.js. Leave it.
    The @font-face is not re-declared either -- MoEEfficiency.css is <link>ed in the same document
@@ -117,12 +121,12 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
    (left+width == -92+109 == 17rem), growing LEFTWARD only, so the minimap-facing edge and
    the surface hit-rect do not move. Same specificity as .mev-bd above; source order wins. */
 .mev-bd-5 { width: 163.5rem; left: -146.5rem; }
-/* Mark-requirement strips narrowed to 2/3 of the shared width, right edge at 17rem
-   (hand-picked literals, exempt from the four_thirds invariant like bd-5), +0.25rem
-   (1 monitor-px) to close a gap to the minimap. */
-.mev-bd-2 { width: 72.917rem; left: -63.167rem; }
-.mev-bd-3 { width: 72.917rem; left: -63.167rem; }
-.mev-bd-4 { width: 72.917rem; left: -63.167rem; }
+/* Mark-requirement strips: width 80.167rem = 17.0rem right edge - (-63.167rem) left, aligned
+   with bd-1/bd-5's shared 17.0rem minimap-facing edge (hand-picked literal, exempt from the
+   four_thirds invariant like bd-5). */
+.mev-bd-2 { width: 80.167rem; left: -63.167rem; }
+.mev-bd-3 { width: 80.167rem; left: -63.167rem; }
+.mev-bd-4 { width: 80.167rem; left: -63.167rem; }
 .mev-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;

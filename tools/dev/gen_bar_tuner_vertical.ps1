@@ -889,10 +889,12 @@ $tpl = @'
       // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
       // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
       ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
-      // preAvg strip (bd-3) narrowed to 2/3 of the shared width, right edge still pinned at
-      // 15rem (hand literal, exempt from four_thirds -- shipped MoEProgressVertical.css,
-      // 2026-08-12 narrowing pass), +0.25rem (1 monitor-px) to close a gap to the minimap.
-      ".mpv-bd-3 { width: 79.583rem; left: -68.733rem; }\n"+
+      // preAvg strip (bd-3) narrowed to 2/3 of the shared width, right edge pinned at 15rem
+      // (hand literal, exempt from four_thirds -- shipped MoEProgressVertical.css, 2026-08-12
+      // narrowing pass), +0.25rem (1 monitor-px) to close a gap to the minimap. width corrected
+      // 2026-08-17 (79.583rem -> 83.733rem): the narrowing pass's width left the right edge at
+      // 10.85rem, 4.15rem short of the other strips' shared 15rem edge -- 15 - (-68.733) = 83.733.
+      ".mpv-bd-3 { width: 83.733rem; left: -68.733rem; }\n"+
       ".mpv-bd-3::before { mask: "+dotMask(st.dotRXWide)+"; }\n"+
       ".mpv-bd-3::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+
