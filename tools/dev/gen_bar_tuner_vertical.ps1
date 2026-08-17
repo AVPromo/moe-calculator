@@ -845,9 +845,10 @@ $tpl = @'
       // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
       ".mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n"+
       ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
-      // Large twin of the preAvg narrowing, right edge pinned at 15.067rem (hand literal --
-      // shipped `.mp-lg .mpv-bd-3`, 2026-08-12 narrowing pass).
-      ".mpv-lg .mpv-bd-3 { left: -82.183rem; width: 86.933rem; }\n"+
+      // Large twin of the preAvg narrowing, right edge at 15.067rem (hand literal --
+      // shipped `.mp-lg .mpv-bd-3`, 2026-08-12 narrowing pass), +0.2rem (1 monitor-px)
+      // to close a gap to the minimap.
+      ".mpv-lg .mpv-bd-3 { left: -82.183rem; width: 87.133rem; }\n"+
       tick("end",st.tickWEnd,st.tickXEnd)+tick("pre",st.tickWPre,st.tickXPre)+
       tick("proj",st.tickWProj,st.tickXProj)+
       ".mpv-lg .mpv-capR { padding-right: "+pr+"; transform: translateX("+X43(st.capxR)+"rem); }\n"+
@@ -890,8 +891,8 @@ $tpl = @'
       ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
       // preAvg strip (bd-3) narrowed to 2/3 of the shared width, right edge still pinned at
       // 15rem (hand literal, exempt from four_thirds -- shipped MoEProgressVertical.css,
-      // 2026-08-12 narrowing pass).
-      ".mpv-bd-3 { width: 79.333rem; left: -68.733rem; }\n"+
+      // 2026-08-12 narrowing pass), +0.25rem (1 monitor-px) to close a gap to the minimap.
+      ".mpv-bd-3 { width: 79.583rem; left: -68.733rem; }\n"+
       ".mpv-bd-3::before { mask: "+dotMask(st.dotRXWide)+"; }\n"+
       ".mpv-bd-3::after { background: "+ugGrad(st.ugRXWide)+"; }\n"+
       ".mpv-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: 100%;\n  background: "+trackBg()+";\n}\n"+

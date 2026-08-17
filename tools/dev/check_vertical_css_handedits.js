@@ -170,7 +170,7 @@ const PROGRESS_EDITS = [
      // that briefly halved it on a since-disproven interface-scale theory -- see
      // MoEProgressVertical.css's own note) is a hand-tuned literal, not the *4/3 formula. Default
      // carries no nudge at all (see 6h/6's own note above, now empty of an edit).
-     '.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(15.733rem); }\n' +
+     '.mp-lg .mpv-capC { padding-right: 8rem; transform: translateX(18.533rem); }\n' +
      '.mp-lg .mpv-capP { padding-right: 8rem;\n  transform: translateY(50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }\n' +
      '.mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
@@ -253,6 +253,15 @@ const PROGRESS_EDITS = [
     // more). Its Large twin is handled inside 4/6+5/6 above, since that edit already owns the whole
     // Large block and .mpv-capC's Large line lives inside it -- see that edit's own comment for the
     // restored, un-halved value.
+    // HAND-EDIT 8/8 (2026-08-17): MoEProgress.js toggles class `none` on `.mpv-bd-1` (capEtaBd) when
+    // `showEta` is false, mirroring the `.mpv-ico.none` idiom -- the tuner has no such rule at all,
+    // so this is a pure insertion, not a value edit.
+    ['.mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
+     '.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
+     '.mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
+     '.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }\n' +
+     '.mpv-bd.none { display: none; }',
+     '8/8 .mpv-bd.none rule inserted'],
 ];
 
 const EFFICIENCY_EDITS = [
@@ -291,12 +300,17 @@ const EFFICIENCY_EDITS = [
      '.mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }',
      '5i/5 backdrop Large width'],
     // 5h: the top block (r4/.tp, the 100% requirement) and bottom block (.bt, current damage +
-    // delta)'s own residual X nudge -- CANCELLED (2026-08-10, third correction): the maintainer's
-    // follow-up ("4px / 7px RIGHT on Large") is the exact opposite of the un-halved LEFT nudge this
-    // table carried a moment ago, and verified-by-Decimal cancels it exactly (11.467+3.2==14.667,
-    // 11.733+5.6==17.333 -- see MoEEfficiencyVertical.css's own note). Large now matches the tuner's
-    // own capxR4=11 / capxCur=13 defaults (X43'd) exactly too, so no entry is needed here at all any
-    // more -- neither Default nor Large diverges from the fresh emit for this pair of rules.
+    // delta) each carry a Large-only caption-position nudge (2026-08-16): .tp moved 4px left, .bt
+    // moved 7px left (monitor px). Right-anchored, so left is a POSITIVE translateX delta; factor
+    // is monitor_px / 5 (1 rem == 5 monitor-px under Large on this maintainer's setup) -- see
+    // MoEEfficiencyVertical.css's own note. Large's emit defaults are the tuner's own capxR4=11 /
+    // capxCur=13 (X43'd == 14.667 / 17.333); the nudge lands on top of those.
+    ['.mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(14.667rem); }',
+     '.mp-lg .mev-cap.tp { transform: translateX(-4rem) translateX(13.067rem); }',
+     '5h/5 tp Large-only nudge'],
+    ['.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(17.333rem); }',
+     '.mp-lg .mev-cap.bt { transform: translateX(-4rem) translateX(14.533rem); }',
+     '5h/5 bt Large-only nudge'],
 ];
 
 function applyEdits(css, edits) {

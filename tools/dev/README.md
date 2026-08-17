@@ -54,6 +54,27 @@ Unit tests (engine-free domain layer, Python 3):
 - Keep the debug package SLIM (only `mod_moe_calculator_debug.pyc`). If it also ships
   `moe_calculator`, it conflicts with the real mod and WoT ignores it.
 
+### Watching a time-sensitive transition (`watch_repl.py`)
+For a fast/unpredictable in-client action (e.g. a ~30s battle countdown) where a
+human-timed before/after poll would miss the moment: start the watcher BEFORE the
+action, then just play — it retries the socket until the client answers, polls on
+a short interval, and logs every reply with a timestamp, marking `>>> CHANGED`
+the tick the reply differs from the previous one. Ctrl-C to stop.
+```
+& "<py3>" tools\dev\watch_repl.py "<snippet that prints one line>" [--port 2224] [--interval 0.5] [--out watch_repl.log]
+& "<py3>" tools\dev\watch_repl.py --selftest   # exercises change-detection, no live client needed
+```
+Example — the bar-hide investigation probe (open_overlays/windowStatus/showingStatus/
+has_placed/_last_good/vm_visible in one line, so one reply captures the whole state):
+```
+& "<py3>" tools\dev\watch_repl.py "import moe_calculator.bridge.battle_bridge as bb
+from moe_calculator.bridge import progress_view, efficiency_view
+host = progress_view._host if progress_view.active_view() else efficiency_view._host
+active = host.active_view()
+w = host._active[0] if host._active else None
+print(\"open_overlays=%r windowStatus=%r showingStatus=%r has_placed=%r last_good=%r vm_visible=%r\" % (bb._open_overlays, (w.windowStatus if w else None), (w.showingStatus if w else None), host.has_placed(), host._last_good, (active.viewModel._getBool(0) if active else None)))" --out bar_hide_watch.log
+```
+
 ### Handy REPL snippets
 ```python
 # current vehicle -> snapshot -> model

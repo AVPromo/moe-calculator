@@ -60,10 +60,16 @@ def run(commands, timeout=8.0):
     return results
 
 
+def commands_from_lines(lines):
+    """Filter blank/comment lines, same rule the --file path applies. Shared with watch_repl.py
+    so a multi-line snippet gets sent one-line-per-command over ONE connection, matching --file."""
+    return [l.rstrip("\n") for l in lines if l.strip() and not l.lstrip().startswith("#")]
+
+
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--file":
         with open(sys.argv[2], "r", encoding="utf-8") as f:
-            commands = [l.rstrip("\n") for l in f if l.strip() and not l.lstrip().startswith("#")]
+            commands = commands_from_lines(f)
     else:
         commands = [" ".join(sys.argv[1:])]
     try:
