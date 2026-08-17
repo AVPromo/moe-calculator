@@ -42,10 +42,10 @@ from openwg_gameface import ModDynAccessor
 
 from moe_calculator.bridge.view_models import BattleMoEVM
 from moe_calculator.domain.constants import (
-    BATTLE_ANCHOR_X, BATTLE_ANCHOR_Y, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED,
-    BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD)
+    BATTLE_ANCHOR_X, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_X_SHIFT,
+    EFFICIENCY_WIDE_THRESHOLD)
 from moe_calculator.domain.positioning import (
-    anchor_top_left, damage_log_summary_hidden, efficiency_panel_wide)
+    anchor_top_left, battle_y_anchor, damage_log_summary_hidden, efficiency_panel_wide)
 
 # itemID registered in mods/configs/res_map/MoEBattleView.json -- keep in lockstep.
 RES_MAP_ITEM_ID = "MoEBattleView"
@@ -138,7 +138,10 @@ def _place(window):
         flags = battle_adapter.read_damage_log_summary_flags()
         raised = damage_log_summary_hidden(*flags)
         x_from_left = BATTLE_ANCHOR_X_RAISED if raised else BATTLE_ANCHOR_X
-        y_from_bottom = BATTLE_ANCHOR_Y_RAISED if raised else BATTLE_ANCHOR_Y
+        # y_from_bottom = base (default/raised) + Frontlines/Epic's extra raise, ADDED on top,
+        # never a replacement -- domain.positioning.battle_y_anchor (pure, unit-tested).
+        # Fail-soft epic read (a bad read -> not epic -> no extra raise).
+        y_from_bottom = battle_y_anchor(raised, battle_adapter.read_is_epic_battle())
         # When an ENABLED "Summarized damage" total goes 5-digit, WG's panel widens a character
         # and collides with the overlay -- shift right to clear it. ONLY in the un-raised state:
         # the raised anchor means the summary block is collapsed (all flags off), so the panel

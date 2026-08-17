@@ -70,6 +70,19 @@ def read_damage_log_summary_flags():
         return True, True, True, True
 
 
+def read_is_epic_battle():
+    """True when the current arena is Frontlines (ARENA_BONUS_TYPE.EPIC_BATTLE, int 27) --
+    NOT EPIC_RANDOM. Feeds the epic-only extra raise on the overlay's Y anchor (WG's bottom-left
+    panel sits ~5 logical px higher there than in Standard). Fail-soft to False on any error
+    (engine may be absent / arena not yet up) -- a bad read just skips the extra raise."""
+    try:
+        from constants import ARENA_BONUS_TYPE
+        return BigWorld.player().arena.bonusType == ARENA_BONUS_TYPE.EPIC_BATTLE
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+        return False
+
+
 def read_minimap_size_index():
     """The player's current minimap size as settingsCore's 0-based index, CLAMPED into
     [0, len(MINIMAP_SIZES) - 1]. Feeds domain.positioning.anchor_minimap via

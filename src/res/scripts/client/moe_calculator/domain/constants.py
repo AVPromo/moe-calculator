@@ -93,6 +93,12 @@ BATTLE_ANCHOR_Y = 0
 BATTLE_ANCHOR_X_RAISED = 215
 BATTLE_ANCHOR_Y_RAISED = 33
 
+# Frontlines/Epic (ARENA_BONUS_TYPE.EPIC_BATTLE) raises WG's bottom-left panel ~5 logical px
+# (~10 device px at interfaceScale 2.0) relative to Standard, so we raise the overlay to match
+# -- ADDED on top of whichever base anchor (BATTLE_ANCHOR_Y / _RAISED) is in play, not a
+# replacement. Tunable -- confirm live.
+BATTLE_ANCHOR_Y_EPIC = 5
+
 # Extra rightward offset (fixed logical px, added to whichever X anchor is in play) applied
 # when WG's efficiency panel goes FIVE digits: a "Summarized damage" total that is ENABLED and
 # exceeds EFFICIENCY_WIDE_THRESHOLD makes WG's panel grow one character wider, which would

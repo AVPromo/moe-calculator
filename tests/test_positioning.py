@@ -5,12 +5,12 @@ readouts measured in-client at 4K (probe_scale.py): 1x -> space 3840x2160, 2x ->
 surface fixed 256x256, so movable extent = space - 256."""
 from moe_calculator.domain.positioning import (
     anchor_centred, anchor_centred_reduced, anchor_minimap, anchor_offset,
-    anchor_top_left, cursor_in_rect, cursor_logical,
+    anchor_top_left, battle_y_anchor, cursor_in_rect, cursor_logical,
     cursor_top_left, damage_log_summary_hidden, efficiency_panel_wide,
     free_anchor_point, free_top_left)
 from moe_calculator.domain.constants import (
     BATTLE_ANCHOR_X, BATTLE_ANCHOR_Y, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED,
-    BATTLE_ANCHOR_X_SHIFT, EFFICIENCY_WIDE_THRESHOLD,
+    BATTLE_ANCHOR_X_SHIFT, BATTLE_ANCHOR_Y_EPIC, EFFICIENCY_WIDE_THRESHOLD,
     MINIMAP_SIZES, MM_GAP, PROGRESS_MM_GAP_BOTTOM, EFFICIENCY_MM_GAP_BOTTOM,
     MM_TICK_OVERHANG, MM_TICK_OVERHANG_LARGE,
     VERTICAL_ANCHOR_Y_SHIFT, VERTICAL_ANCHOR_Y_SHIFT_LARGE)
@@ -109,6 +109,21 @@ def test_raised_anchor_places_left_and_up_of_default():
     xr, yr = anchor_top_left(3584, 1904, BATTLE_ANCHOR_X_RAISED, BATTLE_ANCHOR_Y_RAISED)
     assert xr < xd   # raised X (215) < default X (266)
     assert yr < yd   # raised (33 from bottom) -> smaller top y than bottom-flush
+
+
+# --- Frontlines/Epic extra raise (ADDITIVE on top of default OR raised) ----
+# battle_view._place calls domain.positioning.battle_y_anchor(raised, is_epic) for
+# y_from_bottom -- it is not a third, standalone anchor. `raised` comes from
+# damage_log_summary_hidden; `is_epic` from battle_adapter.read_is_epic_battle (engine-coupled,
+# reads BigWorld.player().arena.bonusType) -- exercise battle_y_anchor itself directly so
+# dropping the epic term in the bridge cannot leave this test green.
+
+
+def test_battle_y_anchor_all_four_combinations():
+    assert battle_y_anchor(False, False) == BATTLE_ANCHOR_Y
+    assert battle_y_anchor(False, True) == BATTLE_ANCHOR_Y + BATTLE_ANCHOR_Y_EPIC
+    assert battle_y_anchor(True, False) == BATTLE_ANCHOR_Y_RAISED
+    assert battle_y_anchor(True, True) == BATTLE_ANCHOR_Y_RAISED + BATTLE_ANCHOR_Y_EPIC
 
 
 # --- 5-digit efficiency-panel right-shift -----------------------------------

@@ -13,6 +13,17 @@ Anchoring convention: x is measured from the LEFT edge, y from the BOTTOM edge (
 y_from_bottom RAISES the panel -- that's the hook the Phase-2 damage-log-aware anchor uses).
 2/3-compatible, engine-free, unit-testable with the client closed.
 """
+from moe_calculator.domain.constants import (
+    BATTLE_ANCHOR_Y, BATTLE_ANCHOR_Y_RAISED, BATTLE_ANCHOR_Y_EPIC)
+
+
+def battle_y_anchor(raised, is_epic):
+    """y_from_bottom for the in-battle overlay: the default/raised base (from `raised`) plus
+    the Frontlines/Epic extra raise (from `is_epic`) ADDED on top -- never a replacement. Pure
+    selection so battle_view._place's branch is exercised by a domain-level test rather than
+    only inlined in the engine-coupled bridge."""
+    base = BATTLE_ANCHOR_Y_RAISED if raised else BATTLE_ANCHOR_Y
+    return base + (BATTLE_ANCHOR_Y_EPIC if is_epic else 0)
 
 
 def damage_log_summary_hidden(total, blocked, assist, assist_stun):
