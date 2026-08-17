@@ -84,6 +84,25 @@ const SURFACE_REASSERT_MS = 4000;
 // inside a window where nothing shows anyway.
 const SURFACE_SETTLE_MS = 250;
 
+// --- THE COLD-MOUNT POLL: LOAD-BEARING, DO NOT REVERT TO A ONE-SHOT ---------------------------
+// Live-measured (watcher log, fresh session's first battle): the Python push that flips
+// `visible`/`hasData` true can land ~27s after mount -- long after SURFACE_REASSERT_MS +
+// SURFACE_SETTLE_MS's one settle point (~4.25s) -- and observer.onUpdate(render) does NOT
+// reliably re-deliver that late push to render() for this private always-composited battle
+// window. A one-shot post-settle render can therefore fire, find the model still not ready
+// (render()'s early return, before it ever reaches T.peek()), and then nothing re-renders again
+// until the user presses Alt (which reveals the bar through a separate force-push path -- that is
+// why Alt "fixes" it by hand). So the settle callback below polls the LIVE observer.model (which
+// stays current even while onUpdate is dormant -- same premise as MoECalculator.js's garage
+// cold-mount poll) until the bar actually reveals, instead of rendering it once and hoping.
+// ponytail: a bounded, SELF-STOPPING poll -- COLD_POLL_MS interval, capped at
+// COLD_POLL_CEILING_MS total (a `visible` that never arrives -- feature off, spectating, no data
+// -- must not poll forever). Each battle window is its own short-lived document torn down with
+// the window at arena teardown, so there is no separate unmount hook to also cancel this from;
+// the ceiling is the only leak guard.
+const COLD_POLL_MS = 500;
+const COLD_POLL_CEILING_MS = 60000;
+
 // Margin on the fallback end timer so it always LOSES to a working animationend (which fires at
 // exactly the run's remaining duration). Not a tuned CSS value -- pure slack.
 const END_MARGIN_MS = 250;
@@ -959,7 +978,9 @@ export function createTransient(cfg) {
     //      that makes the surface correct, so the dependency is structural rather than a second
     //      timer that could outlive it. It then re-renders the model we already hold, so a
     //      STILL-HELD Alt takes effect immediately -- during PREBATTLE there may be no efficiency
-    //      tick to re-push it, and the player is mid-peek.
+    //      tick to re-push it, and the player is mid-peek. That render is no longer a ONE-SHOT: a
+    //      short self-stopping poll keeps re-calling it in case the model's `visible`/`hasData` push
+    //      is still to come (see COLD_POLL_MS above).
     //  (3) the model subscription and the first render.
     function mount(observer, render) {
         engine.whenReady.then(() => {
@@ -996,7 +1017,27 @@ export function createTransient(cfg) {
                 pushSurfaceSize();
                 setTimeout(function () {
                     settled = true;
+                    // The one immediate render this always did -- kept verbatim (see COLD_POLL_MS's
+                    // header note above for why a bare one-shot here is not enough on its own).
                     render(observer.model);
+                    // REVEALED ALREADY: an event fired inline (e.g. a still-held Alt in "Always"
+                    // mode, data that was ready all along) -- `showing`/`peeking` are this closure's
+                    // own state, set by the render() call just above, so no poll is needed.
+                    if (showing || peeking) return;
+                    // NOT YET REVEALED: poll observer.model until it is, or give up at the ceiling.
+                    // A SELF-RESCHEDULING setTimeout, not setInterval -- this module already takes
+                    // `setTimeout`/`clearTimeout`/`Date` as its only timing primitives (mirrored,
+                    // fake-clock-driven, by tools/dev/lib/gf_check_shim.js's headless harness, which
+                    // does NOT stub setInterval), so a setInterval here would fall through to a REAL
+                    // timer under that harness -- ungated by the virtual clock's Date.now(), and
+                    // therefore never satisfying its own stop predicate there.
+                    const deadline = Date.now() + COLD_POLL_CEILING_MS;
+                    (function tick() {
+                        setTimeout(function () {
+                            render(observer.model);
+                            if (!(showing || peeking) && Date.now() < deadline) tick();
+                        }, COLD_POLL_MS);
+                    })();
                 }, SURFACE_SETTLE_MS);
             }, SURFACE_REASSERT_MS);
             observer.onUpdate(render);

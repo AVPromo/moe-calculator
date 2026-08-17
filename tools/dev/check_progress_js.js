@@ -1314,8 +1314,13 @@ function run(mutation) {
        "-" + SEEK_PLATEAU + "ms");
     s.push(F(MAN_OFF, { altHeld: false }));
     eq("the release ENDS the run in the SAME TICK -- no fade-out is armed", s.run(), null);
-    eq("...unpaused, with nothing at all left pending on the clock",
-       [s.root.style.animationPlayState, s.clock.pending()], ["", 0]);
+    // 1, not 0: mount()'s settle callback ran against the harness's still-empty pre-push model
+    // (not yet `visible`), so it left ONE self-rescheduling cold-mount poll timer pending
+    // (MoEBarTransient.js's COLD_POLL_MS retry) -- and nothing in this section ever advances the
+    // clock far enough for that retry to fire. It is not a leftover run/hold/peek timer: those
+    // are all what the release below actually clears.
+    eq("...unpaused, with nothing but the cold-mount poll left pending on the clock",
+       [s.root.style.animationPlayState, s.clock.pending()], ["", 1]);
     s.push(F(MAN_OFF, { projAvg: 2900 }));
     eq("...and it went through endRun (onEnd and all), not a bare disarm: `showing` was cleared, so "
        + "the next event is a fresh COLD show and not a warm re-trigger",
