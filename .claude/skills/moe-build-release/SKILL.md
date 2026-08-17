@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 3.1.1)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 3.1.2)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,15 +95,29 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v3.1.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v3.1.1 (2026-08-16) is the current Latest** — a patch release carrying a single in-battle
+**v0.1.0 through v3.1.2 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v3.1.2 (2026-08-17) is the current Latest** — a patch release carrying three bugfix/tooling
+commits: `904d49e` re-mounts a natively-destroyed `WindowFlags.TOOLTIP` bar window (`BarHost`'s
+`_is_dead` detection + a per-tick re-drive of `open_window` in `battle_bridge`) and restores the
+bar's **last-good placement** instead of stranding it at the `_FAR`/minimap corner on a failed
+`_place()` (`has_placed()` now gates `visible`); `c17f339` gates the vertical Progress bar's
+ETA-row backdrop strip (`.mpv-bd-1`/`showEta`, plus the missing `.mpv-bd.none` rule) so it no
+longer renders when the ETA row is hidden, and corrects vertical caption/minimap-gap tuning
+(widened mark-requirement/preAvg backdrop strips, fixed the Large-mode caption translateX
+direction); `e5b5ffa` adds `tools/dev/watch_repl.py` and refreshes the vertical CSS
+tuner/hand-edit-check tooling for the above. **No user-facing surface change** (no new/renamed
+settings controls, no changed defaults, no new widgets); player docs needed no reconciliation
+(`git log v3.1.1..HEAD` touched none of `README.md` / `INSTALL.md` / `installer/readme.moe.txt`).
+`SETTINGS_VERSION` unchanged; client target **unchanged at EU 2.3.1.2**.
+
+**v3.1.1 (2026-08-16) was the prior Latest** — a patch release carrying a single in-battle
 MoE-projection accuracy fix (commit `20cc5a9`): `cur_percent`/`pct_delta` are now re-anchored on
 ONE curve so the displayed percent agrees with the damage (previously mixing a curve value
 against a server stamp let a fixed gap flip the delta's sign). **No user-facing surface change**
 (no new/changed settings controls, defaults, or widgets); player docs needed no reconciliation.
 `SETTINGS_VERSION` unchanged; client target **unchanged at EU 2.3.1.2**.
 
-**v3.1.0 (2026-08-14) was the prior Latest** — an ordinary feature/minor release cut on top of
+**v3.1.0 (2026-08-14) was the Latest two releases before that** — an ordinary feature/minor release cut on top of
 v3.0.0 (merged the `v3.0.0` tag into `main` so it inherited the client-retarget pointers, then
 bumped `3.0.0 → 3.1.0`; client target **unchanged at EU 2.3.1.2**). `SETTINGS_VERSION` went
 **23 → 28** across the feature's five bumps (24 = the Progress-Bar-to-column-2 swap, 25 = two
