@@ -362,6 +362,11 @@ class BarHost(object):
         # race, not per-frame, but still repeats), so this fires the diagnostic once per mount
         # rather than once per retry. Reset alongside `_sized` on every fresh open_window() mount.
         self._reject_logged = False
+        # Sibling anti-spam latch for _place()'s LOG_PROD SUCCESS line -- the placement-confirmed
+        # counterpart to `_reject_logged` above, so a remote python.log can tell "never placed"
+        # apart from "placed at X" (see that line's own comment). Also once per mount, reset
+        # alongside `_sized`/`_reject_logged` in open_window().
+        self._place_logged = False
         # THE LIVE GESTURE's only two pieces of state (both None while none is in flight):
         # `_grab` is the offset between the window's top-left and the cursor's mapped position at
         # gesture start, carried for the whole gesture so the bar keeps the point it was grabbed by;
@@ -557,17 +562,31 @@ class BarHost(object):
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
             applied_x, applied_y = window.position
             surface = (space_x - max_x, space_y - max_y)
+            # Read for the diagnostics below only -- _resolve already read these itself; re-reading
+            # here costs two cheap getter calls and lets both LOG_PROD lines echo the exact stored
+            # alignment/offset a remote python.log needs to confirm the Fixed/Free shared-pair fix.
+            alignment = mod_settings.progress_bar_alignment()
+            off_x, off_y = mod_settings.bar_pos_x(), mod_settings.bar_pos_y()
             if (abs(applied_x - x) <= _PLACE_TOLERANCE_PX
                     and abs(applied_y - y) <= _PLACE_TOLERANCE_PX):
                 self._last_good = (x, y)
+                if not self._place_logged:
+                    # Once per mount (mirrors `_reject_logged`) -- lets the next remote python.log
+                    # distinguish "never placed" from "placed at X", and confirms which alignment
+                    # branch + stored offset actually produced it.
+                    self._place_logged = True
+                    LOG_PROD("%s placement confirmed: applied=(%d, %d) alignment=%d"
+                              % (self._tag, x, y, alignment))
             elif not self._reject_logged:
                 # Once per mount (see `_reject_logged`'s own comment) -- the SUCCESS path logs
                 # nothing (every normal battle would spam), but a rejected placement leaves NO
                 # trace at all today, which is exactly what makes this unconfirmable on a remote
                 # client whose engine-forced fallback surface differs from anything reproduced here.
                 self._reject_logged = True
-                LOG_PROD("%s placement rejected: target=(%d, %d) applied=(%d, %d) surface=%s"
-                          % (self._tag, x, y, applied_x, applied_y, surface))
+                LOG_PROD("%s placement rejected: target=(%d, %d) applied=(%d, %d) surface=%s "
+                          "alignment=%d off=(%d, %d)"
+                          % (self._tag, x, y, applied_x, applied_y, surface,
+                             alignment, off_x, off_y))
             self._materialise(x, y, surface[0], surface[1])
         except Exception:
             LOG_CURRENT_EXCEPTION()
@@ -820,11 +839,12 @@ class BarHost(object):
             # A FRESH window starts at the engine's 256x256 fallback again, same as the very
             # first one -- so the materialise-on-mount latch must reset here too, not just at
             # __init__, or a stale True from a PREVIOUS battle would let _materialise fire
-            # against this window's own first (fallback-sized) _place call. The reject-log latch
-            # resets alongside it so a rejection gets ONE fresh LOG_PROD line per battle, not just
-            # per process.
+            # against this window's own first (fallback-sized) _place call. The reject-log and
+            # place-log latches reset alongside it so each gets ONE fresh LOG_PROD line per
+            # battle, not just per process.
             self._sized = False
             self._reject_logged = False
+            self._place_logged = False
             view = _BarView(layout, self._vm_factory())
             window = _BarWindow(view, self._place, self)
             # Publish the singleton BEFORE load() so the view's _onLoading initial push (which calls

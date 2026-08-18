@@ -334,7 +334,28 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # carries every saved value across unchanged (enumerated from DEFAULTS, not hand-listed) and the
 # new key takes its fresh 100 default -- the DISABLE sentinel, so no existing user's bar starts
 # auto-toggling on update.
-SETTINGS_VERSION = 28
+# Bumped 28 -> 29 for a ONE-TIME FORCED SELF-HEAL, not a template change: Free and Fixed share
+# progress_bar_pos_x/_y with DIFFERENT meanings (Free = an absolute anchor point; Fixed ADDS the
+# pair as an unbounded offset onto the computed anchor -- bar_window.BarHost._resolve's
+# anchor_offset branch), so a user who switched Alignment from Free to Fixed while keeping a
+# large Free-absolute pair (e.g. (2813, 1517)) ends up with the bar composed off-screen.
+# _derive_layout's own Alignment-change rule only zeroes the pair on a FUTURE transition observed
+# live through onSettingsChanged -- it has no way to reach a store that arrives here ALREADY
+# non-Free with a stale pair, which is exactly the shape a report surfaced. No varName/control/
+# option changed shape, so this owes NO bump on template-structure grounds alone -- but
+# register()'s migration chain (where _migrate_pre_v13_variant / _migrate_pre_v21_layout / etc.
+# already live) is the ONLY hook register() gives to migrate a STORED VALUE once, and that chain
+# only runs on a version bump (same reasoning as the 21->22 PROGRESS_POS_FRAME_KEY bump). A new
+# bare marker key, PROGRESS_BAR_POS_HEALED_KEY (no template row -- an internal bookkeeping flag,
+# same shape as PROGRESS_POS_FRAME_KEY/POS_W_KEY/POS_H_KEY above), lets the new migration
+# (_migrate_pre_v29_stale_bar_pos) key its ABSENCE the same way _migrate_pre_v21_layout /
+# _migrate_pre_v22_pos_frame do -- so it fires EXACTLY ONCE and never re-fires against a
+# legitimate non-Free pair the user sets AFTER this heal runs, even across a LATER bump (unlike
+# _migrate_pre_v23_alignment, which is unconditional -- see its own ponytail comment on that
+# hazard). Every OTHER saved value carries across the bump unchanged (enumerated from DEFAULTS,
+# not hand-listed); the new key takes its fresh True ("nothing to heal") default on a fresh
+# install, where the migration doesn't apply.
+SETTINGS_VERSION = 29
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -516,6 +537,15 @@ PROGRESS_ALIGN_FREE = 1    # ... and the highest legal index (see clamp_variant)
 PROGRESS_ALIGN_DAMAGE_LOG = 0
 PROGRESS_ALIGN_MINIMAP = 1
 
+# Marker for the v29 one-time self-heal (see SETTINGS_VERSION 28->29) -- NOT a UI control, same
+# precedent as PROGRESS_POS_FRAME_KEY/POS_W_KEY/POS_H_KEY above (an internal bookkeeping key with
+# no template row). True means "the stale non-Free bar_pos heal has already run (or never applied
+# -- a fresh install has nothing to heal)". _migrate_pre_v29_stale_bar_pos keys its ABSENCE the
+# same way _migrate_pre_v21_layout / _migrate_pre_v22_pos_frame key theirs, so the heal fires
+# EXACTLY ONCE and can never re-wipe a legitimate non-Free pair the user sets afterward, even
+# across a later bump.
+PROGRESS_BAR_POS_HEALED_KEY = "progress_bar_pos_healed"
+
 # Follow Carousel Mode (default ON): keep nudging a pinned widget vertically as the carousel
 # state changes (1<->2 rows, small<->tall), so a dragged widget never overlaps the carousel.
 # The nudge is live-measured JS-side -- no extra persisted coordinate.
@@ -590,7 +620,8 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
             PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_DAMAGE_LOG,
             FOLLOW_CAROUSEL_KEY: True,
-            PROGRESS_VARIANT_HOTKEY_KEY: [37]}
+            PROGRESS_VARIANT_HOTKEY_KEY: [37],
+            PROGRESS_BAR_POS_HEALED_KEY: True}
 
 
 def clamp_pos(v):
@@ -1832,6 +1863,48 @@ def _migrate_pre_v23_alignment(old_raw):
         old_raw[PROGRESS_ALIGNMENT_KEY] = PROGRESS_ALIGN_FIXED     # == 0
 
 
+def _migrate_pre_v29_stale_bar_pos(old_raw):
+    """One-time self-heal for a store that is ALREADY non-Free with a stale Free-absolute
+    progress_bar_pos_x/_y pair (see the SETTINGS_VERSION 28->29 comment). Free and Fixed share the
+    one stored pair with DIFFERENT meanings -- Free treats it as an absolute anchor point, Fixed
+    ADDS it as an unbounded offset onto the computed anchor (bar_window.BarHost._resolve's
+    anchor_offset branch) -- so a user who switched Alignment from Free to Fixed while keeping a
+    large Free-absolute pair (e.g. (2813, 1517)) ends up with the bar composed off-screen.
+    _derive_layout's own Alignment-change rule only zeroes the pair on a FUTURE transition observed
+    live through onSettingsChanged; it has no way to reach a store that arrives here ALREADY
+    non-Free, which is exactly the shape this migration exists to reach.
+
+    GATED ON THE ABSENCE of PROGRESS_BAR_POS_HEALED_KEY, same trick as _migrate_pre_v21_layout /
+    _migrate_pre_v22_pos_frame (NOT the _migrate_pre_v23_alignment shape, which is unconditional --
+    see that function's own ponytail comment on the hazard this avoids): a non-Free bar_pos is
+    perfectly legitimate the instant a later Ctrl+drag or stepper edit sets one (the steppers only
+    ever unlock a stored pair while Alignment IS Free), so this must fire EXACTLY ONCE and never
+    again -- including at any LATER SETTINGS_VERSION bump, which would otherwise re-enter this same
+    migration chain and wrongly wipe that legitimate value.
+
+    Runs LAST in register()'s migration chain, after _migrate_pre_v23_alignment, so it reads the
+    POST-v23 2-option Fixed/Free encoding (PROGRESS_ALIGN_FREE == 1) that function leaves behind.
+
+    Fail-soft, local to these two keys: a missing / non-int / boolean alignment is left alone (a
+    corrupt store re-clamps to Fixed when later read, via clamp_variant -- the safe assumption)."""
+    if PROGRESS_BAR_POS_HEALED_KEY in old_raw:
+        return
+    old_raw[PROGRESS_BAR_POS_HEALED_KEY] = True
+    alignment = old_raw.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FIXED)
+    if isinstance(alignment, bool) or not isinstance(alignment, int):
+        return
+    if alignment == PROGRESS_ALIGN_FREE:
+        return
+    x = clamp_pos(old_raw.get(BAR_POS_X_KEY, 0))
+    y = clamp_pos(old_raw.get(BAR_POS_Y_KEY, 0))
+    if (x, y) == (0, 0):
+        return
+    old_raw[BAR_POS_X_KEY] = 0
+    old_raw[BAR_POS_Y_KEY] = 0
+    LOG_PROD("[moe] healed a stale non-Free bar_pos (%r, %r) -> (0, 0) at alignment=%r"
+             % (x, y, alignment))
+
+
 def register():
     """Register (or re-load) the settings panel with MSA and seed the flag state.
 
@@ -1903,6 +1976,7 @@ def register():
                     _migrate_pre_v21_layout(raw)
                     _migrate_pre_v22_pos_frame(raw)
                     _migrate_pre_v23_alignment(raw)
+                    _migrate_pre_v29_stale_bar_pos(raw)
                     _apply(raw)
                     g_modsSettingsApi.updateModSettings(
                         LINKAGE, _full_settings_for_write(g_modsSettingsApi))
@@ -1937,39 +2011,48 @@ def register():
 
 
 def _derive_layout(pre, post):
-    """(orientation, (x, y)) the layout settles at, from a (pre, post) diff of the two stored
-    values Orientation can still touch. Pure, engine-free, TOTAL -- one call, no recursion, no
-    reads of module state (`pre`/`post` carry everything it needs).
+    """(orientation, alignment, (x, y)) the layout settles at, from a (pre, post) diff of the
+    three stored values Orientation/Alignment can each still touch. Pure, engine-free, TOTAL --
+    one call, no recursion, no reads of module state (`pre`/`post` carry everything it needs).
 
-    DOWN TO ONE RULE (SETTINGS_VERSION 23's same-bump follow-on): the former "a position change
-    forces Alignment := Free" rule is DELETED, not merely simplified away -- with the position
-    steppers gated on Alignment == Free (see _gate_enable / _template()) and
-    bar_window.BarHost.drag() refusing the whole gesture under Fixed, a stored position can now
-    only ever CHANGE while Alignment is ALREADY Free, by construction. There is nothing left for
-    that rule to fire on, so Alignment is no longer part of this function's signature at all --
-    it never derives from anything here, and _on_changed below no longer needs to track it either.
-    What remains is the rule v23 itself kept: an Orientation change zeroes the stored position
-    pair, because the two orientations use different surface geometries and carrying one's pair
-    across (an anchor-relative offset under Fixed, or an anchor point under Free) would land the
-    bar somewhere it was never tuned for. Everything else (no orientation diff -- a foreign key,
-    an unrelated flag, Size/Variant/Alignment, or the echo of our own write-back) settles on
-    `post` unchanged.
+    TWO ZEROING RULES now -- both share the same shape ("this axis changed -> the stored position
+    pair no longer means what it used to, so drop it to 0/0") and neither ever assigns Alignment
+    itself (MSA has no way to let one control set a peer's value -- see the gating-vocabulary
+    note elsewhere in this module -- so Alignment only ever rides through from `post` unchanged):
 
-    Still a FIXED POINT: _derive_layout(s, s) == s for any (orientation, position) pair -- that
-    termination proof is why `_on_changed` below needs no recursion and only ever writes back once
-    per user action. STILL kept as its own pure function rather than inlined into `_on_changed`:
-    it is down to one branch now, but that branch is still the one place the settle rule is stated
-    and still costs nothing to unit-test without the game -- collapsing it in would only move the
-    same docstring into a much busier function."""
-    pre_o, _pre_p = pre
-    post_o, post_p = post
+    1. (unchanged since SETTINGS_VERSION 23) an Orientation change zeroes the stored position
+       pair, because the two orientations use different surface geometries and carrying one's
+       pair across (an anchor-relative offset under Fixed, or an anchor point under Free) would
+       land the bar somewhere it was never tuned for.
+    2. (new) an ALIGNMENT change to a value that is NOT Free ALSO zeroes the pair. Free and Fixed
+       SHARE the one stored pair but read it completely differently -- Free treats it as an
+       absolute anchor point, Fixed ADDS it as an unbounded offset onto the computed anchor (see
+       bar_window.BarHost._resolve's `anchor_offset` branch) -- so a large absolute Free pair
+       (e.g. a Ctrl+drag near a corner) carried unchanged into Fixed's offset branch computes an
+       off-screen position. Keyed on the value ACTUALLY CHANGING, never on "alignment is non-Free
+       right now": firing on every Apply while already Fixed/Minimap would wipe out a user's own
+       stepper edit the instant they made it, which is a regression this rule must not cause.
+
+    Both rules test PROGRESS_ALIGN_FREE, the exact same sentinel bar_window.BarHost._resolve's
+    `is_free` reads to decide which branch a placement takes, so "non-Free" here means precisely
+    what the offset branch there treats as non-Free.
+
+    Still a FIXED POINT: _derive_layout(s, s) == s for any (orientation, alignment, position)
+    triple -- neither rule fires when nothing changed, so `_on_changed` below still needs no
+    recursion and only ever writes back once per user action. STILL kept as its own pure function
+    rather than inlined into `_on_changed`: it costs nothing to unit-test without the game, and
+    collapsing it in would only move the same docstring into a much busier function."""
+    pre_o, pre_a, _pre_p = pre
+    post_o, post_a, post_p = post
     if post_o != pre_o:
-        return post_o, (0, 0)
-    return post_o, post_p
+        return post_o, post_a, (0, 0)
+    if post_a != pre_a and post_a != PROGRESS_ALIGN_FREE:
+        return post_o, post_a, (0, 0)
+    return post_o, post_a, post_p
 
 
 def _on_changed(linkage, new_settings):
-    """MSA onSettingsChanged callback: overlay our keys, settle Orientation/Position via
+    """MSA onSettingsChanged callback: overlay our keys, settle Orientation/Alignment/Position via
     _derive_layout, fan out to the feature bridges so a checkbox change applies live, and
     re-bake the persisted template so the frozen preview Image tracks the store (see the
     _rebaking_template block below -- root-cause fix for a same-session panel REOPEN showing a
@@ -1980,26 +2063,24 @@ def _on_changed(linkage, new_settings):
     _apply overlay would no-op a foreign payload, but skipping early also avoids a spurious
     _notify()/re-push and any chance of a foreign key colliding with one of ours.
 
-    THE DERIVATION: snapshot the two stored layout values BEFORE the overlay (the only way to
-    tell "the user flipped Orientation" apart from an unrelated change, since MSA hands us the
-    FULL settings snapshot every time, never a diff), overlay, then hand (pre, post) to
+    THE DERIVATION: snapshot the three stored layout values BEFORE the overlay (the only way to
+    tell "the user flipped Orientation/Alignment" apart from an unrelated change, since MSA hands
+    us the FULL settings snapshot every time, never a diff), overlay, then hand (pre, post) to
     _derive_layout ONCE. Whatever differs from `post` gets written into the live cache and the
     pass is marked dirty; nothing derived is ever re-fed back into _derive_layout in the same
     pass -- see _derive_layout's docstring for why that single call always reaches a fixed point.
-    Alignment is NOT part of this snapshot any more (SETTINGS_VERSION 23's same-bump follow-on):
-    nothing derives it here, it just rides through the `_apply` overlay like any other flag.
+    Alignment RIDES ALONG in the snapshot (added back for the Fixed/Free shared-pair bug fix) but
+    is never itself WRITTEN by this function -- MSA has no way to let one control assign a peer's
+    value, so only the position pair is ever zeroed; Alignment always settles at `post_a`.
 
     RE-ENTRANCY LATCH (_deriving): guards the belt-and-braces case where MSA's write-back
     (below) triggers a SYNCHRONOUS re-entrant onSettingsChanged carrying a stale (pre-derivation)
     snapshot. While `_deriving` is set, skip derivation entirely -- still _apply + _notify, so the
     fan-out isn't lost -- rather than deriving against stale data and undoing the settle in
-    progress. STILL EARNS ITS PLACE after the position-forces-Free rule was deleted: the
-    Orientation-zeroing rule is itself still a real derivation (Orientation -> Position), so a
-    stale echo racing IT can still misread a settled `(newO, (0, 0))` as "the user just re-typed
-    the OLD coordinates AND flipped orientation back", which would revert the user's own change.
-    Re-examined against the reduced rule set and kept for that reason, not just inertia. Still a
-    guard against an UNPROVEN assumption (no confirmed live reentrancy), so cheap enough (one
-    bool) to keep rather than prove necessary.
+    progress. Both zeroing rules are real derivations (Orientation/Alignment -> Position), so a
+    stale echo racing either can still misread a settled `(newO, newA, (0, 0))` as "the user just
+    re-typed the OLD coordinates AND flipped the axis back", which would revert the user's own
+    change. Cheap enough (one bool) to keep rather than prove necessary.
 
     LOOP GUARD (the normal, non-re-entrant case): the write-back below fires another
     onSettingsChanged of its own. No extra flag is needed for THAT pass -- the echo carries
@@ -2015,16 +2096,18 @@ def _on_changed(linkage, new_settings):
             _notify()
             return
         pre = (_settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL),
+               _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FIXED),
                (_settings.get(BAR_POS_X_KEY, 0), _settings.get(BAR_POS_Y_KEY, 0)))
         _apply(new_settings)
         post = (_settings.get(PROGRESS_ORIENTATION_KEY, PROGRESS_ORIENT_HORIZONTAL),
+                _settings.get(PROGRESS_ALIGNMENT_KEY, PROGRESS_ALIGN_FIXED),
                 (_settings.get(BAR_POS_X_KEY, 0), _settings.get(BAR_POS_Y_KEY, 0)))
-        settled_o, settled_p = _derive_layout(pre, post)
+        settled_o, _settled_a, settled_p = _derive_layout(pre, post)
         dirty = False
         if settled_o != post[0]:
             _settings[PROGRESS_ORIENTATION_KEY] = settled_o
             dirty = True
-        if settled_p != post[1]:
+        if settled_p != post[2]:
             _settings[BAR_POS_X_KEY], _settings[BAR_POS_Y_KEY] = settled_p
             dirty = True
         if dirty:

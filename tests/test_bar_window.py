@@ -1500,3 +1500,72 @@ def test_the_vertical_progress_bar_lands_on_the_derived_position_at_large(monkey
 # `x_shift_large` machinery those tests protected is deleted with it (constants.py,
 # domain/positioning.py, bar_window.BarHost, progress_view.py, efficiency_view.py).
 
+
+# --- LOG_PROD diagnostics: the reject line's new alignment/off fields, and the new success line -
+
+def test_place_reject_line_echoes_alignment_and_offset(monkeypatch):
+    # The reject LOG_PROD line grew `alignment=`/`off=(...)` fields so a remote python.log can
+    # confirm the Fixed/Free shared-pair fix -- reuse the existing legitimately-clamped-Free-pin
+    # rejection scenario and check the logged text carries both new fields (and the pre-existing
+    # ones), not just that it fired.
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
+        mod_settings.BAR_POS_X_KEY: 5000, mod_settings.BAR_POS_Y_KEY: 5000})
+    host = bar_window.BarHost("test.item", lambda: object(), 0.865, 0,
+                              PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+                              PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
+                              PROGRESS_MM_GAP_BOTTOM, "[test]")
+    window = _ClampingRealizedWindow(1664, 824)
+    host._active = (window, object())
+
+    logged = []
+    monkeypatch.setattr(bar_window, "LOG_PROD", lambda msg: logged.append(msg))
+    host._place(window)
+
+    assert host.has_placed() is False
+    assert len(logged) == 1
+    assert "placement rejected" in logged[0]
+    assert "alignment=%d" % mod_settings.PROGRESS_ALIGN_FREE in logged[0]
+    assert "off=(5000, 5000)" in logged[0]
+
+
+def test_place_success_logs_once_per_mount_and_includes_alignment(monkeypatch):
+    # The new success line (`_place_logged`) must fire exactly ONCE for the host's lifetime, not
+    # on every successful _place (battle_bridge.refresh() drives _place every tick) -- every normal
+    # battle would otherwise spam python.log. Patch LOG_PROD BEFORE the host is even built, so
+    # _host's own internal first-placement call is captured as the "first success" this test pins.
+    logged = []
+    monkeypatch.setattr(bar_window, "LOG_PROD", lambda msg: logged.append(msg))
+
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FIXED)
+    assert host._place_logged is True
+    assert len(logged) == 1, "the first successful _place did not log the confirmed-placement line"
+    assert "placement confirmed" in logged[0]
+    assert "alignment=%d" % mod_settings.PROGRESS_ALIGN_FIXED in logged[0]
+
+    # A SECOND real success against the same host (mirrors battle_bridge.refresh() driving _place
+    # every tick) must NOT log again -- the latch stays flipped for the host's whole mount.
+    host._place(window)
+    assert len(logged) == 1, "a second successful _place re-fired the once-per-mount success line"
+
+
+def test_place_logged_latch_resets_on_remount(monkeypatch):
+    # Mirrors _reject_logged's own remount-reset contract: a fresh open_window() (a new battle)
+    # must reset _place_logged so the new mount gets its own confirmed-placement line, rather than
+    # inheriting a stale True from a previous battle that never mounts again.
+    host = _bare_host()
+    monkeypatch.setattr(host, "_layout_id", lambda: 7)
+    monkeypatch.setattr(bar_window, "_BarView", _FakeMount)
+    monkeypatch.setattr(bar_window, "_BarWindow", _FakeMount)
+
+    host.open_window()
+    host._place_logged = True   # simulate a prior mount's confirmed placement
+
+    host._sized = True
+    host._active[1].viewModel = None   # engine destroyed the handle
+    assert host._is_dead() is True
+
+    host.open_window()   # re-mount
+    assert host._place_logged is False
+
