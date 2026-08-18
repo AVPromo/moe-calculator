@@ -1211,6 +1211,218 @@ def test_open_window_re_mounts_a_destroyed_handle_but_leaves_a_live_one(monkeypa
     assert host._is_dead() is False
 
 
+# --- THE CORE REGRESSION: window.move() can silently NO-OP, not raise -------------------------
+# _place()'s try/except fallback (the "last-good restore" tests above) only covers a move that
+# RAISES. The pre-fix bug was different and worse: on a not-yet-realized window (the engine's
+# 256x256 size-timeout fallback -- see the module docstring), window.move() to the real anchor
+# applies NOTHING AT ALL -- no exception, the window just stays wherever _extent()'s own
+# far-sentinel clamp parked it (the minimap's own corner). The OLD _place() stamped `_last_good`
+# unconditionally right after that call, so has_placed() came back True and the vertical bar
+# rendered PARKED ON THE MINIMAP. THE SHIPPED FIX discriminates on REALIZATION (surface !=
+# _FALLBACK_SURFACE_SIZE), not on position -- see bar_window._place's own docstring for why
+# position alone cannot tell a no-op apart from a legitimate off-screen clamp.
+
+_EFF_LARGE_SURFACE = (144, 398)                                    # test_efficiency_surface_mirror
+_EFF_LARGE_MAX = (_EFF_SPACE[0] - _EFF_LARGE_SURFACE[0], _EFF_SPACE[1] - _EFF_LARGE_SURFACE[1])
+_PROG_LARGE_SURFACE = (157, 400)                                   # test_progress_surface_mirror
+_PROG_LARGE_MAX = (_PROG_V_SPACE[0] - _PROG_LARGE_SURFACE[0],
+                   _PROG_V_SPACE[1] - _PROG_LARGE_SURFACE[1])
+
+
+class _RealizableWindow(_FakeWindow):
+    """Like `_FakeWindow`, but BOTH `.size` (the surface) and the measured movable extent switch
+    together off `realized`, keeping the FULL logical GUI space (`space`, the screen resolution)
+    fixed -- exactly how the real engine works: extent = space - surface, and only the surface
+    changes when the JS resizes it. While `realized` is False the surface is
+    `bar_window._FALLBACK_SURFACE_SIZE` (256x256, the engine's un-resized fallback) and a move to
+    anything OTHER than the far sentinel silently NO-OPS, mirroring the live bug -- once
+    `realized` flips True the surface becomes the real size passed in and every move applies
+    normally, exactly like `_FakeWindow`.
+
+    `size`/`_max` are recomputed on every `move()` call (not just once) because `_extent()` reads
+    the surface via a move-to-far-sentinel *before* `_place()` ever reads `.size` again for
+    `_space()` -- both must already agree with `realized` at read time."""
+
+    def __init__(self, space, real_size):
+        self._space_wh = space
+        self._real_size = real_size
+        self.realized = False
+        fallback = bar_window._FALLBACK_SURFACE_SIZE
+        super(_RealizableWindow, self).__init__(
+            space[0] - fallback[0], space[1] - fallback[1], size=fallback)
+
+    def move(self, x, y, xAnchor=None, yAnchor=None):
+        size = self._real_size if self.realized else bar_window._FALLBACK_SURFACE_SIZE
+        self.size = size
+        self._max = (self._space_wh[0] - size[0], self._space_wh[1] - size[1])
+        self.moves.append((x, y))
+        if (x, y) == (bar_window._FAR, bar_window._FAR):
+            self.position = self._max
+        elif self.realized:
+            self.position = (x, y)
+        # else: silent no-op on the still-256x256 surface -- the live bug this fixture pins.
+
+
+def _efficiency_host_realizable(space=_EFF_SPACE, real_size=_EFF_LARGE_SURFACE):
+    """The real Damage Efficiency host, against a `_RealizableWindow` -- the live-confirmed
+    defect config: Vertical + Large + Fixed(minimap) alignment."""
+    from moe_calculator.domain.constants import (
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
+
+    host = bar_window.BarHost(
+        "MoEEfficiencyView", lambda: object(), EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-eff]")
+    window = _RealizableWindow(space, real_size)
+    host._active = (window, object())
+    return host, window
+
+
+def test_a_place_against_an_unrealized_window_does_not_report_placed(monkeypatch):
+    # THE RED ASSERTION: the pre-fix code returned True here (proven below, RED-then-GREEN).
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({
+        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE})
+    host, window = _efficiency_host_realizable()
+    assert host.has_placed() is False                     # never placed yet
+
+    # The first _place() (mirrors _onReady, run against the not-yet-resized window -- surface
+    # still the 256x256 fallback).
+    host._place(window)
+    assert window.size == bar_window._FALLBACK_SURFACE_SIZE
+    corner = window._max
+    assert window.position == corner, "fixture bug: the un-realized window actually moved"
+    assert host.has_placed() is False, (
+        "has_placed() came back True after a move that silently no-opped -- the bar would "
+        "render PARKED ON THE MINIMAP (the pre-fix bug this test pins)")
+
+    # Sanity: the intended point is genuinely far from the far-sentinel/minimap corner, or the
+    # tolerance check this pins would be meaningless.
+    intended = window.moves[-1]
+    assert abs(intended[0] - corner[0]) > 50 or abs(intended[1] - corner[1]) > 50
+
+    # The surface becomes realized (mirrors the JS's post-deadline size re-assert firing
+    # onSizeChanged) and battle_bridge.refresh() drives ensure_placed() on its next tick.
+    window.realized = True
+    host.ensure_placed()
+    assert host.has_placed() is True
+    assert window.size == _EFF_LARGE_SURFACE
+    assert window.position != corner
+    # The TRUE resolved point for the real Large surface -- independently derived, not the bogus
+    # point `intended` computed against the still-256x256 fallback space (space = extent +
+    # surface, so a wrong surface at the first _place also poisons the space the anchor math
+    # used): 1920 - 510(minimap@idx4) - 8(gap) - 5(overhang) - 137(track edge) == 1260,
+    # 1080 - 28(gap_bottom) - 363(track edge y) == 689.
+    assert window.position == (1260, 689)
+
+
+def test_a_place_against_an_already_realized_window_places_normally(monkeypatch):
+    # THE TOLERANCE GUARD: a healthy, already-realized window (the common case) must place and
+    # report has_placed() True on the very first _place(), exactly as before the readback existed
+    # -- zero regression on the happy path.
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({
+        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE})
+    host, window = _efficiency_host_realizable()
+    window.realized = True
+    host._place(window)
+    assert host.has_placed() is True
+    assert host._last_good == window.moves[-1]
+
+
+class _ClampingRealizedWindow(_FakeWindow):
+    """A REALIZED window (its `.size` is the plain `_SURFACE` default -- never the 256x256
+    fallback) whose move() CLAMPS to the movable extent, exactly like the real engine clamps
+    every Wulf window to the screen (memory `engine-clamps-every-wulf-window-to-screen-and-the-
+    mod-depends-on-it`) -- the scenario behind a legitimate Free/legacy pin resolved past the
+    screen edge (memory `unreachable-drag-position-is-stored-verbatim`) landing at the corner
+    instead of its literal off-screen coordinate. `window.position` therefore ends up FAR from
+    the intended `(x, y)`, same as the no-op bug above -- position alone cannot tell them apart,
+    which is exactly the reviewer's finding this fixture exists to pin."""
+
+    def move(self, x, y, xAnchor=None, yAnchor=None):
+        self.moves.append((x, y))
+        if (x, y) == (bar_window._FAR, bar_window._FAR):
+            self.position = self._max
+        else:
+            self.position = (min(max(x, 0), self._max[0]), min(max(y, 0), self._max[1]))
+
+
+def test_a_legitimately_clamped_free_pin_on_a_realized_window_stays_visible():
+    # THE REVIEWER'S FINDING #1: a legit off-screen Free/legacy pin, engine-clamped to the corner
+    # on a REALIZED window, must NOT be rejected as though it were the unrealized no-op bug -- the
+    # realization gate trusts the move outright once the surface is real, clamp or not.
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
+        mod_settings.BAR_POS_X_KEY: 5000, mod_settings.BAR_POS_Y_KEY: 5000})
+    host = bar_window.BarHost("test.item", lambda: object(), 0.865, 0,
+                              PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+                              PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
+                              PROGRESS_MM_GAP_BOTTOM, "[test]")
+    window = _ClampingRealizedWindow(1664, 824)      # REALIZED: real 256x92 surface, never 256x256
+    host._active = (window, object())
+    host._place(window)
+
+    intended = window.moves[-1]
+    assert intended == (5000, 5000), "the legacy Free pin must resolve to its literal off-screen pair"
+    assert window.position == (1664, 824), "the engine clamp must land at the movable extent's corner"
+    assert abs(window.position[0] - intended[0]) > bar_window._PLACE_TOLERANCE_PX
+    assert host.has_placed() is True, (
+        "a legitimately-clamped Free pin on a REALIZED window must stay visible, not be "
+        "rejected as though it were the unrealized no-op bug")
+
+
+# --- THE DERIVED PLACEMENT AT LARGE, END TO END, BOTH BARS --------------------------------------
+# The coverage gap flagged alongside the fix: the Default-size end-to-end pin above
+# (test_the_vertical_efficiency_bar_lands_on_the_derived_position) has no Large twin, and neither
+# bar had one for the Moving Average bar at all. Composed through each bar's REAL _resolve against
+# its own real Large surface (test_efficiency_surface_mirror / test_progress_surface_mirror), and
+# checked against an INDEPENDENTLY hand-derived expected point (not `anchor_minimap(<the same
+# constants>)`, which only re-checks constant wiring already covered by
+# test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large) --
+# `x = space_x - mm_size - gap - overhang - edge_x`, `y = space_y - gap_bottom - edge_y`, by hand.
+
+def test_the_vertical_efficiency_bar_lands_on_the_derived_position_at_large(monkeypatch):
+    from moe_calculator.domain.constants import EFFICIENCY_MM_TRACK_X_LARGE, MINIMAP_SIZES
+
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+                        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE,
+                        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
+    host, window = _efficiency_host(max_xy=_EFF_LARGE_MAX, surface=_EFF_LARGE_SURFACE)
+    space_x, space_y = host._space(window)
+    resolved = _resolved(host, window)
+    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 137(track edge) == 1260
+    # 1080 - 28(EFFICIENCY_MM_GAP_BOTTOM) - 363(MM_TRACK_Y_LARGE) == 689
+    assert resolved == (1260, 689)
+    mm_size = MINIMAP_SIZES[4]
+    assert resolved[0] + EFFICIENCY_MM_TRACK_X_LARGE <= space_x - mm_size, \
+        "the Large Damage Efficiency bar's track overlaps the minimap"
+
+
+def test_the_vertical_progress_bar_lands_on_the_derived_position_at_large(monkeypatch):
+    from moe_calculator.domain.constants import PROGRESS_MM_TRACK_X_LARGE, MINIMAP_SIZES
+
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+                        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE,
+                        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
+    host, window = _progress_vertical_host(max_xy=_PROG_LARGE_MAX, surface=_PROG_LARGE_SURFACE)
+    space_x, space_y = host._space(window)
+    resolved = _resolved(host, window)
+    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 147(track edge) == 1250
+    # 1080 - 30(PROGRESS_MM_GAP_BOTTOM) - 363(MM_TRACK_Y_LARGE) == 687
+    assert resolved == (1250, 687)
+    mm_size = MINIMAP_SIZES[4]
+    assert resolved[0] + PROGRESS_MM_TRACK_X_LARGE <= space_x - mm_size, \
+        "the Large Moving Average bar's track overlaps the minimap"
+
+
 # DELETED (v23, the Fixed-alignment redesign): the RULE 5 vertical + Damage Log right-edge
 # invariance tests (`_dl_vertical`, `_right_edge`, `_PROG_V_SURFACE_LARGE`, `_EFF_V_SURFACE_LARGE`,
 # and `test_x_shift_large_default_is_a_pure_no_op_for_horizontal_and_minimap`). A vertical bar

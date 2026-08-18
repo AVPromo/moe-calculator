@@ -89,6 +89,26 @@ from moe_calculator.domain.positioning import (anchor_centred_reduced, anchor_mi
 # read back the movable extent (= logical space - windowSize) and place proportionally.
 _FAR = 1 << 20
 
+# _place()'s readback tolerance, in logical px, used ONLY while the window is still UNREALIZED
+# (see _FALLBACK_SURFACE_SIZE below) -- how close window.position must land to the intended
+# (x, y) to count as "actually applied". A no-op move on that fallback surface leaves the window
+# at _extent's far-sentinel corner, hundreds of px away, so a few px of slack cannot mask that.
+# ponytail: a fixed px count, not a fraction of screen/anchor geometry -- anchor_minimap's points
+# sit well inside the screen, so a legitimate unrealized-window placement this close to the far
+# corner is not a real case; if one ever is, it does NOT self-heal on the very next refresh()
+# tick -- it stays pending until the surface actually REALIZES (onSizeChanged / ensure_placed's
+# retry), same as the no-op bug this guards against.
+_PLACE_TOLERANCE_PX = 3
+
+# The engine's fixed "default view size" fallback a Wulf window sits at before its surface has
+# ever been sized by the JS (see the module docstring's "Size calculation timeout"). Read as a
+# SURFACE size (space - _extent()'s movable extent), never as-is against a live measurement --
+# _place() uses this to tell "not yet realized, a no-op move is possible" apart from "realized,
+# trust the move even if the engine legitimately clamped it" (e.g. a Free pin placed past the
+# screen edge). ponytail: exact-equality is enough here (no tolerance like _PLACE_TOLERANCE_PX)
+# because none of these bars' real surfaces is ever exactly 256x256.
+_FALLBACK_SURFACE_SIZE = (256, 256)
+
 # The engine can NATIVELY destroy one of our windows out from under us. A WindowFlags.TOOLTIP
 # window (see _BarWindow) is disposable to Wulf: clicking an alternative-equipment slot on the
 # battle countdown makes the engine destroy the bar's window AND its view -- windowStatus and
@@ -507,15 +527,49 @@ class BarHost(object):
         defaults False and battle_bridge's push gates it on has_placed() (below), which stays
         False until a LATER _place succeeds, so nothing shows the corner meanwhile. The JS's
         post-deadline SURFACE_REASSERT_MS re-assert (see the module docstring) fires
-        onSizeChanged again shortly after mount regardless of this failure, re-running _place."""
+        onSizeChanged again shortly after mount regardless of this failure, re-running _place.
+
+        THE REAL MOVE BELOW CAN SILENTLY NO-OP, and that is not covered by the try/except above
+        it: on a not-yet-realized window (still the engine's 256x256 fallback -- e.g. the very
+        first _place, called from _onReady before the JS has ever pushed a real size) `window.move`
+        raises nothing, it just does not apply, leaving the window sitting wherever _extent's own
+        far-sentinel move put it -- which is the minimap's own corner.
+
+        POSITION ALONE CANNOT TELL THAT APART FROM A LEGITIMATE CLAMP, so this does not compare
+        `window.position` to `x, y` unconditionally: a Free pin the user dragged (or a stored
+        Ctrl+drag) past the screen edge resolves `x, y` off-screen ON PURPOSE, the engine clamps
+        the real move to the corner exactly like a no-op would, and comparing position alone would
+        reject that placement FOREVER (every retry lands at the same clamped corner). The real
+        discriminator is REALIZATION, which the extent/space measurement just above already
+        recovers as a surface size (space - extent) with no extra move: an UNREALIZED surface is
+        always exactly `_FALLBACK_SURFACE_SIZE`, and none of these bars' surfaces is ever really
+        that size. So:
+          * REALIZED (surface != the fallback) -- trust the move outright, unconditionally, same
+            as before this fix existed: whatever the engine did with `x, y` (clamped or not) is a
+            legitimate placement of a real surface.
+          * NOT YET REALIZED (surface == the fallback) -- fall back to the position readback
+            (`_PLACE_TOLERANCE_PX`): only on THIS surface can `window.move` no-op, so only here is
+            a mismatch actually the bug. Rejected, `_last_good` is left exactly as it was (None on
+            a first attempt), so has_placed() stays False and the bar stays hidden rather than
+            parked on the minimap; it does not clear on the very next refresh() tick either -- it
+            stays pending until the surface actually realizes (onSizeChanged flips `_sized`, and
+            ensure_placed() -- driven from battle_bridge.refresh(), since no call site is
+            guaranteed to run against a realized surface -- retries then)."""
         try:
             self._extent_cache = None
             max_x, max_y = self._extent(window)
             space_x, space_y = self._space(window)
             x, y = self._resolve(max_x, max_y, space_x, space_y)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
-            self._last_good = (x, y)
-            self._materialise(x, y, space_x - max_x, space_y - max_y)
+            surface = (space_x - max_x, space_y - max_y)
+            if surface != _FALLBACK_SURFACE_SIZE:
+                self._last_good = (x, y)
+            else:
+                applied_x, applied_y = window.position
+                if (abs(applied_x - x) <= _PLACE_TOLERANCE_PX
+                        and abs(applied_y - y) <= _PLACE_TOLERANCE_PX):
+                    self._last_good = (x, y)
+            self._materialise(x, y, surface[0], surface[1])
         except Exception:
             LOG_CURRENT_EXCEPTION()
             try:
@@ -702,6 +756,19 @@ class BarHost(object):
         index is re-read here, per placement, so no state has to be invalidated). No-op when
         closed."""
         if self._active is None:
+            return
+        self._place(self._active[0])
+
+    def ensure_placed(self):
+        """Retry _place() while this host is open but has never landed (_place's readback
+        rejected every attempt so far -- see its own docstring). No call site of _place is
+        guaranteed to run against a realized (post-256x256-fallback) surface, so this is the
+        reliable retry: called once per battle_bridge.refresh() tick for each active host,
+        after open_window(), it costs nothing once has_placed() is True (the common case,
+        checked first) and otherwise re-runs the exact same _place() the surface's own resize
+        event would have re-triggered anyway, just without waiting on that event. No-op with no
+        active window. _place() is already fail-soft, so nothing further to guard here."""
+        if self._active is None or self.has_placed():
             return
         self._place(self._active[0])
 

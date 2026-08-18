@@ -718,12 +718,21 @@ def refresh():
     the stale dead handle used to be trusted forever, so the bar silently stopped updating for the
     rest of the battle. open_window() now drops a dead handle and re-mounts; re-driving it here on
     the per-tick path re-opens any gated-on window whose live handle is gone (a no-op for a live
-    one). Only while in battle, and only for the gates that say the window should exist."""
+    one). Only while in battle, and only for the gates that say the window should exist.
+
+    THEN RETRY A REJECTED FIRST PLACEMENT (bar_window.BarHost.ensure_placed): no caller of
+    BarHost._place() is guaranteed to run against a realized surface, so its readback can reject
+    every attempt until this ticks it again. `getattr` rather than a bar_window import + isinstance
+    check -- battle_view (the corner overlay, not a BarHost) has no ensure_placed, and the two
+    bars already expose one as a module-level proxy, same as open_window above."""
     if _in_battle:
         try:
             for enabled, module in _window_gates():
                 if enabled:
                     module.open_window()
+                    ensure_placed = getattr(module, "ensure_placed", None)
+                    if ensure_placed is not None:
+                        ensure_placed()
         except Exception:
             LOG_CURRENT_EXCEPTION()
     view = battle_view.active_view()
