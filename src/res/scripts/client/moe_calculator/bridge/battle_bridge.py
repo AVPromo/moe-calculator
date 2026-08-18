@@ -14,7 +14,7 @@ burst of onTotalEfficiencyUpdated collapses to one deferred push.
 """
 import BigWorld
 
-from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG
+from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD
 from moe_calculator.adapter import battle_adapter
 from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
@@ -507,7 +507,7 @@ def _arm(label, get_holder, attr, handler):
         if event is not None and handler not in event:
             event += handler
             setattr(holder, attr, event)
-            LOG_DEBUG("[moe-battle] %s listener (re)armed" % label)
+            LOG_PROD("[moe-battle] %s listener (re)armed" % label)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

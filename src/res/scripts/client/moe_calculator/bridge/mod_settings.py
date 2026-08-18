@@ -38,7 +38,7 @@ literal English brand.
 ``merge_settings`` is pure so it unit-tests without the game (defaults, partial dict, unknown
 keys, reset, version drift).
 """
-from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG
+from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD
 from moe_calculator.adapter import settings_i18n
 
 # MSA store key for this mod (reverse-domain id). Stable across versions so saved checkbox
@@ -1910,7 +1910,7 @@ def register():
                         g_modsSettingsApi.saveState()
                     except Exception:
                         LOG_CURRENT_EXCEPTION()
-                    LOG_DEBUG("[moe] migrated saved settings across a settingsVersion bump")
+                    LOG_PROD("[moe] migrated saved settings across a settingsVersion bump")
                 except Exception:
                     LOG_CURRENT_EXCEPTION()
         # Wire the panel's "reset to defaults" button on whichever api(s) store our settings
@@ -1931,7 +1931,7 @@ def register():
         # leaving update_preview_images() (the change listener) to update on Apply as the fallback.
         _wire_live_preview()
         _registered = True
-        LOG_DEBUG("[moe] settings registered -> %r" % (_settings,))
+        LOG_PROD("[moe] settings registered -> %r" % (_settings,))
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

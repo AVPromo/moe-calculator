@@ -70,3 +70,13 @@ def test_log_debug_is_gated(monkeypatch):
     monkeypatch.setattr(_compat, "DEBUG", True)
     _compat.LOG_DEBUG("should appear")
     assert calls == [("should appear",)]
+
+
+def test_log_prod_is_not_gated(monkeypatch):
+    """LOG_PROD forwards to LOG_NOTE unconditionally -- even when DEBUG is False."""
+    calls = []
+    monkeypatch.setattr(_compat, "LOG_NOTE", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(_compat, "DEBUG", False)
+
+    _compat.LOG_PROD("should still appear")
+    assert calls == [("should still appear",)]

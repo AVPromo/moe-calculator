@@ -26,7 +26,7 @@ from CurrentVehicle import g_currentVehicle
 from helpers import dependency
 from skeletons.gui.shared import IItemsCache
 
-from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG
+from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD
 from moe_calculator.adapter import engine_adapter
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import i18n
@@ -284,7 +284,7 @@ def _arm(label, get_holder, attr, handler):
         if event is not None and handler not in event:
             event += handler
             setattr(holder, attr, event)
-            LOG_DEBUG("[moe] %s listener (re)armed" % label)
+            LOG_PROD("[moe] %s listener (re)armed" % label)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -298,7 +298,7 @@ def _arm_gui_resetters():
         from gui import g_guiResetters
         if _on_gui_reset not in g_guiResetters:
             g_guiResetters.add(_on_gui_reset)
-            LOG_DEBUG("[moe] gui-resetter listener (re)armed")
+            LOG_PROD("[moe] gui-resetter listener (re)armed")
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -490,7 +490,7 @@ def note_mount(name, vm):
             return (_placed_vm, _active[1]) if _active is not None else None
         # Our sub-view re-mounted with a fresh VM (post-battle hangar rebuild).
         if has_inject_model(vm):
-            LOG_DEBUG("[moe] our sub-view '%s' re-mounted foreign-occupied -> yield" % name)
+            LOG_PROD("[moe] our sub-view '%s' re-mounted foreign-occupied -> yield" % name)
             return None
         rvm = attach(vm)
         if rvm is None:
@@ -507,10 +507,10 @@ def note_mount(name, vm):
         _placed_name = chosen
         _placed_vm = _candidate_vms[chosen]
         if _candidate_order and chosen != _candidate_order[0]:
-            LOG_DEBUG("[moe] preferred sub-view occupied -> placed on fallback '%s'" % chosen)
+            LOG_PROD("[moe] preferred sub-view occupied -> placed on fallback '%s'" % chosen)
         return (_placed_vm, rvm)
     if action == BLOCKED:
-        LOG_DEBUG("[moe] all candidate sub-views occupied -> yielding (no placement)")
+        LOG_PROD("[moe] all candidate sub-views occupied -> yielding (no placement)")
     return None
 
 
