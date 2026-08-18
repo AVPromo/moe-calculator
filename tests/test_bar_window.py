@@ -1334,6 +1334,63 @@ def test_a_place_against_an_already_realized_window_places_normally(monkeypatch)
     assert host._last_good == window.moves[-1]
 
 
+class _UltrawideFallbackWindow(_FakeWindow):
+    """An UNREALIZED window whose engine-forced "default view size" is deliberately NOT
+    `bar_window._FALLBACK_SURFACE_SIZE` (256x256) -- the exact ultrawide-client defect the
+    universal-readback fix targets (see the module docstring's ultrawide note and
+    `_FALLBACK_SURFACE_SIZE`'s own "DEAD in shipped code" comment). Move-to-far-sentinel still
+    self-calibrates the extent (mirroring `_extent`'s own trick); any OTHER move silently NO-OPS
+    while unrealized, same as the live bug. The unrealized surface is passed in explicitly and is
+    NEVER (256, 256) -- proving the fix needs no knowledge of that constant, or any fixed fallback
+    size, at all."""
+
+    def __init__(self, space, unrealized_surface):
+        max_x = space[0] - unrealized_surface[0]
+        max_y = space[1] - unrealized_surface[1]
+        super(_UltrawideFallbackWindow, self).__init__(max_x, max_y, size=unrealized_surface)
+
+    def move(self, x, y, xAnchor=None, yAnchor=None):
+        self.moves.append((x, y))
+        if (x, y) == (bar_window._FAR, bar_window._FAR):
+            self.position = self._max
+        # else: silent no-op while unrealized -- mirrors the live bug this fixture pins.
+
+
+def test_a_place_against_an_unrealized_ultrawide_fallback_does_not_report_placed(monkeypatch):
+    # THE ULTRAWIDE REGRESSION this fix actually targets: the OLD `surface !=
+    # _FALLBACK_SURFACE_SIZE` discriminator assumed every unrealized window is stuck at exactly
+    # (256, 256). True on the dev machine it was measured against; FALSE on a real ultrawide
+    # client at 1x interface scale, whose engine-forced fallback is some OTHER size -- so the old
+    # test read `surface != (256, 256)` as True, took the "trust the move outright" branch, and
+    # stamped `_last_good` even though the move below had silently no-opped, parking the bar on the
+    # minimap. This fixture's unrealized surface (1720, 720) is neither (256, 256) NOR
+    # `bar_window._FALLBACK_SURFACE_SIZE`, on purpose -- the fix must not need to know it. RED
+    # against the old surface-size branch (it would report has_placed() True here); GREEN against
+    # the universal position-readback fix.
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({
+        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE})
+    from moe_calculator.domain.constants import (
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE, EFFICIENCY_MM_GAP_BOTTOM,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
+    host = bar_window.BarHost(
+        "MoEEfficiencyView", lambda: object(), EFFICIENCY_ANCHOR_Y_FRAC,
+        EFFICIENCY_ANCHOR_X_OFFSET, EFFICIENCY_ANCHOR_Y_SHIFT, EFFICIENCY_ANCHOR_Y_SHIFT_LARGE,
+        EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE, EFFICIENCY_MM_GAP_BOTTOM, "[test-uw]")
+    window = _UltrawideFallbackWindow(_EFF_SPACE, unrealized_surface=(1720, 720))
+    host._active = (window, object())
+
+    host._place(window)
+    corner = window._max
+    assert window.position == corner, "fixture bug: the un-realized window actually moved"
+    assert host.has_placed() is False, (
+        "an ultrawide client's non-256x256 unrealized fallback must not be mistaken for a "
+        "realized surface -- the old surface-size discriminator trusted this no-op move outright, "
+        "which is the exact regression this fix closes")
+
+
 class _ClampingRealizedWindow(_FakeWindow):
     """A REALIZED window (its `.size` is the plain `_SURFACE` default -- never the 256x256
     fallback) whose move() CLAMPS to the movable extent, exactly like the real engine clamps
@@ -1352,10 +1409,20 @@ class _ClampingRealizedWindow(_FakeWindow):
             self.position = (min(max(x, 0), self._max[0]), min(max(y, 0), self._max[1]))
 
 
-def test_a_legitimately_clamped_free_pin_on_a_realized_window_stays_visible():
-    # THE REVIEWER'S FINDING #1: a legit off-screen Free/legacy pin, engine-clamped to the corner
-    # on a REALIZED window, must NOT be rejected as though it were the unrealized no-op bug -- the
-    # realization gate trusts the move outright once the surface is real, clamp or not.
+def test_a_legitimately_clamped_free_pin_now_hides_instead_of_showing_at_the_clamped_corner():
+    # ACCEPTED TRADE-OFF (universal-position-readback fix, maintainer-approved): _place() no
+    # longer branches on surface size at all (see bar_window._FALLBACK_SURFACE_SIZE's own "DEAD in
+    # shipped code" comment and _place's docstring) -- EVERY move is now judged purely by how close
+    # `window.position` lands to the intended `(x, y)`, unconditionally, because a realization
+    # discriminator based on a guessed fallback size is itself what let an ultrawide client's
+    # differently-sized engine fallback slip through as "realized" and park the bar on the minimap.
+    # The cost, paid here on purpose: a REALIZED window's legitimate off-screen Free/legacy pin,
+    # engine-clamped to the movable extent's corner, is now INDISTINGUISHABLE from the old no-op
+    # bug by position alone -- both land far from the intended point -- so this case is now
+    # REJECTED too. has_placed() stays False and the bar simply stays hidden instead of clamping
+    # visibly to the corner. This test used to assert the opposite (has_placed() True, clamped-but-
+    # visible); it now stands as the documented record of the accepted regression, not a live guard
+    # against it.
     mod_settings._seed({
         mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
         mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
@@ -1372,9 +1439,10 @@ def test_a_legitimately_clamped_free_pin_on_a_realized_window_stays_visible():
     assert intended == (5000, 5000), "the legacy Free pin must resolve to its literal off-screen pair"
     assert window.position == (1664, 824), "the engine clamp must land at the movable extent's corner"
     assert abs(window.position[0] - intended[0]) > bar_window._PLACE_TOLERANCE_PX
-    assert host.has_placed() is True, (
-        "a legitimately-clamped Free pin on a REALIZED window must stay visible, not be "
-        "rejected as though it were the unrealized no-op bug")
+    assert host.has_placed() is False, (
+        "ACCEPTED TRADE-OFF: a legitimately-clamped Free pin on a REALIZED window is now "
+        "indistinguishable from the unrealized no-op bug by position alone, so it is rejected too "
+        "-- the bar hides rather than visibly clamping to the corner (maintainer-approved)")
 
 
 # --- THE DERIVED PLACEMENT AT LARGE, END TO END, BOTH BARS --------------------------------------
