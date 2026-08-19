@@ -2091,7 +2091,13 @@ def _on_changed(linkage, new_settings):
         if linkage != LINKAGE:
             return
         if _deriving:
-            _apply(new_settings)
+            LOG_PROD("[moe] deriving echo: incoming bar_pos=(%r, %r)"
+                     % (new_settings.get(BAR_POS_X_KEY), new_settings.get(BAR_POS_Y_KEY)))
+            # Exclude the keys THIS derivation just settled -- an echo of our own write can
+            # carry the panel's STALE pre-derivation values for them (see the docstring's
+            # RE-ENTRANCY LATCH section), which would clobber the settle back in _settings.
+            _apply({k: v for k, v in new_settings.items()
+                    if k not in (BAR_POS_X_KEY, BAR_POS_Y_KEY, PROGRESS_ORIENTATION_KEY)})
             LOG_DEBUG("[moe] settings changed (re-entrant, no derivation) -> %r" % (_settings,))
             _notify()
             return

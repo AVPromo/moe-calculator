@@ -2395,9 +2395,12 @@ def test_on_changed_deriving_latch_survives_a_synchronous_reentrant_stale_echo(m
     # Alignment UNTOUCHED -- v23 retired the Orientation-forces-Alignment rule), and the call
     # count -- not just the value -- proves the guard held.
     _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FIXED, x=900, y=500)
+    # The stale echo also carries an UNRELATED flag change (GARAGE_KEY) -- the guard must
+    # exclude only bar_pos/orientation, not swallow the whole payload.
     stale_payload = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
                      PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FREE,
-                     BAR_POS_X_KEY: 777, BAR_POS_Y_KEY: 888}
+                     BAR_POS_X_KEY: 777, BAR_POS_Y_KEY: 888,
+                     GARAGE_KEY: False}
     fake = _ReentrantFakeMsa({"enabled": True}, stale_payload)
     monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
 
@@ -2408,6 +2411,36 @@ def test_on_changed_deriving_latch_survives_a_synchronous_reentrant_stale_echo(m
     assert fake.written[PROGRESS_ALIGNMENT_KEY] == PROGRESS_ALIGN_FIXED
     assert (fake.written[BAR_POS_X_KEY], fake.written[BAR_POS_Y_KEY]) == (0, 0)
     assert mod_settings._deriving is False, "the latch must be released after the write-back"
+
+    # THE ACTUAL REGRESSION SURFACE: the write-payload assertions above are computed BEFORE the
+    # reentrant echo mutates anything further, so they alone cannot catch an echo clobbering the
+    # module-level cache AFTER the settle. Re-check _settings itself, post-echo.
+    assert (mod_settings._settings[BAR_POS_X_KEY], mod_settings._settings[BAR_POS_Y_KEY]) == \
+        (0, 0), "the stale echo clobbered the just-settled bar_pos in _settings"
+    assert mod_settings._settings[PROGRESS_ORIENTATION_KEY] == PROGRESS_ORIENT_VERTICAL
+    # The unrelated flag in the SAME stale echo must still have applied -- the guard protects
+    # only the three derived keys, nothing else.
+    assert mod_settings._settings[GARAGE_KEY] is False, \
+        "the guard swallowed an unrelated key from the same reentrant echo"
+
+
+def test_on_changed_deriving_guard_end_to_end_free_to_fixed_settles_at_origin(monkeypatch):
+    # End-to-end confirmation of the real Free -> Fixed live path: a driving _FakeMsaApi-shaped
+    # fake that echoes the panel's STALE pre-toggle bar_pos synchronously, exactly as the panel
+    # would when Free -> Fixed is toggled while a large Free-absolute pin is still stored. After
+    # all synchronous echoes settle, bar_pos must be (0, 0) in the live cache -- not the stale
+    # (2813, 1517) the panel's echo carried.
+    _seed_live(PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGN_FREE, x=2813, y=1517)
+    stale_payload = {PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL,
+                     PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FIXED,
+                     BAR_POS_X_KEY: 2813, BAR_POS_Y_KEY: 1517}
+    fake = _ReentrantFakeMsa({"enabled": True}, stale_payload)
+    monkeypatch.setattr(mod_settings, "_primary_api", lambda: fake)
+
+    mod_settings._on_changed(LINKAGE, {PROGRESS_ALIGNMENT_KEY: PROGRESS_ALIGN_FIXED})
+
+    assert (mod_settings.bar_pos_x(), mod_settings.bar_pos_y()) == (0, 0), \
+        "Free -> Fixed must settle at (0, 0), not the stale echoed Free-absolute pin"
 
 
 def test_set_position_writes_full_dict_preserving_enabled(monkeypatch):

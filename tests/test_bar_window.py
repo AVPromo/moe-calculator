@@ -37,13 +37,15 @@ class _PositionAnchor(object):
 
 
 _stub("frameworks.wulf", ViewSettings=_Permissive, ViewFlags=object(), WindowFlags=object(),
-      WindowLayer=object(), PositionAnchor=_PositionAnchor)
+      WindowLayer=object(), PositionAnchor=_PositionAnchor, ViewModel=_Permissive,
+      Array=_Permissive)
 _stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
 _stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1))
 
 import pytest                                             # noqa: E402
 
 from moe_calculator.bridge import bar_window              # noqa: E402
+from moe_calculator.bridge import battle_bridge           # noqa: E402
 from moe_calculator.bridge import mod_settings            # noqa: E402
 from moe_calculator.domain.constants import (                        # noqa: E402
     PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
@@ -1568,4 +1570,66 @@ def test_place_logged_latch_resets_on_remount(monkeypatch):
 
     host.open_window()   # re-mount
     assert host._place_logged is False
+
+
+# --- COLD-START PUSH GAP: _on_size_changed must push on a has_placed() False->True transition ---
+# _BarWindow._onReady()'s own first _place() call races the JS's real surface resize (see its own
+# docstring): on a cold mount the surface is still the engine's 256x256 fallback, that first
+# _place() rejects, and has_placed() stays False. The FIX is in _on_size_changed: it now lazily
+# calls battle_bridge.refresh() on exactly the has_placed() False->True transition, so the late
+# successful placement still pushes visible=True to the VM (the only other writer of that VM
+# field is battle_bridge.refresh()/push_progress/push_efficiency, and nothing else on this path
+# calls it).
+
+def _bind_on_size_changed(window, host):
+    """Wire `_BarWindow._on_size_changed`'s own two collaborators (`_place`/`_host`) directly onto
+    a fake WINDOW (not a separate `_BarWindow` instance) -- the real `_BarWindow` IS the engine
+    window (`_onReady` calls `self._place(self)`), so `_place`'s `window.move()`/`.size`/
+    `.position` reads must land on the SAME object `_on_size_changed` is called against. Building
+    a standalone `_BarWindow` would also need a live WindowFlags/WindowLayer that this file's
+    module-top stubs deliberately keep permissive stand-ins for. Returns a zero-arg callable
+    matching `Window.onSizeChanged`'s handler signature."""
+    window._place = host._place
+    window._host = host
+    bound = bar_window._BarWindow._on_size_changed.__get__(window)
+    return bound
+
+
+def test_on_size_changed_pushes_battle_bridge_refresh_on_cold_placement_transition(monkeypatch):
+    monkeypatch.setattr(bar_window, "_minimap_size_index", lambda: 4)
+    mod_settings._seed({
+        mod_settings.PROGRESS_ORIENTATION_KEY: mod_settings.PROGRESS_ORIENT_VERTICAL,
+        mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_LARGE})
+    host, window = _efficiency_host_realizable()
+    on_size_changed = _bind_on_size_changed(window, host)
+    refresh_calls = []
+
+    def _fake_refresh():
+        refresh_calls.append(1)
+        host.ensure_placed()   # mirrors the real battle_bridge.refresh()'s per-host retry
+
+    monkeypatch.setattr(battle_bridge, "refresh", _fake_refresh)
+
+    # Cold mount: the surface is still the 256x256 fallback -> _place() rejects -> no transition,
+    # no push.
+    on_size_changed(1, 0, 0)
+    assert host.has_placed() is False
+    assert refresh_calls == [], "a rejected placement must not push a refresh"
+
+    # The JS resizes the surface for real -> _place() now succeeds -> has_placed() flips
+    # False->True -> EXACTLY ONE refresh() push.
+    window.realized = True
+    on_size_changed(1, window._real_size[0], window._real_size[1])
+    assert host.has_placed() is True
+    assert len(refresh_calls) == 1, "the cold False->True transition must push exactly once"
+
+    # A ROUTINE resize afterward (already placed) must NOT push again -- the False->True guard.
+    on_size_changed(1, window._real_size[0], window._real_size[1])
+    assert host.has_placed() is True
+    assert len(refresh_calls) == 1, "a resize that leaves has_placed() True re-fired the push"
+
+    # NO INFINITE RE-ENTRANCY: the one push that DID fire drove refresh() -> ensure_placed() ->
+    # _place(), and that inner _place() found has_placed() already True on entry to THIS test's
+    # fake, so it took the no-op branch rather than cascading into another onSizeChanged/refresh.
+    assert len(refresh_calls) == 1
 

@@ -269,9 +269,31 @@ class _BarWindow(WindowImpl):
         ALSO flips the host's `_sized` latch: THIS is the first point a real (post-256x256
         fallback) surface size exists, which is exactly what BarHost._materialise gates on --
         materialising against the fallback size would bake a wrong Free anchor point FOREVER (see
-        TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 2)."""
+        TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 2).
+
+        ALSO pushes on a has_placed() False->True TRANSITION (cold-start fix): the only VM
+        `visible` writer is battle_bridge.refresh()/push_progress/push_efficiency, and NOTHING
+        else on this path calls it -- a late-but-successful _place() here used to flip
+        has_placed() True with no push to follow, so the bar stayed invisible until an unrelated
+        refresh (e.g. Ctrl) happened to fire. Captured BEFORE _place() (which is what can flip it)
+        and compared AFTER, so a routine Default<->Large / minimap resize that leaves an
+        already-True has_placed() alone does NOT push every time -- only the one-time cold
+        transition does. Lazy import avoids a bar_window <-> battle_bridge cycle (same pattern as
+        _BarView._onLoading above).
+
+        CANNOT RE-ENTER: window.move() (inside _place) is a position change, not a resize, so it
+        never re-fires onSizeChanged; battle_bridge.refresh() -> ensure_placed() finds
+        has_placed() already True (we just set it) and takes its no-op branch, so no new _place()
+        -- let alone a new resize -- is generated from inside this handler."""
         self._host._sized = True
+        was_placed = self._host.has_placed()
         self._place(self)
+        if not was_placed and self._host.has_placed():
+            try:
+                from moe_calculator.bridge import battle_bridge
+                battle_bridge.refresh()
+            except Exception:
+                LOG_CURRENT_EXCEPTION()
 
     def detach(self):
         """Drop the onSizeChanged subscription. Called from close_window BEFORE destroy so the
