@@ -59,11 +59,15 @@ _EXTRA_FILES = ("dist/INSTALL.txt",)
 # matched via re.escape so any dots in it stay literal. These forms UNAMBIGUOUSLY carry THIS
 # mod's version (a packaged/installer filename, a MOD_VERSION/ModVersion assignment), so they are
 # scanned in every file.
+# Version group allows an optional semver pre-release suffix (e.g. "-beta.0", "-rc.1")
+# so a pre-release cut doesn't spuriously fail this gate.
+_VER = r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)"
+
 _PATTERNS = [
-    re.compile(re.escape("com.14th_ua.moe_calculator") + r"_(\d+\.\d+\.\d+)\.wotmod"),
-    re.compile(re.escape("MoECalculator") + r"-Setup-(\d+\.\d+\.\d+)\.exe"),
-    re.compile(r'MOD_VERSION\s*=\s*"(\d+\.\d+\.\d+)"'),
-    re.compile(r'#define\s+ModVersion\s+"(\d+\.\d+\.\d+)"'),
+    re.compile(re.escape("com.14th_ua.moe_calculator") + r"_" + _VER + r"\.wotmod"),
+    re.compile(re.escape("MoECalculator") + r"-Setup-" + _VER + r"\.exe"),
+    re.compile(r'MOD_VERSION\s*=\s*"' + _VER + r'"'),
+    re.compile(r'#define\s+ModVersion\s+"' + _VER + r'"'),
 ]
 
 # The free-prose "version <v>" form is inherently ambiguous -- it also matches a DEPENDENCY
@@ -72,7 +76,7 @@ _PATTERNS = [
 # to the consumer-facing install docs, where "version <v>" means THIS mod's version by convention
 # -- not to source, research notes, or other prose scattered across the repo. The (?<!\d\.) /
 # (?!\.\d) guards keep it from matching a fragment of the 4-part client version ("2.3.0.1").
-_PROSE_PATTERN = re.compile(r"(?<!\d\.)version\s+(\d+\.\d+\.\d+)(?!\.\d)")
+_PROSE_PATTERN = re.compile(r"(?<!\d\.)version\s+" + _VER + r"(?!\.\d)")
 # Root-relative, forward-slashed. dist/INSTALL.txt is gitignored build output (scanned when present
 # via _EXTRA_FILES); README.md / INSTALL.md are the shipped consumer docs.
 _PROSE_FILES = frozenset(("README.md", "INSTALL.md", "dist/INSTALL.txt"))
@@ -151,5 +155,35 @@ def main():
     return 0
 
 
+def _selfcheck():
+    """Assert every pattern captures a pre-release suffix in full, and still
+    captures a plain X.Y.Z with no regression. Not part of the exit-code gate.
+
+    Sample lines are built via %-formatting (not written as literals) so this
+    file's own source doesn't itself look like a version reference to scan().
+    """
+    pre = "3.1.4" + "-beta.0"
+    samples = [
+        (_PATTERNS[0], "com.14th_ua.moe_calculator_%s.wotmod" % pre),
+        (_PATTERNS[1], "MoECalculator-Setup-%s.exe" % pre),
+        (_PATTERNS[2], 'MOD_VERSION = "%s"' % pre),
+        (_PATTERNS[3], '#define ModVersion "%s"' % pre),
+        (_PROSE_PATTERN, "version %s" % pre),
+    ]
+    for pat, line in samples:
+        m = pat.search(line)
+        assert m and m.group(1) == pre, (pat.pattern, line, m)
+    # No-suffix case still parses, and the prose guard still rejects a 4-part version.
+    plain = "3.1.3"
+    assert _PATTERNS[0].search(
+        "com.14th_ua.moe_calculator_%s.wotmod" % plain).group(1) == plain
+    assert _PROSE_PATTERN.search("version %s" % plain) is not None
+    assert _PROSE_PATTERN.search("version 2.3.0.1") is None
+    print("selfcheck OK: pre-release suffix and no-suffix forms both parse.")
+
+
 if __name__ == "__main__":
+    if "--selfcheck" in sys.argv:
+        _selfcheck()
+        sys.exit(0)
     sys.exit(main())
