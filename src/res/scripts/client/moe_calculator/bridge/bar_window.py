@@ -120,6 +120,27 @@ _FALLBACK_SURFACE_SIZE = (256, 256)
 _DEAD_STATUS = (4, 5)   # WindowStatus/View DESTROYING, DESTROYED
 
 
+def _clamp_to_extent(x, y, max_x, max_y):
+    """Clamp a resolved top-left into the window's movable extent [0, max] per axis so EVERY target
+    is reachable, then the readback in _place is a pure realization test.
+
+    Without this, a pin stored off-screen (e.g. a Free/legacy y below the screen bottom) resolves to
+    a target the engine silently clamps back on-screen, so ``applied != target`` and _place's
+    realization gate (b24e0b4) REJECTS it forever -- has_placed() never flips and the bar hides for
+    the whole battle, retrying the same unreachable target every tick. Clamping first makes an
+    off-screen pin land on-screen and its readback match.
+
+    NEVER emits the exact pair (0, 0): that is Free's AUTO sentinel (see
+    unclamping-drag-is-constrained-by-the-auto-placement-sentinel), and the clamped value flows on
+    into _materialise's write-back -- a negative / off-top-left pin clamping to (0, 0) is floored one
+    px on x so it can never be misread as 'not yet materialised'. Pure (no engine call): unit-tested."""
+    cx = max(0, min(int(x), int(max_x)))
+    cy = max(0, min(int(y), int(max_y)))
+    if (cx, cy) == (0, 0):
+        cx = 1
+    return cx, cy
+
+
 def _cursor_position():
     """The mouse cursor's live position as the engine reports it, or None.
 
@@ -163,16 +184,23 @@ def _effective_variant():
     override if it has one, else the global default -- mirrors battle_bridge._window_gates so
     _materialise's own-variant check (below) doesn't skip the host an override actually opened.
 
+    Returns None when the played vehicle's descr can't be read THIS frame (unreadable descr ->
+    int_cd 0, or a read exception). None means "can't resolve" -- NOT the global default: an
+    unreadable frame must never flip _materialise's own-variant gate against a host that a
+    per-vehicle OVERRIDE legitimately opened (that would skip a fresh Free AUTO write for a frame,
+    leaving the steppers reading 0/0 longer). _materialise treats None as "proceed" (below).
+
     Lazily imported for the same reason _minimap_size_index is (battle_adapter touches BigWorld
-    at module scope) and fail-soft to the global default -- a read failure can only fall back to
-    the pre-override behaviour, never wedge _materialise."""
+    at module scope)."""
     default = mod_settings.progress_bar_variant()
     try:
         from moe_calculator.adapter import battle_adapter, variant_overrides
         int_cd = battle_adapter._player_vehicle_int_cd(battle_adapter._player_vehicle_descr())
+        if not int_cd:
+            return None
         return variant_overrides.effective(int_cd, default)
     except Exception:
-        return default
+        return None
 
 
 def _screen_resolution():
@@ -581,6 +609,11 @@ class BarHost(object):
             max_x, max_y = self._extent(window)
             space_x, space_y = self._space(window)
             x, y = self._resolve(max_x, max_y, space_x, space_y)
+            # Clamp into the movable extent BEFORE the move so an off-screen/edge pin lands on-screen
+            # and its readback confirms placement, instead of the engine clamping it and _place
+            # rejecting the mismatch forever (see _clamp_to_extent). A cold-start no-op still fails
+            # the readback: the clamped on-screen target is far from an unrealized (0, 0) position.
+            x, y = _clamp_to_extent(x, y, max_x, max_y)
             window.move(x, y, xAnchor=PositionAnchor.LEFT, yAnchor=PositionAnchor.TOP)
             applied_x, applied_y = window.position
             surface = (space_x - max_x, space_y - max_y)
@@ -589,6 +622,19 @@ class BarHost(object):
             # alignment/offset a remote python.log needs to confirm the Fixed/Free shared-pair fix.
             alignment = mod_settings.progress_bar_alignment()
             off_x, off_y = mod_settings.bar_pos_x(), mod_settings.bar_pos_y()
+            # Plain realization test: did the move actually apply? A realized in-bounds move lands
+            # dead-on; an unrealized surface's move NO-OPS and the readback stays at the pre-move
+            # position -- which the reported client reports as (0, 0) (python.log: applied=(0, 0)
+            # surface=(0, 0)), NOT necessarily the far-sentinel corner (see memory
+            # bar-host-place-must-gate-on-surface-realization). Because the target is now CLAMPED
+            # into [0, max] it can never be (0, 0) for a real pin (the AUTO sentinel is floored to
+            # (1, 0) in _clamp_to_extent) and is well inside the screen for any anchor, so a no-op
+            # readback -- whether (0, 0) or the far corner -- is always further than
+            # _PLACE_TOLERANCE_PX from it and this check rejects it, keeping the cold-start bar
+            # hidden (no flash) until the surface realizes. Do NOT re-add a guard that assumes the
+            # no-op value is always the far sentinel: it catches nothing here (the tolerance check
+            # already rejects the real (0,0) no-op) and would permanently hide a legitimate realized
+            # bottom-right pin, which clamps to (max_x, max_y) and lands there dead-on.
             if (abs(applied_x - x) <= _PLACE_TOLERANCE_PX
                     and abs(applied_y - y) <= _PLACE_TOLERANCE_PX):
                 self._last_good = (x, y)
@@ -659,7 +705,13 @@ class BarHost(object):
             can briefly have both open (see the class docstring)."""
         if not self._sized:
             return
-        if _effective_variant() != self._variant:
+        # Own-variant gate: skip only when the effective variant is KNOWN to be a different host
+        # (the load-bearing case -- a stale host still open mid-flip must not materialise against
+        # the shared pair). None means the descr was unreadable this frame -> proceed rather than
+        # spuriously skip, or a per-vehicle-override host would miss a fresh Free AUTO write until
+        # the next readable frame (see _effective_variant).
+        effective = _effective_variant()
+        if effective is not None and effective != self._variant:
             return
         if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
             return
@@ -718,27 +770,36 @@ class BarHost(object):
         above stays in top-left space throughout; only the value actually persisted is converted.
 
         BLOCKED OUTRIGHT UNDER FIXED (v23 follow-on): dragging only ever makes sense once the bar
-        HAS a free-floating position to write, so the gate sits here, at the very top, before any
-        cursor read or window move -- the bar must never visibly follow the cursor and then snap
-        back once the gesture ends, which is what letting the gesture run and discarding the
-        result at "end" would look like. Checked on EVERY phase (not just "start"), since the
-        setting could in principle change mid-gesture and a half-finished drag must not leave
-        `_grab`/`_drag_pos` in a state a later phase could act on.
+        HAS a free-floating position to write, so the Free gate sits before any cursor read or
+        window move -- the bar must never visibly follow the cursor and then snap back once the
+        gesture ends, which is what letting the gesture run and discarding the result at "end"
+        would look like. The gate guards the START / MOVE application ONLY: "end" runs its
+        state-clearing cleanup UNCONDITIONALLY (so an alignment flip or Reset mid-gesture can never
+        strand `_grab`/`_drag_pos`), and merely SKIPS the persist when Alignment is no longer Free.
 
         Fail-soft throughout: an unreadable cursor leaves the window exactly where it is, and nothing
         raises into the engine's input path."""
         if self._active is None:
             return
-        if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
-            return
         try:
             if phase == "end":
+                # ALWAYS clear the gesture state, even if Alignment left Free mid-gesture (a radio
+                # flip or Reset): otherwise _grab/_drag_pos leak into the next gesture. Persist the
+                # final position ONLY when the gesture still completed as a Free drag -- one whose
+                # Alignment changed underneath it must not write a stale Free pin, but it must still
+                # leave clean state behind (and a gesture that never moved has _drag_pos None).
                 pos = self._drag_pos
                 self._grab = None
                 self._drag_pos = None
                 self._declined = False
-                if pos is not None:
+                if pos is not None and (mod_settings.progress_bar_alignment()
+                                        == mod_settings.PROGRESS_ALIGN_FREE):
                     mod_settings.set_bar_position(pos[0], pos[1], persist=True)
+                return
+            # start / move only run under Free (dragging needs a free-floating pin to write) -- the
+            # gate sits HERE, AFTER the end-cleanup above, so an alignment flip can never strand
+            # _grab/_drag_pos in a state a later phase acts on.
+            if mod_settings.progress_bar_alignment() != mod_settings.PROGRESS_ALIGN_FREE:
                 return
             if phase == "start":
                 self._declined = False
@@ -769,8 +830,12 @@ class BarHost(object):
                 if not cursor_in_rect(spot, origin, (space_x - max_x, space_y - max_y)):
                     self._declined = True
                     return                      # the gesture began on somebody else's box
-                bx, by = self._resolve(max_x, max_y, space_x, space_y)
-                self._grab = (bx - spot[0], by - spot[1])
+                # Grab from the window's ACTUAL position (`origin`, read above BEFORE _extent -- see
+                # memory bar-host-drag-must-read-position-before-extent), NOT from _resolve(): the
+                # window may sit elsewhere than _resolve() computes -- an engine-clamped Free pin, or
+                # a minimap-size / interface-scale change since the last _place -- and grabbing off
+                # the resolved point would teleport the bar by that divergence on the first move.
+                self._grab = (origin[0] - spot[0], origin[1] - spot[1])
                 self._drag_pos = None
                 return                          # the bar is already where it was grabbed
             pos = cursor_top_left(cursor, screen, space_x, space_y,
@@ -842,11 +907,12 @@ class BarHost(object):
         docstring): a dead cached handle is DROPPED and re-mounted through the normal path below,
         rather than trusted forever -- which is what silently killed the bar for the rest of a
         battle after an alternative-equipment-slot click on the countdown. The re-mount re-runs the
-        SAME code the first mount does (fresh view + window, re-armed onSizeChanged, re-placed to
-        _last_good), so the bar returns to its last position. battle_bridge.refresh() re-drives this
-        every tick for each gated-on window, which is what actually TRIGGERS the re-mount (open_window
-        is not otherwise called mid-battle) -- once re-created it is alive again and this returns
-        early, so there is no busy re-create loop."""
+        SAME code the first mount does (fresh view + window, re-armed onSizeChanged, all cold-start
+        latches reset -- see below), so it re-places from the stored pin against the new window's own
+        realized surface, exactly like the first mount. battle_bridge.refresh() re-drives this every
+        tick for each gated-on window, which is what actually TRIGGERS the re-mount (open_window is
+        not otherwise called mid-battle) -- once re-created it is alive again and this returns early,
+        so there is no busy re-create loop."""
         if self._active is not None:
             if not self._is_dead():
                 return self._active[1]
@@ -864,9 +930,17 @@ class BarHost(object):
             # against this window's own first (fallback-sized) _place call. The reject-log and
             # place-log latches reset alongside it so each gets ONE fresh LOG_PROD line per
             # battle, not just per process.
+            # _last_good MUST reset too: it is what has_placed() reads, and a fresh unrealized
+            # window has placed NOTHING yet. A stale True carried over from the previous mount would
+            # make ensure_placed() early-return (skipping the cold-start retry) and open the
+            # push_progress/push_efficiency visibility gate immediately -- flashing the bar
+            # mis-placed at the far-sentinel corner before this window's own _place ever confirms.
+            # Safe to null: _place re-resolves its target from the stored pin (_resolve), never from
+            # _last_good; the only other reader is the exception fallback, which is None-guarded.
             self._sized = False
             self._reject_logged = False
             self._place_logged = False
+            self._last_good = None
             view = _BarView(layout, self._vm_factory())
             window = _BarWindow(view, self._place, self)
             # Publish the singleton BEFORE load() so the view's _onLoading initial push (which calls

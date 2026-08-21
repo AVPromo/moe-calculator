@@ -327,6 +327,47 @@ def test_the_gesture_state_does_not_leak_into_the_next_one(monkeypatch):
     assert host._grab is None and host._drag_pos is None
 
 
+def test_the_grab_is_measured_from_the_windows_actual_position_not_resolve(monkeypatch):
+    # Bug A: the grab offset must come from where the window ACTUALLY sits (window.position), NOT
+    # from _resolve() -- the two diverge when the engine clamped a Free pin, or the minimap size /
+    # interface scale changed since the last _place. Grabbing off _resolve() teleports the bar by
+    # that divergence on the first move. (Revert -- grab from _resolve() -- lands the move on the
+    # resolved point instead of `origin`.)
+    host, window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
+    origin = (900, 600)                      # where the bar ACTUALLY sits
+    window.position = origin
+    max_x, max_y = host._extent(window)      # warm from _host's _place -- no far-sentinel teleport
+    space_x, space_y = host._space(window)
+    assert host._resolve(max_x, max_y, space_x, space_y) != origin, \
+        "fixture: _resolve() must differ from the actual position for this test to bite"
+    cursor = (950, 620)                      # a point inside the 256x92 bar sitting at `origin`
+    _at(monkeypatch, cursor)                 # pixel-space: device px == logical at 1x
+    host.drag("start")
+    assert window.moves == [], "start must not move the bar"
+    host.drag("move")                        # same cursor -> the bar must stay PUT at `origin`
+    assert window.moves[-1] == origin, "a move at the grab point teleported off _resolve()"
+
+
+def test_the_gesture_end_clears_state_and_skips_persist_when_alignment_left_free(monkeypatch):
+    # Bug B: an "end" arriving after Alignment flipped away from Free mid-gesture (a radio flip or
+    # Reset) must STILL clear _grab/_drag_pos -- the old code early-returned before the cleanup,
+    # leaking drag state into the next gesture -- while NOT persisting a stale Free pin.
+    host, _window = _host(1664, 824, align=mod_settings.PROGRESS_ALIGN_FREE)
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda x, y, persist: calls.append((x, y, persist)))
+    _at(monkeypatch, _GRAB)
+    host.drag("start")
+    _at(monkeypatch, (0.4, -0.4))
+    host.drag("move")
+    assert host._grab is not None and host._drag_pos is not None
+    # Alignment leaves Free underneath the live gesture.
+    mod_settings._settings[mod_settings.PROGRESS_ALIGNMENT_KEY] = mod_settings.PROGRESS_ALIGN_FIXED
+    host.drag("end")
+    assert host._grab is None and host._drag_pos is None, "end must clear state after a non-Free flip"
+    assert all(c[2] is not True for c in calls), "a non-Free end must not persist a stale pin"
+
+
 def test_drag_past_the_top_left_edge_goes_negative_and_is_not_clamped(monkeypatch):
     # THERE IS NO SAFEZONE: a bar dragged off the left/top edge keeps going into negative logical
     # coordinates. The old [1, max] clamp stopped the corner at the screen edge, which made the last
@@ -576,6 +617,29 @@ def test_minimap_size_index_wrapper_fails_soft_when_the_adapter_read_raises(monk
     assert bar_window._minimap_size_index() == len(MINIMAP_SIZES) - 1
 
 
+def test_effective_variant_the_producer_itself_not_just_the_consumer_contract(monkeypatch):
+    # bar_window._effective_variant()'s OWN body, driven for real (not monkeypatched wholesale, as
+    # every other _effective_variant-consuming test in this file does) -- covers the two `return
+    # None` paths (unreadable int_cd == 0, and a raising read) plus the normal mapped-variant path,
+    # so the three are proven DISTINCT rather than all collapsing to the same branch.
+    from moe_calculator.adapter import battle_adapter, variant_overrides
+
+    monkeypatch.setattr(battle_adapter, "_player_vehicle_int_cd", lambda descr: 0)
+    assert bar_window._effective_variant() is None, "int_cd 0 must read as unresolvable, not a variant"
+
+    def _boom(descr):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(battle_adapter, "_player_vehicle_int_cd", _boom)
+    assert bar_window._effective_variant() is None, "a raising read must fail soft to None"
+
+    monkeypatch.setattr(battle_adapter, "_player_vehicle_int_cd", lambda descr: 12345)
+    monkeypatch.setattr(variant_overrides, "effective",
+                        lambda int_cd, default: mod_settings.PROGRESS_VARIANT_EFFICIENCY)
+    assert bar_window._effective_variant() == mod_settings.PROGRESS_VARIANT_EFFICIENCY, \
+        "a readable int_cd must still resolve to the mapped variant, not None"
+
+
 # --- BarHost._resolve's THREE alignment branches --------------------------------------------
 
 def _resolved(host, window):
@@ -820,11 +884,14 @@ def test_materialise_writes_exactly_once_after_onsizechanged_for_its_own_variant
 def test_materialise_only_fires_for_its_own_variant(monkeypatch):
     # Both hosts share ONE stored pair; a live variant flip mid-battle can briefly have both open
     # (see BarHost's own docstring), so a materialisation triggered by ONE bar's mount must never
-    # fire for the OTHER bar's host.
+    # fire for the OTHER bar's host. The gate keys on _effective_variant() (a READABLE frame's
+    # resolved variant) -- model that directly rather than via an unreadable descr, which now means
+    # "can't tell -> proceed" (see test_materialise_proceeds_when_the_descr_is_unreadable).
     mod_settings._seed({
         mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
-        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0,
-        mod_settings.PROGRESS_VARIANT_KEY: mod_settings.PROGRESS_VARIANT_EFFICIENCY})
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
+    monkeypatch.setattr(bar_window, "_effective_variant",
+                        lambda: mod_settings.PROGRESS_VARIANT_EFFICIENCY)
     host, window = _cold_host(1664, 824)
     host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE   # the OTHER bar is selected
     host._sized = True
@@ -833,6 +900,29 @@ def test_materialise_only_fires_for_its_own_variant(monkeypatch):
                         lambda x, y, persist=True: calls.append((x, y, persist)))
     host._place(window)
     assert calls == []
+
+
+def test_materialise_proceeds_when_the_descr_is_unreadable(monkeypatch):
+    # Bug C: _effective_variant() returns None when the played vehicle's descr can't be read this
+    # frame. That must NOT flip the own-variant gate against the correctly-open host -- otherwise a
+    # per-vehicle-override host would skip a fresh Free AUTO write for the frame, leaving the
+    # steppers reading 0/0 longer. None -> proceed. (Revert -- gate treating None as a mismatch --
+    # makes this fail: calls stays empty.)
+    from moe_calculator.domain.positioning import free_anchor_point
+
+    mod_settings._seed({
+        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+        mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
+    monkeypatch.setattr(bar_window, "_effective_variant", lambda: None)
+    host, window = _cold_host(1664, 824)
+    host._variant = mod_settings.PROGRESS_VARIANT_MOVING_AVERAGE
+    host._sized = True
+    calls = []
+    monkeypatch.setattr(mod_settings, "set_bar_position",
+                        lambda x, y, persist=True: calls.append((x, y, persist)))
+    host._place(window)
+    assert len(calls) == 1
+    assert (calls[0][0], calls[0][1]) == free_anchor_point(window.moves[-1], _SURFACE, False)
 
 
 def test_materialise_converts_a_legacy_pre_v22_pin_exactly_once(monkeypatch):
@@ -1317,8 +1407,10 @@ def test_a_place_against_an_unrealized_window_does_not_report_placed(monkeypatch
     # point `intended` computed against the still-256x256 fallback space (space = extent +
     # surface, so a wrong surface at the first _place also poisons the space the anchor math
     # used): 1920 - 510(minimap@idx4) - 8(gap) - 5(overhang) - 137(track edge) == 1260,
-    # 1080 - 28(gap_bottom) - 363(track edge y) == 689.
-    assert window.position == (1260, 689)
+    # 1080 - 28(gap_bottom) - 363(track edge y) == 689 -- but 689 is 7px BELOW the movable extent
+    # (_EFF_LARGE_MAX[1] == 682), so _place clamps y into the extent (the real engine already
+    # clamps this window on-screen; the clamp just makes the readback confirm instead of reject).
+    assert window.position == (1260, 682)
 
 
 def test_a_place_against_an_already_realized_window_places_normally(monkeypatch):
@@ -1342,7 +1434,8 @@ class _UltrawideFallbackWindow(_FakeWindow):
     universal-readback fix targets (see the module docstring's ultrawide note and
     `_FALLBACK_SURFACE_SIZE`'s own "DEAD in shipped code" comment). Move-to-far-sentinel still
     self-calibrates the extent (mirroring `_extent`'s own trick); any OTHER move silently NO-OPS
-    while unrealized, same as the live bug. The unrealized surface is passed in explicitly and is
+    while unrealized and the readback falls back to (0, 0), exactly what the reported client's
+    python.log shows (applied=(0, 0)). The unrealized surface is passed in explicitly and is
     NEVER (256, 256) -- proving the fix needs no knowledge of that constant, or any fixed fallback
     size, at all."""
 
@@ -1355,7 +1448,8 @@ class _UltrawideFallbackWindow(_FakeWindow):
         self.moves.append((x, y))
         if (x, y) == (bar_window._FAR, bar_window._FAR):
             self.position = self._max
-        # else: silent no-op while unrealized -- mirrors the live bug this fixture pins.
+        else:
+            self.position = (0, 0)   # unrealized: the move did not apply; readback is (0, 0)
 
 
 def test_a_place_against_an_unrealized_ultrawide_fallback_does_not_report_placed(monkeypatch):
@@ -1385,8 +1479,7 @@ def test_a_place_against_an_unrealized_ultrawide_fallback_does_not_report_placed
     host._active = (window, object())
 
     host._place(window)
-    corner = window._max
-    assert window.position == corner, "fixture bug: the un-realized window actually moved"
+    assert window.position == (0, 0), "the unrealized no-op readback is (0, 0), not the far corner"
     assert host.has_placed() is False, (
         "an ultrawide client's non-256x256 unrealized fallback must not be mistaken for a "
         "realized surface -- the old surface-size discriminator trusted this no-op move outright, "
@@ -1397,11 +1490,10 @@ class _ClampingRealizedWindow(_FakeWindow):
     """A REALIZED window (its `.size` is the plain `_SURFACE` default -- never the 256x256
     fallback) whose move() CLAMPS to the movable extent, exactly like the real engine clamps
     every Wulf window to the screen (memory `engine-clamps-every-wulf-window-to-screen-and-the-
-    mod-depends-on-it`) -- the scenario behind a legitimate Free/legacy pin resolved past the
-    screen edge (memory `unreachable-drag-position-is-stored-verbatim`) landing at the corner
-    instead of its literal off-screen coordinate. `window.position` therefore ends up FAR from
-    the intended `(x, y)`, same as the no-op bug above -- position alone cannot tell them apart,
-    which is exactly the reviewer's finding this fixture exists to pin."""
+    mod-depends-on-it`). Because `_place` now pre-clamps the target INTO that extent, the move it
+    issues is already in-bounds and lands dead-on -- so a legitimate off-screen Free/legacy pin
+    resolves to the extent's corner and the bar SHOWS there (the pre-b24e0b4 clamp-visible
+    behaviour, restored)."""
 
     def move(self, x, y, xAnchor=None, yAnchor=None):
         self.moves.append((x, y))
@@ -1411,40 +1503,61 @@ class _ClampingRealizedWindow(_FakeWindow):
             self.position = (min(max(x, 0), self._max[0]), min(max(y, 0), self._max[1]))
 
 
-def test_a_legitimately_clamped_free_pin_now_hides_instead_of_showing_at_the_clamped_corner():
-    # ACCEPTED TRADE-OFF (universal-position-readback fix, maintainer-approved): _place() no
-    # longer branches on surface size at all (see bar_window._FALLBACK_SURFACE_SIZE's own "DEAD in
-    # shipped code" comment and _place's docstring) -- EVERY move is now judged purely by how close
-    # `window.position` lands to the intended `(x, y)`, unconditionally, because a realization
-    # discriminator based on a guessed fallback size is itself what let an ultrawide client's
-    # differently-sized engine fallback slip through as "realized" and park the bar on the minimap.
-    # The cost, paid here on purpose: a REALIZED window's legitimate off-screen Free/legacy pin,
-    # engine-clamped to the movable extent's corner, is now INDISTINGUISHABLE from the old no-op
-    # bug by position alone -- both land far from the intended point -- so this case is now
-    # REJECTED too. has_placed() stays False and the bar simply stays hidden instead of clamping
-    # visibly to the corner. This test used to assert the opposite (has_placed() True, clamped-but-
-    # visible); it now stands as the documented record of the accepted regression, not a live guard
-    # against it.
-    mod_settings._seed({
-        mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
-        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
-        mod_settings.BAR_POS_X_KEY: 5000, mod_settings.BAR_POS_Y_KEY: 5000})
-    host = bar_window.BarHost("test.item", lambda: object(), 0.865, 0,
-                              PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
-                              PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
-                              PROGRESS_MM_GAP_BOTTOM, "[test]")
-    window = _ClampingRealizedWindow(1664, 824)      # REALIZED: real 256x92 surface, never 256x256
+class _UnrealizedZeroWindow(_FakeWindow):
+    """An UNREALIZED surface modelling the REPORTED client's real no-op: the far-sentinel move
+    still measures the extent (mirrors _extent's own trick), but a real in-bounds move NO-OPS and
+    the readback falls back to (0, 0) -- exactly what the reported python.log shows
+    (applied=(0, 0) surface=(0, 0)), NOT the far-sentinel corner (memory
+    `bar-host-place-must-gate-on-surface-realization`). Since the clamp can never produce (0, 0)
+    for a real pin (the AUTO sentinel is floored to (1, 0)), this no-op is always > tolerance from
+    the target, so the plain readback check rejects it -- the cold-start bar stays hidden."""
+
+    def move(self, x, y, xAnchor=None, yAnchor=None):
+        self.moves.append((x, y))
+        if (x, y) == (bar_window._FAR, bar_window._FAR):
+            self.position = self._max
+        else:
+            self.position = (0, 0)   # unrealized: the move did not apply; readback is (0, 0)
+
+
+def test_a_clamped_bottom_right_pin_shows_when_realized_but_hides_on_cold_start():
+    # v3.1.4 off-screen-pin fix: _place clamps the resolved target INTO the movable extent BEFORE
+    # moving, so a wildly-off legacy Free pin (5000, 5000) clamps to the extent's bottom-right
+    # corner. On a REALIZED surface that corner target lands dead-on and the bar SHOWS there
+    # (restoring the pre-b24e0b4 clamp-visible behaviour). The at_far_corner guard that briefly
+    # rejected this was CUT: it assumed the unrealized no-op parks at the far corner, but the real
+    # client parks it at (0, 0), so the guard caught nothing real and only hid this legitimate
+    # realized corner pin.
+    seed = {mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
+            mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
+            mod_settings.BAR_POS_X_KEY: 5000, mod_settings.BAR_POS_Y_KEY: 5000}
+
+    def _fresh_host():
+        host = bar_window.BarHost("test.item", lambda: object(), 0.865, 0,
+                                  PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
+                                  PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
+                                  PROGRESS_MM_GAP_BOTTOM, "[test]")
+        return host
+
+    # REALIZED -> the clamped corner target applies dead-on -> SHOWS.
+    mod_settings._seed(dict(seed))
+    host = _fresh_host()
+    window = _ClampingRealizedWindow(1664, 824)
     host._active = (window, object())
     host._place(window)
+    assert window.moves[-1] == (1664, 824), "the off-screen pin clamps to the extent's corner"
+    assert window.position == (1664, 824), "the realized window applies the clamped corner target"
+    assert host.has_placed() is True, "a realized clamped corner pin must SHOW at the corner"
 
-    intended = window.moves[-1]
-    assert intended == (5000, 5000), "the legacy Free pin must resolve to its literal off-screen pair"
-    assert window.position == (1664, 824), "the engine clamp must land at the movable extent's corner"
-    assert abs(window.position[0] - intended[0]) > bar_window._PLACE_TOLERANCE_PX
-    assert host.has_placed() is False, (
-        "ACCEPTED TRADE-OFF: a legitimately-clamped Free pin on a REALIZED window is now "
-        "indistinguishable from the unrealized no-op bug by position alone, so it is rejected too "
-        "-- the bar hides rather than visibly clamping to the corner (maintainer-approved)")
+    # UNREALIZED cold-start -> the same clamped corner target no-ops, the readback is (0, 0), far
+    # from the target -> the bar stays HIDDEN (no flash) until the surface realizes.
+    mod_settings._seed(dict(seed))
+    host = _fresh_host()
+    window = _UnrealizedZeroWindow(1664, 824)
+    host._active = (window, object())
+    host._place(window)
+    assert window.position == (0, 0), "the unrealized no-op readback is (0, 0), not the corner"
+    assert host.has_placed() is False, "a cold-start no-op must stay hidden -- the real regression"
 
 
 # --- THE DERIVED PLACEMENT AT LARGE, END TO END, BOTH BARS --------------------------------------
@@ -1507,9 +1620,9 @@ def test_the_vertical_progress_bar_lands_on_the_derived_position_at_large(monkey
 
 def test_place_reject_line_echoes_alignment_and_offset(monkeypatch):
     # The reject LOG_PROD line grew `alignment=`/`off=(...)` fields so a remote python.log can
-    # confirm the Fixed/Free shared-pair fix -- reuse the existing legitimately-clamped-Free-pin
-    # rejection scenario and check the logged text carries both new fields (and the pre-existing
-    # ones), not just that it fired.
+    # confirm the Fixed/Free shared-pair fix -- drive an UNREALIZED cold-start (the real rejection
+    # path: the move no-ops, readback (0, 0)) and check the logged text carries both new fields
+    # (and the pre-existing ones), not just that it fired.
     mod_settings._seed({
         mod_settings.PROGRESS_ALIGNMENT_KEY: mod_settings.PROGRESS_ALIGN_FREE,
         mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_LEGACY,
@@ -1518,7 +1631,7 @@ def test_place_reject_line_echoes_alignment_and_offset(monkeypatch):
                               PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_ANCHOR_Y_SHIFT,
                               PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
                               PROGRESS_MM_GAP_BOTTOM, "[test]")
-    window = _ClampingRealizedWindow(1664, 824)
+    window = _UnrealizedZeroWindow(1664, 824)
     host._active = (window, object())
 
     logged = []
@@ -1570,6 +1683,30 @@ def test_place_logged_latch_resets_on_remount(monkeypatch):
 
     host.open_window()   # re-mount
     assert host._place_logged is False
+
+
+def test_last_good_resets_on_remount_so_has_placed_is_false_until_reconfirmed(monkeypatch):
+    # A mid-battle remount (dead-handle heal / variant or orientation flip) gives a FRESH unrealized
+    # window that has placed nothing yet. _last_good -- what has_placed() reads -- must reset with the
+    # other cold-start latches, or a stale True from the previous mount makes ensure_placed()
+    # early-return (no retry) and opens the visibility gate immediately, flashing the bar mis-placed
+    # at the far-sentinel corner before this window's own _place ever confirms.
+    host = _bare_host()
+    monkeypatch.setattr(host, "_layout_id", lambda: 7)
+    monkeypatch.setattr(bar_window, "_BarView", _FakeMount)
+    monkeypatch.setattr(bar_window, "_BarWindow", _FakeMount)
+
+    host.open_window()
+    host._last_good = (500, 300)          # simulate the previous mount's confirmed placement
+    assert host.has_placed() is True
+
+    host._sized = True
+    host._active[1].viewModel = None      # engine destroyed the handle
+    assert host._is_dead() is True
+
+    host.open_window()                    # re-mount
+    assert host._last_good is None
+    assert host.has_placed() is False, "a fresh remount must not inherit the prior mount's placement"
 
 
 # --- COLD-START PUSH GAP: _on_size_changed must push on a has_placed() False->True transition ---
@@ -1633,3 +1770,19 @@ def test_on_size_changed_pushes_battle_bridge_refresh_on_cold_placement_transiti
     # fake, so it took the no-op branch rather than cascading into another onSizeChanged/refresh.
     assert len(refresh_calls) == 1
 
+
+
+def test_clamp_to_extent_pulls_offscreen_targets_into_bounds():
+    """_clamp_to_extent makes every resolved target reachable so _place's readback is a pure
+    realization test (the v3.1.4 off-screen-pin bug: an off-screen target the engine clamps back
+    on-screen fails the readback and hides the bar forever)."""
+    # Off-screen HIGH (below/right of the extent) clamps to the far edge -- the shipped bug's shape:
+    # y=1446 on a screen whose bar has max_y=1184.
+    assert bar_window._clamp_to_extent(2814, 1446, 3184, 1184) == (2814, 1184)
+    # Off-screen NEGATIVE (past top-left) clamps to 0 on each axis -- but never the AUTO sentinel.
+    assert bar_window._clamp_to_extent(-50, -20, 3184, 1184) == (1, 0)
+    # In-bounds is returned unchanged (no spurious movement of a valid pin).
+    assert bar_window._clamp_to_extent(500, 300, 3184, 1184) == (500, 300)
+    # A target clamping to exactly (0, 0) is floored 1px on x so it can't be misread as Free's AUTO
+    # sentinel by _materialise's write-back (unclamping-drag-is-constrained-by-the-auto...).
+    assert bar_window._clamp_to_extent(0, 0, 3184, 1184) == (1, 0)
