@@ -260,9 +260,9 @@ const PROGRESS_EDITS = [
     // `showEta` is false, mirroring the `.mpv-ico.none` idiom -- the tuner has no such rule at all,
     // so this is a pure insertion, not a value edit.
     ['.mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
-     '.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
+     '.mpv-bd-3::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
      '.mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
-     '.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }\n' +
+     '.mpv-bd-3::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }\n' +
      '.mpv-bd.none { display: none; }',
      '8/8 .mpv-bd.none rule inserted'],
 ];
@@ -344,7 +344,7 @@ const EFFICIENCY_EDITS = [
      '.mev-bd-5 { top: 199.5rem; }\n.mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n' +
      '.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n' +
      '.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
-     '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
+     '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
      '.mev-bd {\n  position: absolute;\n  left: -92rem;\n  width: 109rem;\n  height: 30rem;\n  z-index: 0;\n}\n' +
      '.mev-bd-5 { width: 163.5rem; left: -146.5rem; }\n' +
      '.mev-bd::before {\n  content: "";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n' +
@@ -355,7 +355,7 @@ const EFFICIENCY_EDITS = [
      '.mev-bd-1 { top: -27rem; }\n.mev-bd-2 { top: 35rem; }\n.mev-bd-3 { top: 85rem; }\n.mev-bd-4 { top: 135rem; }\n' +
      '.mev-bd-5 { top: 199.5rem; }\n' +
      '.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
-     '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
+     '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
      '6/6 mark-strip narrowing: reorder + drop bd-1 override (bd-2/3/4 override also dropped, no edit needed)'],
 ];
 

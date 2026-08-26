@@ -579,7 +579,7 @@ $tpl = @'
       // WIDE radii -- the capP strip (.mpv-bd-3) ONLY: its number sits farther from the minimap, so
       // its dither reaches ~2x further left. Every OTHER strip uses the default dotRX/ugRX above.
       {id:"dotRXWide",label:"WIDE dither fade X (%) - capP strip only",min:0,max:250,step:1,val:112},
-      {id:"ugRXWide",label:"WIDE radial X (%) - capP strip only",min:0,max:250,step:1,val:152},
+      {id:"ugRXWide",label:"WIDE radial X (%) - capP strip only",min:0,max:250,step:1,val:128},
       {id:"ugRX",label:"Radial size X (%)",min:0,max:250,step:1,val:76},
       {id:"ugRY",label:"Radial size Y (%)",min:0,max:250,step:1,val:57},
       {id:"ug1a",label:"Radial inner alpha",min:0,max:1,step:0.01,val:0.35},

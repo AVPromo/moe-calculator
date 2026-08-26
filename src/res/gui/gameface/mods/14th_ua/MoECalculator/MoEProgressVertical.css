@@ -193,7 +193,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 /* capP's strip ONLY (.mpv-bd-3) -- its number sits farther from the minimap, so its dither reaches
    ~2x further left (wide X radius). Every other strip keeps the default radius above. */
 .mpv-bd-3::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
-.mpv-bd-3::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
+.mpv-bd-3::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
 /* HAND-EDIT 8/8: MoEProgress.js toggles class `none` on `.mpv-bd-1` (capEtaBd) when `showEta` is
    false, mirroring the `.mpv-ico.none` idiom below -- without this rule no CSS defined what `none`
    does to a `.mpv-bd` strip, so it never hid. */

@@ -152,7 +152,7 @@ body.mev #moe-bar-box { width: 109rem; height: 318rem; }
 /* r1/r2/r3 strips ONLY (.mev-bd-2/3/4) -- their numbers sit farther from the minimap, so their
    dither reaches ~2x further left (wide X radius). tp/bt (.mev-bd-1/-5) keep the default above. */
 .mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }
-.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(152% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
+.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }
 .mev-track {
   position: relative;
   z-index: 1;
