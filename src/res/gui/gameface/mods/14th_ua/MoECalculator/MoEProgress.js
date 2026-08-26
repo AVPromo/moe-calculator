@@ -813,8 +813,9 @@ function scheduleSwap() {
 //
 // `atCurrent` (falsy by default -- the DAMAGE-EVENT entry, unchanged) picks which VALUES the run
 // opens with; the MOTION is identical either way (armRun(SEEK_NONE), the tuned 600ms fade + 20rem
-// slide). Falsy = the rewind above: open on pre_avg with the delta hidden, then climb to proj_avg
-// on the 600ms-delayed transitions and swap the numeral at VALUE_SWAP_MS. That pre->current climb
+// slide). Falsy = the rewind above: the FILL/TICK open at axisLo (the true axis floor, 0%) while
+// the NUMERAL opens on pre_avg with the delta hidden, then both climb to proj_avg on the
+// 600ms-delayed transitions and the numeral swaps at VALUE_SWAP_MS. That floor->current climb
 // IS the widget when a damage event pulls the bar up, so it must stay.
 // TRUE (only peekOn's Alt entry): open ALREADY committed -- fill/tick/caption snapped to proj_avg,
 // numeral + delta + sign already showing -- because Alt is a "show me the state now" request and
@@ -832,7 +833,7 @@ function coldRewind(atCurrent) {
     showVal(swapped);
     T.disarm();
     void root.offsetWidth;
-    setPos(swapped ? cur.projAvg : cur.preAvg, false);
+    setPos(swapped ? cur.projAvg : cur.axisLo, false);
     void root.offsetWidth;
     capD.style.transition = "";
 }

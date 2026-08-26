@@ -229,9 +229,9 @@ const MUTATIONS = {
     "no-change-gate": ["B",
         "} else if (changed && model.showEvents !== false && T.settled()) {",
         "} else if (changed && model.showEvents !== false) {"],
-    // THE COLD REWIND: a cold show must snap the fill back to pre_avg before the run.
+    // THE COLD REWIND: a cold show must snap the fill back to the axis floor before the run.
     "no-cold-rewind": ["B",
-        "    setPos(swapped ? cur.projAvg : cur.preAvg, false);", "    void 0;"],
+        "    setPos(swapped ? cur.projAvg : cur.axisLo, false);", "    void 0;"],
     // THE rAF ASYMMETRY, both directions -- it is the ONE thing that must not be flattened into the
     // shared onCommit hook. Cold: the class change and the new target must land in DIFFERENT frames.
     // Warm: nothing was rewound, so the target is set SYNCHRONOUSLY.
@@ -707,8 +707,8 @@ function run(mutation) {
     // transitions off, then aims it at the target in a LATER frame (the cold-only rAF in onCommit)
     // so the transition actually runs. The baseline above rests at projAvg 2750 == 21.143%, NOT at
     // preAvg's remapped 8.000% -- otherwise a missing rewind would be invisible.
-    eq("the fill was rewound to pre_avg...", [s.fill.style.width, s.fill.style.transition],
-       ["8.000%", "none"]);
+    eq("the fill was rewound to the axis floor...", [s.fill.style.width, s.fill.style.transition],
+       ["0.000%", "none"]);
     s.clock.flushFrames();
     eq("...and re-aimed at the target in the next frame, with the transition handed back",
        [s.fill.style.width, s.fill.style.transition], ["60.571%", ""]);
@@ -768,7 +768,7 @@ function run(mutation) {
     s.push(M({ projAvg: 2900 }));               // cold entry -- rAF deliberately NOT flushed
     eq("precondition: mid-entry the numeral still reads pre_avg", s.capCV.textContent, "2,700");
     eq("precondition: ...and the fill is still at the rewind, not the target",
-       s.fill.style.width, "8.000%");
+       s.fill.style.width, "0.000%");
     s.animEnd(RUN_NAMES[0]);                    // ends at ~0ms, well before VALUE_SWAP_MS
     eq("endRun force-settles the numeral to proj_avg", s.capCV.textContent, "2,900");
     eq("...and SNAPS the fill there, with the transition suppressed",
@@ -1274,8 +1274,8 @@ function run(mutation) {
     armAt = s.clock.now();
     s.push(F(EV_ON, { projAvg: 2900 }));
     eq("an explicit events:true entry still plays from the top", s.root.style.animationDelay, "0ms");
-    eq("...opening on pre_avg (onRewind(false)), NOT snapped to the target",
-       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity], ["8.000%", "2,700", "0"]);
+    eq("...opening on the axis floor (onRewind(false)), NOT snapped to the target",
+       [s.fill.style.width, s.capCV.textContent, s.capD.style.opacity], ["0.000%", "2,700", "0"]);
     s.clock.flushFrames();
     eq("...and onCommit(true) re-aims it in a LATER frame, with the transition handed back",
        [s.fill.style.width, s.fill.style.transition], ["60.571%", ""]);
@@ -1377,8 +1377,8 @@ function run(mutation) {
     const NONE = { transEvents: undefined, transManual: undefined };
     s.push(F(NONE));
     s.push(F(NONE, { projAvg: 2900 }));
-    eq("T.anim(undefined, undefined) leaves the EVENT half animated: a full entry from pre_avg",
-       [s.root.style.animationDelay, s.fill.style.width], ["0ms", "8.000%"]);
+    eq("T.anim(undefined, undefined) leaves the EVENT half animated: a full entry from the axis floor",
+       [s.root.style.animationDelay, s.fill.style.width], ["0ms", "0.000%"]);
     s.clock.advance(TOTAL + MARGIN);
     eq("precondition: that run is over (so the peek below is a cold entry)", s.run(), null);
     s.push(F(NONE, { projAvg: 2900, altHeld: true }));
