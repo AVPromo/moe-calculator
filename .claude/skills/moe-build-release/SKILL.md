@@ -22,7 +22,8 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 3.1.2)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 4.0.1,
+client target EU 2.3.1.3)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -95,8 +96,22 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v3.1.2 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v3.1.2 (2026-08-17) is the current Latest** — a patch release carrying three bugfix/tooling
+**v0.1.0 through v4.0.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v4.0.1 (2026-08-27) is the current Latest** — a patch release carrying two bar-render
+bugfix commits on top of v4.0.0: `0f79e28` opens the Moving Average bar fill at the axis
+floor instead of the `pre_avg` stop; `24010ab` stops the vertical wide-glow backdrop
+clipping on the left. Touched `MoEProgress.js`, `MoEProgressVertical.css`,
+`MoEEfficiencyVertical.css`, plus `tools/dev/` tuner tooling. **No user-facing surface
+change** (no new/renamed settings controls, no changed defaults, no new widgets); player
+docs needed no reconciliation. `SETTINGS_VERSION` unchanged; client target **unchanged at
+EU 2.3.1.3**.
+
+**v4.0.0 (2026-08-12-era) was the prior Latest** — a game-upgrade release retargeting the
+mod to WoT client **EU 2.3.1.3** (up from 2.3.1.2), major bump per convention.
+
+**v3.1.4 and v3.1.3 were patch bar-fix releases published between v3.1.2 and v4.0.0.**
+
+**v3.1.2 (2026-08-17) was the Latest before that chain** — a patch release carrying three bugfix/tooling
 commits: `904d49e` re-mounts a natively-destroyed `WindowFlags.TOOLTIP` bar window (`BarHost`'s
 `_is_dead` detection + a per-tick re-drive of `open_window` in `battle_bridge`) and restores the
 bar's **last-good placement** instead of stranding it at the `_FAR`/minimap corner on a failed
