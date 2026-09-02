@@ -8,8 +8,8 @@
       2. Inno Setup must be installed (provides ISCC.exe):
              winget install -e --id JRSoftware.InnoSetup
       3. The bundled vendor .wotmod dependencies must be present under installer\vendor\
-         (net.openwg.gameface_1.1.6.wotmod, aslain.modssettingsapi_1.6.4.wotmod,
-          me.poliroid.modslistapi_1.7.8.wotmod).
+         (net.openwg.gameface_1.1.6.wotmod, aslain.modssettingsapi_1.7.1.wotmod,
+          me.poliroid.modslistapi_1.7.9.wotmod).
 
     Usage:
         pwsh installer\build_installer.ps1
@@ -24,10 +24,10 @@ $ErrorActionPreference = 'Stop'
 $InstallerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot     = Split-Path -Parent $InstallerDir
 $Iss          = Join-Path $InstallerDir 'moe_calculator-setup.iss'
-$ModWotmod    = Join-Path $RepoRoot 'dist\com.14th_ua.moe_calculator_4.0.1.wotmod'
+$ModWotmod    = Join-Path $RepoRoot 'dist\com.14th_ua.moe_calculator_5.0.0.wotmod'
 $OpenWg       = Join-Path $InstallerDir 'vendor\net.openwg.gameface_1.1.6.wotmod'
-$Msa          = Join-Path $InstallerDir 'vendor\aslain.modssettingsapi_1.6.4.wotmod'
-$ModsList     = Join-Path $InstallerDir 'vendor\me.poliroid.modslistapi_1.7.8.wotmod'
+$Msa          = Join-Path $InstallerDir 'vendor\aslain.modssettingsapi_1.7.1.wotmod'
+$ModsList     = Join-Path $InstallerDir 'vendor\me.poliroid.modslistapi_1.7.9.wotmod'
 
 function Find-ISCC {
     $candidates = @(

@@ -8,12 +8,16 @@ WG's own central battle dispatchers and sample the live key state at each event 
 ``BigWorld.isKeyDown``. ``isKeyDown`` read AT an input event (not on a timer) avoids the stall
 entirely. TWO dispatchers, one per axis of the problem:
 
-  * ``AvatarInputHandler.handleKeyEvent`` -- fires on every key down/up transition, and the engine
-    reports MOUSE BUTTONS as key events too (``Keys.KEY_LEFTMOUSE``). Alt, Ctrl and the left
-    button are all sampled here.
-  * ``AvatarInputHandler.handleMouseEvent(dx, dy, dz)`` -- fires per mouse MOVE. That is the whole
+  * ``AvatarInputHandler.handleKeyEvent(event)`` -- fires on every key down/up transition, and the
+    engine reports MOUSE BUTTONS as key events too (``Keys.KEY_LEFTMOUSE``). Alt, Ctrl and the left
+    button are all sampled here. (As of client 2.4.0.0 this takes a single ``event`` object rather
+    than positional args; our wrapper is ``def _patched(self, *args, **kwargs)`` and reads no
+    positional arg, so it is unaffected either way.)
+  * ``AvatarInputHandler.handleMouseEvent(event)`` -- fires per mouse MOVE. That is the whole
     reason the reposition gesture needs no JS and no delta protocol: every movement event is an
-    opportunity to re-place the window ABSOLUTELY from the live cursor position.
+    opportunity to re-place the window ABSOLUTELY from the live cursor position. (As of client
+    2.4.0.0 this is also a single ``event`` object, was ``(dx, dy, dz)`` before; same
+    ``*args, **kwargs`` wrapper, same non-effect.)
 
 ...plus a THIRD, non-monkey-patch mouse sampling point:
 
@@ -25,7 +29,7 @@ entirely. TWO dispatchers, one per axis of the problem:
 
 IT IS AN ADDITION, NOT A REPLACEMENT, and the reason is WHERE the engine iterates the set. In
 ``game.handleMouseEvent`` (game.py:359-382) it comes LAST -- after an early return on
-``GUI.handleMouseEvent(event)`` AND after one on ``inputHandler.handleMouseEvent(dx, dy, dz)``. So:
+``GUI.handleMouseEvent(event)`` AND after one on ``inputHandler.handleMouseEvent(event)``. So:
 
   * a move the raised Gameface/Flash cursor consumes never reaches the set at all (the wrap, which
     sits INSIDE the ``inputHandler`` call, is equally starved -- but only one of the two can be
