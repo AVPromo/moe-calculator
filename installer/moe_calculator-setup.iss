@@ -5,7 +5,7 @@
 ;      the user confirm/override it, and validates it (version.xml present).
 ;   2. Resolves the client version (e.g. 2.3.0.1) and targets mods\<version>\.
 ;   3. Installs the bundled dependencies ONLY if not already present (recursive check):
-;      OpenWG GameFace (required) and ModsSettingsAPI (provides the in-game settings
+;      OpenWG GameFace (required) and Aslain ModMenu (provides the in-game settings
 ;      panel) -- many users already have both via ModsList/Aslain.
 ;   4. Cleans old copies of this mod (and stale loose res_mods leftovers), then
 ;      installs the mod's .wotmod.
@@ -17,7 +17,7 @@
 #define ModVersion    "5.0.0"
 #define ModWotmod     "com.14th_ua.moe_calculator_5.0.0.wotmod"
 #define OpenWgWotmod   "net.openwg.gameface_1.1.6.wotmod"
-#define MsaWotmod      "aslain.modssettingsapi_1.7.1.wotmod"
+#define MsaWotmod      "aslain.modmenu_2.0.03.wotmod"
 #define ModsListWotmod "me.poliroid.modslistapi_1.7.9.wotmod"
 ; Used by the GitHub update check (see [Code]): the Atom feed + release-asset URLs
 ; are built from these, and SetupBaseName must match this .exe's filename convention.
@@ -55,7 +55,7 @@ Source: "..\dist\{#ModWotmod}"; DestDir: "{code:GetModsVersionDir}"; Flags: igno
 ; Bundled OpenWG dependency -> only copied when not already installed, and never
 ; removed on uninstall (other GameFace mods may depend on it).
 Source: "vendor\{#OpenWgWotmod}"; DestDir: "{code:GetModsVersionDir}"; Flags: ignoreversion uninsneveruninstall; Check: NeedOpenWg
-; Bundled ModsSettingsAPI dependency (provides the in-game settings panel). Same
+; Bundled Aslain ModMenu dependency (provides the in-game settings panel). Same
 ; policy: only copied when absent, never removed on uninstall (shared by many mods).
 Source: "vendor\{#MsaWotmod}"; DestDir: "{code:GetModsVersionDir}"; Flags: ignoreversion uninsneveruninstall; Check: NeedMsa
 ; Bundled Mods List API dependency (surfaces the settings in the in-game "Modification
@@ -228,7 +228,7 @@ begin
   Result := not FindOpenWgIn(GetModsVersionDir(''));
 end;
 
-{ Recursive search for aslain.modssettingsapi*.wotmod under a directory. Deliberately
+{ Recursive search for aslain.modmenu*.wotmod under a directory. Deliberately
   NARROW to Aslain's build: a leftover izeberg.modssettingsapi* must NOT read as "MSA
   present" (the user's settings data now lives under Aslain), so we still bundle Aslain. }
 function FindMsaIn(Dir: string): Boolean;
@@ -237,7 +237,7 @@ var
 begin
   Result := False;
   { files in this dir }
-  if FindFirst(Dir + '\aslain.modssettingsapi*.wotmod', FR) then
+  if FindFirst(Dir + '\aslain.modmenu*.wotmod', FR) then
   begin
     try
       Result := True;
@@ -265,7 +265,7 @@ begin
   end;
 end;
 
-{ [Files] Check: copy bundled ModsSettingsAPI only when none is already present. }
+{ [Files] Check: copy bundled Aslain ModMenu only when none is already present. }
 function NeedMsa(): Boolean;
 begin
   Result := not FindMsaIn(GetModsVersionDir(''));

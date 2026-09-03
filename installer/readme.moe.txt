@@ -9,7 +9,7 @@ your World of Tanks folder and restart the game.
 WHAT'S IN THE BOX
     com.14th_ua.moe_calculator_{VERSION}.wotmod      the mod
     net.openwg.gameface_1.1.6.wotmod                 REQUIRED dependency
-    aslain.modssettingsapi_1.7.1.wotmod              optional (settings panel)
+    aslain.modmenu_2.0.03.wotmod                     optional (settings panel)
     me.poliroid.modslistapi_1.7.9.wotmod             optional (Modification list window)
 
 
@@ -59,7 +59,7 @@ DEPENDENCIES
     OpenWG GameFace is REQUIRED - the widget will not appear without
     it. If you already run it, keep your existing copy.
 
-    ModsSettingsAPI is OPTIONAL - it adds the in-game settings panel
+    Aslain ModMenu is OPTIONAL - it adds the in-game settings panel
     where you turn the Garage and Battle widgets on or off, enable the
     centre-screen bar and pick its variant, orientation and position,
     and set the Garage widget's position. Without it the mod still
@@ -121,7 +121,7 @@ UNINSTALL
     OpenWG GameFace ОБОВ'ЯЗКОВИЙ - без нього віджет не з'явиться.
     Якщо він уже стоїть, лишіть свою копію.
 
-    ModsSettingsAPI НЕОБОВ'ЯЗКОВИЙ - додає ігрову панель налаштувань,
+    Aslain ModMenu НЕОБОВ'ЯЗКОВИЙ - додає ігрову панель налаштувань,
     де можна вмикати/вимикати віджети в Ангарі та в бою, увімкнути
     смугу в центрі екрана й вибрати її варіант, орієнтацію та позицію,
     а також задати позицію віджета в Ангарі. Без нього мод працює з

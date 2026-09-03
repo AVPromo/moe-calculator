@@ -33,7 +33,7 @@ It uses the game's own mark art.
 |-------------|--------|
 | **Game** | World of Tanks **EU (Wargaming)** client, version **2.4.0.0**. Built and tested against this version. |
 | **Dependency** | **OpenWG GameFace** (required). The installer sets this up for you; for a manual install you add it yourself. |
-| **Optional** | **ModsSettingsAPI** — adds the in-game settings panel: the Garage and Battle widgets on/off, the centre-screen progress bar (its mode, orientation, and position), and the Garage widget's position, with a live preview image of both widgets. The installer adds it if missing; without it the mod still runs with both widgets enabled and the progress bar off. |
+| **Optional** | **Aslain ModMenu** — adds the in-game settings panel: the Garage and Battle widgets on/off, the centre-screen progress bar (its mode, orientation, and position), and the Garage widget's position, with a live preview image of both widgets. The installer adds it if missing; without it the mod still runs with both widgets enabled and the progress bar off. |
 
 ---
 
@@ -45,12 +45,12 @@ It uses the game's own mark art.
    contains `version.xml`. The installer detects it automatically in most cases.
 4. If a newer version is available on GitHub, the installer offers to download and run the
    latest installer for you — accept to always get the newest build.
-5. The installer adds OpenWG GameFace (and ModsSettingsAPI, for the settings panel) when
+5. The installer adds OpenWG GameFace (and Aslain ModMenu, for the settings panel) when
    your client doesn't already have them, then installs the mod into `mods\<version>\`.
 6. Start the game and go to the Garage.
 
 To remove the mod later, use its entry in Windows **Apps & features**, or re-run the
-installer. OpenWG GameFace and ModsSettingsAPI stay in place for other mods that use them.
+installer. OpenWG GameFace and Aslain ModMenu stay in place for other mods that use them.
 
 ---
 
@@ -70,12 +70,12 @@ installer. OpenWG GameFace and ModsSettingsAPI stay in place for other mods that
 
 3. Copy **`com.14th_ua.moe_calculator_5.0.0.wotmod`** into that folder.
 4. Delete any older version of this mod from the same folder first.
-5. *(Optional)* Add **ModsSettingsAPI** (`aslain.modssettingsapi`) into the same folder to
+5. *(Optional)* Add **Aslain ModMenu** (`aslain.modmenu`) into the same folder to
    get the in-game settings panel. Without it the mod runs with both widgets enabled.
 6. Fully restart the game client: exit completely and relaunch.
 
 The `mods\2.4.0.0\` folder then holds the OpenWG GameFace `.wotmod`,
-`com.14th_ua.moe_calculator_5.0.0.wotmod`, and (optionally) the ModsSettingsAPI `.wotmod`.
+`com.14th_ua.moe_calculator_5.0.0.wotmod`, and (optionally) the Aslain ModMenu `.wotmod`.
 
 ---
 
@@ -91,7 +91,7 @@ The `mods\2.4.0.0\` folder then holds the OpenWG GameFace `.wotmod`,
 
 ## Settings
 
-With **ModsSettingsAPI** installed, open the in-game **Modification list** window (added by
+With **Aslain ModMenu** installed, open the in-game **Modification list** window (added by
 the bundled Mods List API) and find **14th_ua's MoE Calculator**. The panel has two columns,
 each grouped into named categories; a feature's own on/off switch is simply labelled
 **Enabled**. Live preview images of both widgets sit in the panel and update as you change the

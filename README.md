@@ -100,7 +100,7 @@ Garage bar still does.
 [**GitHub Releases**](https://github.com/drizzer14/moe-calculator/releases) page and run
 it (close the game first). It finds your World of Tanks folder, installs the mod into
 `mods\<version>\`, and adds its bundled dependencies — **OpenWG GameFace**,
-**ModsSettingsAPI**, and **ModsList** — for any you don't already have. On each
+**Aslain ModMenu**, and **ModsList** — for any you don't already have. On each
 run it also checks GitHub and offers to fetch the newest
 installer, so a copy you keep around stays current.
 
@@ -111,7 +111,7 @@ verifying it works, troubleshooting, and uninstalling.
 ## Settings
 
 The mod adds a settings panel to the in-game **mod-settings menu**, provided by
-**ModsSettingsAPI (MSA)** — the standard settings host bundled with the installer. If MSA
+**Aslain ModMenu (MSA)** — the standard settings host bundled with the installer. If MSA
 isn't loaded, the mod still runs with both widgets on by default; you just won't see the panel.
 
 The panel is grouped into named **categories**, each a bold header row followed by that
@@ -295,7 +295,7 @@ Building, deploying, testing, and the repo layout are documented in
 **`MoECalculator-Setup-<version>.exe`** зі сторінки
 [**релізів на GitHub**](https://github.com/drizzer14/moe-calculator/releases) і запустіть
 (спершу закрийте гру). Він знаходить папку World of Tanks, встановлює мод у `mods\<version>\`
-і додає вкладені залежності — **OpenWG GameFace**, **ModsSettingsAPI** та **ModsList** — для
+і додає вкладені залежності — **OpenWG GameFace**, **Aslain ModMenu** та **ModsList** — для
 тих, яких ще немає. Під час кожного запуску
 він також перевіряє GitHub і пропонує завантажити найновіший інсталятор, тож збережена копія
 залишається актуальною.
@@ -307,7 +307,7 @@ Building, deploying, testing, and the repo layout are documented in
 ## Налаштування
 
 Мод додає панель до внутрішньоігрового **меню налаштувань модів**, яке надає
-**ModsSettingsAPI (MSA)** — стандартний застосунок налаштувань, що йде разом з інсталятором.
+**Aslain ModMenu (MSA)** — стандартний застосунок налаштувань, що йде разом з інсталятором.
 Якщо MSA не завантажено, мод усе одно працює з увімкненими за замовчуванням віджетами — просто
 не буде панелі.
 
