@@ -14,7 +14,7 @@ burst of onTotalEfficiencyUpdated collapses to one deferred push.
 """
 import BigWorld
 
-from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD
+from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD, _safe
 from moe_calculator.adapter import battle_adapter
 from moe_calculator.adapter import battle_input
 from moe_calculator.adapter import moe_wgapi
@@ -65,12 +65,26 @@ _last_final_push = None
 # _flush_prediction. Diagnostics only -- nothing reads it back into the model.
 _died = False
 
-# The full-stats scoreboard views currently open, keyed by their g_eventBus eventType. While
-# any is open the overlay hides (it would otherwise clutter the full-screen scoreboard). All
-# four are dispatched on g_eventBus at EVENT_BUS_SCOPE.BATTLE with ctx['isDown'] (True open /
-# False close) -- this mirrors WG's own damage_log_panel gating (see battle.shared.page).
-# Deliberately EXCLUDED: Ctrl free-look (SHOW_CURSOR), F1 help and the ESC menu all keep the
-# readout visible.
+# Reasons to force-hide all three battle widgets, as a set of sentinel keys. While any is
+# present the overlay hides. Three kinds of key ride this one set:
+#  - the full-stats scoreboard views, keyed by their g_eventBus eventType (FULL_STATS etc.),
+#    dispatched at EVENT_BUS_SCOPE.BATTLE with ctx['isDown'] (True open / False close) -- this
+#    mirrors WG's own damage_log_panel gating (see battle.shared.page). Deliberately EXCLUDED:
+#    Ctrl free-look (SHOW_CURSOR), F1 help and the ESC menu all keep the readout visible.
+#  - the string literal "prebattle_highlights", added/discarded whole (no ctx to read) for WoT
+#    2.4.0.0's "Spotlight" pre-battle cinematic (GameEvent.GO_TO_/RETURN_FROM_PREBATTLE_HIGHLIGHTS,
+#    same event bus + scope) -- a distinct sentinel so it can never collide with an eventType.
+#  - the string literal "comp7_vehicle_ban", added/discarded whole for Onslaught's (COMP7)
+#    pre-battle vehicle-ban screen -- driven NOT by g_eventBus but by the per-battle COMP7
+#    vehicle-ban arena controller's onBanPhaseUpdated (see _on_comp7_ban_phase). Another distinct
+#    sentinel so it never collides with the above.
+#  - the string literal "onslaught_start", added on mount whenever THIS battle is Onslaught (see
+#    _on_mount_refresh) and discarded only once the arena period reaches BATTLE (see
+#    _on_arena_period_changed) -- i.e. it spans the WHOLE special start sequence, ban screen
+#    included, not just the ban screen's own "comp7_vehicle_ban" key above. Because both ride
+#    this same set, the ban-phase key clearing on its own (PICK) leaves the widgets hidden for
+#    as long as "onslaught_start" is still set -- no extra coordination needed, just the set's
+#    own "any key present" semantics.
 _open_overlays = set()
 
 # Whether the g_eventBus scoreboard listeners are armed. Unlike the arena controllers (rebuilt
@@ -232,6 +246,14 @@ def _on_mount_refresh(*args, **kwargs):
         # Clear any scoreboard flag left over from a prior battle / relogin / replay teardown,
         # so a stale key can never keep the fresh battle's overlay hidden.
         _open_overlays.clear()
+        # Onslaught (COMP7): hide all three widgets for the WHOLE special pre-battle start
+        # sequence, not just the ban screen's own window (_on_comp7_ban_phase's
+        # "comp7_vehicle_ban" key) -- a dedicated sentinel, added here BEFORE the windows' first
+        # push below so there is no reveal flash, and dropped only once the arena period reaches
+        # BATTLE (_on_arena_period_changed). Non-Onslaught battles: the ctrl resolves to None
+        # (see _comp7_vehicle_ban_ctrl's own bonus-type gate) and nothing changes here.
+        if battle_adapter._comp7_vehicle_ban_ctrl() is not None:
+            _open_overlays.add("onslaught_start")
         # The windows are independently settings-gated. The In-Battle Widget master being off
         # means the corner overlay is never shown, so don't open ITS window this battle (the
         # "Show on Alt Key" child is inert while the master is off) -- but the centre-screen bars
@@ -253,6 +275,18 @@ def _on_mount_refresh(*args, **kwargs):
 
 def _on_arena_period_changed(*args, **kwargs):
     # Arena period changed (PREBATTLE -> BATTLE ...) -> re-push so the overlay reveals/hides.
+    # Also the reveal edge for Onslaught's "onslaught_start" hide sentinel (see
+    # _on_mount_refresh): drop it once the period reaches BATTLE (real combat started), never
+    # earlier. Fail-soft toward discarding it (reveal) rather than wedging the widgets hidden
+    # for the rest of the battle on an unreadable arena/period.
+    if "onslaught_start" in _open_overlays:
+        try:
+            from constants import ARENA_PERIOD
+            if BigWorld.player().arena.period == ARENA_PERIOD.BATTLE:
+                _open_overlays.discard("onslaught_start")
+        except Exception:
+            _open_overlays.discard("onslaught_start")
+            LOG_CURRENT_EXCEPTION()
     try:
         refresh()
     except Exception:
@@ -309,6 +343,10 @@ def _on_teardown(*args, **kwargs):
     try:
         _in_battle = False
         _current_int_cd = None
+        # Defensive: a battle that ends before reaching BATTLE (disconnect, ban-phase abort)
+        # must not leak this hide sentinel into the next mount's _open_overlays.clear() gap.
+        _open_overlays.discard("onslaught_start")
+        _disarm_comp7_ban_listener()
         _flush_prediction()
         battle_view.close_window()
         progress_view.close_window()
@@ -384,6 +422,108 @@ def _on_scoreboard_toggled(event):
         else:
             _open_overlays.discard(key)
         _schedule_refresh()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _on_spotlight_start(event):
+    # GameEvent.GO_TO_PREBATTLE_HIGHLIGHTS: WoT 2.4.0.0's "Spotlight" pre-battle cinematic
+    # started -- force-hide all three battle widgets exactly like the full-stats scoreboard,
+    # via the same _open_overlays set (a distinct sentinel key so it never collides with a
+    # scoreboard eventType). No ctx to read here, unlike the scoreboard event.
+    try:
+        _open_overlays.add("prebattle_highlights")
+        _schedule_refresh()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _on_spotlight_end(event):
+    # GameEvent.RETURN_FROM_PREBATTLE_HIGHLIGHTS: Spotlight ended -- normal end, the dev
+    # hotkey end, and an Esc-skip all funnel through this one event -- so reveal again.
+    try:
+        _open_overlays.discard("prebattle_highlights")
+        _schedule_refresh()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+# The Onslaught (COMP7) vehicle-ban controller we've subscribed onBanPhaseUpdated on THIS battle,
+# or None. Unlike the scoreboard/spotlight g_eventBus listeners (persistent bus, armed once), this
+# is a PER-BATTLE arena controller -- a fresh object each mount, gone after teardown -- so it is
+# armed on every mount and dropped on teardown to avoid a stale-reference leak across remounts.
+_comp7_ban_ctrl = None
+
+# ArenaPrebattlePhase values (comp7_core/scripts/common/comp7_core_constants.py). The vehicle-ban
+# SCREEN is up during PREPICK/VOTING and gone at NONE/PICK (WG's own BanView destroys its window
+# once phase reaches PICK). Named locals rather than importing the enum: getArenaPrebattlePhase()
+# returns these ints directly, so the comparison needs no second fail-soft import of a
+# feature-package symbol.
+_COMP7_PHASE_PREPICK = 1
+_COMP7_PHASE_VOTING = 2
+
+
+def _on_comp7_ban_phase(*args):
+    # comp7 vehicle-ban controller onBanPhaseUpdated: hide all three battle widgets while the
+    # Onslaught pre-battle vehicle-ban screen is up (phase PREPICK/VOTING), reveal when it's gone
+    # (NONE/PICK) -- via the same _open_overlays sentinel set as the scoreboard/spotlight gating,
+    # with its own distinct key. Fail-soft: an unreadable phase can only DROP the key (reveal),
+    # never wedge the widgets hidden. The phase read is _safe-guarded to None OUTSIDE the branch
+    # so ANY error path (unreadable/raising controller) falls through to the discard branch below
+    # -- routing a failed read to REVEAL, never to a retained key.
+    try:
+        ctrl = _comp7_ban_ctrl
+        phase = _safe(lambda: ctrl.getArenaPrebattlePhase(), None) if ctrl is not None else None
+        if phase in (_COMP7_PHASE_PREPICK, _COMP7_PHASE_VOTING):
+            _open_overlays.add("comp7_vehicle_ban")
+        else:
+            _open_overlays.discard("comp7_vehicle_ban")
+        _schedule_refresh()
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _arm_comp7_ban_listener():
+    """Arm onBanPhaseUpdated on THIS battle's Onslaught vehicle-ban controller, if present.
+
+    This is a PER-BATTLE arena controller (fresh each mount, gone after teardown), so it is armed
+    on EVERY mount -- deliberately NOT in the arm-once _arm_overlay_listeners() beside the
+    persistent g_eventBus listeners. Non-Onslaught battles (and clients without comp7_core) resolve
+    the controller to None and skip cleanly -- arm nothing, no raise. onBanPhaseUpdated only fires
+    on CHANGE, so the phase is evaluated ONCE right after arming, covering a mid-phase mount
+    (reconnect) where the ban screen is already up and no edge would otherwise reach us."""
+    global _comp7_ban_ctrl
+    try:
+        ctrl = battle_adapter._comp7_vehicle_ban_ctrl()
+        if ctrl is None:
+            _comp7_ban_ctrl = None
+            LOG_DEBUG("[moe-battle] comp7 vehicle-ban controller absent -- skipping")
+            return
+        event = getattr(ctrl, "onBanPhaseUpdated", None)
+        if event is not None and _on_comp7_ban_phase not in event:
+            event += _on_comp7_ban_phase
+            setattr(ctrl, "onBanPhaseUpdated", event)
+        _comp7_ban_ctrl = ctrl
+        LOG_DEBUG("[moe-battle] comp7 vehicle-ban hide listener armed")
+        _on_comp7_ban_phase()  # initial-state read: a mid-phase mount hides immediately
+    except Exception:
+        LOG_CURRENT_EXCEPTION()
+
+
+def _disarm_comp7_ban_listener():
+    """Drop THIS battle's onBanPhaseUpdated subscription on teardown so it can't leak across
+    remounts (the controller is a fresh per-battle object). Mirrors how the other per-battle
+    listeners are dropped -- here explicit because this one is not in the _LISTENERS table."""
+    global _comp7_ban_ctrl
+    ctrl = _comp7_ban_ctrl
+    _comp7_ban_ctrl = None
+    if ctrl is None:
+        return
+    try:
+        event = getattr(ctrl, "onBanPhaseUpdated", None)
+        if event is not None and _on_comp7_ban_phase in event:
+            event -= _on_comp7_ban_phase
+            setattr(ctrl, "onBanPhaseUpdated", event)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -526,6 +666,9 @@ def install_all_listeners():
         except Exception:
             LOG_CURRENT_EXCEPTION()
     _arm_overlay_listeners()
+    # The Onslaught vehicle-ban hide listener rides a PER-BATTLE arena controller, not the
+    # persistent g_eventBus, so it re-arms EVERY mount here (not in the arm-once path above).
+    _arm_comp7_ban_listener()
     # Event-driven input hooks: the Alt/Ctrl transitions ("Battle Widget on Alt Key", the bars' Ctrl
     # hold) AND the bars' Ctrl+left-button reposition gesture. ONE install for both, because
     # battle_input keeps a SINGLE callback slot per concern -- a second install would silently
@@ -539,10 +682,15 @@ def install_all_listeners():
 
 
 def _arm_overlay_listeners():
-    """Subscribe the scoreboard hide/reveal handler to the full-stats g_eventBus events, ONCE.
-    These sit on the persistent g_eventBus (not the per-battle arena controllers), so re-arming
-    each mount is unnecessary and would only warn. Fail-soft: an unavailable event bus just
-    leaves the overlay always-visible (its prior behaviour)."""
+    """Subscribe the scoreboard hide/reveal handler to the full-stats g_eventBus events, ONCE,
+    plus (2.4.0.0+) the Spotlight pre-battle-highlights hide/reveal pair on the same bus. These
+    sit on the persistent g_eventBus (not the per-battle arena controllers), so re-arming each
+    mount is unnecessary and would only warn. Fail-soft: an unavailable event bus just leaves
+    the overlay always-visible (its prior behaviour).
+
+    The Spotlight events are brand-new in 2.4.0.0 -- an older client's GameEvent has neither
+    member, so they're looked up with getattr and skipped cleanly (no exception, no crash of
+    the scoreboard arm above) when absent."""
     global _overlay_listeners_armed
     if _overlay_listeners_armed:
         return
@@ -553,6 +701,14 @@ def _arm_overlay_listeners():
                   GameEvent.FULL_STATS_PERSONAL_RESERVES, GameEvent.EVENT_STATS)
         for ev in events:
             g_eventBus.addListener(ev, _on_scoreboard_toggled, scope=EVENT_BUS_SCOPE.BATTLE)
+        spotlight_start = getattr(GameEvent, "GO_TO_PREBATTLE_HIGHLIGHTS", None)
+        spotlight_end = getattr(GameEvent, "RETURN_FROM_PREBATTLE_HIGHLIGHTS", None)
+        if spotlight_start is not None and spotlight_end is not None:
+            g_eventBus.addListener(spotlight_start, _on_spotlight_start, scope=EVENT_BUS_SCOPE.BATTLE)
+            g_eventBus.addListener(spotlight_end, _on_spotlight_end, scope=EVENT_BUS_SCOPE.BATTLE)
+            LOG_DEBUG("[moe-battle] spotlight (prebattle highlights) hide listeners armed")
+        else:
+            LOG_DEBUG("[moe-battle] prebattle-highlights events absent on this client -- skipping")
         _overlay_listeners_armed = True
         LOG_DEBUG("[moe-battle] scoreboard hide listeners armed")
     except Exception:

@@ -170,6 +170,27 @@ def _feedback_ctrl():
     return sp.shared.feedback
 
 
+def _comp7_vehicle_ban_ctrl():
+    """The Onslaught (COMP7) pre-battle vehicle-ban arena controller, or None.
+
+    BATTLE_CTRL_ID.COMP7_VEHICLE_BAN_CTRL (=105) lives in the comp7_core FEATURE package
+    (comp7_core/gui/comp7_core_constants.py), absent on clients without Onslaught -- so the
+    import is fail-soft. sessionProvider.dynamic.getControllerByID returns None in every
+    non-Onslaught mode AND when the package is absent, exactly as WG's own comp7 views resolve
+    it (page.py / battle_carousel.py) -- so a plain None from this IS the bonus-type gate; no
+    explicit bonus-type check is needed. Fail-soft to None everywhere: a missing symbol/provider
+    must never break a non-Onslaught battle mount."""
+    try:
+        from comp7_core.gui.comp7_core_constants import BATTLE_CTRL_ID
+    except Exception:
+        return None
+    sp = _session_provider()
+    dynamic = getattr(sp, "dynamic", None) if sp is not None else None
+    if dynamic is None:
+        return None
+    return _safe(lambda: dynamic.getControllerByID(BATTLE_CTRL_ID.COMP7_VEHICLE_BAN_CTRL), None)
+
+
 def _read_assist_split_log():
     """(track, spot) assisted damage from the personal-efficiency controller's per-event log
     (getLoogedEfficiency) -- the LIVE source: it appends on every assist event, so the split is
