@@ -17,8 +17,10 @@ Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `
 
 ## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair + one standalone HotKey + one standalone threshold slider + two live preview Images)
 
-`SETTINGS_VERSION = 28` (was 23 as of the previous v3.0.0-era pass over this skill; five bumps
-shipped between them — see "The column swap (v24)" section below). Each `varName` ==
+`SETTINGS_VERSION = 29` (was 23 as of the previous v3.0.0-era pass over this skill; six bumps
+shipped between them — five are structural (see "The column swap (v24)" section below); the
+sixth, 28→29, is a stored-value self-heal with no template/row change, see `mod_settings.py`'s
+comment block above the constant). Each `varName` ==
 the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
@@ -42,7 +44,7 @@ Built in `_template()`:
 
 **`SETTINGS_VERSION` 23 → 24 SWAPPED the two columns** (see "The column swap (v24) and what rode
 in after it" below) — column 1 is now the Battle Calculator + everything garage-related, column 2
-is the WHOLE Progress Bar feature. The bullet list below is in **current (post-v28) column order**;
+is the WHOLE Progress Bar feature. The bullet list below is in **current (post-v29, column layout unchanged since v28) column order**;
 where a sub-bullet's own history predates the swap it still says "column1" for what is now
 column 2 — read those as **feature-relative**, not literal-column, until the swap section.
 
@@ -186,7 +188,7 @@ COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"barPosX", u"barPosY")
 ```
 
-**Current counts (v28): `COL1_KEYS` 16 slots, `COL2_KEYS` 23 slots, `tipless == 8`, `spacers == 9`.**
+**Current counts (v29, unchanged since v28): `COL1_KEYS` 16 slots, `COL2_KEYS` 23 slots, `tipless == 8`, `spacers == 9`.**
 Growth since v23 (26 / 9 at the time, described by the pre-swap layout further below): the v24
 column swap itself changed only which keys sit in which tuple, not the total row count; v25 added
 one `None` slot to each tuple (the two preview Images' sentinels); v26 added one slot to `COL2_KEYS`
@@ -601,7 +603,7 @@ the gating section above for why (they describe the bar, not when it shows).
 
 ## Registration — soft dep, idempotent, self-healing
 
-MSA (bundled `installer/vendor/aslain.modssettingsapi_1.6.4.wotmod`, import surface
+MSA (bundled `installer/vendor/aslain.modmenu_2.0.03.wotmod`, import surface
 `gui.aslainMenu`; izeberg's `gui.modsSettingsApi` is only a legacy fallback) is a **SOFT
 dependency**: `register()` imports it guarded and, if absent, logs-and-returns with defaults
 intact (both widgets on) and no panel — never a crash. There is no config file of ours; MSA
@@ -614,7 +616,7 @@ key-setter nature of `enableWhen*` / `conditions`, `createControlsGroup`'s singl
 14 component types, zero descriptor validation, varName-less rows excluded from
 `_settingsStructure`, and the two-columns reality) is the **harness** rule — read
 `wotmod-msa-settings`. The installed copy here is byte-identical to
-`installer/vendor/aslain.modssettingsapi_1.6.4.wotmod` and keeps its docstrings, so decompile
+`installer/vendor/aslain.modmenu_2.0.03.wotmod` and keeps its docstrings, so decompile
 it (`wotmod-debug-repl`'s `uncompyle6` recipe) rather than guessing when a detail is missing.
 
 Mod-relevant consequence: a boolean master's children grey out when it's off, but the disabled
@@ -672,7 +674,7 @@ term is never reached.
 
 Every visible label/tooltip comes from `adapter/settings_i18n.panel_text()` at the client's active
 language (English master + per-key fallback; `COL1_KEYS` / `COL2_KEYS` are the wire order MSA and
-`_sync_template_text` walk in lockstep — **16** and **23** slots as of v28 (26 and 9 immediately
+`_sync_template_text` walk in lockstep — **16** and **23** slots as of v29 (unchanged since v28; 26 and 9 immediately
 pre-v24; the v24 column swap reassigned which tuple holds which feature, and v25/v26/v27/v28 each
 grew one tuple by one slot — see "The column swap (v24)" above), several of which are `None`
 sentinels for the `Empty` spacers and the two preview Images. 11 language blocks. The six

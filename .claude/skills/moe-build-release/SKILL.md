@@ -22,8 +22,8 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 4.0.1,
-client target EU 2.3.1.3)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 5.0.0,
+client target EU 2.4.0.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -61,7 +61,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   `--clean-overlay` removes the hot-reload overlay. **Needs `WorldOfTanks.exe` closed** (`wgc` ok).
 - **`build_moe_zip.py`** — any Python. Builds `dist/MoECalculator_<version>.zip` = bilingual
   `readme.txt` (from `installer/readme.moe.txt`, `{VERSION}` substituted, CRLF) + the mod `.wotmod`
-  + all `installer/vendor/*.wotmod` under `mods/2.3.1.2/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.3.1.2"`.
+  + all `installer/vendor/*.wotmod` under `mods/2.4.0.0/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.4.0.0"`.
   Packages whatever `.wotmod` is in `dist/` — the same single build the GitHub installer uses.
 - **`check_version.py`** — the version gate above. **`clean_dist.py`** — prunes non-current release artifacts from `dist/` (`--dry-run`).
 
@@ -72,11 +72,11 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   (`NeedOpenWg`, `uninsneveruninstall`), cleans old builds, WoT-running guard, GitHub
   Atom-feed self-update. Repo `drizzer14/moe-calculator`, base name `MoECalculator-Setup`.
 - **`build_installer.ps1`** — preflights the built `.wotmod` + vendor dep, finds `ISCC.exe`, compiles → `dist/MoECalculator-Setup-<version>.exe`.
-- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip (the only readme template; the old `readme.wgmods.txt` stub was deleted). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modssettingsapi_1.6.4.wotmod` + `me.poliroid.modslistapi_1.7.8.wotmod`.
+- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip (the only readme template; the old `readme.wgmods.txt` stub was deleted). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modmenu_2.0.03.wotmod` + `me.poliroid.modslistapi_1.7.9.wotmod`.
 
 ## Hot-reload (the split that bites)
 
-- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.3.1.2`
+- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.0`
   copies only the Gameface JS/CSS/assets into `res_mods`, then toggle Tech-Tree↔Garage to re-inject. No relaunch.
 - **The in-battle registered WINDOW does NOT hot-reload** — its resources pin at client launch;
   reopen and `Window.reload()` both serve the launch-time cached document. **Every CSS/JS tweak to
@@ -96,8 +96,13 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v4.0.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v4.0.1 (2026-08-27) is the current Latest** — a patch release carrying two bar-render
+**v0.1.0 through v5.0.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v5.0.0 (commit `600ae49`) is the current Latest** — a game-upgrade release retargeting the
+mod to WoT client **EU 2.4.0.0** (up from 2.3.1.3), major bump per convention, cut directly on
+top of v4.0.1 with **zero functional/code changes** (same pattern as v3.0.0/v4.0.0).
+`SETTINGS_VERSION` unchanged at **29**; deploy target confirmed via `deploy.local.json`.
+
+**v4.0.1 (2026-08-27) was the prior Latest** — a patch release carrying two bar-render
 bugfix commits on top of v4.0.0: `0f79e28` opens the Moving Average bar fill at the axis
 floor instead of the `pre_avg` stop; `24010ab` stops the vertical wide-glow backdrop
 clipping on the left. Touched `MoEProgress.js`, `MoEProgressVertical.css`,
@@ -106,7 +111,7 @@ change** (no new/renamed settings controls, no changed defaults, no new widgets)
 docs needed no reconciliation. `SETTINGS_VERSION` unchanged; client target **unchanged at
 EU 2.3.1.3**.
 
-**v4.0.0 (2026-08-12-era) was the prior Latest** — a game-upgrade release retargeting the
+**v4.0.0 (2026-08-12-era) was the Latest two releases before that** — a game-upgrade release retargeting the
 mod to WoT client **EU 2.3.1.3** (up from 2.3.1.2), major bump per convention.
 
 **v3.1.4 and v3.1.3 were patch bar-fix releases published between v3.1.2 and v4.0.0.**
