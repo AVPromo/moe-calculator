@@ -130,7 +130,8 @@ def _iter_files():
 # prints a fix-list (not enforced per-file like _REQUIRED -- advisory, prose not code).
 
 _VENDOR_WOTMOD_RE = re.compile(r"\b([A-Za-z0-9_.]+?)_(\d+(?:\.\d+)*)\.wotmod\b")
-_SETTINGS_VERSION_DOC_RE = re.compile(r"(?:SETTINGS_VERSION|settingsVersion)\D{0,10}?(\d+)")
+_SETTINGS_VERSION_DOC_RE = re.compile(
+    r"(?:SETTINGS_VERSION|settingsVersion)`?\s*(?:[:=]\s*|(?:is\s+now|is|now|currently|at)\s+)\**(\d+)")
 _ATLAS_DIMS_DOC_RE = re.compile(r"\b(\d{2,5})\s*[xX]\s*(\d{2,5})\b")
 _OWN_WOTMOD_RE = re.compile(re.escape("com.14th_ua.moe_calculator") + r"_\d+\.\d+\.\d+\.wotmod")
 _SETTINGS_VERSION_SRC_RE = re.compile(r"(?:SETTINGS_VERSION|settingsVersion)\s*[:=]\s*(\d+)")
@@ -380,7 +381,7 @@ def _selfcheck():
     # settingsVersion/atlas dims each show up in the fix-list; a clean line
     # (matching current values) produces nothing; missing category data never flags.
     stale_vendor_line = "Depends on " + "aslain.modssettingsapi_1.7.1" + ".wotmod for settings."
-    settings_line = "SETTINGS_VERSION" + " 23 is what ships today."
+    settings_line = "SETTINGS_VERSION" + " is now 23, per the changelog."
     atlas_line = "The atlas is " + "4096x5152" + " at build time."
     clean_line = "See MOD_VERSION" + " = \"2.0.0\" in the mod entry point."
 
@@ -412,6 +413,16 @@ def _selfcheck():
     # that's the whole point of keying on those narrow markers.
     assert _scan_line(changelog_line, set(), None, None, mod_version="5.0.0",
                        client_version="2.4.0.0") == []
+
+    # A historical settingsVersion "went N -> M" / "(N -> M)" arrow line never flags,
+    # even though N != the current source value -- it's changelog history, not a live
+    # pointer. A current-state "is now N" claim still IS flagged when N is stale.
+    settings_arrow_line = ("`SETTINGS_VERSION` went " + "5 -> 10"
+                            + " across the feature's iterations.")
+    assert _scan_line(settings_arrow_line, set(), 29, None) == []
+    stale_settings_now_line = "SETTINGS_VERSION" + " is now 25" + ", unchanged since."
+    found = _scan_line(stale_settings_now_line, set(), 29, None)
+    assert any("25" in f for f in found), found
 
     print("selfcheck OK: stale-doc scan flags known-old values, "
           "skips categories the mod doesn't have.")

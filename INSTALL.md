@@ -6,7 +6,9 @@ selected vehicle:
 - **In the Garage** — a percentile bar with the 1 / 2 / 3-mark milestones (65% / 85% /
   95%), the combined damage each mark needs, and your current average combined damage and
   mark percentage. **Ctrl+drag** it to move it anywhere on screen (**Shift** locks the drag
-  to one axis).
+  to one axis). Hovering the mark tooltip also shows a weekly moving-average MoE trend
+  chart — per-battle dots on a fixed percentile axis, mark lines at 65% / 85% / 95% / 100%,
+  day dividers, and an end-of-day moving-average label for each day.
 - **In battle** — a small overlay over the HUD showing your live combined damage against
   your projected average, and your projected MoE percentage with the change versus where
   you started the battle.
@@ -40,7 +42,7 @@ It uses the game's own mark art.
 ## Install with the installer (recommended)
 
 1. Close World of Tanks completely (exit the Game Center launcher too).
-2. Run **`MoECalculator-Setup-5.0.0.exe`**.
+2. Run **`MoECalculator-Setup-5.1.0.exe`**.
 3. Confirm your World of Tanks folder when the installer shows it — the folder that
    contains `version.xml`. The installer detects it automatically in most cases.
 4. If a newer version is available on GitHub, the installer offers to download and run the
@@ -68,14 +70,14 @@ installer. OpenWG GameFace and Aslain ModMenu stay in place for other mods that 
    The folder name matches your installed client version. After a game update the version
    changes and you move the mod into the new version folder.
 
-3. Copy **`com.14th_ua.moe_calculator_5.0.0.wotmod`** into that folder.
+3. Copy **`com.14th_ua.moe_calculator_5.1.0.wotmod`** into that folder.
 4. Delete any older version of this mod from the same folder first.
 5. *(Optional)* Add **Aslain ModMenu** (`aslain.modmenu`) into the same folder to
    get the in-game settings panel. Without it the mod runs with both widgets enabled.
 6. Fully restart the game client: exit completely and relaunch.
 
 The `mods\2.4.0.0\` folder then holds the OpenWG GameFace `.wotmod`,
-`com.14th_ua.moe_calculator_5.0.0.wotmod`, and (optionally) the Aslain ModMenu `.wotmod`.
+`com.14th_ua.moe_calculator_5.1.0.wotmod`, and (optionally) the Aslain ModMenu `.wotmod`.
 
 ---
 
@@ -162,7 +164,7 @@ Changes apply immediately.
 ## Uninstalling
 
 Remove the mod through its Windows **Apps & features** entry, or delete
-`com.14th_ua.moe_calculator_5.0.0.wotmod` from `mods\<version>\`, then restart the client.
+`com.14th_ua.moe_calculator_5.1.0.wotmod` from `mods\<version>\`, then restart the client.
 
 ---
 

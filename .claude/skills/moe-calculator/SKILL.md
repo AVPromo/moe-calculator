@@ -17,7 +17,7 @@ features and the build each have their own project skill:
 
 ## Identity (facts)
 
-- **Mod id:** `com.14th_ua.moe_calculator` (`src/meta.xml` is the canonical version, currently **5.0.0**).
+- **Mod id:** `com.14th_ua.moe_calculator` (`src/meta.xml` is the canonical version, currently **5.1.0**).
 - **Client:** WoT **EU 2.4.0.0**. Runtime **Python 2.7** (BigWorld); tests on **Python 3.13**.
 - **Hard dep:** OpenWG GameFace ≥ 1.1.6 (`import openwg_gameface` raises if absent). Soft dep:
   ModsSettingsAPI — bundled `aslain.modmenu_2.0.03` + `modslistapi_1.7.9` (absent → mod runs

@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 5.0.0,
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 5.1.0,
 client target EU 2.4.0.0)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
@@ -96,13 +96,28 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v5.0.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v5.0.0 (commit `600ae49`) is the current Latest** — a game-upgrade release retargeting the
-mod to WoT client **EU 2.4.0.0** (up from 2.3.1.3), major bump per convention, cut directly on
-top of v4.0.1 with **zero functional/code changes** (same pattern as v3.0.0/v4.0.0).
-`SETTINGS_VERSION` unchanged at **29**; deploy target confirmed via `deploy.local.json`.
+**v0.1.0 through v5.1.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v5.1.0 (2026-09-16) is the current Latest** — a minor feature release cut on top of v5.0.0. It
+adds a **garage weekly moving-average MoE trend chart** inside the MoE-award tooltip: per-battle
+dots on a fixed percentile axis, horizontal mark lines at the 65/85/95/100 percentile thresholds
+drawn from a tiled PNG, Y-axis mark icons in a right gutter including the `barrel_mark` 100%
+glyph, and full-height day dividers with per-day end-of-day moving-average labels. Touched
+`MoECalculator.js` + `.css`, plus new `domain/trend.py` and `adapter/trend_log.py` (with
+`tests/test_trend.py` / `tests/test_trend_log.py`). A pre-build cleanup collapsed the chart's
+duplicate `axisPos` helper into the existing `barX` (−16 lines), and a JS clamp fix stopped the
+100% `barrel_mark` icon cropping at the top. It also fixed a `check_version.py` stale-doc-scan
+false positive (the settingsVersion DOC regex now ignores historical arrow prose).
+`SETTINGS_VERSION` is unchanged at **29** (no MSA settings control changed); client target
+**unchanged at EU 2.4.0.0**. Player docs (`README.md`, `INSTALL.md`, `installer/readme.moe.txt`)
+were reconciled for the new trend chart in both EN and UA halves.
 
-**v4.0.1 (2026-08-27) was the prior Latest** — a patch release carrying two bar-render
+**v5.0.0 (commit `600ae49`) was the prior Latest** — a game-upgrade release
+retargeting the mod to WoT client **EU 2.4.0.0** (up from 2.3.1.3), major bump per convention,
+cut directly on top of v4.0.1 with **zero functional/code changes** (same pattern as
+v3.0.0/v4.0.0). `SETTINGS_VERSION` unchanged at **29**; deploy target confirmed via
+`deploy.local.json`.
+
+**v4.0.1 (2026-08-27) was the Latest two releases before that** — a patch release carrying two bar-render
 bugfix commits on top of v4.0.0: `0f79e28` opens the Moving Average bar fill at the axis
 floor instead of the `pre_avg` stop; `24010ab` stops the vertical wide-glow backdrop
 clipping on the left. Touched `MoEProgress.js`, `MoEProgressVertical.css`,
@@ -255,8 +270,8 @@ Both channels now ship the **same single build** (WG-API threshold source): the 
 carries `MoECalculator-Setup-<ver>.exe` + the bare `.wotmod`, and `MoECalculator_<ver>.zip`
 (same `.wotmod` + vendor deps) is uploaded manually to
 [wgmods.net/7745](https://wgmods.net/7745/). Since **v0.3.0** the installer and the zip also
-bundle **ModsSettingsAPI** (`installer/vendor/aslain.modssettingsapi_1.6.4.wotmod` — migrated
-from izeberg 1.7.0 in v1.3.0) alongside OpenWG GameFace, plus **Mods List API**
+bundle **Aslain ModsSettingsAPI 1.6.4** (migrated from izeberg 1.7.0 in v1.3.0) alongside
+OpenWG GameFace, plus **Mods List API**
 (`installer/vendor/me.poliroid.modslistapi_1.7.8.wotmod`, added in v1.3.0) which surfaces the
 settings in the in-game "Modification list" window. The installer self-update reads the GitHub Atom
 feed, so keep the `vX.Y.Z` tag + `MoECalculator-Setup-<ver>.exe` asset-name convention. Follow

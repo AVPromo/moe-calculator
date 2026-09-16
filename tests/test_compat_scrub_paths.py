@@ -11,7 +11,7 @@ from moe_calculator import _compat
 def test_scrub_windows_absolute_frame_keeps_scripts_client_tail():
     line = (
         'File "C:\\Users\\johnsmith\\AppData\\Local\\Wargaming.net\\WOT\\mods\\2.4.0.0\\'
-        'com.14th_ua.moe_calculator_5.0.0.wotmod\\res\\scripts\\client\\moe_calculator\\'
+        'com.example.fakemod_9.9.9.wotmod\\res\\scripts\\client\\moe_calculator\\'
         'domain\\builder.py", line 42, in build_model'
     )
     out = _compat._scrub_paths(line)
@@ -23,7 +23,7 @@ def test_scrub_windows_absolute_frame_keeps_scripts_client_tail():
 def test_scrub_forward_slash_windows_frame():
     line = (
         'File "C:/Users/johnsmith/AppData/Local/Wargaming.net/WOT/mods/2.4.0.0/'
-        'com.14th_ua.moe_calculator_5.0.0.wotmod/res/scripts/client/moe_calculator/'
+        'com.example.fakemod_9.9.9.wotmod/res/scripts/client/moe_calculator/'
         'domain/builder.py", line 7, in <module>'
     )
     out = _compat._scrub_paths(line)
