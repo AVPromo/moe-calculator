@@ -23,9 +23,11 @@ class MoESnapshot(object):
                          uses; {} when unknown/not loaded yet.
     - `nation`         : nation id string for the mark art ('germany', 'ussr', ...); ''.
     - `has_vehicle`    : whether a vehicle is actually selected (False -> bar hidden).
+    - `trend_rows`     : this vehicle's weekly-trend rows (adapter/trend_log.rows_for), already
+                         scoped to this int_cd; domain/trend.py windows them for the tooltip.
     """
     def __init__(self, vehicle_int_cd=0, nation="", marks=0, cur_percentile=0.0,
-                 cur_avg_damage=0, thresholds=None, has_vehicle=True):
+                 cur_avg_damage=0, thresholds=None, has_vehicle=True, trend_rows=None):
         self.vehicle_int_cd = vehicle_int_cd
         self.nation = nation
         self.marks = marks
@@ -33,6 +35,7 @@ class MoESnapshot(object):
         self.cur_avg_damage = cur_avg_damage
         self.thresholds = thresholds or {}
         self.has_vehicle = has_vehicle
+        self.trend_rows = trend_rows or []
 
 
 class MarkTick(object):
@@ -59,7 +62,8 @@ class MoEModel(object):
     current percentile (how close to the next mark). Ticks are always the three
     milestones in ascending order."""
     def __init__(self, nation, marks, cur_percentile, cur_avg_damage, fill, ticks,
-                 vehicle_int_cd=0, has_data=False, end_damage_required=0):
+                 vehicle_int_cd=0, has_data=False, end_damage_required=0, trend=None,
+                 trend_days=None):
         self.nation = nation
         self.marks = marks                       # 0..3
         self.cur_percentile = cur_percentile     # 0.0..100.0
@@ -73,3 +77,9 @@ class MoEModel(object):
         # True when at least one tick carries a real damage requirement (the external
         # table was loaded for this vehicle). Lets the view/tests know data is present.
         self.has_data = has_data
+        # Weekly garage-tooltip trend chart, VIEWED TANK ONLY: [[ts, pct], ...] chronological,
+        # last 7 days (domain/trend.points_for). [] on day one / no captured battles yet.
+        self.trend = trend or []
+        # Per-day bucketed trend labels (domain/trend.days_for), same window/rows/now as
+        # `trend` above. [] on day one / no captured battles yet.
+        self.trend_days = trend_days or []

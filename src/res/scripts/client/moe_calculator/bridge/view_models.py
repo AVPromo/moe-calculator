@@ -41,7 +41,7 @@ class MarkTickVM(ViewModel):
 
 
 class MoEVM(ViewModel):
-    def __init__(self, properties=18, commands=1):
+    def __init__(self, properties=19, commands=1):
         super(MoEVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -78,6 +78,16 @@ class MoEVM(ViewModel):
         # stays pinned. The widget polls this `rev` as a cheap change-signal and re-renders when it
         # moves (cold-mount self-heal; see pollForChanges in MoECalculator.js).
         self._addNumberProperty("rev", 0)              # 17  push counter (bumped FIRST every push)
+        # Weekly garage-tooltip trend chart (VIEWED TANK ONLY, see domain/trend.py): a JSON
+        # OBJECT {"points": [[ts, pct], ...], "days": [{"count": N, "dmg": D}, ...]} for the
+        # last 7 days, both arrays chronological; {"points": [], "days": []} on day one / no
+        # captured battles yet. `days` groups the same points by local calendar day for the
+        # tooltip's per-day columns (domain/trend.days_for) -- `count` is how many bars that day
+        # owns (the JS walks `points` in `count`-sized chunks to build one column per day), `dmg`
+        # is that day's END-OF-DAY career avg damage (the column's label). APPENDED after `rev`,
+        # so nothing above renumbers. Mirrors how `labels` (index 11) already carries a JSON
+        # bundle rather than a typed channel.
+        self._addStringProperty("trend", "")           # 18  JSON {points, days} weekly trend
         # Reverse channel: the JS drag/stepper reports the final px here. Wulf delivers the
         # JS-supplied {x, y, w, h} MAP to the handler wired in gameface_bridge._connect_commands.
         self.setPosition = self._addCommand("setPosition")  # arg: {x, y, w, h} px (drag / rescale echo)
@@ -132,6 +142,9 @@ class MoEVM(ViewModel):
 
     def setRev(self, v):
         self._setNumber(17, v)
+
+    def setTrend(self, v):
+        self._setString(18, v)
 
     def getTicks(self):
         return self._getArray(9)

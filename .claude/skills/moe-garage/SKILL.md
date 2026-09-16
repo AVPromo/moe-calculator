@@ -48,8 +48,10 @@ VM. `_arm` uses `getattr(holder, attr, None)` so a renamed WG event degrades qui
 - `ModelObserver("MoECalculator")` reads `model.moeData`. `#moe-root` built once by `ensureRoot()`:
   `.moe-head>.moe-cur(.moe-cur-dmg + .moe-cur-icon)` and `.moe-body>.moe-track` holding
   `.moe-fill .moe-split .moe-split-label(50%) .moe-end .moe-end-label .moe-cur-marker .moe-cur-pct .moe-ticks`.
-- **Bar axis** (`barX`): piecewise `PCT_STOPS=[0,50,65,85,95,100]` → `BAR_STOPS=[0,20,40,60,80,100]`
-  (five equal fifths — spreads the crowded 65/85/95 ticks). `SPLIT_PCT=50` drives `.moe-split-passed` at fill ≥ 50.
+- **Bar axis** (`barX`): piecewise `PCT_STOPS=[0,65,85,95,100]` → `BAR_STOPS=[0,25,50,75,100]`
+  (equal quarters — same convention as the Damage Efficiency bar's `EFFICIENCY_BAR_STOPS`, see
+  `moe-progress`). The tooltip's weekly-MoE trend chart's Y axis (`axisPos`, same file) mirrors
+  this exact stop mapping via its own copy of the constants — keep both in lockstep if either changes.
 - **Render branches (`render`):** no `moeData` → hidden; `visible===false` → hidden;
   otherwise shown. **New tank genuinely reads `0` / `0%`** (synchronous dossier read, not the
   async table) — explicit zeros, not a "—" placeholder. Percent via `pctText` is **floored to

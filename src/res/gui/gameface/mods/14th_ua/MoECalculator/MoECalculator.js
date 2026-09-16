@@ -244,6 +244,38 @@ function parseLabels(s) {
 }
 function L(key) { return (LABELS && LABELS[key]) || ""; }
 
+// Weekly MoE trend chart data, pushed from Python as a JSON string on the model (`trend`):
+// {"points": [[ts, pct], ...], "days": [{"count": N, "dmg": D}, ...]}, all already windowed
+// to the last 7 days (domain/trend.py). `days` groups `points` by local calendar day into the
+// chart's per-day columns: `count` points belong to that day (walked in count-sized chunks --
+// see renderTooltip), `dmg` is that day's end-of-day career avg damage (the column's label).
+// Parsed fail-soft: missing / corrupt / legacy bare-array payload all degrade to the same
+// empty shape rather than throwing -- never trust the wire.
+function parseTrend(s) {
+    const obj = parseLabels(s);
+    const points = Array.isArray(obj.points) ? obj.points : [];
+    const days = Array.isArray(obj.days) ? obj.days : [];
+    return { points: points, days: days };
+}
+
+// Trend-chart geometry constants, mirrored from MoECalculator.css (.moe-trend-plot height,
+// .moe-trend-dot diameter) -- keep in lockstep. Used only to derive PAD_FRAC, the fraction of
+// the plot's height an edge dot's own radius eats into, so a min/max-percentile dot centered at
+// the very top/bottom edge doesn't get clipped by the plot's overflow:hidden. Both dot placement
+// and this pad are expressed as a PERCENTAGE of the plot box (see renderTooltip) -- no
+// offsetWidth/offsetHeight read anywhere, so the first paint (before Gameface has laid the plot
+// out) already renders at the right position instead of pinning to 0 until a later re-render.
+const DOT_REM = 4;
+const PLOT_HEIGHT_REM = 100;
+const PAD_FRAC = (DOT_REM / 2) / PLOT_HEIGHT_REM;   // dot radius as fraction of plot height
+// .moe-mark-icon-max's own height (CSS, kept in lockstep) -- its top edge, after the shared
+// .moe-mark-icon translateY(-50%) centering, must not go above the plot's top (0%). yOf(100)
+// alone (PAD_FRAC*100 = 2%) is too small a top offset for this icon's larger half-height, so
+// the top icon's own placement is clamped to this floor (see below); the reference line it
+// pairs with stays at the true yOf(100) -- only the barrel-mark icon moves.
+const ICON_MAX_REM = 15;
+const ICON_MAX_HALF_PCT = (ICON_MAX_REM / 2) / PLOT_HEIGHT_REM * 100;
+
 // Group an integer with thousands separators: 2910 -> "2,910".
 function thousands(n) {
     n = Math.max(0, Math.round(Number(n) || 0));
@@ -307,7 +339,9 @@ function ratioHtml(pct) {
 // filling the whole bar. PCT_STOPS = the percentile region boundaries; BAR_STOPS = their
 // bar-width positions. Applied to BOTH the fill width and every tick's position so they
 // stay consistent; the CSS boundary guides (.moe-tick-notch at 65/85/95, .moe-end at 100)
-// are positioned to the same stops (ticks data-driven via barX).
+// are positioned to the same stops (ticks data-driven via barX). Also reused (unchanged) as
+// the trend chart's fixed Y axis in `yOf` below -- same permanent 25/50/75 spread, never
+// auto-ranged to a window's own min..max.
 const PCT_STOPS = [0, 65, 85, 95, 100];   // percentile region boundaries
 const BAR_STOPS = [0, 25, 50, 75, 100];   // bar-width % (equal quarters)
 function barX(percentile) {
@@ -402,8 +436,8 @@ let ttShowTimer = 0;
 // (see the harness Tooltips guidance). The tooltip stays pointer-events:none (CSS) so it
 // never steals the hangar's drag-to-rotate.
 //
-// Layout mirrors the client's native MoE award tooltip: the big nation mark art beside the
-// title + current-ratio line, then the description, a divider, and the condition rules.
+// Trimmed to essentials: the vehicle name (title), the current-ratio line, and the trend
+// chart -- the mark-description paragraph and the condition/requirement bullets were dropped.
 function ensureTooltip() {
     let tip = document.getElementById("moe-tooltip");
     if (tip) return tip;
@@ -412,10 +446,9 @@ function ensureTooltip() {
     // Reuse the shared `.wg-tooltip` / `.wg-tip-*` tooltip component (the same class
     // vocabulary the sibling wgmod-research-progress mod uses -- both mods render identically,
     // but each ships its OWN standalone copy of the CSS, scoped to its root). Text column
-    // (title + ratio + description) inside .wg-tip-main, with the mark art pinned to the
-    // top-RIGHT out of flow (.wg-tip-icon). The divider + condition span full width below.
-    // MoE-local hooks: .moe-tip-ratio / .moe-tip-descr (JS targets; both styled by the shared
-    // .wg-tip-effect body row); condition bullets are shared .wg-tip-effect rows too.
+    // (title + ratio) inside .wg-tip-main, with the mark art pinned to the top-RIGHT out of
+    // flow (.wg-tip-icon). MoE-local hook: .moe-tip-ratio (JS target; styled by the shared
+    // .wg-tip-effect body row).
     tip.className = "wg-tooltip";
     tip.innerHTML =
         '<div class="wg-tip-main wg-tip-main-mark">' +
@@ -425,12 +458,18 @@ function ensureTooltip() {
         '  </div>' +
         '  <div class="wg-tip-icon wg-tip-icon-mark"></div>' +
         '</div>' +
-        // The description is a FULL-WIDTH paragraph OUTSIDE .wg-tip-main -- it sits below the
-        // mark art, so it must not be squeezed into the icon's reserved right column; as a
-        // top-level block it uses the whole tooltip width like the divider + conditions.
-        '<div class="wg-tip-effect moe-tip-descr"></div>' +
+        // Weekly MoE trend chart (VIEWED TANK ONLY, see domain/trend.py) -- a divider, a
+        // heading (swaps to the day-one empty-state line when there's nothing to plot yet),
+        // and a per-battle dot plot (.moe-trend-plot) over a per-day end-damage label band
+        // (.moe-trend-labels) -- both populated in renderTooltip. CSS abs-positioned divs
+        // only -- no canvas/SVG anywhere in this codebase's front-end (unconfirmed in this
+        // engine).
         '<div class="wg-tip-div"></div>' +
-        '<div class="wg-tip-cond"></div>';
+        '<div class="wg-tip-effect moe-tip-trend-title"></div>' +
+        '<div class="moe-trend">' +
+        '  <div class="moe-trend-plot"></div>' +
+        '  <div class="moe-trend-labels"></div>' +
+        '</div>';
     document.body.appendChild(tip);
 
     const root = document.getElementById("moe-root");
@@ -483,11 +522,10 @@ function hideTooltip() {
     if (tip) tip.classList.remove("moe-tt-open");
 }
 
-// Populate the tooltip from the model -- the client's own MoE award tooltip. All text is
-// localized off the model's LABELS bundle (no hardcoded English); the mark art is the
-// vehicle's own nation icon. Title/description are keyed by the current mark count
-// (title0..3 / descr0..3): at 0 marks the blurb tells you how to earn the 1st, at 3 it
-// reads "maximum obtained" -- exactly as the client does.
+// Populate the tooltip from the model -- trimmed to the vehicle name, the current-ratio
+// line, and the trend chart. All text is localized off the model's LABELS bundle (no
+// hardcoded English); the mark art is the vehicle's own nation icon. Title is keyed by the
+// current mark count (title0..3).
 function renderTooltip(root, data) {
     if (!TOOLTIP_ENABLED) return;
     const tip = ensureTooltip();
@@ -499,7 +537,6 @@ function renderTooltip(root, data) {
     // in its own statistics/awards tooltip.
     iconEl.classList.toggle("wg-tip-icon-unearned", marks === 0);
     tip.querySelector(".wg-tip-name").textContent = L("title" + marks);
-    tip.querySelector(".moe-tip-descr").textContent = L("descr" + marks);
 
     // Current-ratio line: shown only when the client would (a real percentile > 0), matching
     // the native tooltip's localizedValue (empty at damageRating <= 0). Plain inline text.
@@ -513,18 +550,190 @@ function renderTooltip(root, data) {
         ratio.classList.add("moe-tip-empty");
     }
 
-    // Condition rules: one localized '\n'-separated block -> one line per bullet, each a
-    // shared .wg-tip-effect body row (same rhythm as the ratio + description above).
-    const cond = tip.querySelector(".wg-tip-cond");
-    cond.innerHTML = "";
-    const lines = (L("condition") || "").split("\n");
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const el = document.createElement("div");
-        el.className = "wg-tip-effect";
-        el.textContent = line;
-        cond.appendChild(el);
+    // Weekly MoE trend chart (VIEWED TANK ONLY -- see domain/trend.py; accrues forward from
+    // whenever this feature shipped, no backfill is possible). One dot per battle, chronological
+    // left-to-right, no connecting lines, no baseline. `points` is walked in `days[i].count`-sized
+    // chunks to derive each day's index RANGE (for the divider + label bands below). Height is a
+    // FIXED piecewise-linear percentile axis (barX/yOf below), spread exactly like the on-bar
+    // milestone axis (barX above) -- NOT auto-ranged to the window's own min..max, so the
+    // 65/85/95 mark lines always sit at a permanent 25/50/75 and the chart reads consistently
+    // week to week. Day-one / no captured battles yet -> `data.ticks` is STILL 3 entries (the
+    // builder emits them unconditionally, data-independent of `trendPoints`), so the plot stays
+    // visible with just those 3 mark lines as a reference scaffold; only the per-battle dots and
+    // the day-divider/label band (which need actual points) are absent, and the heading shows
+    // the empty-state line.
+    const trend = parseTrend(data.trend);
+    const trendPoints = trend.points;
+    const trendDays = trend.days;
+    const trendTitle = tip.querySelector(".moe-tip-trend-title");
+    const trendEl = tip.querySelector(".moe-trend");
+    const trendPlotEl = trendEl.querySelector(".moe-trend-plot");
+    const trendLabelsEl = trendEl.querySelector(".moe-trend-labels");
+    trendTitle.textContent = trendPoints.length ? L("trendTitle") : L("trendEmpty");
+    trendPlotEl.innerHTML = "";
+    trendLabelsEl.innerHTML = "";
+    // Only the day-label band is empty-hidden at N=0 (nothing to caption yet) -- the plot
+    // itself is NEVER hidden so the fixed mark lines below always draw. Reuses the same
+    // .moe-tip-empty idiom as the ratio row above, just retargeted off the whole .moe-trend.
+    trendLabelsEl.classList.toggle("moe-tip-empty", trendPoints.length === 0);
+
+    const N = trendPoints.length;
+    const ticks = data.ticks || [];
+
+    // Inner content box: lines/dots/dividers resolve their left/top % against THIS box, which
+    // stops 16rem short of the plot's right edge (see .moe-trend-area CSS) -- the icons below
+    // stay direct children of trendPlotEl (the full-width box) so they sit in that right gutter.
+    const trendAreaEl = document.createElement("div");
+    trendAreaEl.className = "moe-trend-area";
+    trendPlotEl.appendChild(trendAreaEl);
+
+    // Positions are PERCENTAGES of the plot box, never px derived from offsetWidth/
+    // offsetHeight -- those read near-zero on the very first paint (before Gameface has
+    // laid the plot out), which pinned every dot/label to the left until a later poll
+    // re-render fixed it up. A %-based position is correct on the very first paint, no
+    // measurement needed. PAD_FRAC (a fixed fraction mirrored from the CSS dot/plot rem
+    // sizes) keeps a min/max-percentile dot's own radius from being clipped by the plot's
+    // overflow:hidden at the very top/bottom edge. Data-independent of N -- shared by the
+    // mark-line loop (always) and the dot loop (only when N > 0) below.
+    const yOf = function (pct) {
+        const f = barX(pct) / 100;
+        return (1 - PAD_FRAC - f * (1 - 2 * PAD_FRAC)) * 100;   // max at TOP, min at BOTTOM
+    };
+
+    // Mark-threshold reference lines: a faint horizontal guide at each 1/2/3-mark
+    // percentile, reusing `data.ticks` (the SAME MarkTickVM[] renderTicks already reads
+    // for the on-bar ticks) and the SAME unwrap() pattern. `data.ticks` is unconditional
+    // (always 3 entries, independent of `trendPoints`) so this loop runs UNCONDITIONALLY --
+    // including at N=0, where it's the only thing the plot draws -- BEFORE the dot loop
+    // below so dots paint on top when there are any. Positioned by yOf (verbatim, %-based --
+    // no offsetWidth/offsetHeight), same as the dots.
+    // Each mark line also gets a mark-count icon at the plot's left edge, vertically centred
+    // on its line (reuses markIcon()/FLAT_MARK, the SAME glyph the on-bar ticks render). Not
+    // added for the explicit 100% top line below -- that's the axis ceiling, not a mark.
+    for (let i = 0; i < ticks.length; i++) {
+        const tk = unwrap(ticks[i]);
+        const pct = Number(tk.percent) || 0;
+        const line = document.createElement("div");
+        line.className = "moe-mark-line";
+        line.style.top = yOf(pct) + "%";
+        trendAreaEl.appendChild(line);
+
+        const count = Math.max(1, Math.min(3, tk.markCount || 1));
+        const ic = document.createElement("div");
+        ic.className = "moe-mark-icon";
+        ic.style.top = yOf(pct) + "%";
+        ic.style.backgroundImage = "url(" + markIcon(count) + ")";
+        trendPlotEl.appendChild(ic);
+    }
+    // 4th reference line at the axis TOP (pct=100 -> 100% on barX, same as the on-bar
+    // axis's own top anchor). `data.ticks` only ever carries the 3 mark thresholds
+    // (65/85/95), never this one, so it's appended explicitly rather than assumed to be a
+    // 4th tick entry. Same class/tile/positioning (yOf) as the 3 lines above.
+    const topLine = document.createElement("div");
+    topLine.className = "moe-mark-line";
+    topLine.style.top = yOf(100) + "%";
+    trendAreaEl.appendChild(topLine);
+
+    const topIcon = document.createElement("div");
+    topIcon.className = "moe-mark-icon moe-mark-icon-max";
+    // Clamped down (not yOf(100) verbatim) so its own top edge stays inside the plot -- see
+    // ICON_MAX_HALF_PCT above. Never moves any of the OTHER mark icons/lines/dots/dividers.
+    topIcon.style.top = Math.max(yOf(100), ICON_MAX_HALF_PCT) + "%";
+    topIcon.style.backgroundImage = "url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png)";
+    trendPlotEl.appendChild(topIcon);
+
+    if (N) {
+        // Per-day index ranges over `trendPoints`, from the parallel `days[i].count` run-lengths.
+        // Fail-soft against a chunk/points mismatch (a corrupt/legacy payload): the loop also
+        // gates on `idx` staying in range, so this can only stop early -- never index past
+        // `trendPoints`.
+        const ranges = [];
+        let idx = 0;
+        for (let d = 0; d < trendDays.length && idx < N; d++) {
+            const day = trendDays[d] || {};
+            const count = Math.max(0, Number(day.count) || 0);
+            if (!count) continue;
+            const start = idx;
+            idx = Math.min(N, idx + count);
+            ranges.push({ start: start, end: idx - 1, endDamage: day.dmg });
+        }
+
+        // EDGE_PAD_PCT insets the first/last dot on the x-axis so their radius isn't clipped
+        // by the plot's overflow:hidden either (the y-axis equivalent of PAD_FRAC above).
+        // ponytail: EDGE_PAD_PCT is a tuned value (DOT_REM=4 over the ~275rem plot content
+        // width is ~0.7% radius; 2% gives clear breathing room without visibly compressing the
+        // series) -- re-derive if the plot width changes materially.
+        const EDGE_PAD_PCT = 2;
+        const xOf = function (i) {
+            const t = N > 1 ? i / (N - 1) : 0.5;
+            return EDGE_PAD_PCT + t * (100 - 2 * EDGE_PAD_PCT);
+        };
+
+        for (let i = 0; i < N; i++) {
+            const v = Number(trendPoints[i][1]) || 0;
+            const dot = document.createElement("div");
+            dot.className = "moe-trend-dot";
+            dot.style.left = xOf(i) + "%";
+            dot.style.top = yOf(v) + "%";
+            trendAreaEl.appendChild(dot);
+        }
+
+        // Day-boundary dividers, at the midpoint (%) between the previous day's last dot and
+        // this day's first dot -- and the same x positions double as the day-label band edges.
+        // Vertical extent spans the FULL axis (yOf(0)..yOf(100), axis bottom to axis top), not
+        // just the plotted dots' own range -- top/height are set here in JS because the CSS rule
+        // carries no top/bottom (see .moe-trend-divider).
+        const dividerTop = yOf(100);
+        const dividerHeight = yOf(0) - yOf(100);
+        const dividers = [];
+        for (let d = 1; d < ranges.length; d++) {
+            dividers.push((xOf(ranges[d - 1].end) + xOf(ranges[d].start)) / 2);
+            const div = document.createElement("div");
+            div.className = "moe-trend-divider";
+            div.style.left = dividers[d - 1] + "%";
+            div.style.top = dividerTop + "%";
+            div.style.height = dividerHeight + "%";
+            trendAreaEl.appendChild(div);
+        }
+
+        // One label per day, CENTERED on that day's OWN dot cluster -- (xOf(range.start) +
+        // xOf(range.end)) / 2 -- NOT the divider midpoints (those bound the band, not the
+        // day's own dots, and drifted the label off a day whose dots hug one edge of its
+        // band). See .moe-day-label CSS (text-align:center + translateX(-50%), width auto).
+        // The centre is clamped so an edge day's number can't clip the plot edge.
+        // ponytail: NUMBER_WIDTH_PCT is a tuned heuristic (~40rem damage number at this 12rem
+        // label font, over the ~275rem WG tooltip content width) -- not measured off-frame;
+        // re-derive if it misbehaves at some other scale.
+        const NUMBER_WIDTH_PCT = 15;
+        const bands = ranges.map(function (r) {
+            const centre = (xOf(r.start) + xOf(r.end)) / 2;
+            return Math.max(NUMBER_WIDTH_PCT / 2, Math.min(100 - NUMBER_WIDTH_PCT / 2, centre));
+        });
+
+        // A centred number can still collide with its neighbour's -- decide which days keep a
+        // label by walking right-to-left FROM THE SECOND-MOST-RECENT day: the most-recent
+        // day's label is always dropped (index bands.length-1 is never visited, `keep` stays
+        // false there) -- that day's end-of-day figure duplicates the live current-damage
+        // number shown elsewhere in this tooltip, so "today" is captioned by the live figure,
+        // not a trend label. Its DOT and DIVIDER are unaffected, only the text is omitted. An
+        // earlier day keeps its label only if its (clamped) centre is at least NUMBER_WIDTH_PCT
+        // from the last-KEPT label's centre -- otherwise it's dropped too.
+        const keep = new Array(bands.length).fill(false);
+        let lastKeptCentre = null;
+        for (let d = bands.length - 2; d >= 0; d--) {
+            if (lastKeptCentre !== null && lastKeptCentre - bands[d] < NUMBER_WIDTH_PCT) continue;
+            keep[d] = true;
+            lastKeptCentre = bands[d];
+        }
+
+        for (let d = 0; d < ranges.length; d++) {
+            if (!keep[d]) continue;
+            const label = document.createElement("div");
+            label.className = "moe-day-label";
+            label.style.left = bands[d] + "%";
+            label.textContent = thousands(ranges[d].endDamage);
+            trendLabelsEl.appendChild(label);
+        }
     }
 
     if (tip.classList.contains("moe-tt-open")) positionTooltip(root, tip);

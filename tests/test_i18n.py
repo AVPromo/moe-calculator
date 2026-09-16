@@ -28,10 +28,9 @@ def test_moe_tooltip_labels_present():
     assert lab["title1"] == "1 Mark of Excellence"
     assert lab["title2"] == "2 Marks of Excellence"
     assert lab["title3"] == "3 Marks of Excellence"
-    assert "65% of players" in lab["descr0"]
-    assert lab["descr3"]  # "maximum obtained"
-    # condition is the '\n'-separated bullet block the JS splits into lines
-    assert len([l for l in lab["condition"].split("\n") if l.strip()]) == 5
+    # weekly garage-tooltip trend chart heading + empty-state text (see domain/trend.py)
+    assert lab["trendTitle"] == "Trend"
+    assert lab["trendEmpty"] == "Not enough data yet"
 
 
 def test_ratio_template_has_js_placeholders():

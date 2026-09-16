@@ -8,7 +8,10 @@ the current damage rating (percentile) -- the game's own authoritative "distance
 next mark", independent of the fetched thresholds, so the fill stays correct even if
 the external table is a different vintage.
 """
+import time
+
 from moe_calculator.domain import types as t
+from moe_calculator.domain import trend
 from moe_calculator.domain.constants import MARK_PERCENTS, MARK_COUNTS, AXIS_MIN, AXIS_MAX
 
 
@@ -20,11 +23,16 @@ def _clamp(value, lo, hi):
     return lo if value < lo else hi if value > hi else value
 
 
-def build_model(snapshot):
+def build_model(snapshot, now=None):
     """Build the three-tick MoE model from the snapshot. Always returns a model with
-    three ticks; visibility is decided separately by bar_visible()."""
+    three ticks; visibility is decided separately by bar_visible().
+
+    `now` (epoch seconds) drives the weekly trend chart's 7-day window; defaults to the
+    real clock, overridable so this stays a pure function under test."""
     percentile = _clamp(float(snapshot.cur_percentile or 0.0), AXIS_MIN, AXIS_MAX)
     thresholds = snapshot.thresholds or {}
+    if now is None:
+        now = time.time()
 
     ticks = []
     has_data = False
@@ -52,7 +60,9 @@ def build_model(snapshot):
         ticks=ticks,
         vehicle_int_cd=snapshot.vehicle_int_cd or 0,
         has_data=has_data,
-        end_damage_required=end_required)
+        end_damage_required=end_required,
+        trend=trend.points_for(snapshot.trend_rows, now),
+        trend_days=trend.days_for(snapshot.trend_rows, now))
 
 
 def bar_visible(overlay_closed, in_garage, has_vehicle, enabled=True):

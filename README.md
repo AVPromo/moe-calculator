@@ -13,6 +13,8 @@ of the interface rather than an add-on.
 | In-battle overlay | Garage MoE bar |
 | ![Progress bar — Moving Average](assets/screenshots/progress_moving_average.png) | ![Progress bar — Damage Efficiency](assets/screenshots/progress_damage_efficiency.png) |
 | Progress bar — Moving Average | Progress bar — Damage Efficiency |
+| ![Garage MoE trend chart](assets/screenshots/trend.png) |  |
+| Garage MoE trend chart |  |
 
 ## What it shows
 
@@ -27,6 +29,10 @@ current mark percentage for the selected vehicle.
 **Ctrl+drag** the widget to move it anywhere on screen (hold **Shift** to lock the drag to
 one axis). Where you drop it is remembered; the panel also has numeric position fields and a
 **Follow Carousel Mode** option — see Settings.
+
+Hovering the bar's mark tooltip also shows a weekly moving-average MoE trend chart —
+per-battle dots on a fixed percentile axis, mark lines at 65% / 85% / 95% / 100%, day
+dividers, and an end-of-day moving-average label for each day.
 
 ### In-battle overlay
 
@@ -207,6 +213,8 @@ Building, deploying, testing, and the repo layout are documented in
 | Смуга класності в Ангарі | Оверлей у бою |
 | ![Смуга прогресу — Ковзне середнє](assets/screenshots/progress_moving_average.png) | ![Смуга прогресу — Ефективність шкоди](assets/screenshots/progress_damage_efficiency.png) |
 | Смуга прогресу — Ковзне середнє | Смуга прогресу — Ефективність шкоди |
+| ![Графік тренду класності в Ангарі](assets/screenshots/trend_ua.png) |  |
+| Графік тренду класності в Ангарі |  |
 
 ## Що показує
 
@@ -221,6 +229,10 @@ Building, deploying, testing, and the repo layout are documented in
 **Ctrl+перетягування** переміщує віджет у будь-яке місце екрана (утримуйте **Shift**, щоб
 зафіксувати перетягування за однією віссю). Місце, де ви його відпустили, запам'ятовується; у
 панелі також є числові поля позиції та параметр **Слідувати за каруселлю** — див. Налаштування.
+
+Наведення на підказку позначки в смузі також показує тижневий графік тренду ковзного
+середнього класності — крапки для кожного бою на фіксованій вісі перцентиля, лінії позначок
+на 65% / 85% / 95% / 100%, розділювачі днів і підпис ковзного середнього на кінець кожного дня.
 
 ### Оверлей у бою
 

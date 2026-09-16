@@ -18,6 +18,7 @@ from moe_calculator.domain import moe_estimate
 from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import baseline_cache
 from moe_calculator.adapter import sample_log
+from moe_calculator.adapter import trend_log
 
 
 def prime_current():
@@ -74,6 +75,11 @@ def build_snapshot():
         # prediction for this tank is pending AND these values moved off its pre-battle ones
         # (adapter/sample_log; diagnostics only, fully guarded).
         sample_log.resolve(int_cd, percentile, avg_damage, battles)
+        # Weekly garage-tooltip trend chart (VIEWED TANK ONLY, see domain/trend.py): same
+        # capture event as sample_log.resolve() above, but its own dedup gate (a changed
+        # career standing, not a prediction<->outcome pairing) and its own storage. Fully
+        # guarded on its own, so a raise here can never take the bar down with it.
+        trend_log.capture(int_cd, percentile, avg_damage)
         # Fallback: if the WG request for this tank completed with no usable data (errored /
         # not in the API), extrapolate from the player's own dossier point (movingAvgDamage @
         # this percentile) via the offline estimator, so the bar still shows numbers rather
@@ -89,6 +95,7 @@ def build_snapshot():
             cur_percentile=percentile,
             cur_avg_damage=avg_damage,
             thresholds=thresholds,
+            trend_rows=trend_log.rows_for(int_cd),
             has_vehicle=True)
     except Exception:
         # Whole-body guard (matches battle_adapter.build_battle_snapshot): any unexpected

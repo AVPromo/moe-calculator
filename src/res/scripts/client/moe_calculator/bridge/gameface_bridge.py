@@ -20,6 +20,7 @@ wotmod-architecture harness skill for the listener re-arm rationale and the Wulf
 `setattr`-back gotcha.
 """
 import json
+import time
 
 import BigWorld
 from CurrentVehicle import g_currentVehicle
@@ -577,7 +578,12 @@ def push(rvm, host_vm=None):
         return
     try:
         snap = engine_adapter.build_snapshot()
-        model = build_model(snap)
+        # ONE clock read for this push: build_model windows model.trend/trend_days off
+        # `snap.trend_rows` against the SAME `now`, so a row landing at the sub-second 7-day
+        # cutoff can't fall inside one and outside the other (bar count vs label count
+        # disagreeing for a single push).
+        now = time.time()
+        model = build_model(snap, now)
         rows, small = _carousel_geometry()
         visible = bar_visible(_overlay_closed(), _in_garage(), snap.has_vehicle,
                               enabled=mod_settings.garage_enabled())
@@ -604,6 +610,12 @@ def push(rvm, host_vm=None):
             tx.setCarouselSmall(small)
             tx.setEndDamageRequired(model.end_damage_required)
             tx.setLabels(_labels_json())
+            # `trend` (index 18) is a JSON-string VM property carrying
+            # {"points": [[ts, pct], ...], "days": [{"count", "dmg"}, ...]} so the JS can render
+            # the per-day columns alongside the existing points. `points`/`days` are exactly
+            # model.trend/model.trend_days -- both windowed off the SAME `now` inside build_model.
+            trend_payload = {"points": model.trend, "days": model.trend_days}
+            tx.setTrend(json.dumps(trend_payload))
             # Echo the persisted drag position + the follow-carousel flag so the widget can
             # re-apply / proportionally rescale a pin on mount, and honour the carousel nudge.
             tx.setPosX(mod_settings.pos_x())

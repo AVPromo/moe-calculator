@@ -23,7 +23,11 @@ WHAT IT DOES
     the 1/2/3-mark milestones (65% / 85% / 95%) and the combined
     damage each one needs, plus your current average combined damage
     and mark percentage. Ctrl+drag the Garage bar to move it anywhere
-    on screen (Shift locks the drag to one axis). In battle it adds a
+    on screen (Shift locks the drag to one axis). Hovering the mark
+    tooltip also shows a weekly moving-average MoE trend chart, with
+    per-battle dots on a fixed percentile axis, mark lines at 65 / 85 /
+    95 / 100 %, day dividers, and an end-of-day average label per day.
+    In battle it adds a
     small overlay over the HUD showing your live combined damage
     against your projected average, and your projected MoE percentage
     with the change versus where you started the battle.
@@ -84,7 +88,11 @@ UNINSTALL
     (65% / 85% / 95%) та комбінованою шкодою, потрібною для кожного,
     а також вашу поточну середню комбіновану шкоду й відсоток знака.
     Ctrl+перетягування переміщує смугу в Ангарі в будь-яке місце
-    екрана (Shift фіксує перетягування за однією віссю). У бою додає
+    екрана (Shift фіксує перетягування за однією віссю). Наведення на
+    підказку позначки також показує тижневий графік тренду ковзного
+    середнього класності: крапки по кожному бою на фіксованій вісі
+    перцентиля, лінії позначок на 65 / 85 / 95 / 100 %, розділювачі
+    днів і підпис середнього на кінець кожного дня. У бою додає
     невеликий оверлей над HUD: поточна комбінована шкода проти вашого
     прогнозованого середнього та прогнозований відсоток MoE зі зміною
     відносно початку бою.

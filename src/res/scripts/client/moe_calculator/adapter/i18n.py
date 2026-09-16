@@ -43,9 +43,6 @@ def _mark(s):
 # The hover tooltip reproduces the client's own MoE award tooltip (Vehicle stats -> Awards),
 # so its text is the client's own achievement strings, keyed by the player's mark count:
 #   title0..3 -> "Marks of Excellence" / "1|2|3 Mark(s) of Excellence"  (#achievements:marksOnGun{N})
-#   descr0..3 -> the how-to-earn-the-next-mark blurb / "maximum obtained" (marksOnGun{N}_descr)
-#   condition -> the multi-line rules block  (#achievements:marksOnGun_condition; '\n'-separated,
-#                bullet chars baked into the string -- the JS splits on '\n')
 #   ratio     -> the "current ratio is higher than N% of players" template
 #                (#tooltips:achievement/marksOnGunCount; has %(color_tag_open)s / %(count)s /
 #                %(color_tag_close)s placeholders + a literal %% -- the JS substitutes them).
@@ -59,11 +56,6 @@ _WG_KEYS = {
     "title1": "#achievements:marksOnGun1",
     "title2": "#achievements:marksOnGun2",
     "title3": "#achievements:marksOnGun3",
-    "descr0": "#achievements:marksOnGun0_descr",
-    "descr1": "#achievements:marksOnGun1_descr",
-    "descr2": "#achievements:marksOnGun2_descr",
-    "descr3": "#achievements:marksOnGun3_descr",
-    "condition": "#achievements:marksOnGun_condition",
     "ratio": "#tooltips:achievement/marksOnGunCount",
 }
 
@@ -76,11 +68,6 @@ _WG_FALLBACK_EN = {
     "title1": "1 Mark of Excellence",
     "title2": "2 Marks of Excellence",
     "title3": "3 Marks of Excellence",
-    "descr0": "To obtain one Mark of Excellence, displayed on the gun, the average damage caused by the player and average damage caused with the player's assistance must be higher than the results of 65% of players in this vehicle for the past 14 days.",
-    "descr1": "To obtain two Marks of Excellence, displayed on the gun, the average damage caused by the player and average damage caused with the player's assistance must be higher than the results of 85% of players in this vehicle for the past 14 days.",
-    "descr2": "To obtain three Marks of Excellence, displayed on the gun, the average damage caused by the player and average damage caused with the player's assistance must be higher than the results of 95% of players in this vehicle for the past 14 days.",
-    "descr3": "The maximum number of Marks of Excellence is obtained.",
-    "condition": u"• The player's average damage is updated after each battle based on the last 100 battles. \n• Obtained Marks are permanent and do not disappear even if the player's average damage decreases.\n• Mark can only be earned in Tier V–XI vehicles.\n• Display of Marks on your vehicles can be disabled in the game settings.\n• Marks can only be obtained in Random Battles.",
     "ratio": u"Current ratio is higher than the ratio of %(color_tag_open)s %(count)s%% %(color_tag_close)s\nplayers who fought in this vehicle for the past 14 days.",
 }
 
@@ -110,6 +97,25 @@ _BUNDLED = {
         "de": u"Ziel",
         "pl": u"Cel",
         "uk": u"Ціль",
+    },
+    # Weekly garage-tooltip trend chart heading (see domain/trend.py -- accrues forward from
+    # install, viewed tank only).
+    "trendTitle": {
+        "en": "Trend",
+        "ru": u"Тренд",
+        "de": "Trend",
+        "pl": "Trend",
+        "uk": u"Тренд",
+    },
+    # Day-one / no-battles-captured-yet state -- there is no way to backfill history, so the
+    # chart can only start accruing data from the moment this feature ships (see the research
+    # note TASKS/garage-tooltip-weekly-moe-trend.md).
+    "trendEmpty": {
+        "en": "Not enough data yet",
+        "ru": u"Пока недостаточно данных",
+        "de": u"Noch nicht genügend Daten",
+        "pl": u"Za mało danych",
+        "uk": u"Поки що недостатньо даних",
     },
 }
 

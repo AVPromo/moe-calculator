@@ -453,11 +453,11 @@
 
 /* --- hover tooltip: native "Marks of Excellence" award tooltip ------------- */
 /* A body-level fixed panel (JS positions + edge-clamps it) shown while the widget is
-   hovered, reproducing the client's own MoE award tooltip (Vehicle stats -> Awards): the
-   big nation mark art + the achievement title, the current-ratio line, the descriptive
-   text, a divider, and the condition rules. All text is the client's own strings (resolved
-   in adapter/i18n.py, pushed via the model's `labels` bundle); the mark art is the
-   marksOnGun 180x180 atlas.
+   hovered, reproducing the client's own MoE award tooltip (Vehicle stats -> Awards),
+   trimmed to essentials: the big nation mark art + the achievement title, the current-ratio
+   line, and the weekly trend chart. All text is the client's own strings (resolved in
+   adapter/i18n.py, pushed via the model's `labels` bundle); the mark art is the marksOnGun
+   180x180 atlas.
 
    STRUCTURE + CHROME reuse the shared `.wg-tooltip` / `.wg-tip-*` tooltip COMPONENT (see the
    wotmod-gameface-widget harness skill, "Native tooltip recipe"): the SAME class vocabulary
@@ -475,9 +475,8 @@
    an unresolved var()).
    MoE-LOCAL additions (NOT part of the shared recipe): .wg-tip-icon-mark / .wg-tip-main-mark
    (the 180x180 mark-art icon box + its reserved column), .wg-tip-icon-unearned (dim the
-   aspirational art at 0 marks), .moe-tip-ratio / .moe-tip-descr (JS hooks, both styled by the
-   shared .wg-tip-effect), .moe-tip-hi (the white percentile highlight), .moe-tip-empty (hide
-   the ratio at 0%). */
+   aspirational art at 0 marks), .moe-tip-ratio (JS hook, styled by the shared .wg-tip-effect),
+   .moe-tip-hi (the white percentile highlight), .moe-tip-empty (hide the ratio at 0%). */
 #moe-tooltip {
     position: fixed;
     display: none;
@@ -565,8 +564,8 @@
     line-height: 1.1;
 }
 /* Body text -- WG's tooltip description body: tertiary parchment, normal weight, wrapping.
-   The shared body row; here it styles the current-ratio line, the description, AND every
-   condition bullet, so all three share the native tooltip body rhythm (margin-top:5rem). */
+   The shared body row; here it styles the current-ratio line AND the trend-chart heading,
+   so both share the native tooltip body rhythm (margin-top:5rem). */
 #moe-tooltip .wg-tip-effect {
     margin-top: 5rem;
     font-size: 15rem;
@@ -590,18 +589,92 @@
 }
 #moe-tooltip .moe-tip-ratio > span { margin-right: 3.4rem; }
 #moe-tooltip .moe-tip-hi { color: #ffffff; }
-/* The description is a full-width paragraph (it lives OUTSIDE .wg-tip-main -- see the DOM -- so
-   the icon's reserved column no longer narrows it). Its 7rem bottom margin opens the gap down
-   to the divider a touch more than the condition block's 5rem top margin below it. */
-#moe-tooltip .moe-tip-descr { margin-bottom: 7rem; }
-/* Ratio hidden at 0% (the client's empty-at-0 behaviour) so it adds no gap above the descr. */
+/* Ratio hidden at 0% (the client's empty-at-0 behaviour) so it adds no gap above the divider. */
 #moe-tooltip .moe-tip-empty { display: none; }
 
 /* Section divider -- the same divider art WG's carousel vehicle tooltip uses, stretched to
-   full width x a fixed 9rem so the end-fade sits at the tooltip edges at any width. */
+   full width x a fixed 9rem so the end-fade sits at the tooltip edges at any width. Exactly
+   ONE divider, between the ratio line and the trend heading. */
 #moe-tooltip .wg-tip-div {
     height: 9rem;
     margin: 4rem 0;
     background: url('img://gui/maps/icons/tooltip/divider.png') no-repeat center;
     background-size: 100% 100%;
 }
+
+/* Weekly MoE trend chart (VIEWED TANK ONLY -- see domain/trend.py), below the divider.
+   `.moe-tip-trend-title` is the shared .wg-tip-effect body row, reused for BOTH the
+   "Last 7 Days" heading and the day-one/no-data empty-state line (never both at once -- the
+   JS swaps the text, not the element). `.moe-trend` wraps a per-battle DOT plot
+   (`.moe-trend-plot`, absolutely-positioned dots the JS places by PERCENTAGE of the plot box
+   -- never offsetWidth/offsetHeight, so the first paint is already correct -- one per
+   battle, no connecting lines, no baseline) over a per-day damage-label band
+   (`.moe-trend-labels`) -- no canvas/SVG anywhere in this codebase's front end (see the
+   research note). The plot is NEVER hidden -- `data.ticks` is unconditional (always 3
+   entries), so its 3 mark-threshold lines (.moe-mark-line below) always draw as a reference
+   scaffold even with zero trend rows this week. Only `.moe-trend-labels` (the day-caption
+   band, which needs actual points) is hidden via the shared .moe-tip-empty idiom (see the
+   ratio row above) when there is nothing to plot yet. */
+/* Sized to match this tooltip's OWN established text scale (12-16rem elsewhere in this file --
+   see .wg-tip-name / .wg-tip-effect / .moe-end-label), not the old 20rem/1rem/0.5rem/8rem set
+   that rendered near 1px each -- invisible next to 15-16rem body text. DOT_REM/PLOT_HEIGHT_REM
+   are mirrored in MoECalculator.js (the pad-fraction math) -- keep them in lockstep. */
+/* "Trend" heading -- matches the tooltip's OWN title (.wg-tip-name) font-size/weight/colour/
+   letter-spacing exactly, so it reads as a second title rather than another body row. Combined
+   selector (not .wg-tip-effect alone) so it beats the shared body-row rule regardless of source
+   order (equal specificity otherwise -- see the harness note on equal-specificity overrides). */
+#moe-tooltip .wg-tip-effect.moe-tip-trend-title {
+    font-size: 16rem;
+    font-weight: 600;
+    color: #ede6d9;
+    opacity: 0.95;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+}
+#moe-tooltip .moe-trend { margin-top: 10rem; }
+#moe-tooltip .moe-trend-plot { position: relative; height: 100rem; width: 100%; overflow: visible; }
+/* Inner content box: the real layout boundary for lines/dots/dividers, inset 16rem from the
+   plot's right edge so their left/top % resolve against an area that stops short of the
+   icon gutter (the icons themselves stay direct children of .moe-trend-plot -- see the JS).
+   overflow: hidden lives HERE (not on .moe-trend-plot) so the 100%-mark icon in the gutter
+   can overflow the plot's top edge without un-clipping the dots/lines/dividers below. */
+#moe-tooltip .moe-trend-area { position: absolute; left: 0; top: 0; right: 16rem; bottom: 0; overflow: hidden; }
+/* Centers a 4rem dot on its (left, top) point -- the JS sets left/top (in %) to the dot's
+   CENTER, not its top-left corner, so this negative margin pair is load-bearing, not decorative. */
+#moe-tooltip .moe-trend-dot { position: absolute; width: 4rem; height: 4rem; margin-left: -2rem; margin-top: -2rem; border-radius: 50%; background: rgba(182, 174, 165, 1); }
+/* top/height are set per-divider by the JS (the FULL axis, yOf(0)..yOf(100), not just the
+   plotted dots' own range) -- no top/bottom here. */
+#moe-tooltip .moe-trend-divider { position: absolute; width: 2rem; background: rgba(182, 174, 165, 0.1); transform: translateX(-50%); }
+/* Mark-threshold reference lines (1/2/3 marks) -- the axis is fixed (see axisPos in
+   MoECalculator.js), so all of them are always drawn -- a dashed HORIZONTAL rule, visually
+   distinct from the solid vertical .moe-trend-divider day boundary above. A repeating-linear-
+   gradient rounds unevenly in Gameface, so this TILES a small uniform dotted PNG (mark_dot.png,
+   a 4x4 RGBA tile: a centred 2x2 dot at rgba(182,174,165,0.35), transparent elsewhere) repeat-x
+   instead -- the stretched divider.png used previously has an END-FADE baked into its raster
+   (it's meant to be stretched once, not tiled), so repeating it made the dots visibly non-
+   uniform along the line; a repeated small tile stays uniform edge-to-edge. mark_dot.png is a
+   bare sibling of this CSS file (same bundled-PNG url scheme as checker.png beside it), tiled at
+   background-size 2rem 2rem so each 2rem tile renders the 4px source 1:1 at x2 interface scale. */
+#moe-tooltip .moe-mark-line { position: absolute; left: 0; right: 0; height: 2rem; background: url(mark_dot.png) repeat-x center; background-size: 2rem 2rem; }
+/* Mark-count icon in the plot's RIGHT gutter, one per .moe-mark-line -- 12rem = 24px at x2, the
+   icon's native size. translateY(-50%) centres it on its line (JS sets `top` to the same
+   yOf() % as the line it pairs with). Direct child of .moe-trend-plot (NOT .moe-trend-area), so
+   it sits outside the inset content box; right:2rem puts its inner edge at 14rem from the
+   plot's right edge -- a 2rem clear gap before .moe-trend-area (and the line inside it) stops
+   at right:16rem. */
+#moe-tooltip .moe-mark-icon { position: absolute; right: 2rem; width: 12rem; height: 12rem; transform: translateY(-50%); background-repeat: no-repeat; background-position: center; background-size: contain; }
+/* The 100%-mark (barrel) icon's 128x128 art has ~40% transparent padding baked in, so plain
+   background-size:contain in the 12rem box renders it visibly smaller than mark_1/2/3. Zoom
+   crops that padding so the glyph reads at the same size as the other three; box grows
+   12rem -> 15rem so it reads slightly larger than mark_1/2/3. right:0.5rem re-centres it on
+   the same 8rem-from-edge centre as the 12rem icons (inner edge lands at 15.5rem, still
+   inside the 16rem gutter, clear of the mark lines); background-size stays 160% since the
+   bigger box only enlarges the already-uncropped glyph. */
+#moe-tooltip .moe-mark-icon-max { width: 15rem; height: 15rem; right: 0.5rem; background-size: 160%; }
+/* Inset to match .moe-trend-area so the day labels (abspos left:% children) share the same
+   coordinate space as the dots -- narrowing this block's width:auto box narrows their %-basis. */
+#moe-tooltip .moe-trend-labels { position: relative; margin-top: 3rem; height: 16rem; margin-right: 16rem; }
+/* Each label is CENTERED on its day column: JS sets `left` to the band's (clamped) centre %,
+   translateX(-50%) recenters the element on that point, width stays auto (no CSS width, no JS
+   width) and text-align:center + nowrap keep the number readable without wrapping. */
+#moe-tooltip .moe-day-label { position: absolute; text-align: center; font-size: 12rem; font-weight: 400; color: #c8c0b4; white-space: nowrap; transform: translateX(-50%); }
