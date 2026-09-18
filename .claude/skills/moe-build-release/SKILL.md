@@ -22,8 +22,8 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 5.1.0,
-client target EU 2.4.0.0)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 6.0.0,
+client target EU 2.4.0.1)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -61,7 +61,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   `--clean-overlay` removes the hot-reload overlay. **Needs `WorldOfTanks.exe` closed** (`wgc` ok).
 - **`build_moe_zip.py`** — any Python. Builds `dist/MoECalculator_<version>.zip` = bilingual
   `readme.txt` (from `installer/readme.moe.txt`, `{VERSION}` substituted, CRLF) + the mod `.wotmod`
-  + all `installer/vendor/*.wotmod` under `mods/2.4.0.0/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.4.0.0"`.
+  + all `installer/vendor/*.wotmod` under `mods/2.4.0.1/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.4.0.1"`.
   Packages whatever `.wotmod` is in `dist/` — the same single build the GitHub installer uses.
 - **`check_version.py`** — the version gate above. **`clean_dist.py`** — prunes non-current release artifacts from `dist/` (`--dry-run`).
 
@@ -72,11 +72,11 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   (`NeedOpenWg`, `uninsneveruninstall`), cleans old builds, WoT-running guard, GitHub
   Atom-feed self-update. Repo `drizzer14/moe-calculator`, base name `MoECalculator-Setup`.
 - **`build_installer.ps1`** — preflights the built `.wotmod` + vendor dep, finds `ISCC.exe`, compiles → `dist/MoECalculator-Setup-<version>.exe`.
-- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip (the only readme template; the old `readme.wgmods.txt` stub was deleted). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modmenu_2.0.03.wotmod` + `me.poliroid.modslistapi_1.7.9.wotmod`.
+- **`readme.moe.txt`** — bilingual EN/UA readme for the wgmods zip (the only readme template; the old `readme.wgmods.txt` stub was deleted). **`installer/vendor/`** — `net.openwg.gameface_1.1.6.wotmod` + `aslain.modmenu_2.0.16.wotmod` + `me.poliroid.modslistapi_1.7.9.wotmod`.
 
 ## Hot-reload (the split that bites)
 
-- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.0`
+- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.1`
   copies only the Gameface JS/CSS/assets into `res_mods`, then toggle Tech-Tree↔Garage to re-inject. No relaunch.
 - **The in-battle registered WINDOW does NOT hot-reload** — its resources pin at client launch;
   reopen and `Window.reload()` both serve the launch-time cached document. **Every CSS/JS tweak to

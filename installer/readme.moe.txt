@@ -9,7 +9,7 @@ your World of Tanks folder and restart the game.
 WHAT'S IN THE BOX
     com.14th_ua.moe_calculator_{VERSION}.wotmod      the mod
     net.openwg.gameface_1.1.6.wotmod                 REQUIRED dependency
-    aslain.modmenu_2.0.03.wotmod                     optional (settings panel)
+    aslain.modmenu_2.0.16.wotmod                     optional (settings panel)
     me.poliroid.modslistapi_1.7.9.wotmod             optional (Modification list window)
 
 
