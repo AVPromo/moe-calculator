@@ -121,7 +121,8 @@ PROGRESS_ANCHOR_Y_FRAC = 0.865
 PROGRESS_ANCHOR_X_OFFSET = 0
 
 # COMPENSATION for the bar's placement -- a WIRE CONTRACT with the JS, and ONE PURE TERM:
-# -SHIFT_Y_REM (== -44). MoEProgress.js shifts the whole composition into POSITIVE document
+# -SHIFT_Y_REM (== -32, after the iter-2 strip-shorten: BOX_TOP -30 -> -22, so
+# SHIFT_Y_REM == PAD_REM - BOX_TOP_REM == 10 - (-22) == 32). MoEProgress.js shifts the whole composition into POSITIVE document
 # coordinates (nothing may sit at a negative x/y or the engine clips it there, whatever the
 # surface size), by SHIFT_X_REM / SHIFT_Y_REM. That pushes the bar SHIFT_Y_REM down inside its
 # own surface, so the window moves UP by exactly that much and the bar stays put on screen. Keep
@@ -139,7 +140,7 @@ PROGRESS_ANCHOR_X_OFFSET = 0
 # X gets NO compensation on purpose: `max_x // 2` centres whatever surface width the view asks
 # for and the composition is symmetric about its own centre, so the horizontal centring
 # self-calibrates (and needs no unit conversion either). Do not fight it.
-PROGRESS_ANCHOR_Y_SHIFT = -44
+PROGRESS_ANCHOR_Y_SHIFT = -32
 
 # ...and the LARGE size mode's twin (mod_settings.progress_bar_size == 1) -- NOT a pure scale-up
 # of the 1x constant. `PROGRESS_ANCHOR_Y_SHIFT_LARGE = SHIFT_Y_REM * SIZE_F` (== -55) is an
@@ -154,7 +155,9 @@ PROGRESS_ANCHOR_Y_SHIFT = -44
 # `.mp-backdrop` IS the ink extreme on every side (its text-/box-shadow bleed reaches the box edge
 # exactly, MoEProgress.js:65-70), and the backdrop sits with a symmetric PAD_REM slack to the
 # surface edge, so the BOTTOM ink, measured from the window's top-left, is
-#   bottom_ink_default == VIEW_H_REM - PAD_REM == 92 - 10 == 82.
+#   bottom_ink_default == PAD_REM + BOX_H_REM == 10 + 55 == 65 -- the composition's own bottom, which
+#   CLIP_B_REM (iter 3) does NOT move (it only trims the surface below it), so this is NOT VIEW_H - PAD
+#   any more (VIEW_H now carries the -CLIP_B trim). BOX_H grew 50->55 (capC's taller strip).
 # Both `frac` and `space_y` in anchor_centred_reduced's `y = int(space_y*frac) + shift` are
 # size-independent, so `shift` is the ONLY size-dependent term, and every rem length (both the
 # surface and the ink inside it) scales by the SAME SIZE_F == 1.25 via the root font:
@@ -163,11 +166,10 @@ PROGRESS_ANCHOR_Y_SHIFT = -44
 # i.e.
 #   shift_large == shift_default - bottom_ink_default * (SIZE_F - 1)
 #              == shift_default - 0.25 * bottom_ink_default
-#              == -44 - 0.25*82 == -64.5 -> -65 (half-away rounding, i.e. away from zero: the
-#              shift is negative, so it rounds DOWN to -65, moving the window UP by 1 more px than
-#              the naive -55 did -- see TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3
-#              Fix A / DECISION 3 for the re-derivation and its arithmetic).
-PROGRESS_ANCHOR_Y_SHIFT_LARGE = -65
+#              == -32 - 0.25*65 == -48.25 -> -48 (was -47 at BOX_H 50; see
+#              TASKS/in-battle-bar-layout-auto-set-redesign.md Trap 3 Fix A / DECISION 3 for the
+#              re-derivation and its arithmetic).
+PROGRESS_ANCHOR_Y_SHIFT_LARGE = -48
 
 # The damage-efficiency bar's window anchor -- its OWN three constants, not the progress bar's.
 # Only one of the two centre-screen bars is ever open (they are radio alternatives), but the
@@ -178,10 +180,10 @@ PROGRESS_ANCHOR_Y_SHIFT_LARGE = -65
 # and anchor_centred's `max_x // 2` centres whatever surface width the JS asks for.
 # Y_SHIFT is the same ONE PURE TERM PROGRESS_ANCHOR_Y_SHIFT documents at length above, measured
 # against the REAL MoEEfficiency.js:
-#   -SHIFT_Y_REM == -50. MoEEfficiency.js shifts the whole composition into POSITIVE document
-#   coordinates by PAD_REM - BOX_TOP_REM == 10 - (-40) == 50, so the window moves UP by exactly
-#   that much and the bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in
-#   MoEEfficiency.css (-40rem) -- the composition's topmost edge.
+#   -SHIFT_Y_REM == -45 (iter-3 FIX A raised BOX_TOP for the taller current-damage strip; was -40).
+#   MoEEfficiency.js shifts the whole composition into POSITIVE document coordinates by
+#   PAD_REM - BOX_TOP_REM == 10 - (-35) == 45, so the window moves UP by exactly that much and the
+#   bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in MoEEfficiency.css (-35rem).
 # WAS EFFICIENCY_ANCHOR_Y_OFFSET == 50 == (-50) + 100, term 2 being
 # +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == round(0.865 * 116) == +100 (VIEW_H_REM ==
 # BOX_H_REM + 2*PAD_REM == 96 + 20 == 116, .mp-backdrop's height plus the JS's four-sided slack) --
@@ -190,19 +192,17 @@ PROGRESS_ANCHOR_Y_SHIFT_LARGE = -65
 # itself, so the coincidence is gone with the term.
 EFFICIENCY_ANCHOR_Y_FRAC = 0.865
 EFFICIENCY_ANCHOR_X_OFFSET = 0
-EFFICIENCY_ANCHOR_Y_SHIFT = -50
+EFFICIENCY_ANCHOR_Y_SHIFT = -45
 
 # ...and its LARGE-mode twin, re-derived exactly as PROGRESS_ANCHOR_Y_SHIFT_LARGE documents at
 # length (read that first) to pin the composition's BOTTOM ink instead of the naive
 # `-(SHIFT_Y_REM * SIZE_F)` identity's pre-shift coordinate (rule 5, DECISION 3):
-#   bottom_ink_default == VIEW_H_REM - PAD_REM == 116 - 10 == 106
-#   shift_large == shift_default - 0.25 * bottom_ink_default == -50 - 0.25*106
-#              == -76.5 -> -77 (half-away rounding, away from zero).
-# WAS EFFICIENCY_ANCHOR_Y_OFFSET_LARGE == 62 == (-63) + 125 under the RETIRED naive derivation
-# (-63); that two-term composite's own retirement (the extent-to-viewport conversion cancelled by
-# anchor_centred_reduced) is unaffected by this further correction -- only the ONE remaining pure
-# term changes, from -63 to -77.
-EFFICIENCY_ANCHOR_Y_SHIFT_LARGE = -77
+#   bottom_ink_default == PAD_REM + BOX_H_REM == 10 + 66 == 76 -- the composition's own bottom, which
+#   CLIP_B_REM (iter 3) does NOT move (it only trims the surface below it), so this is NOT VIEW_H - PAD
+#   any more. BOX_H grew 61->66 (the taller current-damage strip raised BOX_TOP).
+#   shift_large == shift_default - 0.25 * bottom_ink_default == -45 - 0.25*76
+#              == -64 exactly (was -58 at BOX_TOP -30 / BOX_H 61).
+EFFICIENCY_ANCHOR_Y_SHIFT_LARGE = -64
 
 # --- Phase 2 (in-battle vertical bar): minimap-anchored placement geometry -------------------
 # Feeds domain.positioning.anchor_minimap, which places a vertical bar to the LEFT of the

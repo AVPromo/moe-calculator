@@ -63,11 +63,11 @@ const DELTA_HOLD_MS = 1600;
 // --- the axis / clamp contract, also from `meta` ----------------------------------------------
 // The bar's own width (#moe-bar-root), which every percentage resolves against and which the cap
 // clamp works in. meta.capClamp is the corridor the current caption may not leave, in the SAME
-// document-rem coordinates: the box is the 300rem track plus 80rem of pad each side, minus the
-// tuned 4rem end inset, i.e. [-76, 376].
+// document-rem coordinates: the box is the 300rem track plus 45rem of pad each side (box re-cut for
+// edge-drag, was 80), minus the tuned 4rem end inset, i.e. [-41, 341].
 const BAR_W_REM = 300;
-const CLAMP_L_REM = -76;             // meta.capClamp.leftRem
-const CLAMP_R_REM = 376;             // meta.capClamp.rightRem
+const CLAMP_L_REM = -41;             // meta.capClamp.leftRem
+const CLAMP_R_REM = 341;             // meta.capClamp.rightRem
 // The icon's gap to the numeral, which rides in .mp-ico's transform (translate(-1rem, -50%)) and
 // so is NOT part of its offsetWidth -- the clamp has to add it back, exactly as the tuner does.
 const ICO_GAP_REM = 1;
@@ -112,17 +112,39 @@ let large = false;
 // its exact value buys nothing, and hand-editing it would be silent drift from the emit.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
-//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 480     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
-//   VIEW_H_REM = BOX_H_REM + 2 * PAD_REM == 116     SHIFT_Y_REM = PAD_REM - BOX_TOP_REM  == 50
+//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 410     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 55
+//   VIEW_H_REM = BOX_H_REM + 2*PAD_REM - CLIP_B_REM == 78   SHIFT_Y_REM = PAD_REM - BOX_TOP_REM == 45
 // SHIFT_Y_REM is MIRRORED (negated) in Python as
 // domain/constants.EFFICIENCY_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
 // screen until that constant follows. The hit padding and the re-assert timing live in the shared
 // module (its HIT_MAGIC / SURFACE_REASSERT_MS -- both LOAD-BEARING, read its header).
-const BOX_LEFT_REM = -80;                            // .mp-backdrop's left  == leftmost edge
-const BOX_TOP_REM = -40;                             // .mp-backdrop's top   == topmost edge
-const BOX_W_REM = 460;                               // .mp-backdrop's width  (== meta.boxWRem)
-const BOX_H_REM = 96;                                // .mp-backdrop's height
+// SEED (FIRST CUT, box re-cut for edge-drag): with the whole-bar backdrop gone, the surface is
+// re-derived from the ACTUAL visible composition (track + captions + per-caption .mp-bd shadow
+// strips). The prose ABOVE predates this re-cut (old 460x96) -- these four consts are the truth.
+// WIDTH shrank (460->390): the surface must stay SYMMETRIC about the 300rem track (no X term in
+// anchor_centred -- test_the_backdrop_brackets_the_track_symmetrically), so BOX_W == 300 - 2*BOX_LEFT.
+// The moving .mp-bd-5 (capC's strip, +-45) swings to root-x -45..345 == 45 clearance each side, so
+// clearance dropped 80->45 (boxPad/bdBleedX in eff_bar_tuner.html both moved to 45).
+// HEIGHT (iter 3): FIX A restored the CURRENT-DAMAGE strip (.mp-bd-5, the .up caption) to a taller
+// 26rem re-centred on the numeral (the shared 16rem left it too thin); the mark strips (.mp-bd-1..4)
+// stay at 16. The current-damage strip is the TOP one here, so it grows the box UP: topmost is now
+// .mp-bd-5's top (-35); bottommost is the r-caption strips' box bottom (base top 15 + 16 == 31).
+// BOX_TOP -35 .. bottom 31 == 66.
+// FIX B (reach the bottom screen edge): PAD_REM stays 10 (top/sides do no harm at 10; the current-
+// damage sign-glow is now INSIDE the box). The BOTTOM alone is trimmed by CLIP_B_REM (shared module
+// clipB: viewH = boxH + 2*PAD - clipB), which shortens the surface bottom WITHOUT moving the
+// composition (clipB never enters shiftY). Bottom pad becomes PAD_REM - CLIP_B_REM == 2rem: the
+// r-caption strips end at box bottom 31 and their numerals carry only a 1rem drop (no 6rem glow),
+// so the deepest bottom ink is ~28.6 -- 2rem inside the strip box, nothing clips.
+const BOX_LEFT_REM = -45;                            // leftmost edge (== -clearance; symmetric)
+const BOX_TOP_REM = -35;                             // topmost edge (.mp-bd-5's taller strip top)  [was -30]
+const BOX_W_REM = 390;                               // track 300 + 2*45 clearance (== meta.boxWRem)
+const BOX_H_REM = 66;                                // seed: bounds the strips (bd-5 now 26 tall)  [was 61]
 const PAD_REM = 10;                                  // slack for the shadow/glow bleed
+// BOTTOM-only surface trim (iter 3). Effective bottom pad == PAD_REM - CLIP_B_REM == 2rem. Y-length,
+// scales with SIZE_F in applySize; never enters shiftY, so the domain Y-shift constants are unchanged
+// by IT (they move this round only because FIX A raised BOX_TOP).
+const CLIP_B_REM = 8;
 
 // --- THE VERTICAL ORIENTATION (mod_settings.progress_bar_orientation, pushed as the VM's
 // `vertical`) ------------------------------------------------------------------------------------
@@ -324,7 +346,12 @@ function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
 // the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
 const MARKUP =
-        '<div class="mp-backdrop"></div>' +
+        // Per-caption dither strips (MoEEfficiency.css .mp-bd) -- one small box behind each caption,
+        // z-index 0 at root so the captions (inside .mp-track's stacking context) paint over them.
+        // r1..r4 (.mp-bd-1..4) are fixed at the quarter marks; capC (.mp-bd-5) is JS-tracked to its left.
+        '<div class="mp-bd mp-bd-1"></div><div class="mp-bd mp-bd-2"></div>' +
+        '<div class="mp-bd mp-bd-3"></div><div class="mp-bd mp-bd-4"></div>' +
+        '<div class="mp-bd mp-bd-5"></div>' +
         '<div class="mp-track">' +
         '  <div class="mp-fill"></div>' +
         '  <div class="mp-tick mp-req r1"></div>' +
@@ -405,6 +432,9 @@ let reqCaps = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-cap
 let capC = root.querySelector(".mp-capC");
 let capD = capC.querySelector(".mp-d");
 let capDN = capC.querySelector(".mp-d-num");
+// capC's per-caption dither strip (HORIZONTAL only): capC rides the axis, so JS tracks the strip's
+// `left` to the caption's. goVertical() nulls it (V_MARKUP uses .mev-bd strips of its own instead).
+let capCbd = root.querySelector(".mp-bd-5");
 
 // ADOPT THE VERTICAL COMPOSITION -- the bar's half of MoEBarTransient's onVertical hook (the shared
 // module owns the surface, the rigid shift, the run-identity pair and the body scope class). Called
@@ -425,6 +455,7 @@ function goVertical() {
     capC = root.querySelector(".mev-capC");
     capD = capC.querySelector(".mev-d");
     capDN = capC.querySelector(".mev-d-num");
+    capCbd = null;                   // horizontal-only strip; the vertical bar uses .mev-bd instead
 }
 
 function capV(c) { return c.querySelector(ns(".mp-v")); }
@@ -518,6 +549,7 @@ function setPos(x) {
     fill.style[GROW] = p;
     tCur.style[AX] = p;
     if (CAP_C_AX) capC.style[CAP_C_AX] = capClampPct(x).toFixed(3) + "%";
+    if (capCbd) capCbd.style.left = capClampPct(x).toFixed(3) + "%";  // strip behind the moving caption
 }
 
 // Everything that does NOT animate: the four requirement numerals, which of them are met, the band
@@ -567,6 +599,7 @@ const T = createTransient({
     boxW: BOX_W_REM,
     boxH: BOX_H_REM,
     pad: PAD_REM,
+    clipB: CLIP_B_REM,
     onEnd: dropDelta,
     onIdle: dropDelta,
     // THE VERTICAL COMPOSITION. `cls` is the body scope class MoEEfficiencyVertical.css hangs off AND

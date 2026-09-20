@@ -63,9 +63,9 @@ const ruleIn = (text, sel) => {
     return m[1].replace(/\s+/g, " ").trim();
 };
 [
-    [".mp-lg #moe-bar-box", "width: 613.333rem;"],
+    [".mp-lg #moe-bar-box", "width: 520rem;"],
     [".mp-lg #moe-bar-root", "width: 400rem;"],
-    [".mp-lg .mp-backdrop", "left: -106.667rem; width: 613.333rem;"],
+    [".mp-lg .mp-backdrop", "left: -60rem; width: 520rem;"],
     [".mp-lg .mp-track::after",
      "background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem); background-size: 4rem 100%;"],
     [".mp-lg .mp-tick", "width: 2.667rem;"],
@@ -109,10 +109,10 @@ const rule = (sel) => {
     return m[1];
 };
 const bd = rule(".mp-backdrop");
-[["left", "-80rem"], ["top", "-40rem"], ["width", "460rem"], ["height", "96rem"]].forEach((p) =>
+[["left", "-45rem"], ["top", "-35rem"], ["width", "390rem"], ["height", "66rem"]].forEach((p) =>
     assert.ok(new RegExp(p[0] + ":\\s*" + p[1].replace(".", "\\.") + ";").test(bd),
               ".mp-backdrop " + p[0] + " is not " + p[1] + " -- MoEEfficiency.js's BOX_* are stale"));
 assert.ok(/width:\s*300rem;/.test(rule("#moe-bar-root")), "#moe-bar-root width is not 300rem (BAR_W_REM)");
 
 console.log("MoEEfficiency.css OK: emit (" + Buffer.byteLength(emit) + " B) + 4 marked blocks = " +
-            Buffer.byteLength(shipped) + " B; twin matches; backdrop 460x96 @ (-80,-40); bar 300rem");
+            Buffer.byteLength(shipped) + " B; twin matches; backdrop 390x66 @ (-45,-35); bar 300rem");

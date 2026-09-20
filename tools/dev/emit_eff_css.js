@@ -287,9 +287,18 @@ const LARGE = `
    0.5/1.25 (the new nudge, discounted so it renders as 0.5 device px under Large too, not
    0.625) == 0.9. LITERAL here too, exempted from the x4/3 formula test the same way.
 ===== */
-.mp-lg #moe-bar-box { width: 613.333rem; }
+.mp-lg #moe-bar-box { width: 520rem; }
 .mp-lg #moe-bar-root { width: 400rem; }
-.mp-lg .mp-backdrop { left: -106.667rem; width: 613.333rem; }
+.mp-lg .mp-backdrop { left: -60rem; width: 520rem; }
+/* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..5) -- widths only;
+   tops are y-lengths the root font scales, and the .mp-bd-1..4 left:N% are unitless.
+   Straight base x 4/3: 60->80, 54->72, 90->120. */
+.mp-lg .mp-bd { width: 80rem; }
+.mp-lg .mp-bd-1 { width: 72rem; }
+.mp-lg .mp-bd-2 { width: 72rem; }
+.mp-lg .mp-bd-3 { width: 72rem; }
+.mp-lg .mp-bd-4 { width: 72rem; }
+.mp-lg .mp-bd-5 { width: 120rem; }
 .mp-lg .mp-track::after {
   background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem);
   background-size: 4rem 100%;

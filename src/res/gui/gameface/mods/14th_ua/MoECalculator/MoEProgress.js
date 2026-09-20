@@ -136,17 +136,38 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
 //   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 380     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
-//   VIEW_H_REM = BOX_H_REM + 2 * PAD_REM == 92      SHIFT_Y_REM = PAD_REM - BOX_TOP_REM  == 44
+//   VIEW_H_REM = BOX_H_REM + 2*PAD_REM - CLIP_B_REM == 67   SHIFT_Y_REM = PAD_REM - BOX_TOP_REM == 32
 // SHIFT_Y_REM is MIRRORED (negated) in Python as
 // domain/constants.PROGRESS_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
 // screen until that constant follows -- and #moe-bar-box in MoEProgress.css is sized to the derived
 // surface, a THIRD copy: keep all three in lockstep. The hit padding and the re-assert timing live
 // in the shared module (its HIT_MAGIC / SURFACE_REASSERT_MS -- both LOAD-BEARING, read its header).
-const BOX_LEFT_REM = -80;                            // .mp-backdrop's left  == leftmost edge
-const BOX_TOP_REM = -34;                             // .mp-backdrop's top   == topmost edge
-const BOX_W_REM = 360;                               // .mp-backdrop's width
-const BOX_H_REM = 72;                                // .mp-backdrop's height
+// SEED (FIRST CUT, box re-cut for edge-drag): now the whole-bar backdrop is gone the surface is
+// re-derived from the ACTUAL visible composition (track + captions + per-caption .mp-bd shadow
+// strips), NOT the old backdrop rect. The long prose ABOVE predates this re-cut and describes the
+// old 360x72 numbers -- treat the four consts below as the source of truth, tune in the browser.
+// HEIGHT (iter 3): FIX A restored capC's OWN strip (.mp-bd-2) to a taller 26rem re-centred on the
+// numeral (the shared 16rem left it too thin); the mark strips (.mp-bd-1 capP / .mp-bd-3 capR) stay
+// at 16. Topmost is .mp-bd-1's top (capP, -22); bottommost is now capC's taller strip bottom
+// (top 7 + 26 == 33). BOX_TOP -22 .. BOX bottom 33 == 55 tall.
+// FIX B (reach the bottom screen edge): PAD_REM stays 10 -- the RIGHT side genuinely needs it (capR's
+// ETA sign-glow reaches ~90rem past the track end, and the surface must stay SYMMETRIC about the
+// track for anchor_centred_reduced, so padX==padXR==10), and the TOP does no harm at 10. Instead the
+// BOTTOM alone is trimmed by CLIP_B_REM (the shared module's clipB: viewH = boxH + 2*PAD - clipB),
+// which shortens the surface's bottom WITHOUT moving the composition (clipB never enters shiftY), so
+// the mirrored Python Y-shift is unchanged. Bottom pad becomes PAD_REM - CLIP_B_REM == 2rem: capC's
+// numeral sign-glow (~6rem past its ink) lands at ~31.7 == INSIDE box bottom 33, and the strip box
+// (33) sits 2rem inside the surface -- nothing clips.
+// WIDTH is UNCHANGED (-80/360): symmetric, capR-overhang-bound (see above). Only .mp-bd-3 was pulled
+// in from 126->88 (iter 1) so it no longer clips the surface edge.
+const BOX_LEFT_REM = -80;                            // leftmost edge (== -clearance; symmetric)
+const BOX_TOP_REM = -22;                             // topmost edge (.mp-bd-1's top)
+const BOX_W_REM = 360;                               // track 200 + 2*80 clearance (symmetric)
+const BOX_H_REM = 55;                                // seed: bounds the strips (capC strip now 26 tall)  [was 50]
 const PAD_REM = 10;
+// BOTTOM-only surface trim (iter 3). Effective bottom pad == PAD_REM - CLIP_B_REM == 2rem. Y-length,
+// scales with SIZE_F in applySize; never enters shiftY, so the domain Y-shift constants are unchanged.
+const CLIP_B_REM = 8;
 
 // --- THE VERTICAL ORIENTATION (mod_settings.progress_bar_orientation, pushed as the VM's
 // `vertical`) ------------------------------------------------------------------------------------
@@ -460,7 +481,11 @@ function ns(s) { return PFX === "mp" ? s : s.replace(/\bmp-/g, PFX + "-"); }
 // split in the CSS). NO word labels anywhere: MoEBattle.ttf is a 19-glyph numeric subset
 // (digits % ( ) + - , . / space) and a letter renders BLANK.
 const MARKUP =
-        '<div class="mp-backdrop"></div>' +
+        // Per-caption dither strips (MoEProgress.css .mp-bd) -- one small box behind each caption,
+        // z-index 0 at root so the captions (inside .mp-track's stacking context) paint over them.
+        // capP/capC (.mp-bd-1/-2) are JS-tracked to their caption's `left`; capR (.mp-bd-3) is fixed.
+        '<div class="mp-bd mp-bd-1"></div><div class="mp-bd mp-bd-2"></div>' +
+        '<div class="mp-bd mp-bd-3"></div>' +
         '<div class="mp-track">' +
         '  <div class="mp-fill"></div>' +
         '  <div class="mp-tick mp-end mp-left"></div>' +
@@ -550,6 +575,11 @@ let capR = root.querySelector(".mp-capR");
 // the axis (capP.style.bottom is rewritten every render), so a fixed CSS `top` can't stay behind it.
 // goVertical caches it and JS-tracks it to capP's own `bottom`; null (and untouched) horizontally.
 let capBd3 = null;
+// capP's / capC's per-caption dither strips (HORIZONTAL only): both ride the axis (their caption's
+// `left` is rewritten every render), so JS tracks each strip's `left` to its caption's. Queried here
+// against MARKUP; goVertical() nulls them (V_MARKUP has .mpv-bd strips of its own instead).
+let capPbd = root.querySelector(".mp-bd-1");
+let capCbd = root.querySelector(".mp-bd-2");
 // The 0%/floor axis-end tick (VERTICAL only: .mpv-end.mpv-bottom). It marks "no progress" and must
 // show ONLY while the current value is 0 -- once the bar has any fill it reads as clutter under the
 // fill's own bottom edge. goVertical caches it; null (and untouched) horizontally, where the axis-end
@@ -600,6 +630,8 @@ function goVertical() {
     // `bottom` to capP's own value each render and it stays centred behind the number at both sizes.
     capBd3 = root.querySelector(".mpv-bd-3");
     if (capBd3) { capBd3.style.top = "auto"; capBd3.style.transform = "translateY(50%)"; }
+    capPbd = null;                   // horizontal-only strips; the vertical bar uses .mpv-bd instead
+    capCbd = null;
     tBottom = root.querySelector(".mpv-bottom");
     capC = root.querySelector(".mpv-capC");
     capR = root.querySelector(".mpv-capR");
@@ -713,6 +745,7 @@ function setPos(v, anim) {
     fill.style[GROW] = p;
     tProj.style[AX] = p;
     if (CAP_C_AX) capC.style[CAP_C_AX] = p;
+    if (capCbd) capCbd.style.left = p;   // keep capC's dither strip behind the moving number
 }
 
 // The bottom-centre numeral shows pre_avg while the bar fades + slides IN, then swaps to proj_avg
@@ -793,6 +826,7 @@ function paintStatic() {
     tPre.style[AX] = pre;
     capP.style[AX] = pre;
     if (capBd3) capBd3.style.bottom = pre;   // keep capP's backdrop strip behind the moving number
+    if (capPbd) capPbd.style.left = pre;     // horizontal twin of the above (tracks capP's `left`)
     // The floor tick shows ONLY at zero progress (vertical only; null-guarded == no-op horizontally).
     if (tBottom) tBottom.style.display = cur.projAvg > 0 ? "none" : "";
     root.classList.toggle(ns("mp-full"), cur.projAvg >= cur.axisHi);
@@ -897,6 +931,7 @@ const T = createTransient({
     boxW: BOX_W_REM,
     boxH: BOX_H_REM,
     pad: PAD_REM,
+    clipB: CLIP_B_REM,
     onRewind: coldRewind,
     onCommit: commitClimb,
     onEnd: settleValues,

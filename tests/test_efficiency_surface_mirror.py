@@ -270,7 +270,10 @@ def test_the_surface_and_shift_are_derived_from_the_box_plus_the_pad():
 
 def _surface_wh(js):
     pad = _js_const(js, "PAD_REM")
-    return _js_const(js, "BOX_W_REM") + 2 * pad, _js_const(js, "BOX_H_REM") + 2 * pad
+    # iter 3: the horizontal bar now trims its BOTTOM by CLIP_B_REM (shared module clipB:
+    # viewH = boxH + 2*pad - clipB), the same mechanism _v_surface_wh already applies for vertical.
+    return (_js_const(js, "BOX_W_REM") + 2 * pad,
+            _js_const(js, "BOX_H_REM") + 2 * pad - _js_const(js, "CLIP_B_REM"))
 
 
 def _shift_y(js):
@@ -286,7 +289,8 @@ def _large_surface_wh(js):
     f, xf = _size_factor("SIZE_F"), _size_factor("SIZE_XF")
     pad = _js_const(js, "PAD_REM")
     return (iround_half_away((Decimal(_js_const(js, "BOX_W_REM")) * xf + 2 * pad) * f),
-            iround_half_away((Decimal(_js_const(js, "BOX_H_REM")) + 2 * pad) * f))
+            iround_half_away((Decimal(_js_const(js, "BOX_H_REM")) + 2 * pad
+                              - _js_const(js, "CLIP_B_REM")) * f))
 
 
 def _large_shift_y(js):
@@ -580,10 +584,12 @@ def test_python_large_y_shift_pins_the_bottom_ink_not_the_naive_scale():
     # for the full derivation). No literal here: a retune of the pad or the box propagates.
     js = _js()
     surface_w, surface_h = _surface_wh(js)
-    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    # iter 3: the composition's bottom is PAD + BOX_H (clipB only trims the surface BELOW it), so this
+    # is no longer surface_h - PAD once clipB != 0.
+    bottom_ink_default = _js_const(js, "BOX_H_REM") + _js_const(js, "PAD_REM")
     shift = -_shift_y(js)
     computed = Decimal(shift) - Decimal("0.25") * bottom_ink_default
-    assert EFFICIENCY_ANCHOR_Y_SHIFT_LARGE == iround_half_away(computed) == -77
+    assert EFFICIENCY_ANCHOR_Y_SHIFT_LARGE == iround_half_away(computed) == -64
 
 
 def _v_surface_wh(js):
@@ -1113,7 +1119,7 @@ def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(sp
     # composition's BOTTOM ink -- `.mp-backdrop`'s bottom edge, VIEW_H_REM - PAD_REM below the
     # window's own top-left -- so the bar visibly grows UP off a fixed bottom, not off a fixed
     # middle.
-    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    bottom_ink_default = _js_const(js, "BOX_H_REM") + _js_const(js, "PAD_REM")  # clipB-independent
     bottom_ink = y + bottom_ink_default
     lw, lh = _large_surface_wh(js)
     lmax_x, lmax_y = 1920 - lw, space_h - lh

@@ -78,7 +78,11 @@ def _css_box(src):
 def _surface_wh(js):
     """The surface size the JS pushes to the engine -- its VIEW_W_REM / VIEW_H_REM."""
     pad = _js_const(js, "PAD_REM")
-    return _js_const(js, "BOX_W_REM") + 2 * pad, _js_const(js, "BOX_H_REM") + 2 * pad
+    # iter 3: the horizontal bar now trims its BOTTOM by CLIP_B_REM (the shared module's clipB:
+    # viewH = boxH + 2*pad - clipB), same mechanism the vertical bars use -- so the pushed surface
+    # height carries the -clipB, exactly as _v_surface_wh already does.
+    return (_js_const(js, "BOX_W_REM") + 2 * pad,
+            _js_const(js, "BOX_H_REM") + 2 * pad - _js_const(js, "CLIP_B_REM"))
 
 
 def _shift_y(js):
@@ -94,7 +98,8 @@ def _large_surface_wh(js):
     f, xf = _size_factor("SIZE_F"), _size_factor("SIZE_XF")
     pad = _js_const(js, "PAD_REM")
     return (iround_half_away((Decimal(_js_const(js, "BOX_W_REM")) * xf + 2 * pad) * f),
-            iround_half_away((Decimal(_js_const(js, "BOX_H_REM")) + 2 * pad) * f))
+            iround_half_away((Decimal(_js_const(js, "BOX_H_REM")) + 2 * pad
+                              - _js_const(js, "CLIP_B_REM")) * f))
 
 
 def _large_shift_y(js):
@@ -1056,10 +1061,12 @@ def test_python_large_y_shift_pins_the_bottom_ink_not_the_naive_scale():
     # for the full derivation). No literal here: a retune of the pad or the box propagates.
     js = _read("MoEProgress.js")
     surface_w, surface_h = _surface_wh(js)
-    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    # iter 3: the composition's bottom is PAD + BOX_H (clipB only trims the surface BELOW it, it does
+    # not move the composition), so this is no longer surface_h - PAD once clipB != 0.
+    bottom_ink_default = _js_const(js, "BOX_H_REM") + _js_const(js, "PAD_REM")
     shift = -_shift_y(js)
     computed = Decimal(shift) - Decimal("0.25") * bottom_ink_default
-    assert PROGRESS_ANCHOR_Y_SHIFT_LARGE == iround_half_away(computed) == -65
+    assert PROGRESS_ANCHOR_Y_SHIFT_LARGE == iround_half_away(computed) == -48
 
 
 @pytest.mark.parametrize("space_h", [1080, 1440])
@@ -1088,7 +1095,7 @@ def test_the_composed_placement_puts_the_track_at_the_tuned_viewport_fraction(sp
     # composition's BOTTOM ink -- `.mp-backdrop`'s bottom edge, VIEW_H_REM - PAD_REM below the
     # window's own top-left -- so the bar visibly grows UP off a fixed bottom, not off a fixed
     # middle.
-    bottom_ink_default = surface_h - _js_const(js, "PAD_REM")
+    bottom_ink_default = _js_const(js, "BOX_H_REM") + _js_const(js, "PAD_REM")  # clipB-independent
     bottom_ink = y + bottom_ink_default
     lw, lh = _large_surface_wh(js)
     lmax_x, lmax_y = 1920 - lw, space_h - lh
@@ -1435,22 +1442,20 @@ def test_the_large_centre_caption_icon_cancels_scale_only_their_gap():
 
 
 def test_the_backdrop_geometry_is_intentionally_asymmetric_user_approved():
-    # RETIRED CONTRACT: this bar's .mp-backdrop used to bracket the track with EQUAL bleed each
-    # side (the property `anchor_centred`'s `max_x // 2` relied on, since there is no X
-    # compensation term in Python). The maintainer approved moving the backdrop right and
-    # retiring that symmetry -- see MoEProgress.css's own comment above `.mp-backdrop` ("do not
-    # 'fix' it back to -80rem") -- in BOTH Default and Large, so this is now a plain regression
-    # pin of the new intentional geometry rather than a derived-symmetry check. The Efficiency
-    # bar's backdrop did NOT move and keeps its own symmetry test untouched.
+    # RECONCILED (box re-cut for edge-drag): the earlier -72rem drift is gone. .mp-backdrop is now
+    # just the INVISIBLE surface bounding box, so it mirrors MoEProgress.js's BOX_LEFT/W exactly
+    # (-80 / 360) and is SYMMETRIC about the track again -- which is what anchor_centred_reduced's
+    # `max_x // 2` (no X term) needs. Left is base -80 x 4/3 == -106.667 under Large. (NAME is now
+    # stale -- kept to avoid churn; qa re-derives. The Efficiency bar keeps its own symmetry test.)
     _base, large = _cascade("MoEProgress.css")
     base_left = _rem(_base[".mp-backdrop"], "left", "MoEProgress.css")
     base_width = _rem(_base[".mp-backdrop"], "width", "MoEProgress.css")
     large_left = _rem(large[_LG + ".mp-backdrop"], "left", "MoEProgress.css")
     large_width = _rem(large[_LG + ".mp-backdrop"], "width", "MoEProgress.css")
-    assert (base_left, base_width) == (-72, 360), \
-        "the base .mp-backdrop's left/width drifted off its approved -72rem/360rem"
-    assert (large_left, large_width) == (-96, 480), \
-        "the Large .mp-backdrop's left/width drifted off its approved -96rem/480rem"
+    assert (base_left, base_width) == (-80, 360), \
+        "the base .mp-backdrop's left/width drifted off its reconciled -80rem/360rem (== JS BOX_LEFT/W)"
+    assert (large_left, large_width) == (Decimal("-106.667"), 480), \
+        "the Large .mp-backdrop's left/width drifted off its reconciled -106.667rem/480rem (-80 x 4/3)"
 
 
 def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():

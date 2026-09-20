@@ -40,12 +40,12 @@
    is the honest description of the document's size, it costs nothing, and it is not what is broken.
    body margin:0 matters: the UA's default 8px would inflate the measured box to 396x108. The box is
    an empty, transparent sizing shim; the abspos bar root overlays it and no tuned geometry moves.
-   380 x 92 MIRRORS MoEProgress.js's VIEW_W_REM / VIEW_H_REM, which are the SOURCE OF TRUTH
+   380 x 67 MIRRORS MoEProgress.js's VIEW_W_REM / VIEW_H_REM (H == BOX_H + 2*PAD - CLIP_B), SOURCE OF TRUTH
    (BOX_W/H_REM + 2*PAD_REM). Same mirrored-constant contract as the JS's SHIFT_Y_REM <->
    Python's domain/constants.PROGRESS_ANCHOR_Y_SHIFT: change one, change all of them.
    tests/test_progress_surface_mirror.py fails if they drift. */
 body { margin: 0; }
-#moe-bar-box { width: 380rem; height: 92rem; }
+#moe-bar-box { width: 380rem; height: 67rem; }
 
 #moe-bar-root {
   position: absolute;
@@ -66,21 +66,43 @@ body { margin: 0; }
   font-family: "MoEBattle", "Arial Narrow", sans-serif;
   opacity: 0;
 }
-/* Backdrop = the .mb-backdrop two-layer trick: checker dither over a dark radial underlay.
-   EXPLICIT width+height with a single top/left anchor -- Coherent collapses a top+bottom
-   stretch. checker.png + the ttf sit RIGHT BESIDE this CSS (bare sibling urls). */
-/* INTENTIONAL ASYMMETRY (user-approved, symmetry contract retired): left is -72rem while width
-   stays 360rem, so the bleed is 72rem on the left / 88rem on the right -- deliberately uneven,
-   NOT the old -bleed'/track'+2*bleed' symmetric backdrop. Do not "fix" it back to -80rem. */
+/* .mp-backdrop is now the INVISIBLE surface bounding-box marker only (geometry kept as the CSS
+   cross-check of the JS BOX_* surface constants, pinned by tests/test_progress_surface_mirror.py).
+   The visible dither moved to the per-caption .mp-bd strips below -- the corner overlay's
+   .mb-backdrop technique (checker ::before + dark radial ::after), one small box per caption,
+   CENTRED (radial at 50% 50%) since horizontal captions sit centred on their tick. */
+/* SYMMETRIC surface marker, RECONCILED to the JS BOX_* source of truth (the old -72rem drift is
+   gone -- .mp-backdrop is now just the invisible surface bounding box, so it MUST mirror
+   MoEProgress.js's BOX_LEFT/TOP/W/H exactly: -80 / -30 / 360 / 66). The surface stays symmetric
+   about the track (80rem clearance each side) because anchor_centred_reduced's `max_x // 2` has no
+   X term -- see MoEProgress.js's header. top/height re-cut with the box shrink; width is unchanged
+   (capR's right overhang binds the clearance floor, so the left side cannot shrink below it). */
 .mp-backdrop {
   position: absolute;
-  left: -72rem;
-  top: -34rem;
+  left: -80rem;
+  top: -22rem;
   width: 360rem;
-  height: 72rem;
+  height: 55rem;
   z-index: 0;
 }
-.mp-backdrop::before {
+/* PER-CAPTION dither strips. FIRST-CUT geometry (widths/tops are seeds to eyeball + tune).
+   capP (.mp-bd-1) / capC (.mp-bd-2) ride the axis -- JS tracks their `left` to the caption's own
+   (mirroring the vertical bar's capBd3); capR (.mp-bd-3) is fixed off the right end. The .mp-lg
+   x-scaled twins live in the hand-authored LARGE block below (this emit carries no .mp-lg). */
+/* height 16 (iter 2, was 30): the strips hug their numerals now -- shortening removed the ~9rem of
+   dead box that hung below capC's ink and held the surface off the screen edge. The per-strip `top`
+   below re-centres each on the SAME numeral centre it had at 30rem. y-length -> root font scales it,
+   no large-mode twin. */
+.mp-bd {
+  position: absolute;
+  left: 0;
+  top: -30rem;
+  width: 90rem;
+  height: 16rem;
+  z-index: 0;
+  transform: translateX(-50%);
+}
+.mp-bd::before {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   background: url(checker.png) repeat;
@@ -90,11 +112,31 @@ body { margin: 0; }
   opacity: 0.1;
   mask: radial-gradient(56% 110% at 50% 50%,#000 0%,transparent 67%);
 }
-.mp-backdrop::after {
+.mp-bd::after {
   content: "";
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   z-index: -1;
   background: radial-gradient(76% 57% at 50% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);
+}
+/* Mark strips at the tight 16rem (base): bd-1 capP centre ~-14 (top -22), bd-3 capR centre ~4 (top -4).
+   bd-2 (capC, the current value) gets its OWN taller 26rem (iter 3 FIX A -- 16 was too thin), re-centred
+   on the numeral (centre ~20 -> top 7). Per-strip height override so top/bottom strips differ. SEED. */
+.mp-bd-1 {
+  top: -22rem;
+  width: 60rem;
+}
+.mp-bd-2 {
+  top: 7rem;
+  width: 108rem;
+  height: 26rem;
+}
+/* capR's fixed strip. width 126 ran its right edge to root-x 326, 36rem PAST the surface edge (it
+   clipped); 88 keeps it (200 -> 288) inside the surface while still backing capR's ink. SEED. */
+.mp-bd-3 {
+  left: 100%;
+  transform: none;
+  top: -4rem;
+  width: 88rem;
 }
 .mp-track {
   position: relative;
@@ -833,12 +875,17 @@ body { margin: 0; }
    whole periods then a final full 2.667rem dash flush against the right edge, exactly as at 1x
    (the whole grid is scaled uniformly, so that invariant is preserved by construction). */
 .mp-lg #moe-bar-root { width: 266.667rem; }
-/* INTENTIONAL ASYMMETRY (user-approved, symmetry contract retired) -- the Large twin of the base
-   .mp-backdrop shift: left is base -72rem x 4/3 == -96rem while width stays 480rem, so the bleed is
-   now uneven (96rem left / 112rem right), matching the Default mode's own retired symmetry. The old
-   symmetric -106.667rem (== -80 x 4/3) is deliberately gone; do NOT "fix" it back. NOTE: this breaks
-   the anchor_centred `max_x // 2` free-centring the symmetric backdrop used to buy -- accepted. */
-.mp-lg .mp-backdrop { left: -96rem; width: 480rem; }
+/* Large twin of the base .mp-backdrop, RECONCILED with the base's -72rem drift removal: left is base
+   -80rem x 4/3 == -106.667rem, width base 360 x 4/3 == 480rem. SYMMETRIC about the track again (the
+   old -96rem was the drifted -72rem's twin). */
+.mp-lg .mp-backdrop { left: -106.667rem; width: 480rem; }
+/* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..3 above) -- widths only;
+   tops are y-lengths the root font scales, and the .mp-bd-3 left:100% / transform are unitless.
+   Straight base x 4/3: 90->120, 60->80, 108->144, 88->117.333. */
+.mp-lg .mp-bd { width: 120rem; }
+.mp-lg .mp-bd-1 { width: 80rem; }
+.mp-lg .mp-bd-2 { width: 144rem; }
+.mp-lg .mp-bd-3 { width: 117.333rem; }
 /* The dash grid's horizontal geometry: 2rem dash + 1rem gap -> 2.667 + 1.333, i.e. a 4rem period,
    and background-size's x term MUST stay equal to dash+gap or the grid drifts out of phase. The
    colours and the outset ring are untouched (the ring is uniform -- the root font has it). */

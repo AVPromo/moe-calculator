@@ -812,10 +812,10 @@ $tpl = @'
       // centred on the track: bdTop = -(bdH - trackH)/2. That recomputation is why the old -10
       // does NOT transfer: -10 dated from when the captions were IN FLOW and the root was ~72rem
       // tall, so top:-10 already sat above the whole stack; with an absolute-caption root the same
-      // -10 shoves the backdrop up off the track entirely. The maintainer's tuning returned -34
-      // UNCHANGED (the formula at trackH 3 would say -34.5 -- they kept -34; do not "correct" it).
-      {id:"bdTop",label:"Top (rem, negative = above)",min:-120,max:40,step:0.5,val:-34},
-      {id:"bdH",label:"Height (rem, EXPLICIT)",min:10,max:200,step:1,val:72},
+      // -10 shoves the backdrop up off the track entirely. SEED (box re-cut for edge-drag): the
+      // backdrop is now just the invisible surface marker, re-cut to the .mp-bd strip extremes.
+      {id:"bdTop",label:"Top (rem, negative = above)",min:-120,max:40,step:0.5,val:-22},
+      {id:"bdH",label:"Height (rem, EXPLICIT)",min:10,max:200,step:1,val:55},
       {id:"dotAlpha",label:"Dither strength (opacity)",min:0,max:1,step:0.01,val:0.1},
       {id:"dotRX",label:"Dither fade size X (%)",min:0,max:250,step:1,val:56},
       {id:"dotRY",label:"Dither fade size Y (%)",min:0,max:250,step:1,val:110},
@@ -1177,16 +1177,26 @@ $tpl = @'
       "#moe-bar-root {\n  position: absolute;\n  left: 0;\n  top: 0;\n  width: "+st.barW+"rem;\n"+
       "  z-index: 9000;\n  pointer-events: none;\n  text-align: center;\n"+
       "  font-family: \"MoEBattle\", \"Arial Narrow\", sans-serif;\n  opacity: 0;\n}\n"+
-      "/* Backdrop = the .mb-backdrop two-layer trick: checker dither over a dark radial underlay.\n"+
-      "   EXPLICIT width+height with a single top/left anchor -- Coherent collapses a top+bottom\n"+
-      "   stretch. checker.png + the ttf sit RIGHT BESIDE this CSS (bare sibling urls). */\n"+
+      "/* .mp-backdrop is now the INVISIBLE surface bounding-box marker only (geometry kept as the CSS\n"+
+      "   cross-check of the JS BOX_* surface constants, pinned by tests/test_progress_surface_mirror.py).\n"+
+      "   The visible dither moved to the per-caption .mp-bd strips below -- the corner overlay's\n"+
+      "   .mb-backdrop technique (checker ::before + dark radial ::after), one small box per caption,\n"+
+      "   CENTRED (radial at 50% 50%) since horizontal captions sit centred on their tick. */\n"+
       ".mp-backdrop {\n  position: absolute;\n  left: "+(-st.bdBleedX)+"rem;\n  top: "+st.bdTop+"rem;\n"+
       "  width: "+(st.barW+2*st.bdBleedX)+"rem;\n  height: "+st.bdH+"rem;\n  z-index: 0;\n}\n"+
-      ".mp-backdrop::before {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
+      "/* PER-CAPTION dither strips. FIRST-CUT geometry (widths/tops are seeds to eyeball + tune).\n"+
+      "   capP (.mp-bd-1) / capC (.mp-bd-2) ride the axis -- JS tracks their `left` to the caption's own\n"+
+      "   (mirroring the vertical bar's capBd3); capR (.mp-bd-3) is fixed off the right end. The .mp-lg\n"+
+      "   x-scaled twins live in the hand-authored LARGE block below (this emit carries no .mp-lg). */\n"+
+      ".mp-bd {\n  position: absolute;\n  left: 0;\n  top: -30rem;\n  width: 90rem;\n  height: 16rem;\n  z-index: 0;\n  transform: translateX(-50%);\n}\n"+
+      ".mp-bd::before {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  background: url(checker.png) repeat;\n  background-size: auto;\n  background-position: 0px 0px;\n"+
       "  image-rendering: pixelated;\n  opacity: "+st.dotAlpha+";\n  mask: "+dotMask()+";\n}\n"+
-      ".mp-backdrop::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
+      ".mp-bd::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  z-index: -1;\n  background: "+ugGrad()+";\n}\n"+
+      ".mp-bd-1 {\n  top: -22rem;\n  width: 60rem;\n}\n"+
+      ".mp-bd-2 {\n  top: 7rem;\n  width: 108rem;\n  height: 26rem;\n}\n"+
+      ".mp-bd-3 {\n  left: 100%;\n  transform: none;\n  top: -4rem;\n  width: 88rem;\n}\n"+
       ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n  background: "+trackBg()+";\n}\n"+
       "/* THE GARAGE BAR'S TRACK TREATMENT, cloned (MoECalculator.css:277-296 -- #moe-root .moe-track).\n"+
       "   The hangar bar gets its vertical dashes from WG's OWN art, a 99x2 strip drawn at\n"+

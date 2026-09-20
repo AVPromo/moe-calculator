@@ -411,7 +411,9 @@ const PAD = jsConst(B_SRC, "PAD_REM", "MoEEfficiency.js");
 const BOX_W = jsConst(B_SRC, "BOX_W_REM", "MoEEfficiency.js");
 const BOX_H = jsConst(B_SRC, "BOX_H_REM", "MoEEfficiency.js");
 const BOX_LEFT = jsConst(B_SRC, "BOX_LEFT_REM", "MoEEfficiency.js");
-const SURFACE = [BOX_W + 2 * PAD, BOX_H + 2 * PAD];
+// iter 3: the bottom is trimmed by CLIP_B_REM (shared module clipB), so viewH == boxH + 2*pad - clipB.
+const CLIP_B = jsConst(B_SRC, "CLIP_B_REM", "MoEEfficiency.js");
+const SURFACE = [BOX_W + 2 * PAD, BOX_H + 2 * PAD - CLIP_B];
 // ONE SHARED VALUE (see MoEBarTransient.js's header note): half the LARGER of the two surface
 // dimensions, on all four sides -- WG's own confirmed usage (four equal args, an oversized pad
 // accepted not rejected), not a per-axis pair.
@@ -433,7 +435,7 @@ const ROOT_FONT_PX = 2;
 // different from ROOT_FONT_PX so the two are distinguishable in an assertion.
 const UA_FONT_PX = 16;
 const LG_SURFACE = [Math.round((BOX_W * SIZE_XF + 2 * PAD) * SIZE_F),
-                    Math.round((BOX_H + 2 * PAD) * SIZE_F)];
+                    Math.round((BOX_H + 2 * PAD - CLIP_B) * SIZE_F)];
 const LG_HIT_PAD = Math.ceil(Math.max(LG_SURFACE[0], LG_SURFACE[1]) / 2);
 const LG_SHIFT_X = Math.round((PAD - BOX_LEFT * SIZE_XF) * 1000) / 1000 + "rem";
 const REASSERT = jsConst(T_SRC, "SURFACE_REASSERT_MS", "MoEBarTransient.js");

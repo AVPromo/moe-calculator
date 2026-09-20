@@ -512,7 +512,7 @@
       {id:"capxReq",label:"Requirement cap X nudge, residual (rem)",min:-40,max:40,step:0.5,val:0},
       {id:"capxCur",label:"Current cap X nudge, residual (rem)",min:-40,max:40,step:0.5,val:0},
       // The box's own side clearance: the backdrop bleed and the cap-clamp corridor.
-      {id:"boxPad",label:"Box side padding beyond the track (rem)",min:0,max:200,step:5,val:80},
+      {id:"boxPad",label:"Box side padding beyond the track (rem)",min:0,max:200,step:5,val:45},
       {id:"gapEndL",label:"Cap clamp inset, LEFT end (rem)",min:0,max:60,step:0.5,val:4},
       {id:"gapEndR",label:"Cap clamp inset, RIGHT end (rem)",min:0,max:60,step:0.5,val:4},
       {id:"clamp",label:"Cap edge clamping (keeps the 100% cap inside the box)",opts:["on","off"],val:"on"},
@@ -645,9 +645,9 @@
       {id:"ugRY",label:"Darkening radius Y (%)",min:10,max:300,step:1,val:57},
       {id:"ug1a",label:"Darkening centre alpha",min:0,max:1,step:0.01,val:0.35},
       {id:"ug2p",label:"Darkening fade out at (%)",min:0,max:100,step:1,val:70},
-      {id:"bdBleedX",label:"Backdrop bleed past each end (rem)",min:0,max:200,step:5,val:80},
-      {id:"bdTop",label:"Backdrop top offset (rem)",min:-200,max:100,step:1,val:-40},
-      {id:"bdH",label:"Backdrop height (rem)",min:10,max:300,step:1,val:96},
+      {id:"bdBleedX",label:"Backdrop bleed past each end (rem)",min:0,max:200,step:5,val:45},
+      {id:"bdTop",label:"Backdrop top offset (rem)",min:-200,max:100,step:1,val:-35},
+      {id:"bdH",label:"Backdrop height (rem)",min:10,max:300,step:1,val:66},
       // Stage tint over the real frame: a vignette that darkens toward the edges, and at
       // alpha 1 a flat tone -- so a map area brighter or darker than this shot can be faked
       // without re-shooting it. Preview only, never emitted.
@@ -1001,18 +1001,31 @@
 "  width: "+st.barW+"rem;\n"+
 "  z-index: 9000;\n  pointer-events: none;\n  text-align: center;\n"+
 "  font-family: \"MoEBattle\", \"Arial Narrow\", sans-serif;\n  opacity: 0;\n}\n"+
+"/* .mp-backdrop is now the INVISIBLE surface bounding-box marker only (geometry kept as the CSS\n"+
+"   cross-check of the JS BOX_* surface constants, pinned by tests/test_efficiency_surface_mirror.py).\n"+
+"   The visible dither moved to the per-caption .mp-bd strips below -- the corner overlay's\n"+
+"   .mb-backdrop technique (checker ::before + dark radial ::after), one small box per caption,\n"+
+"   CENTRED (radial at 50% 50%) since horizontal captions sit centred on their tick. */\n"+
 ".mp-backdrop {\n  position: absolute;\n  left: "+(-st.bdBleedX)+"rem;\n  top: "+st.bdTop+"rem;\n"+
 "  width: "+(st.barW+2*st.bdBleedX)+"rem;\n  height: "+st.bdH+"rem;\n  z-index: 0;\n}\n"+
-"/* checker.png + MoEBattle.ttf sit RIGHT BESIDE this file -- Coherent resolves a bare url\n"+
-"   against the DOCUMENT directory only. The tuner previewed THIS EXACT tile, inlined as a\n"+
-"   data: URI -- the same 4px PNG, 2x2 cells @2px (tools/dev/gen_checker.py). */\n"+
-".mp-backdrop::before {\n  content: \"\";\n"+
+"/* PER-CAPTION dither strips. FIRST-CUT geometry (widths/tops are seeds to eyeball + tune).\n"+
+"   r1..r4 (.mp-bd-1..4) are fixed at the quarter marks (left 25/50/75/100%); capC (.mp-bd-5) rides\n"+
+"   the axis -- JS tracks its `left` to the caption's own. checker.png + MoEBattle.ttf sit RIGHT\n"+
+"   BESIDE this file (bare sibling url). The .mp-lg x-scaled twins live in the hand-authored LARGE\n"+
+"   block below (this emit carries no .mp-lg). */\n"+
+".mp-bd {\n  position: absolute;\n  left: 0;\n  top: 15rem;\n  width: 60rem;\n  height: 16rem;\n  z-index: 0;\n  transform: translateX(-50%);\n}\n"+
+".mp-bd::before {\n  content: \"\";\n"+
 "  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
 "  background: url(checker.png) repeat;\n  background-size: auto;\n"+
 "  image-rendering: pixelated;\n  opacity: "+st.ckAlpha+";\n  mask: "+ckMask()+";\n}\n"+
-".mp-backdrop::after {\n  content: \"\";\n"+
+".mp-bd::after {\n  content: \"\";\n"+
 "  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  z-index: -1;\n"+
 "  background: "+ugGrad()+";\n}\n"+
+".mp-bd-1 {\n  left: 25%;\n  width: 54rem;\n}\n"+
+".mp-bd-2 {\n  left: 50%;\n  width: 54rem;\n}\n"+
+".mp-bd-3 {\n  left: 75%;\n  width: 54rem;\n}\n"+
+".mp-bd-4 {\n  left: 100%;\n  width: 54rem;\n}\n"+
+".mp-bd-5 {\n  top: -35rem;\n  width: 90rem;\n  height: 26rem;\n}\n"+
 ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n"+
 "  background: "+hexA(st.trackCol,st.trackA)+";\n}\n"+
 "/* THE DASH GRID MASKS THE FILL: "+st.dashW+"rem dash + "+st.dashGap+
