@@ -268,13 +268,6 @@ function parseTrend(s) {
 const DOT_REM = 4;
 const PLOT_HEIGHT_REM = 100;
 const PAD_FRAC = (DOT_REM / 2) / PLOT_HEIGHT_REM;   // dot radius as fraction of plot height
-// .moe-mark-icon-max's own height (CSS, kept in lockstep) -- its top edge, after the shared
-// .moe-mark-icon translateY(-50%) centering, must not go above the plot's top (0%). yOf(100)
-// alone (PAD_FRAC*100 = 2%) is too small a top offset for this icon's larger half-height, so
-// the top icon's own placement is clamped to this floor (see below); the reference line it
-// pairs with stays at the true yOf(100) -- only the barrel-mark icon moves.
-const ICON_MAX_REM = 15;
-const ICON_MAX_HALF_PCT = (ICON_MAX_REM / 2) / PLOT_HEIGHT_REM * 100;
 
 // Group an integer with thousands separators: 2910 -> "2,910".
 function thousands(n) {
@@ -636,9 +629,9 @@ function renderTooltip(root, data) {
 
     const topIcon = document.createElement("div");
     topIcon.className = "moe-mark-icon moe-mark-icon-max";
-    // Clamped down (not yOf(100) verbatim) so its own top edge stays inside the plot -- see
-    // ICON_MAX_HALF_PCT above. Never moves any of the OTHER mark icons/lines/dots/dividers.
-    topIcon.style.top = Math.max(yOf(100), ICON_MAX_HALF_PCT) + "%";
+    // Centers on the same gridline as topLine, like the other three mark icons -- the plot is
+    // overflow:visible with headroom above, so the icon's overhang above 0% fits.
+    topIcon.style.top = yOf(100) + "%";
     topIcon.style.backgroundImage = "url(img://gui/maps/icons/personal_missions_30/quest_type/128x128/icon_battle_condition_barrel_mark.png)";
     trendPlotEl.appendChild(topIcon);
 
