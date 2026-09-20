@@ -22,7 +22,7 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 6.0.0,
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 6.0.1,
 client target EU 2.4.0.1)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
@@ -96,8 +96,27 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**v0.1.0 through v5.1.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v5.1.0 (2026-09-16) is the current Latest** — a minor feature release cut on top of v5.0.0. It
+**v0.1.0 through v6.0.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v6.0.1 (2026-09-20) is the current Latest** — a patch release cut on top of v6.0.0. The garage
+weekly MoE trend chart's 100% mark icon is now centered on its top gridline (it was clamped
+~5.5rem too low) and two dead JS constants left over from that clamp were removed. The two
+horizontal centre-screen transient bars (Progress Bar "Moving Average" variant and Damage
+Efficiency) had their single whole-bar backdrop dither replaced with **per-caption** shadow
+strips — each caption now gets its own dither+radial box, matching the vertical bars'
+treatment — and the surface box was shrunk (a new `CLIP_B_REM` bottom trim was added) so both
+bars can drag closer to the bottom screen edge; the current-damage caption's shadow was
+re-sized/re-centered, and the now-dead `.mp-backdrop` DOM node was removed. Touched
+`MoEProgress.js`/`.css`, `MoEEfficiency.js`/`.css`, the `tools/dev` CSS generators/checkers, and
+`domain/constants.py`. `SETTINGS_VERSION` is unchanged at **29** (no MSA control changed);
+client target **unchanged at EU 2.4.0.1**. The settings-panel widget preview PNGs were
+regenerated for the two changed bars. No player-facing settings/controls were added; player
+docs needed no change.
+
+**v6.0.0 (2026-09-18) was the prior Latest** — a game-upgrade release retargeting the mod to
+WoT client **EU 2.4.0.1** (up from 2.4.0.0), major bump per convention, cut on top of v5.1.0
+(same pattern as v3.0.0/v4.0.0/v5.0.0). `SETTINGS_VERSION` unchanged at **29**.
+
+**v5.1.0 (2026-09-16) was the Latest two releases before that** — a minor feature release cut on top of v5.0.0. It
 adds a **garage weekly moving-average MoE trend chart** inside the MoE-award tooltip: per-battle
 dots on a fixed percentile axis, horizontal mark lines at the 65/85/95/100 percentile thresholds
 drawn from a tiled PNG, Y-axis mark icons in a right gutter including the `barrel_mark` 100%
@@ -111,7 +130,7 @@ false positive (the settingsVersion DOC regex now ignores historical arrow prose
 **unchanged at EU 2.4.0.0**. Player docs (`README.md`, `INSTALL.md`, `installer/readme.moe.txt`)
 were reconciled for the new trend chart in both EN and UA halves.
 
-**v5.0.0 (commit `600ae49`) was the prior Latest** — a game-upgrade release
+**v5.0.0 (commit `600ae49`) was the Latest three releases before that** — a game-upgrade release
 retargeting the mod to WoT client **EU 2.4.0.0** (up from 2.3.1.3), major bump per convention,
 cut directly on top of v4.0.1 with **zero functional/code changes** (same pattern as
 v3.0.0/v4.0.0). `SETTINGS_VERSION` unchanged at **29**; deploy target confirmed via
