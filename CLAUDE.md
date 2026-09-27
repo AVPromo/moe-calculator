@@ -4,36 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**14th_ua's MoE Calculator** (`com.14th_ua.moe_calculator`) — a World of Tanks **EU 2.4.0.1** Garage mod.
+**14th_ua's MoE Calculator** (`com.14th_ua.moe_calculator`) — a World of Tanks **EU** Garage mod.
 Hard dependency: **OpenWG GameFace**. Player-facing docs live in this repo's
-`README.md` / `INSTALL.md` (add them); WoT-modding background: `RESEARCH.md`.
+`README.md` / `INSTALL.md`.
 
 Client/mod versions rot at every client upgrade — this file is NOT the source of truth for
 them. Read: **deploy target** = `deploy.local.json` (`"version"`); **mod version** = `src/meta.xml`
-(`<version>`); **what the client actually is** = the game's own `version.xml`. As of 2026-09-18:
-deploy target / client **2.4.0.1**, mod **6.0.0**.
+(`<version>`); **what the client actually is** = the game's own `version.xml`.
 
 ## The one rule that bites everywhere
 
 The game runs compiled `.pyc`, and **bytecode is version-locked**: package with
 **Python 2.7.18** (`C:\Python27\python.exe`) — Python 3 bytecode will NOT load.
-Tests and dev tools run on **Python 3.13**. There is no npm/linter/CI; builds are
+Tests and dev tools run on **Python 3.13**. `ruff` lint (plus a Python 2.7 compile) runs on
+every edited `src/**/*.py` via the PostToolUse hook; there is no npm or CI, and builds are
 plain Python scripts.
+
+## Never weaken a check
+
+Fix the code when pytest, `ruff`, `py_compile`, or a build check fails — never loosen the
+check. No `|| true`, no deleted rule, no skipped test. Every suppression carries a concrete
+reason on the same line (`# noqa: F401 -- re-exported for the bridge`).
+
+## Skill drift rule
+
+After every gated iteration, run the retrospect → scribe → commit drift pass (see
+`orchestrator` § Skill drift rule).
 
 ## Task-scoped skills
 
-Detailed, situational guidance lives in the installed **`wotmod`** harness plugin
-skills (loaded on demand to keep context tight) — do not duplicate it here:
-- **wotmod-basics** — the WoT modding stack, file structure, load model, Fair Play, resources.
-- **wotmod-architecture** — the engine-free domain / adapter / Wulf-bridge layering and the
-  conventions that bite (listener re-arming, Wulf MAP-arg, engine-free domain) + `game-api`.
-- **wotmod-build-deploy** — build the `.wotmod`, deploy locally, run pytest, hot-reload JS/CSS.
-- **wotmod-debug-repl** — live in-client TCP REPL introspection and decompiled-source navigation.
-- **wotmod-gameface-widget** — the Gameface HTML/CSS/JS widget: DOM, model observer, CSS quirks.
-- **wotmod-release** — bump the version, tag, build the installer, publish the GH release.
-- **wotmod-planner** — research each idea/bug and save an implementer-ready note under
-  `TASKS/`, plus capture/prune the `TASKS.md` backlog.
+Situational guidance lives in the installed **`wotmod`** plugin's skills (loaded on demand by
+their `description`; see the plugin's `skills/` for the current set) — for substantial work
+start with **orchestrator**. Do not duplicate them here.
 
 Project-specific detail (this mod's exact file tree, its widget DOM, its version
 files) belongs in this repo's own `.claude/skills/`, which should reference the
-harness skills above for the shared pattern.
+harness skills for the shared pattern.
