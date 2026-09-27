@@ -28,6 +28,10 @@ deploy.local.json
 # Dev tool staging
 tools/dev/_stage_debug/
 
+# Local live-verification scratch (watch_repl.py / debug-loop captures), not tracked
+/watch_first_battle.log
+/.tbw.diff
+
 # Superpowers docs / research notes / task backlog — local working notes, not tracked
 /docs/superpowers/
 /RESEARCH.md
