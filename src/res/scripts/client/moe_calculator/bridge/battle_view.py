@@ -21,8 +21,9 @@ steals battle input or the cursor. The document is pointer-events:none as a seco
 The window content view's OWN root ViewModel is our BattleMoEVM; the JS reads it with a
 root ModelObserver() and battle_bridge pushes into `view.viewModel`.
 
-    Symbols VERIFIED against the ~/wot-eu decompile (branch 2.3, in the wotmod-debug-repl
-    skill) + the extracted me.poliroid.battlehits / net.openwg.gameface bundles:
+    Symbols VERIFIED against the ~/wot-src-eu decompile (IzeBerg/wot-src, branch EU, in the
+    wotmod:debug-repl skill) + the extracted me.poliroid.battlehits / net.openwg.gameface
+    bundles:
     - openwg_gameface.ModDynAccessor(itemID) is a deferred DynAccessor; calling it returns
       the layoutID for our res_map itemID (INVALID_RES_ID == -1 until the res_map is
       validated at client start; resolved well before any battle).

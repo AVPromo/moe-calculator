@@ -1,7 +1,7 @@
 # Dev tools (WoT 2.4.0.1)
 
 In-game introspection + the real dev loop for this mod. **Not shipped** with the mod.
-See the harness skills `wotmod-build-deploy` and `wotmod-debug-repl` for the generic
+See the harness skills `wotmod:build-deploy` and `wotmod:debug-repl` for the generic
 pattern behind these scripts.
 
 ## Environment (this PC)
@@ -42,38 +42,12 @@ Unit tests (engine-free domain layer, Python 3):
 ```
 
 ## Debug REPL (live introspection)
-`com.14th_ua.moe_calculator_debug.wotmod` runs a TCP REPL on **127.0.0.1:2224** in the client
-(the sibling Garage Progress Bar's debug REPL owns **2223**, so both can run at once).
-- Build/deploy it (client closed):
-  `& "C:\Python27\python.exe" tools\dev\build_debug_wotmod.py "D:/Games/World_of_Tanks_EU" 2.4.0.1`
-- Drive it from the host (client running, in Garage):
-  `& "<py3>" tools\dev\repl_client.py "<expr>"` or `--file cmds.txt`
-- One command per line; state shared only within one run → put interdependent
-  commands in one `--file`. For multi-line code: write a `.py` and send
-  `execfile(r'<abs path>')` as one command.
-- Keep the debug package SLIM (only `mod_moe_calculator_debug.pyc`). If it also ships
-  `moe_calculator`, it conflicts with the real mod and WoT ignores it.
-
-### Watching a time-sensitive transition (`watch_repl.py`)
-For a fast/unpredictable in-client action (e.g. a ~30s battle countdown) where a
-human-timed before/after poll would miss the moment: start the watcher BEFORE the
-action, then just play — it retries the socket until the client answers, polls on
-a short interval, and logs every reply with a timestamp, marking `>>> CHANGED`
-the tick the reply differs from the previous one. Ctrl-C to stop.
-```
-& "<py3>" tools\dev\watch_repl.py "<snippet that prints one line>" [--port 2224] [--interval 0.5] [--out watch_repl.log]
-& "<py3>" tools\dev\watch_repl.py --selftest   # exercises change-detection, no live client needed
-```
-Example — the bar-hide investigation probe (open_overlays/windowStatus/showingStatus/
-has_placed/_last_good/vm_visible in one line, so one reply captures the whole state):
-```
-& "<py3>" tools\dev\watch_repl.py "import moe_calculator.bridge.battle_bridge as bb
-from moe_calculator.bridge import progress_view, efficiency_view
-host = progress_view._host if progress_view.active_view() else efficiency_view._host
-active = host.active_view()
-w = host._active[0] if host._active else None
-print(\"open_overlays=%r windowStatus=%r showingStatus=%r has_placed=%r last_good=%r vm_visible=%r\" % (bb._open_overlays, (w.windowStatus if w else None), (w.showingStatus if w else None), host.has_placed(), host._last_good, (active.viewModel._getBool(0) if active else None)))" --out bar_hide_watch.log
-```
+The per-mod debug REPL package has been retired in favour of ONE harness-owned debug
+REPL, shared across every 14th_ua mod: `wotmod-harness/plugins/wotmod/tools/debug-repl/`
+(package `com.wotmod_harness.debug_repl`, TCP **127.0.0.1:2223**, client `repl_client.py`
+there). See `wotmod:debug-repl` for build/deploy/drive instructions and the watch-loop
+tool (the harness's own equivalent of the old `watch_repl.py`, for time-sensitive
+transitions like a battle countdown).
 
 ### Handy REPL snippets
 ```python
@@ -745,10 +719,10 @@ and warns on a non-monotonic size sequence, a near-whole-image bbox (wrong frame
 or a bbox outside the bottom-left quadrant.
 
 ## Decompiled source (re-clone as needed; not in repo)
-Match the client's branch/region — use the branch matching your client's major
-version (e.g. the `2.4.0.1` major line):
+`github.com/IzeBerg/wot-src` — branch `EU` tracks the live client, branch `CT` tracks
+Common Test:
 ```
-& $git clone --depth 1 --branch <major> --single-branch https://github.com/StranikS-Scan/WorldOfTanks-Decompiled.git wot-eu
+& $git clone --depth 1 --branch EU --single-branch https://github.com/IzeBerg/wot-src.git wot-src-eu
 ```
-(The repo's default branch is a different regional client — cross-check against
-the live `res/packages/scripts.pkg` by listing module filenames.)
+(Cross-check the branch against the live `res/packages/scripts.pkg` by listing module
+filenames — a stale clone lags a client patch.)

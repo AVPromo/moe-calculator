@@ -5,7 +5,7 @@ description: Use when packaging, deploying, testing, hot-reloading, versioning, 
 
 # MoE Calculator — build, deploy, version & dev loop
 
-Reusable mechanics live in `wotmod-build-deploy`, `wotmod-release`, and `wotmod-debug-repl`;
+Reusable mechanics live in `wotmod:build-deploy`, `wotmod:release`, and `wotmod:debug-repl`;
 this skill is the concrete file list and command set. **Two Pythons:** package with
 `C:\Python27\python.exe` (bytecode is version-locked), test/dev-tool with Python 3.13.
 
@@ -85,14 +85,16 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Dev loop / REPL
 
-- Live introspection: build the slim debug package (`tools/dev/build_debug_wotmod.py` →
-  `com.14th_ua.moe_calculator_debug.wotmod`, TCP **:2224**), then `<py3> tools\dev\repl_client.py "<expr>"`.
-  Multiline needs `execfile(r'<abs path>')`. See `wotmod-debug-repl`.
-- Decompiled client source for symbol hunting: `C:\Users\Dmytro Vasylkivskyi\wot-eu\source\res\scripts\client\`.
+- Live introspection: the per-mod debug REPL package has been retired in favour of the
+  harness-owned debug REPL — `wotmod-harness/plugins/wotmod/tools/debug-repl/`
+  (package `com.wotmod_harness.debug_repl`, TCP **:2223**, client `repl_client.py` there).
+  See `wotmod:debug-repl`.
+- Decompiled client source for symbol hunting:
+  `C:\Users\Dmytro Vasylkivskyi\wot-src-eu\sources\res\scripts\client\`.
 - **`tools/dev/` inventory:** `sync_gameface.py` (hot-reload), `gen_checker.py` (battle dither PNG),
   `swf_font_to_ttf.py` / `swf_probe.py` (extract `MoEBattle.ttf` from `fontlib.swf`),
   `gen_overlay_tuner.ps1` / `gen_icon_picker.ps1` (browser calibration artifacts → `TASKS/refs/`),
-  `mod_moe_calculator_debug.py` (Py2-only REPL server), and the `probe_*` live-discovery scripts.
+  and the `probe_*` live-discovery scripts.
 
 ## Release state
 
@@ -294,7 +296,7 @@ OpenWG GameFace, plus **Mods List API**
 (`installer/vendor/me.poliroid.modslistapi_1.7.8.wotmod`, added in v1.3.0) which surfaces the
 settings in the in-game "Modification list" window. The installer self-update reads the GitHub Atom
 feed, so keep the `vX.Y.Z` tag + `MoECalculator-Setup-<ver>.exe` asset-name convention. Follow
-`wotmod-release` for the bump→tag→build→publish flow.
+`wotmod:release` for the bump→tag→build→publish flow.
 **1.8.0 (2026-08-03)** is a minor bump carrying three feature commits (`d80a739`, `ec614e3`,
 `0d5496d`). It adds **Ctrl+drag reposition for the two centre-screen in-battle progress bars** —
 a new column-1 **"Bar Position"** MSA category with two `NumericStepper`s `progress_bar_pos_x` /
@@ -342,3 +344,10 @@ are `vX.Y.Z` (e.g. `v1.3.0`) — never the bare `X.Y.Z`. Every prior release (v0
 follows this. Create with `gh release create vX.Y.Z --title "vX.Y.Z" …`, then verify
 `gh release view vX.Y.Z --json name --jq '.name'` prints `vX.Y.Z`; fix drift with
 `gh release edit vX.Y.Z --title "vX.Y.Z"`.
+
+**Upload the pinned `.sha256` next to the Setup `.exe`.** The installer's self-updater
+(`installer/moe_calculator-setup.iss`) downloads `<SetupBaseName>-<ver>.exe.sha256`
+alongside the `.exe` and refuses to run the downloaded installer on a missing or
+mismatched hash. `build_installer.ps1` writes `MoECalculator-Setup-X.Y.Z.exe.sha256`
+next to the built `.exe` automatically -- upload BOTH files as release assets every
+release, or every existing install's self-update silently refuses to run the new one.

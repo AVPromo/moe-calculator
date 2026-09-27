@@ -4,8 +4,8 @@
 Mirror of engine_adapter.py for the in-battle path. Every read is _safe-guarded so one
 unreadable subsystem degrades to a hidden overlay rather than blanking or crashing.
 
-All symbols below are VERIFIED against the on-disk decompile at ~/wot-eu (StranikS-Scan
-branch 2.3; see the wotmod-debug-repl harness skill for the clone location):
+All symbols below are VERIFIED against the on-disk decompile at ~/wot-src-eu (IzeBerg/wot-src,
+branch EU; see the wotmod:debug-repl harness skill for the clone location):
   - IBattleSessionProvider.shared.{personalEfficiencyCtrl, vehicleState}  (battle_session.py)
   - PersonalEfficiencyController.getTotalEfficiency(eType) + onTotalEfficiencyUpdated event
     (gui/battle_control/controllers/personal_efficiency_ctrl.py)

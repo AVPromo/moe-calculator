@@ -12,8 +12,8 @@ mods never contend. We recompute on vehicle change.
 
 OpenWG Gameface is a hard dependency. Python 2.7 (BigWorld) runtime.
 
-See the wotmod-architecture harness skill for the layered domain/adapter/bridge
-design this scaffold demonstrates, and wotmod-build-deploy for packaging.
+See the wotmod:architecture harness skill for the layered domain/adapter/bridge
+design this scaffold demonstrates, and wotmod:build-deploy for packaging.
 """
 from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, LOG_PROD
 

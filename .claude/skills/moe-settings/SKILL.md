@@ -1,6 +1,6 @@
 ---
 name: moe-settings
-description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its six bold category/group headers, Empty spacers, column 1 (Battle Calculator + a calcPreview Image, then the WHOLE Garage Widget group + its "Layout"/positioning group + a barPreview Image, as of the SETTINGS_VERSION 23→24 column swap) and column 2 (the WHOLE Progress Bar feature: Battle Progress + its three visibility children, the standalone Mode/HotKey-override/Automatic-Mode-Toggle/Scale controls, Transitions + its Events/Alt Press/Hold Duration slider children, and "Layout" (i18n key catBarPosition) + its Orientation/Alignment radios and its two shared X/Y steppers for the Ctrl+drag reposition), the standalone inline int-valued radios (Mode, Scale, Orientation, Alignment), the per-vehicle Mode-override HotKey and Automatic Mode Toggle threshold slider, the two live MSA preview Images, the flag getters the feature bridges read (including the master-folded transition getters, the "Always"-folded visibility getters, and the position getters/setter), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod-msa-settings; for the panel prose translation see wotmod-i18n-settings; for feature internals see moe-garage / moe-battle.
+description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem — the ModsSettingsAPI (MSA) panel, its six bold category/group headers, Empty spacers, column 1 (Battle Calculator + a calcPreview Image, then the WHOLE Garage Widget group + its "Layout"/positioning group + a barPreview Image, as of the SETTINGS_VERSION 23→24 column swap) and column 2 (the WHOLE Progress Bar feature: Battle Progress + its three visibility children, the standalone Mode/HotKey-override/Automatic-Mode-Toggle/Scale controls, Transitions + its Events/Alt Press/Hold Duration slider children, and "Layout" (i18n key catBarPosition) + its Orientation/Alignment radios and its two shared X/Y steppers for the Ctrl+drag reposition), the standalone inline int-valued radios (Mode, Scale, Orientation, Alignment), the per-vehicle Mode-override HotKey and Automatic Mode Toggle threshold slider, the two live MSA preview Images, the flag getters the feature bridges read (including the master-folded transition getters, the "Always"-folded visibility getters, and the position getters/setter), MSA registration / soft-dep / self-heal, MSA 1.6.4's real conditional gating and its zero descriptor validation, when a change owes a SETTINGS_VERSION bump, or why a foreign mod's settings change must not touch our flags. For the reusable MSA panel MECHANICS (probe, register/migrate lifecycle, descriptor shapes, guards, bump rules) see the harness skill wotmod:msa-settings; for the panel prose translation see wotmod:i18n-settings; for feature internals see moe-garage / moe-battle.
 ---
 
 # MoE Calculator — settings panel (feature)
@@ -8,9 +8,9 @@ description: Use when editing the 14th_ua MoE Calculator's SETTINGS subsystem �
 The mod's user toggles, surfaced as ModsSettingsAPI (MSA) controls in the in-game mod-settings
 menu. Shared mechanics live in the harness: **the api probe, the register/migrate lifecycle,
 descriptor shapes + gating keys, the replace-not-merge rule and `saveState`, the linkage /
-`enabled` guards, and the `settingsVersion` bump rules** → `wotmod-msa-settings`;
+`enabled` guards, and the `settingsVersion` bump rules** → `wotmod:msa-settings`;
 **panel-prose localization, `_sync_template_text`, `getClientLanguage` + the `uk`-not-`ua`
-quirk** → `wotmod-i18n-settings`.
+quirk** → `wotmod:i18n-settings`.
 This skill is only the mod's concretes. All paths under `src/res/scripts/client/moe_calculator/`.
 
 Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `adapter/settings_i18n.py`.
@@ -29,7 +29,7 @@ text-only and does NOT bump it. The full bump history is the comment block above
 read it there rather than restating it. **The bump is always FORWARD, even to revert a layout** —
 the host acts only on `new > stored`.
 
-⚠️ Don't be misled by `wotmod-msa-settings`' (correct) general rule that a pure layout move is
+⚠️ Don't be misled by `wotmod:msa-settings`' (correct) general rule that a pure layout move is
 NOT structural to MSA's `_settingsStructure`. That is about MSA; **this repo's `register()` takes
 the saved-truthy path on an existing install and never calls `setModTemplate` at all**, so a
 forward bump is the only thing that can re-lay-out a store we've already written — structural or
@@ -364,7 +364,7 @@ return (bool(_settings.get(PROGRESS_TRANSITIONS_KEY, True))
 
 One place ANDs the group, so the JS can never honour a child while the master is off. The JS half
 of the same discipline reads the pushed bools as `!== false` (absent ⇒ animated, the shipped
-behaviour) — see `wotmod-gameface-widget` and the memory note on new VM bools.
+behaviour) — see `wotmod:gameface-widget` and the memory note on new VM bools.
 
 ### `bar_pos_x()` / `bar_pos_y()` and `set_bar_position()` — the Ctrl+drag position pair
 
@@ -609,15 +609,15 @@ dependency**: `register()` imports it guarded and, if absent, logs-and-returns w
 intact (both widgets on) and no panel — never a crash. There is no config file of ours; MSA
 owns persistence.
 
-### What MSA 1.6.4 offers → `wotmod-msa-settings`
+### What MSA 1.6.4 offers → `wotmod:msa-settings`
 
 The vendor capability survey (real conditional gating beyond a group master, the pure
 key-setter nature of `enableWhen*` / `conditions`, `createControlsGroup`'s single effect, the
 14 component types, zero descriptor validation, varName-less rows excluded from
 `_settingsStructure`, and the two-columns reality) is the **harness** rule — read
-`wotmod-msa-settings`. The installed copy here is byte-identical to
+`wotmod:msa-settings`. The installed copy here is byte-identical to
 `installer/vendor/aslain.modmenu_2.0.16.wotmod` and keeps its docstrings, so decompile
-it (`wotmod-debug-repl`'s `uncompyle6` recipe) rather than guessing when a detail is missing.
+it (`wotmod:debug-repl`'s `uncompyle6` recipe) rather than guessing when a detail is missing.
 
 Mod-relevant consequence: a boolean master's children grey out when it's off, but the disabled
 state is **derived from a `masterVarName` / `conditions` binding**, not a per-control `disabled`
@@ -630,7 +630,7 @@ failed attempt leaves the latch False and is retried on the first hangar mount
 (`gameface_bridge.attach()` calls `register()` again). The entry point also subscribes the two
 feature bridges' `apply_settings` as change listeners.
 
-`_candidate_apis()` / `_primary_api()` are the harness probe verbatim (`wotmod-msa-settings` →
+`_candidate_apis()` / `_primary_api()` are the harness probe verbatim (`wotmod:msa-settings` →
 the probe): `gui.aslainMenu` first, the legacy `gui.modsSettingsApi` second and de-duped,
 `register()` driving the primary while reset-hooks + template-text sync run on every candidate.
 
@@ -670,7 +670,7 @@ The child greys out in the panel while the master is off (see `createControlsGro
 `masterVarName` above), and it's also inert at runtime — when `enabled` is false the `alt_mode`
 term is never reached.
 
-## Panel prose (defer to `wotmod-i18n-settings`)
+## Panel prose (defer to `wotmod:i18n-settings`)
 
 Every visible label/tooltip comes from `adapter/settings_i18n.panel_text()` at the client's active
 language (English master + per-key fallback; `COL1_KEYS` / `COL2_KEYS` are the wire order MSA and
@@ -684,7 +684,7 @@ live nowhere else.
 `modDisplayName` stays the literal English brand. THE gotcha — MSA caches a COPY of the template
 text at registration, so on an EXISTING install a client-language change never shows unless
 `_sync_template_text` rewrites the stored template text in place (text-only, NO `settingsVersion`
-bump) — is the harness rule; see `wotmod-i18n-settings` for the full mechanism and the
+bump) — is the harness rule; see `wotmod:i18n-settings` for the full mechanism and the
 `uk`-not-`ua` EU quirk.
 
 **Two mod-specific exceptions to "text is free":** all four radios' **option labels** are

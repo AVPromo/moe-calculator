@@ -16,7 +16,7 @@ TASKS/collision-aware-injection.md.
 
 This is the seam between the engine and the pure domain: it READS via the adapter,
 builds the model via the domain, and MARSHALS it into Wulf ViewModels. See the
-wotmod-architecture harness skill for the listener re-arm rationale and the Wulf event
+wotmod:architecture harness skill for the listener re-arm rationale and the Wulf event
 `setattr`-back gotcha.
 """
 import json

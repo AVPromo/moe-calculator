@@ -24,7 +24,7 @@
 //          -> the delta is RED when negative, WHITE at zero, GREEN when positive.
 //
 // pointer-events:none throughout -- the overlay is pure HUD info and must never
-// intercept battle input. See the wotmod-gameface-widget harness skill for the
+// intercept battle input. See the wotmod:gameface-widget harness skill for the
 // DOM/CSS conventions + Coherent quirks; mirrors MoECalculator.js.
 import { ModelObserver } from "../../libs/model.js";
 

@@ -6,8 +6,8 @@ description: Use when editing the 14th_ua MoE Calculator's IN-BATTLE live-MoE ov
 # MoE Calculator — in-battle overlay (feature)
 
 A live combined-damage / projected-MoE readout floated over the battle HUD. Reusable
-patterns: `wotmod-gameface-widget` (front-end), `wotmod-architecture` (Python +
-`references/game-api.md` "Battle HUD / efficiency"), `wotmod-debug-repl` (live probing).
+patterns: `wotmod:gameface-widget` (front-end), `wotmod:architecture` (Python +
+`references/game-api.md` "Battle HUD / efficiency"), `wotmod:debug-repl` (live probing).
 All paths under `src/res/`.
 
 ## Hosting model (the hard-won part)
@@ -116,7 +116,7 @@ baseline present; false on the replay/relogin BUG-B path → JS dashes proj/%/de
 **7 `countedAssist`** (Number, = `max(track, spot, stun)`), **8 `assistKind`** (String:
 `track|spot|stun|assist`, selects the row-3 icon), **9 `assistVisible`** (Bool: the "Enable
 Counted Assistance" setting; JS also hides the row while `countedAssist == 0`).
-`curPercent`/`pctDelta` must be Real — see the Wulf-decimals rule in `wotmod-architecture`.
+`curPercent`/`pctDelta` must be Real — see the Wulf-decimals rule in `wotmod:architecture`.
 The next free index is 10 — any new flag (single/double-row mode, RTL) must bump `properties`
 and append; the backlog notes' "spare slot 7/8/9" assumption is obsolete.
 

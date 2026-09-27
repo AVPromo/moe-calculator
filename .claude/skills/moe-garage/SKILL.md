@@ -5,8 +5,8 @@ description: Use when editing the 14th_ua MoE Calculator's HANGAR percentile-bar
 
 # MoE Calculator — garage widget (feature)
 
-The hangar percentile bar. Reusable patterns are in `wotmod-gameface-widget` (front-end)
-and `wotmod-architecture` (Python layering + `references/game-api.md`); this skill is the
+The hangar percentile bar. Reusable patterns are in `wotmod:gameface-widget` (front-end)
+and `wotmod:architecture` (Python layering + `references/game-api.md`); this skill is the
 concrete wiring. All paths under `src/res/`.
 
 ## Data flow (game → widget)
@@ -41,7 +41,7 @@ VM. `_arm` uses `getattr(holder, attr, None)` so a renamed WG event degrades qui
   7 `carouselRows`, 8 `carouselSmall`, 9 `ticks` (Array of `MarkTickVM`),
   **10 `endDamageRequired`**, 11 `labels` (JSON string for the tooltip).
 - **`MarkTickVM`** — `properties=4`: 0 `percent`, 1 `markCount`, 2 `damageRequired`, 3 `reached`. (No `icon` slot — the widget draws a flat glyph; the old nation-art URL was removed.)
-- `curPercent`/`fill` must be Real — see the Wulf-decimals rule in `wotmod-architecture`.
+- `curPercent`/`fill` must be Real — see the Wulf-decimals rule in `wotmod:architecture`.
 
 ## Front-end (`MoECalculator.js` / `.css`)
 
@@ -80,7 +80,7 @@ the client's own strings via the `labels` bundle (`adapter/i18n.py`).
 
 Built in the **shared `.wg-tooltip` / `.wg-tip-*` vocabulary** — the SAME classes as the sibling
 `wgmod-research-progress` tooltip (both render identically), but a STANDALONE copy scoped to
-`#moe-tooltip` (no shared file). Recipe: the `wotmod-gameface-widget` skill's "Native tooltip
+`#moe-tooltip` (no shared file). Recipe: the `wotmod:gameface-widget` skill's "Native tooltip
 recipe". MoE-local classes: `.wg-tip-icon-mark`/`.wg-tip-main-mark`, `.wg-tip-icon-unearned`,
 `.moe-tip-ratio`/`.moe-tip-descr`, `.moe-tip-hi`, `.moe-tip-empty`.
 

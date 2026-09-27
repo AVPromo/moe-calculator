@@ -6,7 +6,7 @@ surface the mod can't localize through the game's resource strings: its checkbox
 labels and tooltips are mod-invented prose with no in-game equivalent (unlike the widget
 text, which ``adapter/i18n.py`` resolves by reusing WG's own strings -- see that module).
 So we ship our own ``{lang: {key: entry}}`` tables and pick the block matching the client's
-active language, exactly the pattern the wotmod-architecture skill recommends for a mod's
+active language, exactly the pattern the wotmod:architecture skill recommends for a mod's
 own strings. Mirrors the sibling Garage Progress Bar mod's ``settings_i18n`` mechanism.
 
 Everything here is PURE and unit-tested EXCEPT ``client_language()`` -- the one call

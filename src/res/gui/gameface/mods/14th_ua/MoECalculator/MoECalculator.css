@@ -460,7 +460,7 @@
    180x180 atlas.
 
    STRUCTURE + CHROME reuse the shared `.wg-tooltip` / `.wg-tip-*` tooltip COMPONENT (see the
-   wotmod-gameface-widget harness skill, "Native tooltip recipe"): the SAME class vocabulary
+   wotmod:gameface-widget harness skill, "Native tooltip recipe"): the SAME class vocabulary
    the sibling wgmod-research-progress mod uses, so both mods' tooltips render IDENTICALLY.
    The mods stay STANDALONE -- each ships its OWN copy of these rules (no shared file), scoped
    here to #moe-tooltip so two installed mods never collide (the sibling scopes the same

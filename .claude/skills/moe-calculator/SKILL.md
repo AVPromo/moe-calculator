@@ -6,7 +6,7 @@ description: Use when working anywhere in the 14th_ua MoE Calculator repo and yo
 # 14th_ua's MoE Calculator — project map
 
 A World of Tanks **Garage + in-battle** Marks-of-Excellence mod. This skill is the
-orientation; the concrete patterns live in the harness skill `wotmod-basics`. The two
+orientation; the concrete patterns live in the harness skill `wotmod:basics`. The two
 features and the build each have their own project skill:
 
 - **`moe-garage`** — the hangar percentile-bar widget, end-to-end.
@@ -21,7 +21,7 @@ features and the build each have their own project skill:
 - **Client:** WoT **EU 2.4.0.1**. Runtime **Python 2.7** (BigWorld); tests on **Python 3.13**.
 - **Hard dep:** OpenWG GameFace ≥ 1.1.6 (`import openwg_gameface` raises if absent). Soft dep:
   ModsSettingsAPI — bundled `aslain.modmenu_2.0.16` + `modslistapi_1.7.9` (absent → mod runs
-  with default settings, no panel). See `moe-settings`, and `wotmod-msa-settings` for the mechanics.
+  with default settings, no panel). See `moe-settings`, and `wotmod:msa-settings` for the mechanics.
 - **MoE data source (official WG API, single build):** per-tank combined-damage thresholds keyed by intCD, each row keyed by **PERCENTILE** `{20,40,55,65,75,85,95,100}` (the 8 anchors WG actually stores; 65/85/95/100 required all-or-nothing, the rest optional enrichment), come from the Wargaming public API's `wot/tanks/mastery` method (`distribution=damage&percentile=20,40,55,65,75,85,95,100`) via `adapter/moe_wgapi.py` — the sole provider, no facade. On garage entry it fetches the selected tank, then warms the 100 most-recently-played owned vehicles (`adapter/garage_roster.py`, ranked by dossier `getLastBattleTime()`); an uncached selection fetches that one tank. Worker-thread fetch + `BigWorld.callback` poll; results persisted (`mods_data/14th_ua_moe/moe_wgapi_cache.json`) and revalidated 24h after the reply's `updated_at`. On a request error, `engine_adapter` extrapolates from the player's own dossier point via `domain/moe_estimate.py`. GitHub and WGMods ship the identical build. See [[moe-build-release]].
 
 ## The tree
@@ -76,11 +76,11 @@ Deploy yourself — never ask the user to run these (run the commands directly v
 | Package + deploy | `C:\Python27\python.exe build\deploy_wotmod.py "D:/Games/World_of_Tanks_EU" 2.4.0.1` (reads `deploy.local.json` if no args) |
 | Garage hot-reload | `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.1` (front-end only; **battle window can't hot-reload**) |
 | Tests | `<py3> -m pytest -q` |
-| Live REPL | `<py3> tools\dev\repl_client.py "<expr>"` — needs `com.14th_ua.moe_calculator_debug.wotmod` on TCP **:2224** |
+| Live REPL | harness-owned `repl_client.py` (see `wotmod:debug-repl`) — needs `com.wotmod_harness.debug_repl` on TCP **:2223** |
 
-- WoT install: `D:/Games/World_of_Tanks_EU`. Decompiled client source: `C:\Users\Dmytro Vasylkivskyi\wot-eu\source\res\scripts\client\`.
+- WoT install: `D:/Games/World_of_Tanks_EU`. Decompiled client source: `C:\Users\Dmytro Vasylkivskyi\wot-src-eu\sources\res\scripts\client\`.
 - Sibling repo with portable code (garage widget's DOM Ctrl+drag, `installDrag`):
   `C:\Users\Dmytro Vasylkivskyi\wgmod-research-progress`. The in-battle bars' Ctrl+drag is a
   separate, Python-owned absolute-placement design (no DOM drag, no JS delta) — see `moe-battle`.
 - **Deploy needs `WorldOfTanks.exe` closed** (file locks); the `wgc` launcher may stay open.
-- Backlog + research notes live in `TASKS/` (`TASKS/shipped/` = archived). Planner role: see `wotmod-planner`.
+- Backlog + research notes live in `TASKS/` (`TASKS/shipped/` = archived). Planner role: see `wotmod:planner`.

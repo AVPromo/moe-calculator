@@ -6,7 +6,7 @@
 // readout of the current average combined damage + current mark percentage.
 //
 // Style mimics the garage's top-right Battlepass chapter-progress widget. See the
-// wotmod-gameface-widget harness skill for the DOM/CSS conventions + Coherent quirks.
+// wotmod:gameface-widget harness skill for the DOM/CSS conventions + Coherent quirks.
 import { ModelObserver } from "../../libs/model.js";
 
 const observer = ModelObserver("MoECalculator");
@@ -236,7 +236,7 @@ function bigMarkIcon(nation, marks) {
 
 // Localized label bundle, pushed from Python as a JSON string on the model (`labels`).
 // The JS renders whatever the model carries and hardcodes NO English (see the
-// wotmod-gameface-widget Localization convention). Parsed missing-key-safe: a missing
+// wotmod:gameface-widget Localization convention). Parsed missing-key-safe: a missing
 // key degrades to "" rather than crashing or blanking the whole tooltip.
 let LABELS = {};
 function parseLabels(s) {
