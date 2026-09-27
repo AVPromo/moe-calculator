@@ -42,10 +42,10 @@ _stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
 _stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1),
       gf_mod_inject=lambda *a, **k: None)
 
-from moe_calculator.bridge import battle_bridge          # noqa: E402
-from moe_calculator.bridge import mod_settings            # noqa: E402
-from moe_calculator.adapter import battle_adapter         # noqa: E402
-from moe_calculator.domain import battle_types as bt      # noqa: E402
+from moe_calculator.bridge import battle_bridge
+from moe_calculator.bridge import mod_settings
+from moe_calculator.adapter import battle_adapter
+from moe_calculator.domain import battle_types as bt
 
 THR = {65: 2450, 85: 3050, 95: 3620, 100: 4400}
 

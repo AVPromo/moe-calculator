@@ -42,15 +42,15 @@ _stub("frameworks.wulf", ViewSettings=_Permissive, ViewFlags=object(), WindowFla
 _stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
 _stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1))
 
-import pytest                                             # noqa: E402
+import pytest
 
-from moe_calculator.bridge import bar_window              # noqa: E402
-from moe_calculator.bridge import battle_bridge           # noqa: E402
-from moe_calculator.bridge import mod_settings            # noqa: E402
-from moe_calculator.domain.constants import (                        # noqa: E402
+from moe_calculator.bridge import bar_window
+from moe_calculator.bridge import battle_bridge
+from moe_calculator.bridge import mod_settings
+from moe_calculator.domain.constants import (
     PROGRESS_ANCHOR_Y_SHIFT, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
     PROGRESS_MM_GAP_BOTTOM)
-from moe_calculator.domain.positioning import anchor_centred_reduced  # noqa: E402
+from moe_calculator.domain.positioning import anchor_centred_reduced
 
 # A REALISTIC surface -- 256x92 (92 is the real PROGRESS bar's shipped 1x surface height, per the
 # surface-mirror derivation "progress default: ... surface_h 92"), NOT the engine's 256x256

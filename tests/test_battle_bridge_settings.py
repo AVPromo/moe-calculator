@@ -39,8 +39,8 @@ _stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
 _stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1),
       gf_mod_inject=lambda *a, **k: None)
 
-from moe_calculator.bridge import battle_bridge          # noqa: E402
-from account_helpers.settings_core.settings_constants import DAMAGE_LOG, GAME  # noqa: E402
+from moe_calculator.bridge import battle_bridge
+from account_helpers.settings_core.settings_constants import DAMAGE_LOG, GAME
 
 
 def _calls(monkeypatch):

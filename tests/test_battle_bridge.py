@@ -39,8 +39,8 @@ _stub("gui.impl.pub", ViewImpl=_Permissive, WindowImpl=_Permissive)
 _stub("openwg_gameface", ModDynAccessor=lambda *a, **k: (lambda: -1),
       gf_mod_inject=lambda *a, **k: None)
 
-from moe_calculator.bridge import battle_bridge          # noqa: E402
-from moe_calculator.bridge import mod_settings           # noqa: E402
+from moe_calculator.bridge import battle_bridge
+from moe_calculator.bridge import mod_settings
 
 
 def setup_function(_):

@@ -44,10 +44,10 @@ class _StubArray(object):
 _stub("frameworks.wulf", ViewModel=_StubViewModel, Array=_StubArray)
 _stub("openwg_gameface", gf_mod_inject=lambda *a, **k: None)
 
-from moe_calculator.bridge import gameface_bridge  # noqa: E402
-from moe_calculator.adapter import engine_adapter   # noqa: E402
-from moe_calculator.adapter import moe_wgapi         # noqa: E402
-from moe_calculator.adapter import baseline_cache    # noqa: E402
+from moe_calculator.bridge import gameface_bridge
+from moe_calculator.adapter import engine_adapter
+from moe_calculator.adapter import moe_wgapi
+from moe_calculator.adapter import baseline_cache
 
 
 def teardown_function(_):

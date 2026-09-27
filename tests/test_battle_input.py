@@ -68,7 +68,7 @@ class _AvatarInputHandler(object):
         return "wg-mouse-result"
 
 
-from moe_calculator.adapter import battle_input          # noqa: E402
+from moe_calculator.adapter import battle_input
 
 
 @pytest.fixture

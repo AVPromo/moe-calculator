@@ -30,8 +30,8 @@ import shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "build"))
-import build_wotmod  # noqa: E402
-import meta  # noqa: E402
+import build_wotmod
+import meta
 
 
 def _resolve_args(argv):

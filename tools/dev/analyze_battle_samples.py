@@ -59,7 +59,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 # Imported, never copied, so the back-test measures what the mod actually does. domain/ is
 # engine-free and py3-clean (same sys.path trick as tests/conftest.py); nothing here writes src/.
 sys.path.insert(0, os.path.join(ROOT, "src", "res", "scripts", "client"))
-from moe_calculator.domain import battle_builder as bb  # noqa: E402 - needs the path above
+from moe_calculator.domain import battle_builder as bb
 
 # --- the 8-anchor WG distribution (--backtest only) ---------------------------
 # WG stores exactly these 8 anchors for `distribution=damage` and linearly interpolates every
@@ -382,7 +382,7 @@ def enrich(rows, stops8):
         pre, proj, post = (_f(r, "pre_avg_damage"), _f(r, "proj_avg_damage"),
                            _f(r, "post_avg_damage"))
         pre_p, post_p = _f(r, "pre_percentile"), _f(r, "post_percentile")
-        f = lambda d: bb._smooth_percent(d, fit)                  # noqa: E731 - local alias
+        f = lambda d: bb._smooth_percent(d, fit)
         inc = f(proj) - f(pre)
         recs.append({
             "row": r, "cd": cd, "band": _band(pre / float(th[65])),
@@ -494,7 +494,7 @@ def backtest(rows, stops8):
     print("  %-9s %4s %10s %8s %9s %9s"
           % ("group", "n", "med miss", ">%d" % MISS_THRESHOLD, "mean res", "med res"))
     for label, n, med, over, mres, medres in death_split(recs):
-        cell = lambda v, f: (f % v) if v is not None else "%8s" % "-"   # noqa: E731 - local alias
+        cell = lambda v, f: (f % v) if v is not None else "%8s" % "-"
         print("  %-9s %4d %10s %8d %9s %9s"
               % (label, n, cell(med, "%10.0f"), over, cell(mres, "%+9.3f"),
                  cell(medres, "%+9.3f")))

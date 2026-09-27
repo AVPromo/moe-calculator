@@ -30,7 +30,7 @@ for _attr in ("ViewModel", "Array"):
     if not hasattr(sys.modules["frameworks.wulf"], _attr):
         setattr(sys.modules["frameworks.wulf"], _attr, _Permissive)
 
-from moe_calculator.bridge import view_models              # noqa: E402
+from moe_calculator.bridge import view_models
 
 
 def _models():
