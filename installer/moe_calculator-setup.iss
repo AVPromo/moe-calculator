@@ -452,10 +452,31 @@ begin
   end;
 end;
 
-{ Download the given installer asset into the temp dir and launch it. True on ok. }
-function DownloadAndRun(Url, FileName: string): Boolean;
+{ Fetch the pinned sha256 for a release asset from "<AssetUrl>.sha256" (a release step
+  publishes this alongside the .exe as plain lowercase hex). Empty on any failure --
+  caller treats a missing hash exactly like a mismatch (refuse to run). }
+function FetchAssetSha256(AssetUrl: string): string;
+var
+  S: AnsiString;
+begin
+  Result := '';
+  try
+    DownloadTemporaryFile(AssetUrl + '.sha256', 'moe_calculator_update.sha256', '', nil);
+    if LoadStringFromFile(ExpandConstant('{tmp}\moe_calculator_update.sha256'), S) then
+      Result := Lowercase(Trim(String(S)));
+  except
+    Result := '';
+  end;
+end;
+
+{ Download the given installer asset into the temp dir, verify it against its published
+  sha256 BEFORE running it, and launch it only on a match. True when the download was
+  launched. Refuses (message + opens the GitHub release page) on any hash mismatch or a
+  missing hash file -- never runs an unverified downloaded .exe. }
+function DownloadAndRun(Url, FileName, ReleasePageUrl: string): Boolean;
 var
   rc: Integer;
+  expected, actual, localFile: string;
 begin
   Result := False;
   DownloadPage.Clear;
@@ -471,9 +492,25 @@ begin
   finally
     DownloadPage.Hide;
   end;
-  if Result then
-    Result := Exec(ExpandConstant('{tmp}\' + FileName), '', '',
-                   SW_SHOWNORMAL, ewNoWait, rc);
+  if not Result then
+    Exit;
+
+  localFile := ExpandConstant('{tmp}\' + FileName);
+  expected := FetchAssetSha256(Url);
+  actual := Lowercase(GetSHA256OfFile(localFile));
+  if (expected = '') or (actual <> expected) then
+  begin
+    Result := False;
+    MsgBox('The downloaded update could not be verified (missing or mismatched ' +
+           'SHA-256) and will NOT be run.'#13#10#13#10 +
+           'You can download it manually, after checking it yourself, from:'#13#10 +
+           ReleasePageUrl,
+           mbError, MB_OK);
+    ShellExec('open', ReleasePageUrl, '', '', SW_SHOWNORMAL, ewNoWait, rc);
+    Exit;
+  end;
+
+  Result := Exec(localFile, '', '', SW_SHOWNORMAL, ewNoWait, rc);
 end;
 
 { If GitHub has a release newer than max(installed, bundled), offer to fetch and
@@ -508,10 +545,11 @@ begin
   assetName := '{#SetupBaseName}-' + latest + '.exe';
   assetUrl := 'https://github.com/{#RepoOwner}/{#RepoName}/releases/download/v' +
               latest + '/' + assetName;
-  if DownloadAndRun(assetUrl, assetName) then
+  if DownloadAndRun(assetUrl, assetName,
+       'https://github.com/{#RepoOwner}/{#RepoName}/releases/latest') then
     Result := True
   else
-    MsgBox('Could not download the new installer automatically.'#13#10 +
+    MsgBox('Could not download and verify the new installer automatically.'#13#10 +
            'You can get it manually from:'#13#10 +
            'https://github.com/{#RepoOwner}/{#RepoName}/releases/latest'#13#10#13#10 +
            'Setup will continue with the bundled version.',
