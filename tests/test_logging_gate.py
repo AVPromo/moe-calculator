@@ -25,6 +25,7 @@ _ALLOWED = {os.path.join(_CLIENT, "moe_calculator", "_compat.py")}
 
 _LOG_NOTE_CALL = re.compile(r"\bLOG_NOTE\s*\(")
 _LOG_NOTE_IMPORT = re.compile(r"\bimport\b.*\bLOG_NOTE\b")
+_DEBUG_UTILS_IMPORT = re.compile(r"\bimport\s+debug_utils\b|\bfrom\s+debug_utils\b")
 
 
 def _py_files():
@@ -55,6 +56,26 @@ def test_no_raw_log_note_call_sites():
                 offenders.append("%s:%d: %s" % (rel, lineno, line.strip()))
     assert not offenders, (
         "raw LOG_NOTE usage found -- route verbose logging through the gated LOG_DEBUG:\n  "
+        + "\n  ".join(offenders))
+
+
+def test_no_raw_debug_utils_import_outside_compat():
+    """`debug_utils` (the game's own log module) must be imported ONLY in _compat.py -- every
+    other module goes through the shared, path-scrubbing LOG_DEBUG/LOG_PROD/LOG_CURRENT_EXCEPTION
+    wrappers instead. A direct import elsewhere means that module's exceptions bypass the scrub
+    and can leak the player's absolute install path into python.log."""
+    offenders = []
+    for path in _py_files():
+        if path in _ALLOWED:
+            continue
+        with open(path, "rb") as fh:
+            text = fh.read().decode("utf-8")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if _DEBUG_UTILS_IMPORT.search(line):
+                rel = os.path.relpath(path, _CLIENT).replace(os.sep, "/")
+                offenders.append("%s:%d: %s" % (rel, lineno, line.strip()))
+    assert not offenders, (
+        "raw debug_utils import found outside _compat.py -- route logging through _compat:\n  "
         + "\n  ".join(offenders))
 
 

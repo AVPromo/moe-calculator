@@ -60,13 +60,13 @@ import json
 import threading
 
 from moe_calculator import build_config
-from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG
+from moe_calculator._compat import LOG_CURRENT_EXCEPTION, LOG_DEBUG, _scrub_paths
 from moe_calculator.adapter import garage_roster
 from moe_calculator.domain import constants
 from moe_calculator.domain import fetch_list
 
 # --- source configuration ----------------------------------------------------
-REGION = "eu"                                        # this client is EU 2.3.0.1
+REGION = "eu"                                        # this mod targets the EU client
 API_URL = "https://api.worldoftanks.%s/wot/tanks/mastery/" % REGION
 # The WG API application_id is a SECRET injected at build time (see build_config.py + .env);
 # it is empty in an unbuilt/source checkout, which just disables fetching (fail-soft).
@@ -836,7 +836,10 @@ try:
                 self.result, self.updated_at = parse_response(text)
             except Exception:
                 import traceback
-                self.error = traceback.format_exc()
+                # Stash path-scrubbed (LOG_DEBUG below is not LOG_CURRENT_EXCEPTION, so it
+                # does not scrub on its own): a raw traceback would leak the player's
+                # absolute install path into python.log via this thread's stored text.
+                self.error = _scrub_paths(traceback.format_exc())
                 self.result = None
                 self.ok = False
 except Exception:  # pragma: no cover - threading always present; defensive only
