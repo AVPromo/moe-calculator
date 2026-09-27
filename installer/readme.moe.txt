@@ -70,6 +70,11 @@ DEPENDENCIES
     works with both widgets enabled and the centre-screen bar off.
     Keep your existing copy if you already run it.
 
+NETWORK
+    The mod calls Wargaming's own public API (api.worldoftanks.eu) to
+    fetch the real Marks-of-Excellence damage thresholds for your
+    vehicles. No other data is sent or collected.
+
 UNINSTALL
     Delete com.14th_ua.moe_calculator_{VERSION}.wotmod from
     mods\<version>\ and restart. Leave GameFace if other mods use it.
@@ -135,6 +140,11 @@ UNINSTALL
     а також задати позицію віджета в Ангарі. Без нього мод працює з
     обома увімкненими віджетами й вимкненою смугою в центрі екрана.
     Якщо він уже стоїть, лишіть свою копію.
+
+МЕРЕЖА
+    Мод звертається до публічного API Wargaming (api.worldoftanks.eu),
+    щоб отримати реальні пороги Знаків Класності для вашої техніки.
+    Жодні інші дані не надсилаються й не збираються.
 
 ВИДАЛЕННЯ
     Видаліть com.14th_ua.moe_calculator_{VERSION}.wotmod з
