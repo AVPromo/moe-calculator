@@ -31,15 +31,18 @@ which is otherwise skipped; it is scanned explicitly when present.
 `.claude/skills/**/*.md` + `CLAUDE.md` are prose nothing else greps, so they
 silently rot after a release or client upgrade -- both dirs are in _SKIP_DIRS
 above so the core pass never scans them for old-version drift either. On top
-of that, this file ALSO prints a fix-list (file:line + what's stale) for three
-narrower signals: an old bundled vendor .wotmod name (compares against
-installer/vendor/*.wotmod, id-only so a version-only bump isn't a false
-positive -- catches a modssettingsapi->modmenu-style swap), an old
-settingsVersion/SETTINGS_VERSION value (compares against the mod's own
-source), and old atlas WxH dimensions (compares against the mod's own atlas
-PNG, read via IHDR, only on lines mentioning "atlas"). Every one of these is
-fail-soft: a mod without a vendor dep / settings panel / atlas just emits no
-rows for that category, never an error.
+of that, this file ALSO prints a fix-list (file:line + what's stale) for five
+narrower signals: a backtick- or bold-fenced mention of THIS mod's own version
+(e.g. "mod version `4.0.1`" or "**4.0.1** is current"), an old bundled vendor
+.wotmod name (compares against installer/vendor/*.wotmod, id-only so a
+version-only bump isn't a false positive -- catches a
+modssettingsapi->modmenu-style swap), an old settingsVersion/SETTINGS_VERSION
+value (compares against the mod's own source), old atlas WxH dimensions
+(compares against the mod's own atlas PNG, read via IHDR, only on lines
+mentioning "atlas"), and the existing "currently <v>" / "**Client:** WoT **EU
+<v>**" current-state pointers below. Every one of these is fail-soft: a mod
+without a vendor dep / settings panel / atlas just emits no rows for that
+category, never an error.
 
 Run `python check_version.py --selfcheck` to also exercise the stale-doc scan
 logic against fixtures (no repo state needed).
@@ -143,6 +146,20 @@ _CURRENT_MOD_VER_RE = re.compile(
     r"currently\s+\**(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\**")
 _CLIENT_HEADER_RE = re.compile(
     r"\*\*Client:?\*\*\s*WoT\s*\**EU\s*(\d+\.\d+\.\d+\.\d+)\**")
+# THIS mod's own version mentioned as a markdown-fenced literal, e.g. "mod version
+# `4.0.1`" or "**4.0.1** is current" -- catches a plain backtick/bold mention that
+# _CURRENT_MOD_VER_RE's "currently <v>" keying misses. A changelog-shaped "<old>->
+# <new>" bump note (optionally fenced) names an old version on purpose and is exempt,
+# same idiom as the settingsVersion arrow-line exemption below.
+_OWN_VERSION_DOC_RE = re.compile(
+    r"`(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)`|\*\*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\*\*")
+_CHANGELOG_SHAPE_RE = re.compile(r"\d[`*]*\s*->\s*[`*]*\d")
+# A markdown heading that starts a release-history / changelog narrative (e.g.
+# "## Release state" in moe-build-release/SKILL.md) -- every past-version mention
+# under it (bold or backtick) names an old version on purpose. Sections are bounded
+# by the next heading of equal-or-higher level; tracked line-by-line in _scan_stale_docs.
+_RELEASE_HEADING_RE = re.compile(r"^(#{1,6})\s*.*\b(release|changelog|history)\b", re.IGNORECASE)
+_ANY_HEADING_RE = re.compile(r"^(#{1,6})\s")
 
 
 def _read_text(path):
@@ -231,17 +248,23 @@ def _current_atlas_dims():
 
 
 def _scan_line(line, vendor_ids, settings_version, atlas_dims,
-                mod_version=None, client_version=None):
+                mod_version=None, client_version=None, in_release_history=False):
     """Pure per-line check: returns a list of human-readable "what's stale"
     strings for one prose line. No disk I/O -- kept separate so _selfcheck can
     exercise it with a fixture string.
 
-    NOTE: old-version detection is NOT duplicated here -- main()'s existing
-    _iter_files()/_PATTERNS pass already covers old-version drift in shipped
-    files; this scan only reaches the docs _iter_files() skips (.claude, and
-    CLAUDE.md is scanned there too but the drift-specific bits below still add
+    NOTE: old-version detection in SHIPPED files is NOT duplicated here --
+    main()'s existing _iter_files()/_PATTERNS pass already covers old-version
+    drift there; this scan only reaches the docs _iter_files() skips (.claude,
+    and CLAUDE.md is scanned there too but the drift-specific bits below still add
     value on top)."""
     findings = []
+    if (mod_version is not None and not in_release_history
+            and not _CHANGELOG_SHAPE_RE.search(line)):
+        for m in _OWN_VERSION_DOC_RE.finditer(line):
+            got = m.group(1) or m.group(2)
+            if got != mod_version:
+                findings.append("mod version %s (current %s)" % (got, mod_version))
     if vendor_ids:
         for m in _VENDOR_WOTMOD_RE.finditer(line):
             if _OWN_WOTMOD_RE.search(line):
@@ -288,9 +311,19 @@ def _scan_stale_docs():
         if text is None:
             continue
         rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+        in_release_history = False
+        release_heading_level = None
         for lineno, line in enumerate(text.splitlines(), 1):
+            heading = _ANY_HEADING_RE.match(line)
+            if heading:
+                level = len(heading.group(1))
+                if _RELEASE_HEADING_RE.match(line):
+                    in_release_history = True
+                    release_heading_level = level
+                elif release_heading_level is not None and level <= release_heading_level:
+                    in_release_history = False
             for what in _scan_line(line, vendor_ids, settings_version, atlas_dims,
-                                    mod_version, client_version):
+                                    mod_version, client_version, in_release_history):
                 rows.append((rel, lineno, what))
     return rows
 
@@ -398,6 +431,22 @@ def _selfcheck():
     assert _scan_line(stale_vendor_line, set(), None, None) == []
     assert _scan_line(settings_line, set(), None, None) == []
     assert _scan_line(atlas_line, set(), None, None) == []
+
+    # Own-version backtick/bold markdown-fenced mentions -- caught even without
+    # the "currently <v>" phrasing _CURRENT_MOD_VER_RE requires. Changelog-shaped
+    # "<old>-><new>" bump notes are exempt.
+    own_backtick_line = "mod version `" + "4.0.1" + "`, unreleased."
+    own_bold_line = "**" + "4.0.1" + "** is what ships today."
+    own_changelog_line = "bumped `" + "4.0.1" + "`->`" + "5.0.0" + "` for the client upgrade."
+
+    found = _scan_line(own_backtick_line, set(), None, None, mod_version="5.0.0")
+    assert any("4.0.1" in f for f in found), found
+
+    found = _scan_line(own_bold_line, set(), None, None, mod_version="5.0.0")
+    assert any("4.0.1" in f for f in found), found
+
+    assert _scan_line(own_changelog_line, set(), None, None, mod_version="5.0.0") == []
+    assert _scan_line(own_backtick_line, set(), None, None) == []
 
     stale_mod_line = "the live canonical value is (" + "currently 4.0.1" + ", client target EU 2.3.1.3)."
     stale_client_line = "**Client:** WoT **EU " + "2.3.1.2" + "**."
