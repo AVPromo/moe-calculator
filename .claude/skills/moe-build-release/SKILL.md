@@ -22,8 +22,8 @@ this skill is the concrete file list and command set. **Two Pythons:** package w
 | `INSTALL.md` | `MoECalculator-Setup-X.Y.Z.exe`, `…_X.Y.Z.wotmod` |
 | `dist/INSTALL.txt` | prose `version X.Y.Z` (gitignored build output; checked when present) |
 
-_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 6.0.1,
-client target EU 2.4.0.1)._
+_`X.Y.Z` is illustrative — the live canonical value is in `src/meta.xml` (currently 7.0.0,
+client target EU 2.4.0.2)._
 
 - `README.md` uses `<version>` placeholders (no hard-coded number). `adapter/moe_wgapi.py`'s
   `_AGENT` string carries the project URL (no version number — nothing cosmetic to bump there).
@@ -61,7 +61,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
   `--clean-overlay` removes the hot-reload overlay. **Needs `WorldOfTanks.exe` closed** (`wgc` ok).
 - **`build_moe_zip.py`** — any Python. Builds `dist/MoECalculator_<version>.zip` = bilingual
   `readme.txt` (from `installer/readme.moe.txt`, `{VERSION}` substituted, CRLF) + the mod `.wotmod`
-  + all `installer/vendor/*.wotmod` under `mods/2.4.0.1/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.4.0.1"`.
+  + all `installer/vendor/*.wotmod` under `mods/2.4.0.2/`. Manual upload to wgmods.net. Holds `CLIENT_VERSION="2.4.0.2"`.
   Packages whatever `.wotmod` is in `dist/` — the same single build the GitHub installer uses.
 - **`check_version.py`** — the version gate above. **`clean_dist.py`** — prunes non-current release artifacts from `dist/` (`--dry-run`).
 
@@ -76,7 +76,7 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Hot-reload (the split that bites)
 
-- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.1`
+- **Garage widget hot-reloads:** `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.2`
   copies only the Gameface JS/CSS/assets into `res_mods`, then toggle Tech-Tree↔Garage to re-inject. No relaunch.
 - **The in-battle registered WINDOW does NOT hot-reload** — its resources pin at client launch;
   reopen and `Window.reload()` both serve the launch-time cached document. **Every CSS/JS tweak to
@@ -99,7 +99,12 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 ## Release state
 
 **v0.1.0 through v6.0.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v6.0.1 (2026-09-20) is the current Latest** — a patch release cut on top of v6.0.0. The garage
+**v7.0.0 is the current Latest** — a game-upgrade release retargeting the mod to WoT client
+**EU 2.4.0.2** (up from 2.4.0.1), major bump per convention, cut on top of v6.0.1 with **zero
+functional/code changes** (static-only analysis found 0 divergences; live CONFIRM still owed).
+`SETTINGS_VERSION` is unchanged at **29**.
+
+**v6.0.1 (2026-09-20) was the prior Latest** — a patch release cut on top of v6.0.0. The garage
 weekly MoE trend chart's 100% mark icon is now centered on its top gridline (it was clamped
 ~5.5rem too low) and two dead JS constants left over from that clamp were removed. The two
 horizontal centre-screen transient bars (Progress Bar "Moving Average" variant and Damage

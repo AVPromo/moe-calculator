@@ -17,8 +17,8 @@ features and the build each have their own project skill:
 
 ## Identity (facts)
 
-- **Mod id:** `com.14th_ua.moe_calculator` (`src/meta.xml` is the canonical version, currently **6.0.1**).
-- **Client:** WoT **EU 2.4.0.1**. Runtime **Python 2.7** (BigWorld); tests on **Python 3.13**.
+- **Mod id:** `com.14th_ua.moe_calculator` (`src/meta.xml` is the canonical version, currently **7.0.0**).
+- **Client:** WoT **EU 2.4.0.2**. Runtime **Python 2.7** (BigWorld); tests on **Python 3.13**.
 - **Hard dep:** OpenWG GameFace ≥ 1.1.6 (`import openwg_gameface` raises if absent). Soft dep:
   ModsSettingsAPI — bundled `aslain.modmenu_2.0.16` + `modslistapi_1.7.9` (absent → mod runs
   with default settings, no panel). See `moe-settings`, and `wotmod:msa-settings` for the mechanics.
@@ -73,8 +73,8 @@ Deploy yourself — never ask the user to run these (run the commands directly v
 
 | Task | Command |
 |---|---|
-| Package + deploy | `C:\Python27\python.exe build\deploy_wotmod.py "D:/Games/World_of_Tanks_EU" 2.4.0.1` (reads `deploy.local.json` if no args) |
-| Garage hot-reload | `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.1` (front-end only; **battle window can't hot-reload**) |
+| Package + deploy | `C:\Python27\python.exe build\deploy_wotmod.py "D:/Games/World_of_Tanks_EU" 2.4.0.2` (reads `deploy.local.json` if no args) |
+| Garage hot-reload | `<py3> tools\dev\sync_gameface.py "D:/Games/World_of_Tanks_EU" 2.4.0.2` (front-end only; **battle window can't hot-reload**) |
 | Tests | `<py3> -m pytest -q` |
 | Live REPL | harness-owned `repl_client.py` (see `wotmod:debug-repl`) — needs `com.wotmod_harness.debug_repl` on TCP **:2223** |
 
