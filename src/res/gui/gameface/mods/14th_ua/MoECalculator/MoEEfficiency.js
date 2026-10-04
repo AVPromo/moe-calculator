@@ -90,7 +90,7 @@ let large = false;
 // ITS FALLBACK RUNS LAST AND WINS. See SURFACE_REASSERT_MS.
 //
 // The composition's bounding box, document origin at (0,0) and 1rem == 1 logical px, IS
-// .mp-backdrop -- left -80rem / top -40rem / 460 wide / 96 tall (MoEEfficiency.css; the emitted
+// .mp-backdrop -- left -45rem / top -35rem / 390 wide / 66 tall (MoEEfficiency.css; the emitted
 // value, asserted by tools/dev/check_eff_css.js). Everything else fits inside it with
 // room to spare, measured against the emit rather than guessed:
 //   * TOP: the .mp-cap.up numeral's box bottom sits at -12rem (bottom:100% of the 3rem track, then

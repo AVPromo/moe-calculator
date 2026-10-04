@@ -10,7 +10,7 @@ description: Use when editing the 14th_ua MoE Calculator's two centre-screen TRA
 "Progress Bar" in the MSA/UI names the **master checkbox** `progress_bar_enabled` that gates
 **both** centre bars. The variant radio `progress_bar_variant` picks which one opens:
 **0 = Efficiency (default), 1 = Moving Average**. At most one is ever open —
-`battle_bridge._window_gates()` (battle_bridge.py:145-157) is the single place deciding all
+`battle_bridge._window_gates()` is the single place deciding all
 three battle windows. Neither centre bar is the corner in-battle overlay (`MoEBattle.*` /
 `battle_view.py`, gated by `BATTLE_KEY`) — that is `moe-battle`. Three coexisting widgets,
 not a rename.
@@ -33,15 +33,15 @@ not a rename.
 ## Data flow
 
 `battle_bridge._on_efficiency_updated` / `_on_summary_feedback` → `_schedule_refresh()` →
-`refresh()` (battle_bridge.py:634) → `battle_adapter.build_battle_snapshot()` →
+`refresh()` → `battle_adapter.build_battle_snapshot()` →
 `build_battle_model(snap)` → `push_progress(bar.viewModel, snap, model)` /
-`push_efficiency(eff.viewModel, snap, model)` (battle_bridge.py:695-850+). `push_progress`
+`push_efficiency(eff.viewModel, snap, model)` (all in `battle_bridge.py`). `push_progress`
 computes `marks_from_percentile`, `mark_axis`, `ewma_project_raw`, `battles_to_axis_hi`,
 `progress_axis_lo`, writing inside `rvm.transaction()`. `push_efficiency` has **no
 has-baseline gate**, unlike `push_progress` — its axis is the tank's requirement table alone,
 so it doesn't need a career baseline to draw.
 
-## VM slot table — `ProgressVM` (`bridge/view_models.py:200-373`), `properties=16, commands=0`
+## VM slot table — `ProgressVM` (`bridge/view_models.py`), `properties=16, commands=0`
 
 | # | field | type | notes |
 |---|---|---|---|
@@ -62,7 +62,7 @@ so it doesn't need a career baseline to draw.
 | 14 | `etaBattles` | Number | battles to `axisHi`, -1 = no data |
 | 15 | `vertical` | bool | draw vertical composition |
 
-`EfficiencyVM` (`bridge/view_models.py:375-532`), `properties=18, commands=0` — its OWN model,
+`EfficiencyVM` (`bridge/view_models.py`), `properties=18, commands=0` — its OWN model,
 deliberately NOT sharing ProgressVM's two-end mark axis (it plots ONE battle's combined damage
 against ALL FOUR requirement stops):
 
@@ -98,22 +98,29 @@ never showed").
 ## DOM + CSS
 
 `MoEProgressView.html`'s static markup is ONLY `<div id="moe-bar-box">` — a sizing shim, sized
-to `BOX_W_REM + 2*PAD_REM` × `BOX_H_REM + 2*PAD_REM` = **380×92rem** (`MoEProgress.js:147-149`),
-mirrored exactly in `MoEProgress.css`. `#moe-bar-root` is JS-created in `ensureRoot()`
-(`MoEProgress.js:371`) and appended to `document.body` — the box must exist at the FIRST layout
+to `BOX_W_REM + 2*PAD_REM` × `BOX_H_REM + 2*PAD_REM - CLIP_B_REM` (VIEW_H), mirrored exactly in
+`MoEProgress.css`. Progress box is -80/-22/360/55, PAD=10, CLIP_B_REM=8 → `#moe-bar-box`
+**380×67rem** (Efficiency box: -45/-35/390/66). `CLIP_B_REM` is a bottom-only trim and never
+enters `shiftY`. `#moe-bar-root` is JS-created in `ensureRoot()` (`MoEProgress.js`) and appended
+to `document.body` — the box must exist at the FIRST layout
 pass or the engine's size calculation has nothing to measure and clobbers the surface (see
 Placement below).
 
-Horizontal `MARKUP` (`MoEProgress.js:307-329`): backdrop, track (fill + 4 ticks
+Horizontal `MARKUP` (`MoEProgress.js`): per-caption shadow strips, then the track, then the
+captions. Progress: `.mp-bd mp-bd-1..3` (-1 behind `capP`, -2 behind `capC` JS-tracked left,
+-3 behind `capR` fixed). Efficiency: `.mp-bd-1..5` (-1..-4 at the quarter marks, fixed; -5 behind
+`capC`). Then the track (fill + 4 ticks
 `mp-end.mp-left`/`mp-right`, `mp-pre`, `mp-proj`), 3 captions `mp-capP` (projected avg) /
 `mp-capC` (current combined damage + delta) / `mp-capR` (requirement + eta/battles glyph).
+There is NO `.mp-backdrop` DOM node any more; `.mp-backdrop` survives only as an invisible CSS
+rule that the mirror tests and `check_eff_css.js` read as the surface bounding-box — keep it.
 Order-dependent: `capV()` is a first-match `querySelector` for `.mp-v`, so the mark-pair-first
 ordering inside `capR` is load-bearing (`check_progress_js.js`'s `battles-pair-comes-first`
 mutation exists exactly to catch a swap here).
 
-Vertical `V_MARKUP` (`MoEProgress.js:355-369`): numeral-before-icon, `capR`'s two groups
+Vertical `V_MARKUP` (`MoEProgress.js`): numeral-before-icon, `capR`'s two groups
 reordered. Class prefix `.mpv-*`, gated by `body.mpv`. Both stylesheets are `<link>`ed
-unconditionally (`MoEProgressView.html:22-23`) — orientation is a JS **mount-time branch** on
+unconditionally (`MoEProgressView.html`) — orientation is a JS **mount-time branch** on
 the `vertical` VM field, not a second res_map layout (a new itemID would cost every user a
 one-time client restart). The two sheets are namespace-DISJOINT (`.mp-*` vs `.mpv-*`); only
 `body`, `#moe-bar-box`, `#moe-bar-root` are shared subjects, and `body.mpv` at (1,1,1)
@@ -122,10 +129,10 @@ SECOND so source order also backs it up.
 
 Size: `barSize` → `MoEBarTransient.applySize()` toggles `document.body.classList.toggle
 ("mp-lg", large)` and rewrites the root font-size, `SIZE_F=1.25`. The `.mp-lg` block
-(`MoEProgress.css:761-806`) re-declares ONLY cross-axis (x) lengths at `SIZE_XF=4/3`; y-lengths
+(in `MoEProgress.css`) re-declares ONLY cross-axis (x) lengths at `SIZE_XF=4/3`; y-lengths
 ride the root font alone. Double-applying either is the classic bug. `.mp-s1` is a SEPARATE
 orthogonal body class for interface-scale legibility (`px > 0 && px < 1.5`); the two combine as
-the **compound** selector `.mp-s1.mp-lg` (never descendant) — `MoEProgress.css:866,868`.
+the **compound** selector `.mp-s1.mp-lg` (never descendant).
 
 ## Generated-CSS pipeline (exact commands)
 
@@ -135,10 +142,11 @@ pwsh tools\dev\gen_bar_tuner_vertical.ps1 -EmitCss [-CssOut TASKS/refs/MoEProgre
 ```
 
 The emit is written to gitignored `TASKS/refs/`. Shipped `MoEProgress.css` = emit + **2**
-hand-additions (marked `ADDITION n OF 2` at `MoEProgress.css:11,26` — the `@font-face` and the
-`#moe-bar-box` rule). Shipped `MoEProgressVertical.css` = emit + **6** hand-edits (marked
-`HAND-EDIT n/6`, header at `MoEProgressVertical.css:22-24`). Efficiency's vertical sheet
-(`MoEEfficiencyVertical.css`) = emit + **5** hand-edits. Never paste a fresh emit over a shipped
+hand-additions (marked `ADDITION n OF 2` near the top of `MoEProgress.css` — the `@font-face` and the
+`#moe-bar-box` rule). The horizontal emit now carries the per-caption `.mp-bd` strips plus
+`.mp-backdrop` as an invisible marker, plus a hand-authored LARGE block (`.mp-lg .mp-bd*`).
+Shipped `MoEProgressVertical.css` carries **8** hand-edits (its header says `HAND-EDIT n/8`).
+Efficiency's vertical sheet (`MoEEfficiencyVertical.css`) = emit + **5** hand-edits. Never paste a fresh emit over a shipped
 sheet — see the memory `emitcss-is-not-the-whole-shipped-stylesheet`.
 
 The Efficiency tuners have **no separate PowerShell generator** — `eff_bar_tuner.html` /
@@ -155,19 +163,18 @@ Gates, all `node tools\dev\<script>.js`, exit 1 on failure, most support `--prob
 - `check_bar_vertical.js` — pins `cssOut()` byte-for-byte against the checked-in
   `TASKS/refs/MoEProgressVertical.css` (re-run `-EmitCss` after any generator edit or this
   fails on a stale artifact — it is gitignored and absent in a fresh clone).
-- `check_vertical_css_handedits.js` — shipped vertical CSS == fresh emit + exactly the
-  documented hand-edits, for both bars.
+- `check_vertical_css_handedits.js` — intended: shipped vertical CSS == fresh emit + exactly the
+  documented hand-edits, for both bars. **CURRENTLY RED**: out of sync with the vertical CSS's 8
+  hand-edits (header says `HAND-EDIT n/8`; the checker encodes 6). Fix in progress.
 - `lib/gf_check_shim.js` is the shared harness (assertion helpers `eq`/`ok`, a minimal DOM, a
   virtual clock, the `jsConst`/`jsFactor` scrapers) — not a checker itself.
 
-Note the doc drift: `tools/dev/README.md:652` says "the shipped vertical CSS is emit + exactly
-5 hand-edits" for BOTH bars; the CSS header and `check_vertical_css_handedits.js` correctly
-encode **6** for Progress / **5** for Efficiency. Trust the checker and the CSS header, not
-that one README line.
+Doc drift: `tools/dev/README.md` says the shipped vertical CSS is emit + exactly 5 hand-edits for
+BOTH bars. Trust the CSS header for the count (Progress 8, Efficiency 5), not that README line.
 
 ## Placement / window
 
-`bridge/progress_view.py:25-28` builds `BarHost("MoEProgressView", ProgressVM,
+`bridge/progress_view.py` builds `BarHost("MoEProgressView", ProgressVM,
 PROGRESS_ANCHOR_Y_FRAC, PROGRESS_ANCHOR_X_OFFSET, PROGRESS_ANCHOR_Y_SHIFT,
 PROGRESS_ANCHOR_Y_SHIFT_LARGE, PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
 PROGRESS_MM_GAP_BOTTOM, "[moe-bar]")`; `efficiency_view.py` is the byte-identical shape off its
@@ -176,7 +183,7 @@ flags/layer reasoning as the corner overlay (`moe-battle`'s hosting-model sectio
 `WINDOW_FULLSCREEN`, because a full-screen surface steals the whole-screen mouse hit-test
 whenever the cursor is raised.
 
-`_resolve()` (`bar_window.py:277-360`) has two live top-level branches now, `alignment` reduced
+`_resolve()` (`bar_window.py`) has two live top-level branches now, `alignment` reduced
 (v23) to `PROGRESS_ALIGN_FIXED` (0, default) / `PROGRESS_ALIGN_FREE` (1) — see `moe-settings`'s
 "The Fixed-alignment redesign (v23)" section for the full collapse story and why it shipped.
 **Fixed** resolves internally, purely by Orientation: Horizontal → the Damage Log anchor
@@ -204,10 +211,10 @@ gesture-end persist). **The conversion is placement-only, never written back on 
 the engine's compiled clamp (memory `[[engine-clamps-every-wulf-window-to-screen-and-the-mod-depends-on-it]]`)
 would bake a crossed-edge clamp in forever if it were. A pre-v22 store's Free pin is still a
 literal top-left until the bar's next mount converts it once (`progress_bar_pos_frame() ==
-POS_FRAME_LEGACY`, `mod_settings.py:698-710`) — no arithmetic migration at bump time, because no
+POS_FRAME_LEGACY`, `mod_settings.py`) — no arithmetic migration at bump time, because no
 surface exists to convert against outside a live battle (same wall as materialise-on-mount below).
 
-**Free DOES have an auto sentinel (`bar_window.py:346-353`, corrected 2026-08-08).** Under
+**Free DOES have an auto sentinel (in `BarHost._resolve`, corrected 2026-08-08).** Under
 `PROGRESS_ALIGN_FREE` the exact pair `(0, 0)` is rewritten to this ORIENTATION's default alignment
 before the branch runs (Horizontal → Damage Log, Vertical → Minimap) — it does NOT mean the screen
 corner. That is what lets an explicit Orientation flip zero the stored pair
@@ -231,8 +238,8 @@ briefly have both open), and the pair/frame re-read fresh rather than reused fro
 locals (which were overwritten in place by the AUTO rewrite).
 
 Ctrl+drag: `adapter/battle_input.py` samples Ctrl+LMB → `battle_bridge._on_drag(phase, cursor)`
-(battle_bridge.py:354) → `progress_view.drag(...)` / `efficiency_view.drag(...)` →
-`BarHost.drag()` (`bar_window.py:467-...`). **v23: `drag()` refuses the WHOLE gesture outright**
+→ `progress_view.drag(...)` / `efficiency_view.drag(...)` →
+`BarHost.drag()` (`bar_window.py`). **v23: `drag()` refuses the WHOLE gesture outright**
 — checked at the very top, before any cursor read or window move, on EVERY phase — while
 `progress_bar_alignment() != PROGRESS_ALIGN_FREE`. This is not a spatial gate (see
 `[[battle-bar-installdrag-has-no-spatial-gate-by-design]]` for the JS-side one that predates and
@@ -252,22 +259,21 @@ drag is entirely Python-owned (see `moe-battle`'s Ctrl+drag section for the full
 shared verbatim by both bars).
 
 Constants (`domain/constants.py`): `PROGRESS_ANCHOR_Y_FRAC=0.865`,
-`PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-44` / `_LARGE=-65`,
+`PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-32` / `_LARGE=-48`,
 `PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X=105` / `_LARGE=147` (pure derivation 107/149,
 with a measured -2 hand-placement correction — see the constants' long comment on two
 independent Ctrl+drags landing on the same corrected value across different surface
-geometries; both the pure derivation and the correction's own validity predate the vertical
-bars' V_PAD_X_REM growth to 70/52 below — a fresh in-game drag is owed); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`,
-`EFFICIENCY_ANCHOR_Y_SHIFT=-50` / `_LARGE=-77`,
+geometries; both the pure derivation and the correction's own validity predate the v6.0.1 box shrink and V_PAD_X growth); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`,
+`EFFICIENCY_ANCHOR_Y_SHIFT=-45` / `_LARGE=-64`,
 `EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X=95` / `_LARGE=137` (pure derivation, no
-correction — only one, unconfirmed hand-drag exists for this bar, and it too predates the
-growth below). Shared:
+correction). TRACK_X values predate the v6.0.1 box shrink and V_PAD_X growth; an in-game
+re-drag is owed. Shared:
 `MM_GAP=8`, `MM_TICK_OVERHANG=3`/`_LARGE=5`, `MM_TRACK_Y=290`/`_LARGE=363`,
 `VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-170` (identical for both bars — both vertical
 compositions share the same backdrop geometry).
 
-**The `_LARGE` Y-shifts above were RE-DERIVED (rule 5, `-55→-65`, `-63→-77`, `-113→-170`)** to pin
-the composition's BOTTOM ink rather than the naive `shift * SIZE_F` algebraic identity, which pins
+**Rule: `_LARGE` shifts pin the composition's bottom ink, not `shift*SIZE_F`.** (Current horizontal
+values -48/-64; vertical -170 still correct.) The naive algebraic identity pins
 neither ink edge — see memory `[[anchor-y-shift-large-pins-neither-ink-edge]]`. These stay live:
 rule 5's size-invariance still holds through `anchor_minimap` (Minimap/Fixed+vertical) and
 `free_top_left` (Free, either orientation).
@@ -289,22 +295,21 @@ pin them against real geometry.
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
 `SETTINGS_VERSION=29` (was 28; the 28→29 bump is a stored-value self-heal, no template change — see `moe-settings`). Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
-`progress_bar_enabled()` (`mod_settings.py:516`). Variant `PROGRESS_VARIANT_KEY=
-"progress_bar_variant"` (:548, 0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
-"progress_bar_size"` (:559, 0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=
-"progress_bar_orientation"` (:640, 0=Horizontal/1=Vertical). Alignment `PROGRESS_ALIGNMENT_KEY=
-"progress_bar_alignment"` (:440, 0=Fixed/1=Free as of v23, collapsed from 0=Damage Log/1=Minimap/
+`progress_bar_enabled()`. Variant `PROGRESS_VARIANT_KEY=
+"progress_bar_variant"` (0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
+"progress_bar_size"` (0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=
+"progress_bar_orientation"` (0=Horizontal/1=Vertical). Alignment `PROGRESS_ALIGNMENT_KEY=
+"progress_bar_alignment"` (0=Fixed/1=Free as of v23, collapsed from 0=Damage Log/1=Minimap/
 2=Free — see `moe-settings`). Visibility children
 `PROGRESS_SHOW_EVENTS_KEY`, `PROGRESS_SHOW_ALT_KEY`, `PROGRESS_SHOW_ALWAYS_KEY` (all default
-True/True/False), folded by `progress_show_events()` (:524) and `progress_alt_held(alt_held)`
-(:535 — "Always" IS a permanently-held Alt, no fourth code path). Transitions
+True/True/False), folded by `progress_show_events()` and `progress_alt_held(alt_held)`
+("Always" IS a permanently-held Alt, no fourth code path). Transitions
 `PROGRESS_TRANSITIONS_KEY` (master) + `PROGRESS_TRANS_EVENTS_KEY` + `PROGRESS_TRANS_MANUAL_KEY`
-(all True) folded by `progress_transitions_events()`/`progress_transitions_manual()`
-(:570-587). Hold slider `PROGRESS_HOLD_SECONDS_KEY` 1–30s default 5 →
+(all True) folded by `progress_transitions_events()`/`progress_transitions_manual()`. Hold slider `PROGRESS_HOLD_SECONDS_KEY` 1–30s default 5 →
 `progress_hold_seconds()` — deliberately NOT master-folded (a duration, not a switch). Position
 `BAR_POS_X_KEY="progress_bar_pos_x"` / `BAR_POS_Y_KEY="progress_bar_pos_y"` →
 `bar_pos_x()`/`bar_pos_y()`/`set_bar_position()`. Every one of these is shared by both bars.
-`battle_bridge._window_gates()` (:145-157) folds `progress_bar_enabled()` × `progress_bar_variant()`
+`battle_bridge._window_gates()` folds `progress_bar_enabled()` × `progress_bar_variant()`
 into the two centre-bar entries — keep any new gate in lockstep there.
 
 ## Tests
@@ -322,13 +327,13 @@ catches a slot append without the matching bump). Plus the Node checkers above.
 
 ### Orientation flip is not live-stylable
 The JS branches on `vertical` only at mount, so a live radio change must close+reopen the
-window via `battle_bridge.apply_settings()` (`battle_bridge.py:852-880`, which diffs
+window via `battle_bridge.apply_settings()` (which diffs
 `_bar_orientation` against the freshly-read setting), not just re-push the VM.
 
 ### `_extent()` is a real window MOVE
-Far-sentinel `window.move(1<<20, 1<<20, ...)` (`bar_window.py:309-323`) — memoize it, invalidate
+Far-sentinel `window.move(1<<20, 1<<20, ...)` (`bar_window.py`) — memoize it, invalidate
 only in `_place()`. `BarHost.drag()` must read `window.position` BEFORE calling `_extent()`
-(`bar_window.py:419-421`) or a cold cache teleports the window to the sentinel first.
+(`bar_window.py`) or a cold cache teleports the window to the sentinel first.
 
 ### `#moe-bar-box` does not defeat the size-calculation timeout
 The engine's "Size calculation timeout" fallback (256×256) runs LAST and wins even with the box
@@ -369,8 +374,8 @@ current-damage top-row icon; these are tuner-only constants baked into the emitt
 exposed at runtime. `band` selects one of five CSS classes `.mp-b-{w,g,t,v,au}` (white/green/
 teal/violet/gold — 0..4 requirements passed). `barX` is computed by
 `domain.battle_builder.efficiency_bar_x` over the four equal-quarter stops
-`EFFICIENCY_BAR_STOPS=(0,25,50,75,100)` (`constants.py:39`) — do not recompute the axis mapping
+`EFFICIENCY_BAR_STOPS=(0,25,50,75,100)` (`constants.py`) — do not recompute the axis mapping
 in JS. `battleEpoch` (slot 10) is the only field with no Progress equivalent: a monotonic
 per-battle counter Python bumps before the first `refresh()` each battle
-(`battle_bridge.py:167-177`), letting `MoEEfficiency.js` reset its own damage-delta latch on a
+(`battle_bridge.py`), letting `MoEEfficiency.js` reset its own damage-delta latch on a
 battle boundary without a dedicated VM reset command.

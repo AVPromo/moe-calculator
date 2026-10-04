@@ -54,15 +54,15 @@ _CALC_VIEWPORT = {"width": 340, "height": 152}
 #   #loupe            -- the MA-horizontal tuner's own "dither magnifier" debug panel.
 # The shipped in-battle bars KEEP their backdrop (dark radial + checker-dither strips) -- this
 # is a PREVIEW-ONLY omission, so the settings-panel image shows just the track/ticks/numbers/
-# icons on full transparency. `.mp-backdrop` (horizontals) paints its own dither/glow directly
-# via ::before/::after; `.mev-bd`/`.mpv-bd` (efficiency/progress verticals) are the per-row strip
-# elements that carry it (`.mev-backdrop`/`.mpv-backdrop` themselves paint nothing -- see each
-# tuner's own header comment). Hiding the host element also suppresses its ::before/::after.
+# icons on full transparency. Since v6.0.1 the per-caption strips carry the dither on EVERY bar:
+# `.mp-bd` (horizontals, `.mp-bd-1..5`) and `.mev-bd`/`.mpv-bd` (verticals); `.mp-backdrop` /
+# `.mev-backdrop`/`.mpv-backdrop` are invisible surface markers (hidden anyway, harmless).
+# Hiding the host element also suppresses its ::before/::after.
 _STRIP_SCENE_CSS = (
     "html,body{background:transparent!important}"
     ".stage{background:none!important;box-shadow:none!important;outline:none!important}"
     ".panel,#ribbons,#mmMock,#loupe{display:none!important}"
-    ".mp-backdrop,.mev-bd,.mpv-bd{display:none!important}"
+    ".mp-backdrop,.mp-bd,.mev-bd,.mpv-bd{display:none!important}"
 )
 
 # Alpha threshold, PER JOB -- used as an OUTPUT FLOOR, not just a bbox cutoff: every pixel with

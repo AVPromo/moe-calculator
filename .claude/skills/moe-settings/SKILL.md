@@ -428,7 +428,7 @@ anchor under Large; that combination is now unreachable through the UI or any le
 (Alignment only ever stores Fixed or Free, and Fixed always picks Minimap when vertical), so
 `clamp_variant`'s ceiling of `1` for the alignment key structurally forecloses it — not just
 "currently unused". `VERTICAL_ANCHOR_Y_SHIFT` / `_LARGE` (the −170 value) and the re-derived
-horizontal `PROGRESS_ANCHOR_Y_SHIFT_LARGE`/`EFFICIENCY_ANCHOR_Y_SHIFT_LARGE` (−65/−77) are KEPT —
+horizontal `PROGRESS_ANCHOR_Y_SHIFT_LARGE`/`EFFICIENCY_ANCHOR_Y_SHIFT_LARGE` (values owned by `moe-progress`; read them in `domain/constants.py`) are KEPT —
 rule 5's size-invariance still holds through `anchor_minimap` and `free_top_left`, and the JS files
 cite the vertical shift constants as a wire-contract record even though placement no longer reads
 them for a centred anchor.

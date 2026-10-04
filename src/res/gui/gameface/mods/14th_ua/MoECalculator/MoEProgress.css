@@ -73,7 +73,7 @@ body { margin: 0; }
    CENTRED (radial at 50% 50%) since horizontal captions sit centred on their tick. */
 /* SYMMETRIC surface marker, RECONCILED to the JS BOX_* source of truth (the old -72rem drift is
    gone -- .mp-backdrop is now just the invisible surface bounding box, so it MUST mirror
-   MoEProgress.js's BOX_LEFT/TOP/W/H exactly: -80 / -30 / 360 / 66). The surface stays symmetric
+   MoEProgress.js's BOX_LEFT/TOP/W/H exactly: -80 / -22 / 360 / 55). The surface stays symmetric
    about the track (80rem clearance each side) because anchor_centred_reduced's `max_x // 2` has no
    X term -- see MoEProgress.js's header. top/height re-cut with the box shrink; width is unchanged
    (capR's right overhang binds the clearance floor, so the left side cannot shrink below it). */

@@ -81,10 +81,8 @@ already verifies) — do not drive it. `_STRIP_SCENE_CSS` hides the tuner's own 
   low-alpha (~0-40) veil across nearly the whole stage — independent of GPU vs software render
   (`--disable-gpu`, `--disable-gpu-compositing`, `--use-gl=swiftshader` all tried, none changed
   it). Fix is an OUTPUT alpha floor (T=45 for bars, T=10 for the calculator — its page has no
-  haze), not a launch arg. `bar_ma_horizontal` and `bar_eff_horizontal` need a PROTECTED lower
-  floor (T=3, `_BACKDROP_LOW_THRESHOLD`) over their own `.mp-backdrop` rect only — the flat
-  T=45 floor was clipping their real, deliberately low-opacity dither/radial backdrop paint
-  down to ~2/3 of its true CSS-drawn width.
+  haze), not a launch arg. The flat T=45 floor applies to all bars (the protected-floor
+  machinery was removed); the backdrop is hidden via `_STRIP_SCENE_CSS`.
 - **Wait ≥2s before capture.** The bars hold-fade in on load; a short wait under-renders every
   alpha value (calculator has no such fade — 200ms suffices there).
 - **The bare Edge CLI is broken for this.** `msedge.exe --screenshot
@@ -108,6 +106,6 @@ already verifies) — do not drive it. `_STRIP_SCENE_CSS` hides the tuner's own 
 
 - Composite each PNG onto the MSA dark panel colour (`#2b2d30`) and eyeball; an HTML gallery
   artifact (4x source next to its display-size render) is a useful throwaway for this.
-- Live-only, needs a deployed client: MSA actually downscales via `width`/`height` (still
+- Live-only, needs a deployed client: MSA actually downscales via `width`/`height` (LIVE-ONLY,
   unconfirmed, see wiring note above), the previews render at all, and geometry reads aligned
   in-client — none of this is checkable from the dev box alone.

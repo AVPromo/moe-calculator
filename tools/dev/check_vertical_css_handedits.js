@@ -126,6 +126,22 @@ const PROGRESS_EDITS = [
     // past the track's tick overhang plus a 2px margin -- see MoEProgress.js's own note).
     ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 119rem; height: 320rem; }\n.mpv-backdrop {',
      '2/6 sizing shim'],
+    // STRIP-GEOMETRY EDIT A (un-numbered in the CSS header; re-anchored 2026-10, ratifies the shipped
+    // file as-is): the bd-4/bd-2 width/left overrides move from AFTER the tops (emit order, `left;
+    // width;`) to RIGHT AFTER the shared `.mpv-bd` box, property order `width; left;`. Values equal.
+    ['  z-index: 0;\n}\n.mpv-bd::before {',
+     '  z-index: 0;\n}\n.mpv-bd-4 { width: 178.5rem; left: -163.5rem; }\n.mpv-bd-2 { width: 148.75rem; left: -133.75rem; }\n' +
+     '.mpv-bd::before {',
+     'strip A: bd-4/bd-2 override moved before ::before'],
+    // STRIP-GEOMETRY EDIT B (same status): the maintainer-converged tops differ from the tuner's
+    // defaults for strips 1 and 3 (-50 -> -50.5, 33 -> 85; 2 and 4 match the emit), and the old
+    // bd-4/bd-2 override lines (moved by A) are gone from their emit position.
+    ['.mpv-bd-1 { top: -50rem; }\n.mpv-bd-2 { top: -30rem; }\n.mpv-bd-3 { top: 33rem; }\n' +
+     '.mpv-bd-4 { top: 204rem; }\n.mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n' +
+     '.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n',
+     '.mpv-bd-1 { top: -50.5rem; }\n.mpv-bd-2 { top: -30rem; }\n.mpv-bd-3 { top: 85rem; }\n' +
+     '.mpv-bd-4 { top: 204rem; }\n',
+     'strip B: bd-1/bd-3 converged tops, override lines removed from emit position'],
     // HAND-EDIT 3/5: the dash grid's gap stripe goes OPAQUE -- SCOPED to the gradient's own stops,
     // never the box-shadow ring in the same rule (which stays 0.5, a separate knob).
     ['rgba(13,14,16,0.5) 2rem,rgba(13,14,16,0.5) 3rem)',
@@ -143,6 +159,8 @@ const PROGRESS_EDITS = [
      // .mp-lg like every sibling line, VALUE unchanged (the surface's Large geometry, not the
      // backdrop's, drives it -- see MoEProgressVertical.css).
      '.mpv-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }\n' +
+     '.mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n' +
+     '.mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n' +
      '.mpv-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -162,6 +180,9 @@ const PROGRESS_EDITS = [
      // own fact-3 note); 90 lands it exactly on the minimap's edge instead.
      '.mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }\n' +
      '.mp-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }\n' +
+     // property order flipped to `width; left;` (same reorder as strip edit A; values equal).
+     '.mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }\n' +
+     '.mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }\n' +
      '.mp-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-proj { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -417,7 +438,7 @@ function run(mutation) {
     const editedP = applyEdits(freshP, PROGRESS_EDITS);
     const editedE = applyEdits(freshE, EFFICIENCY_EDITS);
 
-    eq("MoEProgressVertical.css == fresh emit + exactly its 6 hand-edits",
+    eq("MoEProgressVertical.css == fresh emit + exactly its 8 hand-edits + 2 un-numbered strip edits",
         normalize(editedP), normalize(progressShipped));
     eq("MoEEfficiencyVertical.css == fresh emit + exactly its 5 hand-edits",
         normalize(editedE), normalize(efficiencyShipped));

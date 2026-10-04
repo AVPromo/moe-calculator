@@ -185,8 +185,8 @@ PROGRESS_ANCHOR_Y_SHIFT_LARGE = -48
 #   PAD_REM - BOX_TOP_REM == 10 - (-35) == 45, so the window moves UP by exactly that much and the
 #   bar stays put on screen. BOX_TOP_REM is .mp-backdrop's top in MoEEfficiency.css (-35rem).
 # WAS EFFICIENCY_ANCHOR_Y_OFFSET == 50 == (-50) + 100, term 2 being
-# +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == round(0.865 * 116) == +100 (VIEW_H_REM ==
-# BOX_H_REM + 2*PAD_REM == 96 + 20 == 116, .mp-backdrop's height plus the JS's four-sided slack) --
+# +round(EFFICIENCY_ANCHOR_Y_FRAC * VIEW_H_REM) == round(0.865 * 116) == +100 (that era's VIEW_H_REM was 116; today it is
+# BOX_H_REM + 2*PAD_REM - CLIP_B_REM == 66 + 20 - 8 == 78) --
 # the extent-to-viewport conversion retired by anchor_centred_reduced. The old composite happening
 # to equal SHIFT_Y_REM was a coincidence of round(0.865*116) == 2*50; THIS value is the shift
 # itself, so the coincidence is gone with the term.

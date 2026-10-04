@@ -63,8 +63,9 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // before it is the one T.settled() hides the bar through.
 //
 // The composition's MEASURED bounding box, document origin at (0,0) and 1rem == 1 logical px, is
-// 360 x 72 -- .mp-backdrop IS the extremes (left -80rem / top -34rem / 360 wide / 72 tall,
-// MoEProgress.css) and every caption, tick and glow sits inside it. So the surface is that box
+// 360 x 55 -- the per-caption .mp-bd strips are the visible extremes; .mp-backdrop is the invisible
+// surface marker (left -80rem / top -22rem / 360 wide / 55 tall, MoEProgress.css; CLIP_B_REM == 8
+// trims the surface bottom) and every caption, tick and glow sits inside it. So the surface is that box
 // plus PAD_REM of slack on all four sides (the text-/box-shadow bleed reaches the box edge
 // exactly), and the whole composition is rigidly translated by that much so NOTHING sits at a
 // negative coordinate -- an origin overflow is clipped no matter how big the surface is.
