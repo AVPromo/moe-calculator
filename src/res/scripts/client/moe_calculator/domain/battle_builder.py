@@ -125,6 +125,14 @@ def _smooth_percent(damage, fit):
     return _clamp(percent, 0.0, 100.0)
 
 
+def damage_percent(damage, thresholds):
+    """The percentile THIS battle's combined `damage` alone represents on WG's curve (the
+    Damage Efficiency bar's % caption), or -1.0 when no usable fit exists. A pure function of
+    damage + thresholds (no baseline), over ALL anchors -- NOT the bar's equal-quarter barX."""
+    fit = _fit_from_thresholds(thresholds)
+    return _smooth_percent(damage, fit) if fit else -1.0
+
+
 def ewma_project_raw(prev_avg, cd, k=EWMA_K):
     """`ewma_project` WITHOUT the final rounding -- the same fold as a float.
 

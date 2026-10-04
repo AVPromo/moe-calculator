@@ -149,14 +149,16 @@ def _push(damage, **snap_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # The bridge is this model's only producer: a prop added on one side without the other would
-    # silently leave the JS reading a default forever. EIGHTEEN: the ten that survived
+    # silently leave the JS reading a default forever. NINETEEN: the ten that survived
     # `damageDelta`'s removal (which RENUMBERED every property after it), then `battleEpoch`,
     # `barSize`, `transEvents` / `transManual`, `showEvents`, `holdMs`, `ctrlHeld` and (Phase 1)
     # `vertical` -- draw the vertical composition instead of horizontal -- every one APPENDED after
-    # altHeld for exactly that reason, since an append renumbers nothing.
+    # altHeld for exactly that reason, since an append renumbers nothing -- the last one being
+    # `damagePercent`, the "(73.84%)" caption.
     assert set(_push(2000)) == _VM_PROPS
     assert "vertical" in _VM_PROPS
-    assert len(_VM_PROPS) == 18
+    assert "damagePercent" in _VM_PROPS
+    assert len(_VM_PROPS) == 19
 
 
 def test_the_push_keeps_no_state_between_calls(epoch):
@@ -754,3 +756,42 @@ def _battle_bridge_code():
         src = fh.read()
     return " ".join(tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline)
                     if tok.type != tokenize.COMMENT)
+
+
+# --- the "(73.84%)" caption: damagePercent, with the Show MoE % setting folded into the -1 sentinel ---
+
+def test_damage_percent_is_this_battles_damage_percentile(monkeypatch):
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, True)
+    assert _push(2450)["damagePercent"] == 65.0       # damage == r65 -> the 65th percentile exactly
+    assert _push(0)["damagePercent"] == 0.0           # 0.0 is a REAL percentile, not "no data"
+
+
+def test_damage_percent_is_independent_of_the_models_cur_percent(monkeypatch):
+    # Not the MA bar's career % (cur_percent=74.3 in _model): it comes from damage + thresholds only.
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, True)
+    assert _push(2450)["damagePercent"] != 74.3
+
+
+def test_damage_percent_needs_no_baseline(monkeypatch):
+    # DE has no has_baseline gate (replay / relogin): its own percentile must still be pushed.
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, True)
+    vm = _FakeVM()
+    battle_bridge.push_efficiency(vm, _snap(baseline_known=False),
+                                  _model(combined_damage=2450, has_baseline=False, has_data=False))
+    assert vm.props["damagePercent"] == 65.0
+
+
+def test_damage_percent_is_minus_one_without_a_usable_threshold_table(monkeypatch):
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, True)
+    assert _push(2000, thresholds={})["damagePercent"] == -1.0
+
+
+def test_damage_percent_is_minus_one_when_the_setting_is_off_even_with_data(monkeypatch):
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, False)
+    props = _push(2450)
+    assert props["hasData"] is True and props["damagePercent"] == -1.0
+
+
+def test_the_show_percent_flag_is_never_pushed_under_its_own_name():
+    props = _push(2000)
+    assert "showPercent" not in props and mod_settings.PROGRESS_SHOW_PERCENT_KEY not in props

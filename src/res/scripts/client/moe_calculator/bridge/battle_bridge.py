@@ -21,7 +21,8 @@ from moe_calculator.adapter import moe_wgapi
 from moe_calculator.adapter import sample_log
 from moe_calculator.adapter import variant_overrides
 from moe_calculator.domain.battle_builder import (
-    build_battle_model, battle_bar_visible, battles_to_axis_hi, efficiency_band, efficiency_bar_x,
+    build_battle_model, battle_bar_visible, battles_to_axis_hi, damage_percent, efficiency_band,
+    efficiency_bar_x,
     efficiency_stops, ewma_project_raw, mark_axis, marks_from_percentile, progress_axis_lo)
 from moe_calculator.domain.constants import EFFICIENCY_WIDE_THRESHOLD, EWMA_K
 from moe_calculator.domain.positioning import efficiency_panel_wide
@@ -996,9 +997,10 @@ def push_progress(rvm, snap, model):
         # the Always mode -- the JS pins the bar at its hold plateau), `showEvents` carries "Events".
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
-        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f eta=%d alt=%s ctrl=%s size=%d ev=%s vert=%s" % (
+        show_percent = mod_settings.progress_show_percent()
+        LOG_DEBUG("[moe-battle] push_progress visible=%s data=%s marks=%d axis=%.1f..%.1f pre=%d proj=%.3f eta=%d alt=%s ctrl=%s size=%d ev=%s vert=%s pct=%.2f show_pct=%s" % (
             visible, has_data, marks, axis_lo, axis_hi, pre_avg, proj_avg, eta, alt_held,
-            _ctrl_held, bar_size, show_events, vertical))
+            _ctrl_held, bar_size, show_events, vertical, model.cur_percent, show_percent))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setMarks(marks)
@@ -1031,6 +1033,10 @@ def push_progress(rvm, snap, model):
             # prefix and the surface size, none of which is a style. A live flip therefore needs the
             # window closed and reopened -- see apply_settings.
             tx.setVertical(vertical)
+            # The parenthesised "(73.84%)" caption: the live MoE % (the corner overlay's "current
+            # %"). The "Show MoE %" setting is folded into the -1 sentinel here (like the
+            # Transitions master), so the JS's single `>= 0` test covers "off" and "no data".
+            tx.setCurPercent(model.cur_percent if (model.has_data and show_percent) else -1.0)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 
@@ -1080,10 +1086,13 @@ def push_efficiency(rvm, snap, model):
         # agree by construction.
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
+        show_percent = mod_settings.progress_show_percent()
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
-                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s vert=%s" % (
+                  "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s vert=%s "
+                  "pct=%s show_pct=%s" % (
                       visible, has_data, damage, bar_x, band, r[1], r[2], r[3], r[4], alt_held,
-                      _ctrl_held, _battle_epoch, bar_size, show_events, vertical))
+                      _ctrl_held, _battle_epoch, bar_size, show_events, vertical,
+                      damage_percent(damage, snap.thresholds), show_percent))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -1111,6 +1120,10 @@ def push_efficiency(rvm, snap, model):
             # WHICH COMPOSITION the JS draws -- same wire meaning as push_progress's, including the
             # mount-only branch that makes a live flip a close/reopen (see apply_settings).
             tx.setVertical(vertical)
+            # The parenthesised "(73.84%)" caption: the percentile THIS battle's damage alone is
+            # worth. The "Show MoE %" setting is folded into the -1 sentinel here (like the
+            # Transitions master), so the JS's single `>= 0` test covers "off" and "no data".
+            tx.setDamagePercent(damage_percent(damage, snap.thresholds) if show_percent else -1.0)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

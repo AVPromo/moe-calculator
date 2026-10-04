@@ -7,7 +7,8 @@ import pytest
 from moe_calculator.domain import battle_types as bt
 from moe_calculator.domain.battle_builder import (
     combined_damage, counted_assistance, ewma_project, ewma_project_raw,
-    build_battle_model, battle_bar_visible, _fit_from_thresholds, _smooth_percent)
+    build_battle_model, battle_bar_visible, _fit_from_thresholds, _smooth_percent,
+    damage_percent)
 from moe_calculator.domain.constants import EWMA_K, MARK_PERCENTS
 
 
@@ -954,3 +955,41 @@ def test_battle_bar_visible_alt_mode_still_respects_base_guards():
                               enabled=True, alt_mode=True, alt_held=True) is False
     assert battle_bar_visible(True, True, overlay_open=True,
                               enabled=True, alt_mode=True, alt_held=True) is False
+
+
+# --- damage_percent: THIS battle's damage percentile (the Damage Efficiency bar's % caption) ----
+
+def test_damage_percent_is_exact_at_an_anchor():
+    assert damage_percent(1000, _THR) == 65.0
+    assert damage_percent(2000, _THR) == 85.0
+
+
+def test_damage_percent_is_zero_at_the_origin():
+    assert damage_percent(0, _THR) == 0.0
+
+
+def test_damage_percent_is_flat_at_the_top_percentile_past_the_last_anchor():
+    assert damage_percent(4000, _THR) == 100.0
+    assert damage_percent(99999, _THR) == 100.0
+
+
+def test_damage_percent_interpolates_linearly_between_anchors():
+    assert damage_percent(1500, _THR) == pytest.approx(75.0)
+
+
+@pytest.mark.parametrize("bad", [{}, None, {65: "x", 85: None}, {65: 0, 85: 0}, "garbage", 7])
+def test_damage_percent_is_minus_one_without_a_usable_fit(bad):
+    assert damage_percent(1000, bad) == -1.0
+
+
+def test_damage_percent_nan_damage_is_zero_not_the_top_percentile():
+    assert damage_percent(float("nan"), _THR) == 0.0
+
+
+def test_damage_percent_is_not_linear_in_the_bar_axis():
+    # The % is WG's curve over ALL anchors, not the bar's equal-quarter barX. At the 40th-percentile
+    # damage the 8-anchor curve says exactly 40.0, while a straight origin->r65 chord (what a
+    # barX-linear reading would give) says 65 * 1163 / 1799 = 42.02 -- an enrichment anchor bends it.
+    assert damage_percent(1163, _REAL_8_54657) == 40.0
+    assert 65.0 * 1163 / 1799 == pytest.approx(42.02, abs=0.01)
+    assert damage_percent(1163, _REAL_8_54657) != pytest.approx(65.0 * 1163 / 1799, abs=1.0)

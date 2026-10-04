@@ -123,13 +123,14 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. SIXTEEN: the nine through barSize, then transEvents /
-    # transManual, showEvents, holdMs, ctrlHeld, etaBattles and (Phase 1) `vertical` -- draw the
-    # vertical composition instead of horizontal -- all APPENDED after barSize so nothing above
-    # them is renumbered.
+    # side only is invisible in the client. SEVENTEEN: the nine through barSize, then transEvents /
+    # transManual, showEvents, holdMs, ctrlHeld, etaBattles, (Phase 1) `vertical` -- draw the
+    # vertical composition instead of horizontal -- and `curPercent` (the "(73.84%)" caption), all
+    # APPENDED after barSize so nothing above them is renumbered.
     assert set(_push()) == _VM_PROPS
     assert "vertical" in _VM_PROPS
-    assert len(_VM_PROPS) == 16
+    assert "curPercent" in _VM_PROPS
+    assert len(_VM_PROPS) == 17
 
 
 # --- push_progress's own has_placed() gate (the corner-flash fix) -----------------------------
@@ -340,3 +341,36 @@ def test_push_derives_has_data_from_mark_axis_not_the_display_floor():
         _bb.progress_axis_lo = real_axis_lo
     assert props["hasData"] is True
     assert props["axisLo"] == props["axisHi"]
+
+
+# --- the "(73.84%)" caption: curPercent, with the Show MoE % setting folded into the -1 sentinel ---
+
+def _push_model(model, **settings_over):
+    if settings_over:
+        mod_settings._apply(settings_over)
+    vm = _FakeVM()
+    battle_bridge.push_progress(vm, _snap(), model)
+    return vm.props
+
+
+def test_cur_percent_is_the_models_live_percent_as_a_real():
+    # The value the corner overlay shows, passed through untouched (a float: the slot is Real).
+    assert _push()["curPercent"] == 74.3
+
+
+def test_cur_percent_is_minus_one_without_data():
+    assert _push_model(_model(has_data=False))["curPercent"] == -1.0
+
+
+def test_cur_percent_is_minus_one_when_the_setting_is_off_even_with_data():
+    props = _push_model(_model(), **{mod_settings.PROGRESS_SHOW_PERCENT_KEY: False})
+    assert props["curPercent"] == -1.0
+
+
+def test_cur_percent_zero_is_a_real_percentile_not_the_sentinel():
+    assert _push_model(_model(cur_percent=0.0))["curPercent"] == 0.0
+
+
+def test_the_show_percent_flag_is_never_pushed_under_its_own_name():
+    props = _push()
+    assert "showPercent" not in props and mod_settings.PROGRESS_SHOW_PERCENT_KEY not in props

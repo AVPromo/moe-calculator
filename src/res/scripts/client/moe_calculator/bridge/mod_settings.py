@@ -351,11 +351,16 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # (_migrate_pre_v29_stale_bar_pos) key its ABSENCE the same way _migrate_pre_v21_layout /
 # _migrate_pre_v22_pos_frame do -- so it fires EXACTLY ONCE and never re-fires against a
 # legitimate non-Free pair the user sets AFTER this heal runs, even across a LATER bump (unlike
-# _migrate_pre_v23_alignment, which is unconditional -- see its own ponytail comment on that
-# hazard). Every OTHER saved value carries across the bump unchanged (enumerated from DEFAULTS,
+# _migrate_pre_v23_alignment, which register() gates on PROGRESS_POS_FRAME_KEY's absence -- see
+# its own ponytail comment on that hazard). Every OTHER saved value carries across the bump unchanged (enumerated from DEFAULTS,
 # not hand-listed); the new key takes its fresh True ("nothing to heal") default on a fresh
 # install, where the migration doesn't apply.
-SETTINGS_VERSION = 29
+# Bumped 29 -> 30 for the Show MoE % checkbox (PROGRESS_SHOW_PERCENT_KEY): a new varName AND a new
+# column-2 row right after Scale, which shifts settings_i18n.COL2_KEYS's positional zip by one
+# (progressShowPercent inserted after progressSize). Structural, so only a forward bump reaches an
+# existing install. NO _migrate_pre_v30_* function: register()'s bump branch runs _apply(raw),
+# which carries every v29 value, and the new key -- absent from raw -- takes its fresh True default.
+SETTINGS_VERSION = 30
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
@@ -408,6 +413,11 @@ PROGRESS_VARIANT_HOTKEY_KEY = "progress_variant_hotkey"
 PROGRESS_SIZE_KEY = "progress_bar_size"
 PROGRESS_SIZE_DEFAULT = 0             # the shipped size -- every existing user keeps it
 PROGRESS_SIZE_LARGE = 1               # ... and the highest legal index (see clamp_variant)
+
+# The parenthesised MoE % caption beside the current-damage numeral on BOTH centre bars (v30). A
+# plain bool, default ON, one shared toggle, STANDALONE row after Scale. The bridge folds it into
+# the percent VM slot's -1 sentinel (like the Transitions master), so the JS never reads it.
+PROGRESS_SHOW_PERCENT_KEY = "progress_show_percent"
 
 # WHEN the Progress Bar comes up -- three children of PROGRESS_BAR_KEY, and a DIFFERENT axis from
 # the Transitions group below, which only decides HOW it moves once it is coming up. Do not
@@ -608,6 +618,7 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: True, PROGRESS_BAR_KEY: False,
             PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_EFFICIENCY,
             PROGRESS_SIZE_KEY: PROGRESS_SIZE_DEFAULT,
+            PROGRESS_SHOW_PERCENT_KEY: True,
             PROGRESS_SHOW_EVENTS_KEY: True, PROGRESS_SHOW_ALT_KEY: True,
             PROGRESS_SHOW_ALWAYS_KEY: False,
             PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
@@ -808,6 +819,13 @@ def progress_show_events():
     JS commits new values on the same trigger it shows on."""
     return (bool(_settings.get(PROGRESS_SHOW_ALWAYS_KEY, False))
             or bool(_settings.get(PROGRESS_SHOW_EVENTS_KEY, True)))
+
+
+def progress_show_percent():
+    """Whether the bars draw the parenthesised MoE % beside the current-damage numeral (default
+    True). Not master-folded: the bar's own master already closes the window. The bridge folds
+    this into the percent VM slot's -1 sentinel, so the JS never sees the flag."""
+    return bool(_settings.get(PROGRESS_SHOW_PERCENT_KEY, True))
 
 
 def progress_alt_held(alt_held):
@@ -1498,6 +1516,7 @@ def _template():
     progress_variant_hotkey = _hotkey(PROGRESS_VARIANT_HOTKEY_KEY,
                                       t[settings_i18n.VARIANT_HOTKEY_KEY])
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
+    show_percent = _checkbox(PROGRESS_SHOW_PERCENT_KEY, t["progressShowPercent"])
     progress_orientation = _radio(PROGRESS_ORIENTATION_KEY, t["progressOrientation"])
     progress_alignment = _radio(PROGRESS_ALIGNMENT_KEY, t["progressAlignment"])
     # Automatic Mode Toggle (v28): the SAME _slider helper as the hold-duration one below, but its
@@ -1597,6 +1616,10 @@ def _template():
         # change (a pre-battle percentile crossing), not when the bar shows, and 100 (the shipped
         # default) already disables it, so it must stay readable while the feature is off.
         #
+        # The Show MoE % checkbox (v30) sits right after Scale, ALSO standalone (no master, no
+        # _gate_and) for the same reason: a caption's content describes the bar, not when it shows,
+        # so it must not inherit the visibility children's "Always" gate nor grey out with the master.
+        #
         # Wire order MUST stay in lockstep with settings_i18n.COL2_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.
         #
@@ -1629,7 +1652,7 @@ def _template():
         "column2": ([_label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
                     + [_empty(), progress_variant, progress_variant_hotkey, auto_toggle,
-                       progress_size,
+                       progress_size, show_percent,
                        _empty(), _label("catTransitions", t["catTransitions"])]
                     + _grouped_column1(trans_master, [trans_events, trans_manual])
                     + [_empty(), trans_hold,
@@ -1841,16 +1864,13 @@ def _migrate_pre_v23_alignment(old_raw):
     _migrate_pre_v21_layout / _migrate_pre_v22_pos_frame, both of which still write/read the OLD
     encoding this function consumes.
 
-    UNCONDITIONAL, unlike its three siblings above -- not gated on the absence of a marker key.
-    This bump introduces no new varName to key an "already migrated" check on (Fixed/Free reuses
-    PROGRESS_ALIGNMENT_KEY's own varName), and every old_raw this function ever sees today comes
-    from THIS ONE v22->23 transition register() is applying right now; there is no earlier
-    "already v23" store in existence yet for it to misfire against.
-    # ponytail: unconditional map, not gated on a marker key -- a raw value of 1 is genuinely
-    # ambiguous once a v23+ store exists (pre-v23 Minimap vs post-v23 Free), so a LATER
-    # SETTINGS_VERSION bump that re-enters this migration branch against an ALREADY-v23 store
-    # would wrongly re-collapse a real Free(1) pin back to Fixed(0). Add an absence-keyed marker
-    # (the progress_bar_pos_frame precedent) the day a v24+ bump needs to re-enter this branch.
+    GATED by register() on `pre_v23` (PROGRESS_POS_FRAME_KEY absent from the stored raw, read
+    BEFORE the chain runs because _migrate_pre_v22_pos_frame always seeds it). The pre-v23 3-option
+    encoding only exists in a store that predates that key; a v23+ store already speaks the new
+    encoding, where a raw 1 means Free, not Minimap.
+    # ponytail: this body is NOT idempotent -- a raw 1 is ambiguous (pre-v23 Minimap vs post-v23
+    # Free), so never call it outside the register() `pre_v23` gate: re-entering it on a v23+ store
+    # (any later bump) would collapse a real Free(1) pin back to Fixed(0).
 
     Fail-soft, local to this one key: a missing / non-int / boolean value is left alone (a corrupt
     store re-clamps to PROGRESS_ALIGN_FIXED when later read, via clamp_variant)."""
@@ -1875,8 +1895,8 @@ def _migrate_pre_v29_stale_bar_pos(old_raw):
     non-Free, which is exactly the shape this migration exists to reach.
 
     GATED ON THE ABSENCE of PROGRESS_BAR_POS_HEALED_KEY, same trick as _migrate_pre_v21_layout /
-    _migrate_pre_v22_pos_frame (NOT the _migrate_pre_v23_alignment shape, which is unconditional --
-    see that function's own ponytail comment on the hazard this avoids): a non-Free bar_pos is
+    _migrate_pre_v22_pos_frame (NOT the _migrate_pre_v23_alignment shape, which register() gates
+    on PROGRESS_POS_FRAME_KEY's absence -- see that function's ponytail comment on the hazard): a non-Free bar_pos is
     perfectly legitimate the instant a later Ctrl+drag or stepper edit sets one (the steppers only
     ever unlock a stored pair while Alignment IS Free), so this must fire EXACTLY ONCE and never
     again -- including at any LATER SETTINGS_VERSION bump, which would otherwise re-enter this same
@@ -1972,10 +1992,13 @@ def register():
             # defaults and registration still completes below.
             if raw:
                 try:
+                    # Must be read BEFORE the chain: _migrate_pre_v22_pos_frame always seeds the key.
+                    pre_v23 = PROGRESS_POS_FRAME_KEY not in raw
                     _migrate_pre_v13_variant(raw)
                     _migrate_pre_v21_layout(raw)
                     _migrate_pre_v22_pos_frame(raw)
-                    _migrate_pre_v23_alignment(raw)
+                    if pre_v23:
+                        _migrate_pre_v23_alignment(raw)
                     _migrate_pre_v29_stale_bar_pos(raw)
                     _apply(raw)
                     g_modsSettingsApi.updateModSettings(

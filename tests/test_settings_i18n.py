@@ -174,7 +174,7 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # header, the Transitions master, its two switches and the hold-duration slider. The TABLE KEY
     # `progressBar` never changed through any of those moves, so no translation was ever orphaned.
     #
-    # Pinned as a literal SEVENTEEN-slot RUN (fourteen real keys + the three `None` sentinels that
+    # Pinned as a literal EIGHTEEN-slot RUN (fifteen real keys + the three `None` sentinels that
     # sit inside it), rather than filtering the sentinels out and asserting contiguity on what
     # remains -- that would silently accept a spacer landing anywhere in the run instead of exactly
     # where it belongs. It is now COL2_KEYS' own HEAD (the whole feature is column 2 in full), so
@@ -186,11 +186,14 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # Mode Toggle threshold Slider), growing the run 16 -> 17.
     assert u"progressBar" in S._PANEL[u"en"]
     start = S.COL2_KEYS.index(u"catBattleProgress")
-    tail = S.COL2_KEYS[start:start + 17]
+    # v29->30 added progressShowPercent right after progressSize (the standalone Show MoE %
+    # checkbox), growing the run 17 -> 18.
+    tail = S.COL2_KEYS[start:start + 18]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
                     None, S.VARIANT_KEY, S.VARIANT_HOTKEY_KEY,
                     u"progressAutoToggleThreshold", u"progressSize",
+                    u"progressShowPercent",
                     None, u"catTransitions",
                     u"progressTransitions", u"progressTransEvents", u"progressTransManual",
                     None, u"progressHoldSeconds"), (
@@ -200,7 +203,7 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers. The
     # barPreview Image's trailing None sentinel that used to close COL2_KEYS (appended at 24->25)
     # MOVED to COL1_KEYS's own tail at 26->27 -- see mod_settings's SETTINGS_VERSION history.
-    assert S.COL2_KEYS[start + 17:] == (
+    assert S.COL2_KEYS[start + 18:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
         u"barPosX", u"barPosY"), (
         u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))
@@ -666,3 +669,57 @@ def test_panel_text_uses_client_language(monkeypatch):
     # language-independent, but the localized German text must still be inside it.
     assert t[u"catGarage"][u"text"] == u"<b>Garage-Widget</b>"
     assert t[u"garageWidget"][u"text"] == u"Aktiviert"
+
+
+# --- progressShowPercent (the v30 Show MoE % checkbox) -----------------------
+
+def test_col2_keys_pair_one_to_one_with_the_built_template_column2():
+    # THE positional-zip invariant mod_settings._sync_template_text relies on: one COL2_KEYS slot
+    # per column-2 control, so an inserted row without its key retitles everything after it.
+    from moe_calculator.bridge import mod_settings
+    col2 = mod_settings._template()["column2"]
+    assert len(S.COL2_KEYS) == len(col2)
+    for comp, key in zip(col2, S.COL2_KEYS):
+        # a spacer is exactly the `None` slot; every other control carries a real key
+        assert (comp["type"] == "Empty") == (key is None)
+
+
+def test_the_show_percent_row_pairs_with_the_show_percent_checkbox():
+    from moe_calculator.bridge import mod_settings
+    col2 = mod_settings._template()["column2"]
+    i = S.COL2_KEYS.index(u"progressShowPercent")
+    assert S.COL2_KEYS[i - 1] == u"progressSize"
+    assert col2[i]["varName"] == mod_settings.PROGRESS_SHOW_PERCENT_KEY
+    assert col2[i]["text"] == S.panel_text()[u"progressShowPercent"]["text"]
+
+
+def test_sync_template_text_retitles_the_show_percent_row(monkeypatch):
+    # Walk the real zip: corrupt the stored text of exactly that row and its neighbours, sync, and
+    # only the right rows come back -- and the Show MoE % row gets ITS text, not Scale's or Empty's.
+    from moe_calculator.bridge import mod_settings
+    tmpl = mod_settings._template()
+    i = S.COL2_KEYS.index(u"progressShowPercent")
+    want = tmpl["column2"][i]["text"]
+    tmpl["column2"][i]["text"] = u"STALE"
+
+    class _Api(object):
+        state = {"templates": {mod_settings.LINKAGE: tmpl}}
+        saved = 0
+
+        def saveState(self):
+            type(self).saved += 1
+
+    mod_settings._sync_template_text(_Api())
+    assert tmpl["column2"][i]["text"] == want
+    assert _Api.saved == 1
+
+
+def test_every_language_has_a_translated_show_percent_row():
+    en = S._PANEL[u"en"][u"progressShowPercent"]
+    assert en[u"label"] == u"Show MoE %"
+    for code in _SHIPPED:
+        row = S._PANEL[code][u"progressShowPercent"]
+        assert row[u"label"] and row[u"label"] != en[u"label"], code
+        assert row[u"ttBody"] != en[u"ttBody"], code
+        assert row[u"ttHeader"] != en[u"ttHeader"], code
+    assert len(_SHIPPED) == 10   # + English = the 11 shipped languages

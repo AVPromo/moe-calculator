@@ -66,6 +66,7 @@ def test_defaults_when_empty_or_none():
     assert DEFAULTS == {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
                         COUNTED_ASSIST_KEY: True, PROGRESS_BAR_KEY: False,
                         PROGRESS_VARIANT_KEY: 0, PROGRESS_SIZE_KEY: 0,
+                        mod_settings.PROGRESS_SHOW_PERCENT_KEY: True,
                         PROGRESS_SHOW_EVENTS_KEY: True, PROGRESS_SHOW_ALT_KEY: True,
                         PROGRESS_SHOW_ALWAYS_KEY: False,
                         PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
@@ -140,6 +141,7 @@ def test_overlays_known_keys():
     assert out2 == {GARAGE_KEY: True, BATTLE_KEY: False, BATTLE_ALT_KEY: False,
                     COUNTED_ASSIST_KEY: False, PROGRESS_BAR_KEY: False,
                     PROGRESS_VARIANT_KEY: 0, PROGRESS_SIZE_KEY: 0,
+                    mod_settings.PROGRESS_SHOW_PERCENT_KEY: True,
                     PROGRESS_SHOW_EVENTS_KEY: True, PROGRESS_SHOW_ALT_KEY: True,
                     PROGRESS_SHOW_ALWAYS_KEY: False,
                     PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
@@ -153,6 +155,34 @@ def test_overlays_known_keys():
                     FOLLOW_CAROUSEL_KEY: False,
                     PROGRESS_VARIANT_HOTKEY_KEY: [37],
                     mod_settings.PROGRESS_BAR_POS_HEALED_KEY: True}
+
+
+def test_progress_show_percent_defaults_true_on_a_fresh_cache():
+    mod_settings._seed({})
+    assert mod_settings.progress_show_percent() is True
+
+
+def test_progress_show_percent_honours_a_stored_false():
+    mod_settings._seed({mod_settings.PROGRESS_SHOW_PERCENT_KEY: False})
+    assert mod_settings.progress_show_percent() is False
+
+
+def test_progress_show_percent_coerces_a_truthy_non_bool_to_bool():
+    mod_settings._seed({mod_settings.PROGRESS_SHOW_PERCENT_KEY: 1})
+    assert mod_settings.progress_show_percent() is True
+    mod_settings._seed({mod_settings.PROGRESS_SHOW_PERCENT_KEY: 0})
+    assert mod_settings.progress_show_percent() is False
+
+
+def test_a_payload_lacking_show_percent_leaves_it_unchanged_via_on_changed():
+    # MSA hands the FULL snapshot of whichever mod changed, and the _apply keep-current rule means a
+    # payload without our key must not reset it to the default.
+    mod_settings._seed({mod_settings.PROGRESS_SHOW_PERCENT_KEY: False})
+    mod_settings._on_changed(LINKAGE, {GARAGE_KEY: False})
+    assert mod_settings.progress_show_percent() is False
+    # A foreign linkage's payload is ignored outright, even one carrying our key.
+    mod_settings._on_changed("some.other.mod", {mod_settings.PROGRESS_SHOW_PERCENT_KEY: True})
+    assert mod_settings.progress_show_percent() is False
 
 
 def test_partial_dict_fills_missing_with_defaults():
@@ -1314,7 +1344,10 @@ def test_template_settings_version_pins_the_current_layout():
     # template change: no row/varName/option changed shape, but register()'s migration chain
     # (the only hook that can migrate a STORED VALUE) only runs on a version bump. The new
     # PROGRESS_BAR_POS_HEALED_KEY marker has no template row (see mod_settings's own comment).
-    assert SETTINGS_VERSION == 29
+    # Bumped 29 -> 30 for the "Show MoE %" checkbox (PROGRESS_SHOW_PERCENT_KEY): a new varName AND a
+    # new standalone column-2 row right after Scale, which shifts settings_i18n.COL2_KEYS's
+    # positional zip. No migration function: the new key takes its fresh True default.
+    assert SETTINGS_VERSION == 30
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -1474,12 +1507,15 @@ def test_template_size_radio_shape(monkeypatch):
     # that master plus its two switches plus the ungrouped hold Slider are still a contiguous
     # FOUR-row run. So an insertion anywhere else (which shifts every later control's text --
     # COL2_KEYS' zip is positional) still fails here, while a legitimate append does not.
-    assert col2[index + 1] == {"type": "Empty"}, \
-        "a control was inserted between the Scale radio and its spacer"
-    assert col2[index + 2]["type"] == "Label", \
+    # The "Show MoE %" checkbox (v30) is the ONE control that follows Scale, standalone.
+    assert col2[index + 1]["varName"] == mod_settings.PROGRESS_SHOW_PERCENT_KEY, \
+        "the Show MoE % checkbox moved from right after the Scale radio"
+    assert col2[index + 2] == {"type": "Empty"}, \
+        "a control was inserted between the Show MoE % checkbox and its spacer"
+    assert col2[index + 3]["type"] == "Label", \
         "the Transitions category header moved or disappeared"
     master_at = _at(col2, PROGRESS_TRANSITIONS_KEY)[1]
-    assert index + 3 == master_at, \
+    assert index + 4 == master_at, \
         "the spacer + header ahead of the Transitions master moved or disappeared"
     # The group's THREE varName-bearing controls (master + two switches) are still a contiguous
     # run; the hold Slider is one further slot out, with a FIFTH Empty spacer (v19) between it and
@@ -1576,7 +1612,7 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     # garage-related groups (test_template_column1_is_the_calculator_and_garage_groups).
     tmpl = mod_settings._template()
     col2 = tmpl["column2"]
-    # TWENTY-THREE controls (v28, grew from 22) = FOUR CATEGORIES separated by Empty spacers, each
+    # TWENTY-FOUR controls (v30, grew from 23 for the standalone Show MoE % checkbox after Scale) = FOUR CATEGORIES separated by Empty spacers, each
     # a bare Label header followed by that feature's controls: "Battle Progress" + [Progress Bar
     # master + its three VISIBILITY children] + a SECOND Empty spacer (ahead of "Mode") + [the Mode
     # radio, its HotKey mode-override sibling (v26), the Automatic Mode Toggle threshold Slider
@@ -1593,7 +1629,7 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     assert [c["type"] for c in col2] == [
         "Label", "CheckBox", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
-        "RadioButtonGroup", "HotKey", "Slider", "RadioButtonGroup",
+        "RadioButtonGroup", "HotKey", "Slider", "RadioButtonGroup", "CheckBox",
         "Empty",
         "Label", "CheckBox", "CheckBox", "CheckBox",
         "Empty",
@@ -1606,27 +1642,28 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
         PROGRESS_SHOW_EVENTS_KEY, PROGRESS_SHOW_ALT_KEY, PROGRESS_SHOW_ALWAYS_KEY,
         PROGRESS_VARIANT_KEY, PROGRESS_VARIANT_HOTKEY_KEY,
         mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY, PROGRESS_SIZE_KEY,
+        mod_settings.PROGRESS_SHOW_PERCENT_KEY,
         PROGRESS_TRANSITIONS_KEY, PROGRESS_TRANS_EVENTS_KEY, PROGRESS_TRANS_MANUAL_KEY,
         PROGRESS_HOLD_SECONDS_KEY,
         PROGRESS_ORIENTATION_KEY, PROGRESS_ALIGNMENT_KEY,
         mod_settings.BAR_POS_X_KEY, mod_settings.BAR_POS_Y_KEY]
     # ...and the two category headers carry no varName at all -- and they are the ONLY two here.
-    assert "varName" not in col2[0] and "varName" not in col2[11] and "varName" not in col2[18]
-    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 11, 18]
+    assert "varName" not in col2[0] and "varName" not in col2[12] and "varName" not in col2[19]
+    assert [i for i, c in enumerate(col2) if c["type"] == "Label"] == [0, 12, 19]
     # Every category header is BOLD: <b>...</b> wrapped text and an explicit useHTML key (MSA's
     # own HTML default is unverified from our side, so we emit it ourselves rather than rely on it).
     assert col2[0]["text"] == u"<b>Battle Progress</b>" and col2[0]["useHTML"] is True
-    assert col2[11]["text"] == u"<b>Transitions</b>" and col2[11]["useHTML"] is True
-    assert col2[18]["text"] == u"<b>Layout</b>" and col2[18]["useHTML"] is True
+    assert col2[12]["text"] == u"<b>Transitions</b>" and col2[12]["useHTML"] is True
+    assert col2[19]["text"] == u"<b>Layout</b>" and col2[19]["useHTML"] is True
     # All FOUR Empty spacers are a bare type and NOTHING else: no varName, and above all no
     # text/tooltip, which is what lets settings_i18n give each a `None` sentinel slot instead of a
     # key. The first heads "Mode"; the second heads "Transitions"; the third heads the hold Slider;
     # the fourth heads "Layout".
     assert col2[5] == {"type": "Empty"}
-    assert col2[10] == {"type": "Empty"}
-    assert col2[15] == {"type": "Empty"}
-    assert col2[17] == {"type": "Empty"}
-    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 10, 15, 17]
+    assert col2[11] == {"type": "Empty"}
+    assert col2[16] == {"type": "Empty"}
+    assert col2[18] == {"type": "Empty"}
+    assert [i for i, c in enumerate(col2) if c["type"] == "Empty"] == [5, 11, 16, 18]
     # The Mode/HotKey/AutoToggle/Scale quartet are STANDALONE -- no masterVarName, no conditions --
     # so they stay readable and editable while the Progress Bar master is off, exactly like
     # column 1's steppers used to be before they were gated.
@@ -1637,17 +1674,21 @@ def test_template_column2_is_four_categories_each_a_label_then_its_group():
     assert (col2[8]["type"] == "Slider"
             and col2[8]["varName"] == mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY)
     assert col2[9]["varName"] == PROGRESS_SIZE_KEY
+    # The Show MoE % checkbox (v30) is standalone too: no master, no conditions, and a tooltip.
+    assert col2[10]["type"] == "CheckBox" and col2[10]["varName"] == mod_settings.PROGRESS_SHOW_PERCENT_KEY
+    assert "masterVarName" not in col2[10] and "conditions" not in col2[10]
+    assert col2[10]["tooltip"]
     # The two Orientation/Alignment radios are ALSO STANDALONE -- see above. The two position
     # steppers ARE gated: see test_template_position_steppers_are_gated_on_alignment_free below.
-    for control in col2[19:21]:
+    for control in col2[20:22]:
         assert "masterVarName" not in control and "conditions" not in control
     # The two radios sit directly between the "Layout" header and the two steppers.
-    assert col2[19]["varName"] == PROGRESS_ORIENTATION_KEY
-    assert col2[20]["varName"] == PROGRESS_ALIGNMENT_KEY
-    assert col2[21]["varName"] == mod_settings.BAR_POS_X_KEY
-    assert col2[22]["varName"] == mod_settings.BAR_POS_Y_KEY
+    assert col2[20]["varName"] == PROGRESS_ORIENTATION_KEY
+    assert col2[21]["varName"] == PROGRESS_ALIGNMENT_KEY
+    assert col2[22]["varName"] == mod_settings.BAR_POS_X_KEY
+    assert col2[23]["varName"] == mod_settings.BAR_POS_Y_KEY
     # ...and the position steppers are the LAST controls in this column now (barPreview moved out).
-    assert len(col2) == 23
+    assert len(col2) == 24
     # ...and still only TWO columns: a third column does not render in the panel at all.
     assert sorted(k for k in tmpl if re.match(r"^column\d+$", k)) == ["column1", "column2"]
 
@@ -2817,6 +2858,7 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
         PROGRESS_BAR_KEY: True,         # default False -- the control the relayout moved
         PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,   # default 0 (Damage Efficiency)
         PROGRESS_SIZE_KEY: PROGRESS_SIZE_LARGE,              # default 0 (the shipped size)
+        mod_settings.PROGRESS_SHOW_PERCENT_KEY: False,   # default True (v30 key, carried like any other)
         PROGRESS_SHOW_EVENTS_KEY: False,    # default True
         PROGRESS_SHOW_ALT_KEY: False,       # default True
         PROGRESS_SHOW_ALWAYS_KEY: True,     # default False
@@ -2863,6 +2905,7 @@ def test_migration_across_a_layout_bump_keeps_every_saved_value(_run_register):
     assert mod_settings._settings[PROGRESS_VARIANT_KEY] == 1
     assert mod_settings.progress_bar_variant() == PROGRESS_VARIANT_MOVING_AVERAGE
     assert mod_settings.progress_bar_size() == PROGRESS_SIZE_LARGE
+    assert mod_settings.progress_show_percent() is False
     # The three visibility flags: a user who pinned the bar (or muted a trigger) must not have it
     # reset by the bump.
     assert progress_show_events() is True        # "Always" folds in
@@ -3240,6 +3283,76 @@ def test_same_version_load_does_not_migrate(_run_register):
     assert api.registered_cb is None
     assert api.updated == 0
     assert api.saved == 0
+
+
+def _v29_store(alignment, pair):
+    """A v29-shaped store: EVERY DEFAULTS key present at a NON-default value (bar the v30 key,
+    which is the one this bump introduces), so a key silently reset by the bump cannot hide."""
+    store = {
+        "enabled": True,
+        GARAGE_KEY: False, BATTLE_KEY: False, BATTLE_ALT_KEY: True, COUNTED_ASSIST_KEY: False,
+        PROGRESS_BAR_KEY: True,
+        PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_MOVING_AVERAGE,           # 1, default 0
+        PROGRESS_SIZE_KEY: PROGRESS_SIZE_LARGE,
+        PROGRESS_SHOW_EVENTS_KEY: False, PROGRESS_SHOW_ALT_KEY: False, PROGRESS_SHOW_ALWAYS_KEY: True,
+        PROGRESS_TRANSITIONS_KEY: False, PROGRESS_TRANS_EVENTS_KEY: False,
+        PROGRESS_TRANS_MANUAL_KEY: False,
+        PROGRESS_HOLD_SECONDS_KEY: 12,
+        mod_settings.PROGRESS_AUTO_TOGGLE_THRESHOLD_KEY: 80,
+        POS_X_KEY: 700, POS_Y_KEY: 300, POS_W_KEY: 1920, POS_H_KEY: 1080,
+        PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_VERTICAL,              # 1, default 0
+        PROGRESS_ALIGNMENT_KEY: alignment,
+        BAR_POS_X_KEY: pair[0], BAR_POS_Y_KEY: pair[1],
+        FOLLOW_CAROUSEL_KEY: False,
+        PROGRESS_VARIANT_HOTKEY_KEY: [38],
+        mod_settings.PROGRESS_POS_FRAME_KEY: mod_settings.POS_FRAME_ANCHOR,
+        mod_settings.PROGRESS_BAR_POS_HEALED_KEY: True,
+    }
+    assert set(store) - {"enabled"} == set(DEFAULTS) - {mod_settings.PROGRESS_SHOW_PERCENT_KEY}
+    return store
+
+
+@pytest.mark.parametrize("alignment,pair", [(PROGRESS_ALIGN_FREE, (900, 500)),
+                                            (PROGRESS_ALIGN_FIXED, (0, 0))])
+def test_v29_to_v30_bump_keeps_every_value_and_seeds_show_percent_true(
+        _run_register, alignment, pair):
+    old = _v29_store(alignment, pair)
+    api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
+    assert SETTINGS_VERSION == 30
+    _run_register(api)
+
+    live = mod_settings._settings
+    for key, value in old.items():
+        if key != "enabled":
+            assert live[key] == value, "%s did not survive the 29 -> 30 bump" % key
+    # The new key was absent from the stored dict -> its fresh default, ON.
+    assert live[mod_settings.PROGRESS_SHOW_PERCENT_KEY] is True
+    assert mod_settings.progress_show_percent() is True
+    # Free/Fixed (and the pair) came through the unconditional _migrate_pre_v23_alignment intact.
+    assert mod_settings.progress_bar_alignment() == alignment
+    assert (bar_pos_x(), bar_pos_y()) == pair
+    # ...and the radios stayed INT indices, never booled.
+    for key in (PROGRESS_VARIANT_KEY, PROGRESS_SIZE_KEY, PROGRESS_ORIENTATION_KEY,
+                PROGRESS_ALIGNMENT_KEY):
+        assert not isinstance(live[key], bool)
+    # One coalesced write to disk, the new key included.
+    assert api.updated == 1
+    assert api.state["settings"][LINKAGE][mod_settings.PROGRESS_SHOW_PERCENT_KEY] is True
+
+
+@pytest.mark.parametrize("old_alignment,expected", [(1, PROGRESS_ALIGN_FIXED),    # old Minimap
+                                                     (2, PROGRESS_ALIGN_FREE)])   # old Free
+def test_genuine_pre_v23_store_still_migrates_through_the_gated_path(
+        _run_register, old_alignment, expected):
+    # No PROGRESS_POS_FRAME_KEY == a real pre-v22/v23 store: register()'s pre_v23 gate must let it
+    # through to _migrate_pre_v23_alignment (SHOW_EVENTS marks it >= v13; ORIENTATION marks it >= v21,
+    # else _migrate_pre_v21_layout re-derives alignment from the pair).
+    old = {"enabled": True, PROGRESS_SHOW_EVENTS_KEY: True,
+           PROGRESS_ORIENTATION_KEY: PROGRESS_ORIENT_HORIZONTAL, PROGRESS_ALIGNMENT_KEY: old_alignment}
+    assert mod_settings.PROGRESS_POS_FRAME_KEY not in old
+    api = _FakeMsaApi(stored=old, stored_version=21)
+    _run_register(api)
+    assert mod_settings.progress_bar_alignment() == expected
 
 
 def test_a_mount_never_zeroes_the_stored_bar_position(_run_register):

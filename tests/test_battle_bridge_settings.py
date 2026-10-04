@@ -119,3 +119,69 @@ def test_a_broken_constants_import_fails_open_and_reroutes_everything(monkeypatc
     monkeypatch.delitem(sys.modules, "account_helpers.settings_core.settings_constants")
     battle_bridge._on_settings_changed({"anything": True})
     assert fired == {"overlay", "progress", "efficiency"}
+
+
+# --- a Show MoE % flip + apply_settings() re-pushes the -1 sentinel ------------------------------
+
+def test_flipping_show_percent_then_apply_settings_repushes_minus_one_on_both_bars(monkeypatch):
+    from moe_calculator.bridge import mod_settings
+    from moe_calculator.bridge.view_models import EfficiencyVM, ProgressVM
+    from moe_calculator.domain import battle_types as bt
+
+    class _VM(object):
+        def __init__(self, vm_cls):
+            self.props = {}
+            self._known = frozenset(n[3].lower() + n[4:] for n in dir(vm_cls) if n.startswith("set"))
+
+        def transaction(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def __getattr__(self, name):
+            if not name.startswith("set"):
+                raise AttributeError(name)
+            key = name[3].lower() + name[4:]
+            assert key in self._known, "no VM property %s" % key
+            return lambda v: self.props.__setitem__(key, v)
+
+    ma_vm, de_vm = _VM(ProgressVM), _VM(EfficiencyVM)
+    snap = bt.BattleSnapshot(vehicle_int_cd=1073, thresholds={65: 2450, 85: 3050, 95: 3620, 100: 4400},
+                             has_vehicle=True, in_battle=True, is_spectating=False,
+                             baseline_known=True, pre_avg_damage=1850, pre_percentile=73.67)
+    monkeypatch.setattr(battle_bridge, "_in_battle", False)          # open/close loop stays inert
+    monkeypatch.setattr(battle_bridge, "_open_overlays", set())
+    monkeypatch.setattr(battle_bridge.battle_view, "active_view", lambda: None)
+    monkeypatch.setattr(battle_bridge.progress_view, "active_view",
+                        lambda: types.SimpleNamespace(viewModel=ma_vm))
+    monkeypatch.setattr(battle_bridge.efficiency_view, "active_view",
+                        lambda: types.SimpleNamespace(viewModel=de_vm))
+    monkeypatch.setattr(battle_bridge.progress_view, "has_placed", lambda: True)
+    monkeypatch.setattr(battle_bridge.efficiency_view, "has_placed", lambda: True)
+    monkeypatch.setattr(battle_bridge.progress_view, "apply_position", lambda: None)
+    monkeypatch.setattr(battle_bridge.efficiency_view, "apply_position", lambda: None)
+    monkeypatch.setattr(battle_bridge.battle_adapter, "build_battle_snapshot", lambda: snap)
+    monkeypatch.setattr(battle_bridge, "_record_played_tank", lambda s: None)
+    monkeypatch.setattr(battle_bridge, "_note_prediction", lambda s, m: None)
+    monkeypatch.setattr(battle_bridge.battle_input, "set_hotkey", lambda *a, **k: None)
+    monkeypatch.setattr(mod_settings, "progress_bar_enabled", lambda: True)
+    saved = dict(mod_settings._settings)
+    try:
+        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: True})
+        battle_bridge.apply_settings()
+        assert ma_vm.props["curPercent"] >= 0.0 and de_vm.props["damagePercent"] >= 0.0
+
+        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: False})
+        battle_bridge.apply_settings()
+        assert ma_vm.props["curPercent"] == -1.0
+        assert de_vm.props["damagePercent"] == -1.0
+
+        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: True})   # and back
+        battle_bridge.apply_settings()
+        assert ma_vm.props["curPercent"] >= 0.0 and de_vm.props["damagePercent"] >= 0.0
+    finally:
+        mod_settings._seed(saved)

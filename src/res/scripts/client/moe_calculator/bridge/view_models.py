@@ -234,7 +234,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=16, commands=0):
+    def __init__(self, properties=17, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -335,6 +335,19 @@ class ProgressVM(ViewModel):
                                                      #    placement half is already
                                                      #    orientation-aware (bar_window._resolve /
                                                      #    domain.VERTICAL_ANCHOR_Y_SHIFT)
+        self._addRealProperty("curPercent", -1.0)     # 16 the live MoE % (BattleModel.cur_percent --
+                                                     #    the corner overlay's "current %"), shown as
+                                                     #    "(73.84%)" beside the current-damage
+                                                     #    numeral. APPENDED, `properties=` bumped WITH
+                                                     #    it. Real, NOT Number: _setNumber int-casts
+                                                     #    and would render 73.00%. -1.0 is the
+                                                     #    load-bearing sentinel for "no data" AND
+                                                     #    "setting off" (mod_settings.
+                                                     #    progress_show_percent is folded in Python):
+                                                     #    0.0 is a REAL percentile. The JS reads it
+                                                     #    BARE (Number(model.curPercent), no `|| 0`)
+                                                     #    and draws only when >= 0, so an absent
+                                                     #    field (NaN) draws nothing
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -384,6 +397,9 @@ class ProgressVM(ViewModel):
     def setVertical(self, v):
         self._setBool(15, v)
 
+    def setCurPercent(self, v):
+        self._setReal(16, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -411,7 +427,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=18, commands=0):
+    def __init__(self, properties=19, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -488,6 +504,19 @@ class EfficiencyVM(ViewModel):
                                                     #    and the surface size, not a style), so a
                                                     #    live flip is delivered by Python closing and
                                                     #    reopening the window
+        self._addRealProperty("damagePercent", -1.0)  # 18 the percentile THIS battle's damage alone
+                                                    #    is worth (domain.damage_percent), shown as
+                                                    #    "(73.84%)" beside the current-damage numeral.
+                                                    #    APPENDED, `properties=` bumped WITH it. Real,
+                                                    #    NOT Number: _setNumber int-casts and would
+                                                    #    render 73.00%. -1.0 is the load-bearing
+                                                    #    sentinel for "no data" AND "setting off"
+                                                    #    (mod_settings.progress_show_percent is folded
+                                                    #    in Python, like the Transitions master):
+                                                    #    0.0 is a REAL percentile. The JS reads it
+                                                    #    BARE (Number(model.damagePercent), no `|| 0`)
+                                                    #    and draws only when >= 0, so an absent field
+                                                    #    (NaN) draws nothing
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -542,3 +571,6 @@ class EfficiencyVM(ViewModel):
 
     def setVertical(self, v):
         self._setBool(17, v)
+
+    def setDamagePercent(self, v):
+        self._setReal(18, v)

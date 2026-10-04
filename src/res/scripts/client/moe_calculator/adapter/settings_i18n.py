@@ -159,14 +159,16 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              u"positionSub", u"posX", u"posY",
              None)                                   # barPreview Image (no i18n text)
 # Column 2: the WHOLE Progress Bar feature (was column 1's tail), unchanged internally.
-# TWENTY-THREE slots (21 after the 23->24 column swap, +1 for the variantHotkey HotKey control
+# TWENTY-FOUR slots (21 after the 23->24 column swap, +1 for the variantHotkey HotKey control
 # spliced in right after VARIANT_KEY at 25->26, +1 for the progressAutoToggleThreshold Slider
-# spliced in right after it at 27->28; the barPreview Image's trailing None sentinel that briefly
+# spliced in right after it at 27->28, +1 for the progressShowPercent checkbox spliced in right
+# after progressSize at 29->30; the barPreview Image's trailing None sentinel that briefly
 # lived here at 24->25 MOVED to COL1_KEYS's tail at 26->27; see COL1_KEYS above).
 COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
              None,
              VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressAutoToggleThreshold", u"progressSize",
+             u"progressShowPercent",
              None,
              u"catTransitions", u"progressTransitions",
              u"progressTransEvents", u"progressTransManual",
@@ -336,6 +338,11 @@ _PANEL = {
             u"a distance."),
         # The two v21 radios: which axis the bar draws on, and which anchor the position
         # steppers below offset from. Both carry a tooltip, same reasoning as Mode/Scale above.
+        u"progressShowPercent": _row(
+            u"Show MoE %", u"MoE percentage",
+            u"Shows your Mark of Excellence percentage in brackets beside the current damage "
+            u"on the bar. Damage Efficiency: the percentage this battle's damage alone is worth. "
+            u"Moving Average: your live MoE percentage with this battle counted."),
         u"progressOrientation": _row(
             u"Orientation", u"Bar orientation",
             u"Horizontal is the bar's original layout. Vertical draws it standing upright, "
@@ -440,6 +447,12 @@ _PANEL = {
             u"Skalierung", u"Leistengröße",
             u"Standard: die normale Größe der Leiste. Groß: zeigt sie größer an, für bessere "
             u"Lesbarkeit aus der Entfernung."),
+        u"progressShowPercent": _row(
+            u"MoE-% anzeigen", u"MoE-Prozentwert",
+            u"Zeigt deinen MoE-Prozentwert (Marken der Exzellenz) in Klammern neben dem "
+            u"aktuellen Schaden auf der Leiste an. Schadenseffizienz: der Prozentwert, den allein "
+            u"der Schaden dieses Gefechts wert ist. Gleitender Durchschnitt: dein aktueller "
+            u"MoE-Prozentwert mit diesem Gefecht eingerechnet."),
         u"progressOrientation": _row(
             u"Ausrichtung", u"Leistenausrichtung",
             u"Horizontal ist das ursprüngliche Layout der Leiste. Vertikal zeigt sie "
@@ -567,6 +580,12 @@ _PANEL = {
             u"Échelle", u"Taille de la barre",
             u"Par défaut : taille normale de la barre. Grande : l'affiche plus grande, pour une "
             u"meilleure lisibilité à distance."),
+        u"progressShowPercent": _row(
+            u"Afficher le % MoE", u"Pourcentage MoE",
+            u"Affiche votre pourcentage de Marque de maîtrise entre parenthèses à côté des "
+            u"dégâts actuels sur la barre. Efficacité des dégâts : le pourcentage que valent à "
+            u"eux seuls les dégâts de ce combat. Moyenne glissante : votre pourcentage MoE en "
+            u"direct, ce combat compris."),
         u"progressOrientation": _row(
             u"Orientation", u"Orientation de la barre",
             u"Horizontale est la disposition d'origine de la barre. Verticale l'affiche debout, "
@@ -695,6 +714,11 @@ _PANEL = {
             u"Escala", u"Tamaño de la barra",
             u"Predeterminada: el tamaño normal de la barra. Grande: la muestra más grande, para "
             u"facilitar la lectura a distancia."),
+        u"progressShowPercent": _row(
+            u"Mostrar % MoE", u"Porcentaje MoE",
+            u"Muestra tu porcentaje de Marca de maestría entre paréntesis junto al daño actual "
+            u"en la barra. Eficiencia de daño: el porcentaje que vale por sí solo el daño de "
+            u"este combate. Media móvil: tu porcentaje MoE en directo con este combate incluido."),
         u"progressOrientation": _row(
             u"Orientación", u"Orientación de la barra",
             u"Horizontal es la disposición original de la barra. Vertical la muestra de pie, "
@@ -823,6 +847,12 @@ _PANEL = {
             u"Scala", u"Dimensione della barra",
             u"Predefinita: la dimensione normale della barra. Grande: la mostra più grande, per "
             u"una lettura più facile a distanza."),
+        u"progressShowPercent": _row(
+            u"Mostra % MoE", u"Percentuale MoE",
+            u"Mostra la tua percentuale di Marchio di eccellenza tra parentesi accanto al danno "
+            u"attuale sulla barra. Efficienza dei danni: la percentuale che vale da solo il "
+            u"danno di questa battaglia. Media mobile: la tua percentuale MoE in tempo reale "
+            u"con questa battaglia conteggiata."),
         u"progressOrientation": _row(
             u"Orientamento", u"Orientamento della barra",
             u"Orizzontale è la disposizione originale della barra. Verticale la mostra in "
@@ -952,6 +982,11 @@ _PANEL = {
             u"Skala", u"Rozmiar paska",
             u"Domyślna: normalny rozmiar paska. Duża: pokazuje go większym, dla łatwiejszego "
             u"odczytu z odległości."),
+        u"progressShowPercent": _row(
+            u"Pokaż % MoE", u"Procent MoE",
+            u"Pokazuje twój procent Oznaczenia biegłości w nawiasach obok bieżących obrażeń na "
+            u"pasku. Efektywność obrażeń: procent, jaki warte są same obrażenia z tej bitwy. "
+            u"Średnia krocząca: twój bieżący procent MoE z uwzględnieniem tej bitwy."),
         u"progressOrientation": _row(
             u"Orientacja", u"Orientacja paska",
             u"Pozioma to pierwotny układ paska. Pionowa pokazuje go w pozycji stojącej, "
@@ -1075,6 +1110,12 @@ _PANEL = {
             u"Měřítko", u"Velikost lišty",
             u"Výchozí: běžná velikost lišty. Velké: zobrazí ji větší, pro snazší čtení z "
             u"dálky."),
+        u"progressShowPercent": _row(
+            u"Zobrazit % MoE", u"Procento MoE",
+            u"Zobrazí vaše procento Známky mistrovství v závorce vedle aktuálního poškození na "
+            u"liště. Efektivita poškození: procento, které samo o sobě vyjadřuje poškození "
+            u"z této bitvy. Klouzavý průměr: vaše aktuální procento MoE se započtením této "
+            u"bitvy."),
         u"progressOrientation": _row(
             u"Orientace", u"Orientace lišty",
             u"Vodorovná je původní rozvržení lišty. Svislá ji zobrazí na výšku, s rozměry "
@@ -1194,6 +1235,11 @@ _PANEL = {
             u"Масштаб", u"Масштаб полосы",
             u"Стандартный: обычный размер полосы. Большой: показывает её крупнее, для удобного "
             u"чтения на расстоянии."),
+        u"progressShowPercent": _row(
+            u"Показывать % ОМ", u"Процент отметки мастерства",
+            u"Показывает ваш процент отметки мастерства в скобках рядом с текущим уроном на "
+            u"полосе. Эффективность урона: процент, которого стоит один лишь урон этого боя. "
+            u"Скользящее среднее: ваш текущий процент отметки с учётом этого боя."),
         u"progressOrientation": _row(
             u"Ориентация", u"Ориентация полосы",
             u"Горизонтальная -- исходное расположение полосы. Вертикальная показывает её "
@@ -1318,6 +1364,11 @@ _PANEL = {
             u"Масштаб", u"Масштаб смуги",
             u"Стандартний: звичайний розмір смуги. Великий: показує її більшою, для зручного "
             u"читання на відстані."),
+        u"progressShowPercent": _row(
+            u"Показувати % ВМ", u"Відсоток відмітки майстерності",
+            u"Показує ваш відсоток відмітки майстерності в дужках поруч із поточною шкодою на "
+            u"смузі. Ефективність шкоди: відсоток, якого вартує сама лише шкода цього бою. "
+            u"Ковзне середнє: ваш поточний відсоток відмітки з урахуванням цього бою."),
         u"progressOrientation": _row(
             u"Орієнтація", u"Орієнтація смуги",
             u"Горизонтальна -- початкове розташування смуги. Вертикальна показує її "
@@ -1442,6 +1493,11 @@ _PANEL = {
             u"Méretezés", u"Sáv mérete",
             u"Alapértelmezett: a sáv normál mérete. Nagy: nagyobb méretben jeleníti meg, hogy "
             u"távolról is könnyebb legyen olvasni."),
+        u"progressShowPercent": _row(
+            u"MoE % megjelenítése", u"MoE-százalék",
+            u"Zárójelben megjeleníti a Mesterjelvény-százalékodat az aktuális sebzés mellett a "
+            u"sávon. Sebzéshatékonyság: az a százalék, amit önmagában ennek a csatának a sebzése "
+            u"ér. Mozgóátlag: az élő MoE-százalékod ezzel a csatával együtt számolva."),
         u"progressOrientation": _row(
             u"Tájolás", u"Sáv tájolása",
             u"A Vízszintes a sáv eredeti elrendezése. A Függőleges állva jeleníti meg, a "
@@ -1562,6 +1618,11 @@ _PANEL = {
             u"Ölçek", u"Çubuk boyutu",
             u"Varsayılan: çubuğun normal boyutu. Büyük: uzaktan daha kolay okumak için daha "
             u"büyük gösterir."),
+        u"progressShowPercent": _row(
+            u"MoE %'sini göster", u"MoE yüzdesi",
+            u"Ustalık Nişanesi yüzdenizi çubuktaki mevcut hasarın yanında parantez içinde "
+            u"gösterir. Hasar verimliliği: yalnızca bu savaşın hasarının değeri olan yüzde. "
+            u"Hareketli ortalama: bu savaş hesaba katılmış canlı MoE yüzdeniz."),
         u"progressOrientation": _row(
             u"Yönelim", u"Çubuk yönelimi",
             u"Yatay, çubuğun özgün düzenidir. Dikey, minimap'in yanına oturacak boyutta, "
