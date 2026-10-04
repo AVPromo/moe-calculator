@@ -191,12 +191,13 @@ function fmt(n) {
 // field alike: `!(p >= 0)` is the one test, so the callers' bare Number(model.x) needs no `|| 0`.
 function pctText(p) {
     if (!(p >= 0)) return "";
-    return (Math.floor(p * 100) / 100).toFixed(2) + "%";
+    const v = Math.floor(p * 100) / 100;
+    return v > 0 ? v.toFixed(2) + "%" : "0%";   // 0 -> "0%", exactly MoEBattle.js's pctText
 }
 
 // Build one bar's transient controller.
 //
-//   root                        the bar's #moe-bar-root element (mp-life animates ITS transform)
+//   root                          the bar's #moe-bar-root element (mp-life animates ITS transform)
 //   boxLeft/boxTop/boxW/boxH      the composition's bounding box in document rem (== .mp-backdrop)
 //   pad                           slack for the shadow/glow bleed, on all four sides
 //   padX                          OPTIONAL, default `pad`. The X-AXIS slack, when the ink reaches

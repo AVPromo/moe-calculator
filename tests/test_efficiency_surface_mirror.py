@@ -731,14 +731,6 @@ def _advances():
     return adv
 
 
-def _ink(adv, size, digits=0, commas=0, parens=0, signs=0, percents=0, periods=0):
-    """One numeral's rendered width in rem, at `size` rem and letter-spacing 0 -- a superset of
-    test_progress_surface_mirror.py's own `_ink` (the r1/r2/r3 captions use only digits/commas)."""
-    return size * (digits * adv["digit"] + commas * adv["comma"]
-                   + parens * adv["paren"] + signs * adv["sign"]
-                   + percents * adv["percent"] + periods * adv["period"])
-
-
 def _decrem(css, selector, prop):
     """The Decimal rem value of `prop` within one line-anchored SOLE rule -- like `_rem` above,
     but for the fractional per-mark literals (0.500rem, -2.000rem, ...) `_rem`'s whole-int regex

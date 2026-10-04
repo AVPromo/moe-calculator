@@ -309,12 +309,20 @@ const MUTATIONS = {
     // constant in the corridor is an x-length, and at the shipped size xf == 1, so these anchors are
     // the same behaviour they always guarded.
     "clamp-left-bound": ["B",
-        "    const lo = CLAMP_L_REM * xf + half;", "    const lo = 0 + half;"],
+        "    const lo = CLAMP_L_REM * xf + half + w(\".mp-ico\")", "    const lo = 0 + half + w(\".mp-ico\")"],
     "clamp-right-bound": ["B",
-        "    const hi = CLAMP_R_REM * xf - half;", "    const hi = BAR_W_REM - half;"],
+        "    const hi = CLAMP_R_REM * xf - half - right;", "    const hi = BAR_W_REM - half - right;"],
     "no-ico-gap": ["B",
-                 'Math.max(w(".mp-ico") + ICO_GAP_REM * xf, right);',
-                 'Math.max(w(".mp-ico"), right);'],
+                 'w(".mp-ico") + ICO_GAP_REM * xf;',
+                 'w(".mp-ico");'],
+    // The corridor is ASYMMETRIC: the % reach must never inflate the LEFT bound...
+    "clamp-left-bound-counts-the-right-overhang": ["B",
+        "    const lo = CLAMP_L_REM * xf + half + w(\".mp-ico\") + ICO_GAP_REM * xf;",
+        "    const lo = CLAMP_L_REM * xf + half + Math.max(w(\".mp-ico\") + ICO_GAP_REM * xf, right);"],
+    // ...and the %-backing strip must stay inside the surface.
+    "strip-ignores-the-surface-edge": ["B",
+        "BOX_LEFT_REM * xf - PAD_REM + sw / 2);", "-1e9);"],
+    "strip-width-ignores-the-pct": ["B", "(!(cur.pct >= 0) ? 90 : 150)", "150"],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // The shared halves are anchored identically in check_progress_js.js; this bar adds the ONE
@@ -329,11 +337,8 @@ const MUTATIONS = {
     "size-surface-loses-the-x-factor": ["T",
         "viewW = Math.round((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);",
         "viewW = Math.round((cfg.boxW + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);"],
-    // THE 4/3 REPRESENTABILITY TRAP, on the bar that actually hits it: (460*4/3 + 20)*1.5 evaluates
-    // to 949.9999999999999, so a floor hands the engine a 1px-narrow surface.
-    "size-surface-floored-not-rounded": ["T",
-        "viewW = Math.round((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);",
-        "viewW = Math.floor((cfg.boxW * xf + cfg.padX + (large ? cfg.padXRLarge : cfg.padXR)) * f);"],
+    // (The floor-vs-round probe is gone: this bar's shipped Large numbers are exact, so floor and
+    // round agree and it was vacuous. Re-add it only with a fixture where they differ.)
     "size-shift-not-re-derived": ["T",
         "shiftX = Math.round((cfg.padX - cfg.boxLeft * xf) * 1000) / 1000;", "void 0;"],
     "size-no-surface-repush": ["T",
@@ -361,15 +366,15 @@ const MUTATIONS = {
     "pct-hidden-when-minus-one": ["B", "cur.pct >= 0 ?", "cur.pct >= -1 ?"],
     // The clamp must count the out-of-flow % box and both gaps...
     "clamp-ignores-the-pct": ["B",
-        "PCT_GAP_REM * xf + w(\".mp-pct\") + PCT_GAP_REM * xf + w(\".mp-d\")", "w(\".mp-d\")"],
+        "? w(\".mp-pct\") + PCT_GAP_REM * xf + w(\".mp-d\")", "? w(\".mp-d\")"],
     // ...but only while it is showing, or a hidden % still pushes the caption inward.
     "clamp-counts-a-hidden-pct": ["B", "const right = cur.pct >= 0", "const right = true"],
 
     "clamp-measured-icon-not-normalised": ["B",
         "        return ((n && n.offsetWidth) || 0) / px;", "        return (n && n.offsetWidth) || 0;"],
     "clamp-measured-numeral-not-normalised": ["B",
-        "    const half = (capC.offsetWidth || 0) / 2 / px +",
-        "    const half = (capC.offsetWidth || 0) / 2 +"],
+        "    const half = (capC.offsetWidth || 0) / 2 / px;",
+        "    const half = (capC.offsetWidth || 0) / 2;"],
     // The axis the clamped x is expressed against must take the x factor too, or the returned
     // PERCENTAGE is off by 4/3.
     "clamp-axis-not-scaled": ["B",
@@ -543,6 +548,7 @@ function mount(srcs, unsettled, unsized) {
         capDN: capC.querySelector(".mp-d-num"),
         capIco: capC.querySelector(".mp-ico"),
         capPctBox: capC.querySelector(".mp-pct"),
+        capCbd: q(".mp-bd-5"),
         capPct: capC.querySelector(".mp-pct-t"),
         capPctN: capC.querySelector(".mp-pct-num"),
         reqTick: (i) => q(".mp-tick.r" + i),
@@ -952,9 +958,10 @@ function run(mutation) {
     s.capC.offsetWidth = 100;                   // half the numeral == 50
     s.capIco.offsetWidth = 60;                  // + ICO_GAP_REM == 61 -> half == 111
     s.capD.offsetWidth = 0;
-    const HALF = 100 / 2 + 60 + ICO_GAP;
-    const LO = ((CLAMP_L + HALF) / BAR_W * 100).toFixed(3) + "%";
-    const HI = ((CLAMP_R - HALF) / BAR_W * 100).toFixed(3) + "%";
+    // ASYMMETRIC: the left bound reserves the numeral half + the icon (+gap), the right bound the
+    // numeral half + the right overhang (here the delta alone == 0, % off).
+    const LO = ((CLAMP_L + 100 / 2 + 60 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%";
+    const HI = ((CLAMP_R - 100 / 2) / BAR_W * 100).toFixed(3) + "%";
     s.push(M({ barX: 0 }));
     eq("at barX 0 the caption is held off the LEFT bound (meta.capClamp.leftRem)",
        s.capC.style.left, LO);
@@ -965,12 +972,15 @@ function run(mutation) {
        s.capC.style.left, HI);
     s.push(M({ barX: 50 }));
     eq("mid-axis it rides its tick untouched", s.capC.style.left, "50.000%");
-    // The delta can be the wider overhang, and then IT sets the margin (no icon gap involved).
+    // Each overhang binds ONLY its own side: a wide delta moves the RIGHT bound, never the left.
     s.capIco.offsetWidth = 10;
     s.capD.offsetWidth = 60;
     s.push(M({ barX: 0 }));
-    eq("the WIDER of the two overhangs wins -- here the delta's",
-       s.capC.style.left, ((CLAMP_L + 50 + 60) / BAR_W * 100).toFixed(3) + "%");
+    eq("the left bound is the icon's alone -- a wide delta does not inflate it",
+       s.capC.style.left, ((CLAMP_L + 50 + 10 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%");
+    s.push(M({ barX: 100 }));
+    eq("...and the right bound is the delta's alone",
+       s.capC.style.left, ((CLAMP_R - 50 - 60) / BAR_W * 100).toFixed(3) + "%");
     // A corridor narrower than the caption is DEGENERATE: bail, do not invert the bounds.
     s.capC.offsetWidth = 1000;
     s.push(M({ barX: 100 }));
@@ -989,7 +999,7 @@ function run(mutation) {
     eq("damagePercent -1 (setting off / no data) hides it", pctOf(s), ["none", ""]);
     s = mount(srcs);
     s.push(M({ damagePercent: 0 }));
-    eq("damagePercent 0.0 is a REAL percentile (a 0-damage battle), not absent", pctOf(s), ["", "0.00%"]);
+    eq("damagePercent 0.0 is a REAL percentile (a 0-damage battle), not absent", pctOf(s), ["", "0%"]);   // == MoEBattle.js's pctText(0)
     s = mount(srcs);
     s.push(M({ damagePercent: 73.849 }));
     eq("two decimals, TRUNCATED not rounded", pctOf(s), ["", "73.84%"]);
@@ -1007,15 +1017,51 @@ function run(mutation) {
     s.capPctBox.offsetWidth = 80;
     s.capD.offsetWidth = 20;
     s.push(M({ barX: 0, damagePercent: 50 }));
+    s.push(M({ barX: 100, damagePercent: 50 }));
     eq("the clamp's right overhang is the % box (own gap inside it) + the delta's gap + the delta",
-       s.capC.style.left, ((CLAMP_L + 50 + 80 + 4.2 + 20) / BAR_W * 100).toFixed(3) + "%");
+       s.capC.style.left, ((CLAMP_R - 50 - (80 + 4.2 + 20)) / BAR_W * 100).toFixed(3) + "%");
     s.push(M({ barX: 0, damagePercent: -1 }));
     eq("with the % hidden the clamp falls back to today's numbers (icon side here)",
        s.capC.style.left, ((CLAMP_L + 50 + 60 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%");
     s.capIco.offsetWidth = 0;
     s.push(M({ barX: 0, damagePercent: -1 }));
     eq("...and the delta alone otherwise (no % term, no gaps)",
-       s.capC.style.left, ((CLAMP_L + 50 + 20) / BAR_W * 100).toFixed(3) + "%");
+       s.capC.style.left, ((CLAMP_L + 50 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%");
+
+    // F1: the % reach must NOT inflate the LEFT bound. A realistic caption (20 numeral, 14 icon): at
+    // barX 0 the corridor's left bound is below the tick, so the numeral stays ON it, % shown.
+    s = mount(srcs);
+    s.capC.offsetWidth = 20;
+    s.capIco.offsetWidth = 14;
+    s.capPctBox.offsetWidth = 55;
+    s.capD.offsetWidth = 31;
+    s.push(M({ barX: 0, damagePercent: 50 }));
+    eq("barX 0 with the % ON leaves the caption on its tick (0%)", s.capC.style.left, "0.000%");
+
+    // F2: the %-backing strip (.mp-bd-5) must never cross the SURFACE edge, % on and off, Default
+    // and Large, across the axis. Surface left == BOX_LEFT*xf - PAD, right == 300*xf - that.
+    const strip = s.capCbd;
+    ok("the harness reaches the .mp-bd-5 strip", !!strip);
+    for (const large of [false, true]) {
+        const xf = large ? SIZE_XF : 1, f = large ? SIZE_F : 1;
+        const sl = BOX_LEFT * xf - PAD, sr = BAR_W * xf - sl;
+        for (const pct of [50, -1]) {
+            const t = mount(srcs);
+            t.push(M({ barSize: large ? 1 : 0 }));
+            t.capC.offsetWidth = 20 * f; t.capIco.offsetWidth = 14 * f;
+            t.capPctBox.offsetWidth = 55 * f; t.capD.offsetWidth = 31 * f;
+            let worst = [Infinity, -Infinity];
+            for (let x = 0; x <= 100; x += 2.5) {
+                t.push(M({ barSize: large ? 1 : 0, barX: x, damagePercent: pct }));
+                const c = parseFloat(t.capCbd.style.left) / 100 * BAR_W * xf;
+                const hw = parseFloat(t.capCbd.style.width) / 2;
+                worst = [Math.min(worst[0], c - hw), Math.max(worst[1], c + hw)];
+            }
+            ok("strip inside the surface (" + (large ? "Large" : "Default") + ", % " +
+               (pct >= 0 ? "on" : "off") + "): [" + worst.map((v) => v.toFixed(1)) + "] within [" +
+               sl.toFixed(1) + ", " + sr.toFixed(1) + "]", worst[0] >= sl - 1e-6 && worst[1] <= sr + 1e-6);
+        }
+    }
 
     // --- barX AND band ARE CONSUMED VERBATIM -------------------------------------------------
     // domain/battle_builder owns efficiency_bar_x / efficiency_band, and the `>=`-INCLUSIVE
@@ -1263,10 +1309,9 @@ function run(mutation) {
     s.push(M({ barSize: 1 }));
     s.capC.offsetWidth = 100 * SIZE_F;          // 100 document rem -> half is 50
     s.capIco.offsetWidth = 60 * SIZE_F;         // 60 document rem
-    s.capD.offsetWidth = 0;
-    const LG_HALF = 100 / 2 + 60 + ICO_GAP * SIZE_XF;
-    const LG_LO = ((CLAMP_L * SIZE_XF + LG_HALF) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
-    const LG_HI = ((CLAMP_R * SIZE_XF - LG_HALF) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
+    s.capD.offsetWidth = 60 * SIZE_F;           // the right overhang (% off): 60 document rem
+    const LG_LO = ((CLAMP_L * SIZE_XF + 100 / 2 + 60 + ICO_GAP * SIZE_XF) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
+    const LG_HI = ((CLAMP_R * SIZE_XF - 100 / 2 - 60) / (BAR_W * SIZE_XF) * 100).toFixed(3) + "%";
     s.push(M({ barSize: 1, barX: 0 }));
     eq("at barX 0 the caption is held off the LEFT bound, scaled by SIZE_XF",
        s.capC.style.left, LG_LO);

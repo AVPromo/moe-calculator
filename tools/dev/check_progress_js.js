@@ -721,7 +721,7 @@ function run(mutation) {
     eq("curPercent -1 (setting off / no data) hides it", pctOf(s), ["none", ""]);
     s = mount(srcs);
     s.push(M({ curPercent: 0 }));
-    eq("curPercent 0.0 is a REAL percentile, not absent", pctOf(s), ["", "0.00%"]);
+    eq("curPercent 0.0 is a REAL percentile, not absent", pctOf(s), ["", "0%"]);   // == MoEBattle.js's pctText(0)
     s = mount(srcs);
     s.push(M({ curPercent: 73.849 }));
     eq("two decimals, TRUNCATED not rounded (pctText)", pctOf(s), ["", "73.84%"]);

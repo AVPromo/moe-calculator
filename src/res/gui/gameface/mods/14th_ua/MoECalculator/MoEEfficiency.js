@@ -491,7 +491,7 @@ function goVertical() {
     capDN = capC.querySelector(".mev-d-num");
     capPct = capC.querySelector(".mev-pct");
     capPctN = capC.querySelector(".mev-pct-num");
-    capCbd = null;                  // horizontal-only strip; the vertical bar uses .mev-bd instead
+    capCbd = null;                   // horizontal-only strip; the vertical bar uses .mev-bd instead
 }
 
 function capV(c) { return c.querySelector(ns(".mp-v")); }
@@ -570,10 +570,12 @@ function capClampPct(p) {
     const right = cur.pct >= 0
         ? w(".mp-pct") + PCT_GAP_REM * xf + w(".mp-d")
         : w(".mp-d");
-    const half = (capC.offsetWidth || 0) / 2 / px +
-                 Math.max(w(".mp-ico") + ICO_GAP_REM * xf, right);
-    const lo = CLAMP_L_REM * xf + half;
-    const hi = CLAMP_R_REM * xf - half;
+    // ASYMMETRIC: each bound reserves only the overhang on ITS side (icon on the left, % + delta on
+    // the right). One shared max() let the % reach inflate the left bound and shoved the numeral
+    // off its tick at low damage.
+    const half = (capC.offsetWidth || 0) / 2 / px;
+    const lo = CLAMP_L_REM * xf + half + w(".mp-ico") + ICO_GAP_REM * xf;
+    const hi = CLAMP_R_REM * xf - half - right;
     let x = p / 100 * BAR_W_REM * xf;
     if (lo <= hi) x = Math.max(lo, Math.min(hi, x));
     return x / (BAR_W_REM * xf) * 100;
@@ -593,7 +595,15 @@ function setPos(x) {
     fill.style[GROW] = p;
     tCur.style[AX] = p;
     if (CAP_C_AX) capC.style[CAP_C_AX] = capClampPct(x).toFixed(3) + "%";
-    if (capCbd) capCbd.style.left = capClampPct(x).toFixed(3) + "%";  // strip behind the moving caption
+    if (capCbd) {   // strip behind the moving caption
+        // 150 backs the % (+-75), 90 is the %-off width; both x-lengths (Large == SIZE_XF). The
+        // centre never lets the strip's own edge cross the surface's left edge (BOX_LEFT*xf - PAD).
+        const xf = large ? SIZE_XF : 1;
+        const sw = (!(cur.pct >= 0) ? 90 : 150) * xf;
+        const c = Math.max(capClampPct(x) / 100 * BAR_W_REM * xf, BOX_LEFT_REM * xf - PAD_REM + sw / 2);
+        capCbd.style.width = sw + "rem";
+        capCbd.style.left = (c / (BAR_W_REM * xf) * 100).toFixed(3) + "%";
+    }
 }
 
 // Everything that does NOT animate: the four requirement numerals, which of them are met, the band

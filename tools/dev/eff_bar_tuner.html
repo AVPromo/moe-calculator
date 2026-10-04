@@ -768,12 +768,14 @@
   function capLeft(el,p){
     if(st.clamp==="off"){el.style.left=p.toFixed(3)+"%";return p;}
     // WIDENED for the out-of-flow caption parts: .mp-cap's offsetWidth is now the NUMERAL only
-    // (the icon and the delta hang off it), so add the larger of the two overhangs -- otherwise
-    // the corridor would silently narrow to the digits and let the icon leave the box.
+    // (the icon and the delta hang off it), so each bound reserves ITS side's overhang -- the icon
+    // (+ its gap) on the left, the delta on the right -- otherwise the corridor would silently
+    // narrow to the digits and let them leave the box. ASYMMETRIC, mirroring MoEEfficiency.js's
+    // capClampPct (a shared max() let the right-hand % reach shove the numeral off its tick).
     var w=function(q){var n=el.querySelector(q);return ((n&&n.offsetWidth)||0)/st.pxrem;},
-        half=(el.offsetWidth||0)/st.pxrem/2+Math.max(w(".mp-ico")+st.icoGap,w(".mp-d")),
-        lo=-(st.boxPad-st.gapEndL)+half,
-        hi=st.barW+(st.boxPad-st.gapEndR)-half, x=p/100*st.barW;
+        half=(el.offsetWidth||0)/st.pxrem/2,
+        lo=-(st.boxPad-st.gapEndL)+half+w(".mp-ico")+st.icoGap,
+        hi=st.barW+(st.boxPad-st.gapEndR)-half-w(".mp-d"), x=p/100*st.barW;
     if(lo<=hi) x=Math.max(lo,Math.min(hi,x));
     var q=x/st.barW*100;
     el.style.left=q.toFixed(3)+"%";

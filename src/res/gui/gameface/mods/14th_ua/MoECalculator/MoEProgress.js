@@ -869,7 +869,7 @@ function paintStatic() {
     capPct.style.display = cur.pct >= 0 ? "" : "none";
     capPctN.textContent = pctText(cur.pct);
     capV(capP).textContent = fmt(cur.preAvg);
-    const pre =axisPct(cur.preAvg).toFixed(3) + "%";
+    const pre = axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style[AX] = pre;
     capP.style[AX] = pre;
     if (capBd3) capBd3.style.bottom = pre;   // keep capP's backdrop strip behind the moving number
