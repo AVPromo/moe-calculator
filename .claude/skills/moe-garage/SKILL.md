@@ -36,7 +36,9 @@ VM. `_arm` uses `getattr(holder, attr, None)` so a renamed WG event degrades qui
 
 ## VM slots (`bridge/view_models.py`) — HAND-NUMBERED, JS reads by name
 
-- **`MoEVM`** — `properties=12`, `commands=0`. Indices: 0 `visible`, 1 `nation`, 2 `marks`,
+- **`MoEVM`** — read `properties=`/`commands=` off its `__init__` in `view_models.py` (the 12 read
+  slots below are only the v1 set; later slots are APPENDED after `labels` — the drag/position
+  channel, the `rev` push counter, the `trend` JSON — plus a `setPosition` command). Indices: 0 `visible`, 1 `nation`, 2 `marks`,
   **3 `curPercent` (Real)**, 4 `curAvgDamage`, **5 `fill` (Real)**, 6 `hasData`,
   7 `carouselRows`, 8 `carouselSmall`, 9 `ticks` (Array of `MarkTickVM`),
   **10 `endDamageRequired`**, 11 `labels` (JSON string for the tooltip).

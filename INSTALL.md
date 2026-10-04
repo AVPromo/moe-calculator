@@ -128,6 +128,7 @@ settings that affect their look.
     percentage before battle, its mode switches once on its own, the same as pressing the
     override key. 100% disables it.
   - **Scale** — **Default** or **Large**.
+  - **Show MoE %** *(on)* — shows the MoE percentage in brackets beside the current damage.
   - **Transitions** — **Enabled** *(on)*, with **Events** / **Alt Press** children (whether
     the bar animates its entry/exit for each trigger, or appears and disappears instantly) and
     a **Hold Duration (s)** slider *(1–30, default 5)* for how long it stays up before fading.

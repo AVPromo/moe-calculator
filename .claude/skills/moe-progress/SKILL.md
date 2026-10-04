@@ -41,7 +41,7 @@ computes `marks_from_percentile`, `mark_axis`, `ewma_project_raw`, `battles_to_a
 has-baseline gate**, unlike `push_progress` — its axis is the tank's requirement table alone,
 so it doesn't need a career baseline to draw.
 
-## VM slot table — `ProgressVM` (`bridge/view_models.py`), `properties=16, commands=0`
+## VM slot table — `ProgressVM` (`bridge/view_models.py`), `commands=0` (the `properties=` count is the `__init__` default there — read it, `tests/test_view_models.py` pins it)
 
 | # | field | type | notes |
 |---|---|---|---|
@@ -61,8 +61,9 @@ so it doesn't need a career baseline to draw.
 | 13 | `ctrlHeld` | bool | Ctrl down → hold up for reposition |
 | 14 | `etaBattles` | Number | battles to `axisHi`, -1 = no data |
 | 15 | `vertical` | bool | draw vertical composition |
+| 16 | `curPercent` | **Real** | live MoE % shown "(73.84%)" beside the current-damage numeral; **`-1.0` = "setting off / no data"** (0.0 is a real percentile) |
 
-`EfficiencyVM` (`bridge/view_models.py`), `properties=18, commands=0` — its OWN model,
+`EfficiencyVM` (`bridge/view_models.py`), `commands=0` (count: read the `__init__` default) — its OWN model,
 deliberately NOT sharing ProgressVM's two-end mark axis (it plots ONE battle's combined damage
 against ALL FOUR requirement stops):
 
@@ -81,6 +82,7 @@ against ALL FOUR requirement stops):
 | 15 | `holdMs` | Number | |
 | 16 | `ctrlHeld` | bool | |
 | 17 | `vertical` | bool | |
+| 18 | `damagePercent` | **Real** | percentile THIS battle's damage alone is worth, shown "(73.84%)"; **`-1.0` = "setting off / no data"** |
 
 No `damageDelta` slot on Efficiency — the "last increment" caption is derived and latched in
 `MoEEfficiency.js` off successive `damage` pushes; adding one would have renumbered every
@@ -99,8 +101,12 @@ never showed").
 
 `MoEProgressView.html`'s static markup is ONLY `<div id="moe-bar-box">` — a sizing shim, sized
 to `BOX_W_REM + 2*PAD_REM` × `BOX_H_REM + 2*PAD_REM - CLIP_B_REM` (VIEW_H), mirrored exactly in
-`MoEProgress.css`. Progress box is -80/-22/360/55, PAD=10, CLIP_B_REM=8 → `#moe-bar-box`
-**380×67rem** (Efficiency box: -45/-35/390/66). `CLIP_B_REM` is a bottom-only trim and never
+`MoEProgress.css`. The box numbers (`BOX_LEFT_REM`/`BOX_TOP_REM`/`BOX_W_REM`/`BOX_H_REM`, `PAD_REM`,
+`CLIP_B_REM`) are consts at the top of each bar's JS (`MoEProgress.js`, `MoEEfficiency.js`) with the
+derived `VIEW_W_REM`/`VIEW_H_REM` in the header comment above them — read them there, they change
+whenever a caption grows (the `%` caption widened Progress's surface), and
+`tests/test_progress_surface_mirror.py` / `tests/test_efficiency_surface_mirror.py` pin the CSS
+mirror (`.mp-backdrop` and `#moe-bar-box`). `CLIP_B_REM` is a bottom-only trim and never
 enters `shiftY`. `#moe-bar-root` is JS-created in `ensureRoot()` (`MoEProgress.js`) and appended
 to `document.body` — the box must exist at the FIRST layout
 pass or the engine's size calculation has nothing to measure and clobbers the surface (see
@@ -169,8 +175,12 @@ Gates, all `node tools\dev\<script>.js`, exit 1 on failure, most support `--prob
 - `lib/gf_check_shim.js` is the shared harness (assertion helpers `eq`/`ok`, a minimal DOM, a
   virtual clock, the `jsConst`/`jsFactor` scrapers) — not a checker itself.
 
-Doc drift: `tools/dev/README.md` says the shipped vertical CSS is emit + exactly 5 hand-edits for
-BOTH bars. Trust the CSS header for the count (Progress 8, Efficiency 5), not that README line.
+The hand-edit count lives in each shipped vertical CSS's own header (`HAND-EDIT n/N`); trust that,
+not any restated count in a doc.
+
+**Gate honesty:** a green plain `check_*.js` run does NOT prove its probes still catch anything — a
+CSS/JS re-anchor can leave a gate vacuously green. After any re-anchor run the checker with
+`--probe-all` and confirm every mutation still reports failures.
 
 ## Placement / window
 
@@ -260,14 +270,14 @@ shared verbatim by both bars).
 
 Constants (`domain/constants.py`): `PROGRESS_ANCHOR_Y_FRAC=0.865`,
 `PROGRESS_ANCHOR_X_OFFSET=0`, `PROGRESS_ANCHOR_Y_SHIFT=-32` / `_LARGE=-48`,
-`PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X=105` / `_LARGE=147` (pure derivation 107/149,
-with a measured -2 hand-placement correction — see the constants' long comment on two
-independent Ctrl+drags landing on the same corrected value across different surface
-geometries; both the pure derivation and the correction's own validity predate the v6.0.1 box shrink and V_PAD_X growth); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`,
+`PROGRESS_MM_GAP_BOTTOM=30`, `PROGRESS_MM_TRACK_X(_LARGE)` (a pure derivation plus a flat measured
+-2 hand-placement correction — see the constants' long comment); `EFFICIENCY_ANCHOR_Y_FRAC=0.865`,
 `EFFICIENCY_ANCHOR_Y_SHIFT=-45` / `_LARGE=-64`,
-`EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X=95` / `_LARGE=137` (pure derivation, no
-correction). TRACK_X values predate the v6.0.1 box shrink and V_PAD_X growth; an in-game
-re-drag is owed. Shared:
+`EFFICIENCY_MM_GAP_BOTTOM=28`, `EFFICIENCY_MM_TRACK_X(_LARGE)` (pure derivation, no correction).
+**Read the `*_MM_TRACK_X` values in `domain/constants.py` — never restate them**: they are
+re-derived whenever a bar surface grows (growth moves the track inside it; the `%` caption growth
+re-derived all four), and the Progress flat -2 correction rides on top of the re-derived pure
+value. Shared:
 `MM_GAP=8`, `MM_TICK_OVERHANG=3`/`_LARGE=5`, `MM_TRACK_Y=290`/`_LARGE=363`,
 `VERTICAL_ANCHOR_Y_SHIFT=-90`/`_LARGE=-170` (identical for both bars — both vertical
 compositions share the same backdrop geometry).
@@ -294,7 +304,9 @@ pin them against real geometry.
 
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
-`SETTINGS_VERSION=29` (was 28; the 28→29 bump is a stored-value self-heal, no template change — see `moe-settings`). Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
+`SETTINGS_VERSION` is in `mod_settings.py` (28→29 was a stored-value self-heal; 29→30 added the
+standalone `progress_show_percent` checkbox, default True — a layout change, forward bump; see
+`moe-settings`). Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
 `progress_bar_enabled()`. Variant `PROGRESS_VARIANT_KEY=
 "progress_bar_variant"` (0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
 "progress_bar_size"` (0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=
@@ -342,8 +354,9 @@ is the real fix, and the bar must stay hidden (`surfaceSettled`) until the surfa
 renders cropped ~142px too high.
 
 ### VM `properties=` must be bumped with every appended field
-`ProgressVM.properties=16` (`vertical` at slot 15 was the last append); `EfficiencyVM.
-properties=18` (`vertical` at slot 17). `test_view_models.py` derives the count from source and
+Rule: the LAST append moves — every new slot is appended at the end and bumps that VM's `properties=`
+in the same edit (see the slot tables above for what is last now; do not restate the count).
+`test_view_models.py` derives the count from source and
 does catch a mismatch — the push tests' fake VM ignores the declared count and cannot.
 
 ### The two bars share `#moe-bar-root` and the `.mp-*` namespace
@@ -354,7 +367,8 @@ open one before the other closes).
 ### Vertical surface must stay concentric with its track
 `anchor_centred_reduced` has no x term, so widening one side of a vertical surface alone re-aims
 the whole bar — mirrored in three places (both JS files' `V_PAD_X_REM`/shift derivations, one in
-document rem, plus the shared `VERTICAL_ANCHOR_Y_SHIFT` constant).
+document rem, plus the shared `VERTICAL_ANCHOR_Y_SHIFT` constant). Read `V_PAD_X_REM` in each bar's
+JS; never restate it here.
 
 ### The vertical Efficiency bar has no clip-invariance gate yet
 The vertical Moving Average bar shipped a real clip on its bottom row once, caught only by

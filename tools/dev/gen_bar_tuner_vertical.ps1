@@ -563,8 +563,8 @@ $tpl = @'
       // is -(padX - boxLeft*SIZE_XF), which is not a clean *4/3 of the Default). Change the JS
       // surface (V_BOX_*/V_PAD_*) and these must move with it. Tops are per-row seeds the maintainer
       // converges in-client.
-      {id:"bdStripLeft",label:"Strip left == surface left (rem)",min:-160,max:0,step:0.001,val:-104},
-      {id:"bdStripW",label:"Strip width == surface width (rem)",min:10,max:200,step:0.001,val:119},
+      {id:"bdStripLeft",label:"Strip left (rem; the pre-% surface's left, kept)",min:-160,max:0,step:0.001,val:-104},
+      {id:"bdStripW",label:"Strip width (rem; right edge flush with the surface's right edge)",min:10,max:200,step:0.001,val:119},
       {id:"bdStripLeftLg",label:"Strip left, Large (rem)",min:-200,max:0,step:0.001,val:-115.333},
       {id:"bdStripWLg",label:"Strip width, Large (rem)",min:10,max:220,step:0.001,val:130.4},
       {id:"bdStripH",label:"Strip height, shared (rem)",min:6,max:120,step:1,val:30},

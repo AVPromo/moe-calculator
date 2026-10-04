@@ -110,7 +110,7 @@ destroys it. `battle_view.open_window()`/`close_window()` keep a `_active` singl
 
 ## VM slots (`bridge/view_models.py::BattleMoEVM`)
 
-`properties=10`, indices 0–9: 0 `visible`, 1 `combinedDamage`, 2 `projAvgDamage`,
+`properties=` is the `BattleMoEVM.__init__` default (10 at the time of writing; read it), indices 0–9: 0 `visible`, 1 `combinedDamage`, 2 `projAvgDamage`,
 **3 `curPercent` (Real)**, **4 `pctDelta` (Real)**, 5 `hasData`, **6 `hasBaseline`** (career
 baseline present; false on the replay/relogin BUG-B path → JS dashes proj/%/delta),
 **7 `countedAssist`** (Number, = `max(track, spot, stun)`), **8 `assistKind`** (String:

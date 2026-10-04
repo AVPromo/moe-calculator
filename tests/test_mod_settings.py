@@ -1749,10 +1749,10 @@ def test_preview_sources_are_bare_relative_scaleform_paths():
     # Defaults: countedAssist on -> 3-row calc, variant Efficiency + Horizontal -> eff_horizontal.
     assert calc_src.endswith(u"calc_assist_on.png")
     assert bar_src.endswith(u"bar_eff_horizontal.png")
-    # The dims must match _PREVIEW_DISPLAY for the default state (calc 125x73, bar 276x323 --
-    # the previews are now multi-range composites, so the default eff_horizontal is taller).
+    # The dims must match _PREVIEW_DISPLAY for the default state (calc 125x73, bar 314x323 --
+    # the previews are multi-range composites grown to fit the %-caption surfaces).
     assert (calc_w, calc_h) == mod_settings._PREVIEW_DISPLAY["calc_assist_on"] == (125, 73)
-    assert (bar_w, bar_h) == mod_settings._PREVIEW_DISPLAY["bar_eff_horizontal"] == (276, 323)
+    assert (bar_w, bar_h) == mod_settings._PREVIEW_DISPLAY["bar_eff_horizontal"] == (314, 323)
 
 
 def test_template_preview_images_carry_display_width_and_height():
@@ -1766,14 +1766,14 @@ def test_template_preview_images_carry_display_width_and_height():
     # width/height are the CURRENT source's display dims; containerWidth/Height reserve the
     # max slot across every swappable image, so a taller/wider swap never reflows the panel.
     assert (calc_img["width"], calc_img["height"]) == (125, 73)
-    assert (bar_img["width"], bar_img["height"]) == (276, 323)
+    assert (bar_img["width"], bar_img["height"]) == (314, 323)
     assert (calc_img["containerWidth"], calc_img["containerHeight"]) == (
         mod_settings._CALC_PREVIEW_W, mod_settings._CALC_PREVIEW_H)
     assert (bar_img["containerWidth"], bar_img["containerHeight"]) == (
         mod_settings._BAR_PREVIEW_W, mod_settings._BAR_PREVIEW_H)
     # The composite previews fill the width, so no alignment is passed (MSA ignored `align` anyway);
     # the bar slot reserves the max bar dims. Neither Image carries an `align` key.
-    assert bar_img["containerWidth"] == 332
+    assert bar_img["containerWidth"] == 496
     assert "align" not in bar_img
     assert "align" not in calc_img
 
@@ -1798,7 +1798,7 @@ def test_update_preview_images_passes_the_display_dims_through(monkeypatch):
     calc_call = [c for c in calls if c[1] == mod_settings.CALC_PREVIEW_KEY][0]
     bar_call = [c for c in calls if c[1] == mod_settings.BAR_PREVIEW_KEY][0]
     assert (calc_call[3], calc_call[4]) == (125, 73)
-    assert (bar_call[3], bar_call[4]) == (276, 323)
+    assert (bar_call[3], bar_call[4]) == (314, 323)
 
 
 def test_on_live_change_reads_the_passed_settings_not_the_getters(monkeypatch):

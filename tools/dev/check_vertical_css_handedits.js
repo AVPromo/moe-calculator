@@ -120,10 +120,11 @@ const PROGRESS_EDITS = [
      '1/6 root rule'],
     // HAND-EDIT 2/6: the sizing shim -- the tuner has no surface, so this rule does not exist in
     // the emit at all; inserted right before the backdrop rule that follows the root in both files.
-    // The width is a SPLIT pad now: 46 + 70 + -4 == 112 (V_BOX_W_REM(46) + V_PAD_X_REM(70) on the
-    // LEFT, where the right-anchored captions' ink lives, + V_PAD_XR_REM(-4) on the RIGHT, which
-    // CLIPS the (already trimmed) backdrop's own decorative bleed a little further, down to just
-    // past the track's tick overhang plus a 2px margin -- see MoEProgress.js's own note).
+    // The width is a SPLIT pad: V_BOX_W_REM + V_PAD_X_REM (LEFT, where the right-anchored captions'
+    // ink lives) + V_PAD_XR_REM (RIGHT, a small pad that trims the backdrop's own decorative bleed
+    // down to just past the track's tick overhang). Read the three constants in MoEProgress.js
+    // rather than a restated sum here; the literal below must equal their sum (46+116+3 == 165 at
+    // the time of writing -- the shipped CSS shim and the JS are the source of truth).
     ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 165rem; height: 320rem; }\n.mpv-backdrop {',
      '2/6 sizing shim'],
     // STRIP-GEOMETRY EDIT A (un-numbered in the CSS header; re-anchored 2026-10, ratifies the shipped

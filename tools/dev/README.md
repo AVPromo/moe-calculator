@@ -392,7 +392,7 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
   Schema defaults are the **maintainer's tuned values** (600/**5000**/600 ms = **6200** total, keyframe
   stops **9.68/90.32**; `barW` **200** (was 300) — the ONE knob behind the emitted
   `#moe-bar-root { width: 200rem }`, and the only tuned length anything else is derived from:
-  `.mp-backdrop` follows it (`width: barW + 2*bdBleedX` = **360rem**) and so, outside this file, does
+  `.mp-backdrop` follows it (`width: barW + 2*bdBleedX`; `bdBleedX`'s default is in `gen_bar_tuner.ps1`'s schema, **105** = **410rem** at `barW` 200) and so, outside this file, does
   `MoEProgress.js`'s mirrored `BOX_W_REM` → `VIEW_W_REM` → the hand-appended `#moe-bar-box` width
   (`SHIFT_X_REM` is `PAD_REM - BOX_LEFT_REM` and does **not** move with `barW`). 200 = 3×66 + 2, so
   the 3rem dash period still ends on a **whole 2rem mark flush with the right edge** — nothing to
@@ -402,8 +402,8 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
   **rem** width centred on their tick: at `barW` 200 the bottom caption is collision-free only over
   **17.5 %–82.5 %** of the axis (it was 11.7 %–88.3 % at 300), the top one over 8.5 %–91.5 %, and the
   `pre`/`proj` tick edges close from 2rem to **0.67rem** at the default mock move. The two `.side`
-  captions hang off the ends by a width-INDEPENDENT `gapEndL`/`gapEndR` + row width, so `bdBleedX` 80 still
-  covers them with ~25rem to spare exactly as at 300;
+  captions hang off the ends by a width-INDEPENDENT `gapEndL`/`gapEndR` + row width, so `bdBleedX` (now 105, widened
+  for the % caption) still covers them;
   `offY` **86.5**vh, `trackH` 3, `tickH` 9, `slide` **20rem, range ±85, step 0.1 —
   a float** (it was 1 until `slideStops()` was fixed to route through the `pxrem` calibration like
   every other length: it had emitted a literal `rem`, and with no root font-size the browser's 16px
@@ -416,7 +416,7 @@ pwsh tools\dev\gen_bar_tuner.ps1 [-Out TASKS/refs/in-battle-bar-tuner.html]
   they are never on screen together; without the `.moe` rule it fell back to 13rem and shrank),
   `icoGap` 1, per-role
   icon Y 0.5/**0**/1/0.5 (L/P/C/R — the TOP caption's nudge is 0 now, the bottom one is still 1), `numY` **-0.5**; fill **cream `#ede6d9` @ 0.8** — `fillA` drives all three fill backgrounds —
-  ticks `endA` **0.8** / `preA` **0.75** / `projA` **1** (the CURRENT tick reads solid); backdrop `bdBleedX` **80** → `left: -80rem` / `width: 360rem`, dither mask
+  ticks `endA` **0.8** / `preA` **0.75** / `projA` **1** (the CURRENT tick reads solid); backdrop `bdBleedX` **105** → `left: -105rem` / `width: 410rem`, dither mask
   `56% 110%` fading out by **67%**, radial underlay **76% 57%**), so the "transient"
   preset no longer matches them. **`fillCol` must stay off `upCol`/`dnCol`:** it *was* the same
   green as `upCol`, which made every cold damage event flash **green** through the entry animation
@@ -644,13 +644,15 @@ node tools\dev\check_eff_vertical.js          # the efficiency tuner's gate + it
   `.mpv-cap` / `.mev-cap` rule with the icon and delta as **in-flow flex children**. A nudge
   computed off a caption box's own content width is the bug this replaces.
 
-### The shipped vertical CSS is "emit + exactly 5 hand-edits" — `check_vertical_css_handedits.js`
-Both shipped stylesheets are their tuner's emit **plus exactly five documented hand-edits** (each
-marked `HAND-EDIT n/5` at its site in the CSS's own header/comments): the root rule's scoping +
+### The shipped vertical CSS is "emit + documented hand-edits" — `check_vertical_css_handedits.js`
+Both shipped stylesheets are their tuner's emit **plus documented hand-edits** (each marked
+`HAND-EDIT n/N` at its site; **N is in each CSS's own header — read it there**, the Progress
+sheet carries more than the Efficiency one, and the checker's table may lag). The original
+five: the root rule's scoping +
 absolute positioning, a `#moe-bar-box` sizing shim the tuner never emits, the dash-gap stripe
 forced to opaque `rgba(...,1)`, `.mpv-lg`/`.mev-lg` renamed to the shared `.mp-lg` (the body class
 `MoEBarTransient.applySize` actually writes), and the two Large-mode root/box rules re-scoped to
-`body.mpv.mp-lg` / `body.mev.mp-lg`. Until this gate existed those five were enforced by comment
+`body.mpv.mp-lg` / `body.mev.mp-lg`. Until this gate existed those were enforced by comment
 only — a careless re-emit-and-paste (the exact mistake `emitcss-is-not-the-whole-shipped-
 stylesheet` records for the horizontal sheets) silently reverts any of them with no signal.
 ```
