@@ -302,6 +302,11 @@
     font-size:var(--dfs);line-height:var(--dlh);color:#ffffff;font-weight:var(--wt);
     text-shadow:var(--textsh);opacity:0;transition:opacity var(--dfadems) var(--dfadease)}
   .mev-cap.bt .mev-d.on{opacity:1}
+  /* THE MoE-% "(73.84%)": in-flow, immediately BEFORE the numeral (delta, %, numeral, icon); margin-right
+     is its gap to the numeral (--pctgap == the delta's own gap), no transform -- align-items:center
+     lands its line box on the same centre the delta's top:0 + dY does. Shares the BAND glow below. */
+  .mev-cap.bt .mev-pct{margin-right:var(--pctgap);font-size:var(--dfs);line-height:var(--dlh);
+    color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
 
   /* ---- BAND COLOURING: byte-identical to the horizontal sibling apart from the rename. The
      current TOTAL's numeral AND its icon glow both live in .mev-cap.bt now (the static readout);
@@ -321,6 +326,11 @@
   #mev-bar-root.mev-b-t  .mev-cap.bt .mev-v{text-shadow:var(--tsh-t)}
   #mev-bar-root.mev-b-v  .mev-cap.bt .mev-v{text-shadow:var(--tsh-v)}
   #mev-bar-root.mev-b-au .mev-cap.bt .mev-v{text-shadow:var(--tsh-au)}
+  #mev-bar-root.mev-b-w  .mev-cap.bt .mev-pct{text-shadow:var(--tsh-w)}
+  #mev-bar-root.mev-b-g  .mev-cap.bt .mev-pct{text-shadow:var(--tsh-g)}
+  #mev-bar-root.mev-b-t  .mev-cap.bt .mev-pct{text-shadow:var(--tsh-t)}
+  #mev-bar-root.mev-b-v  .mev-cap.bt .mev-pct{text-shadow:var(--tsh-v)}
+  #mev-bar-root.mev-b-au .mev-cap.bt .mev-pct{text-shadow:var(--tsh-au)}
 
   /* ---- Minimap mock (preview only, never emitted): bordered/labelled box flush to the stage's
      bottom-right corner, zero inset -- measured fact, tools/dev/measure_minimap.py:7-10,44-47.
@@ -359,7 +369,7 @@
         <div class="mev-cap tp r4"><span class="mev-v"></span><i class="mev-ico bm"></i></div>
         <!-- Current/latest value + delta: STATIC, below the track's bottom end. Delta LEFT of
              the numeral, icon RIGHT of it -- no moving marker element any more. -->
-        <div class="mev-cap bt mev-capC"><span class="mev-d"><span class="mev-d-num"></span></span><span class="mev-v"></span><i class="mev-ico dmg"></i></div>
+        <div class="mev-cap bt mev-capC"><span class="mev-d"><span class="mev-d-num"></span></span><span class="mev-pct">(<span class="mev-pct-num">73.84%</span>)</span><span class="mev-v"></span><i class="mev-ico dmg"></i></div>
       </div></div>
 </div></div>
 
@@ -731,7 +741,7 @@
       ".mev-lg .mev-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
       // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css's `.mp-lg`
       // twin, 2026-08-12 widen pass, right-edge-pinned to 17.067rem).
-      ".mev-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }\n"+
+      ".mev-lg .mev-bd-5 { left: -251.333rem; width: 268.4rem; }\n"+
       // bd-1's Large override REVERTED to the shared Large strip (no separate rule needed).
       // bd-2/3/4's Large overrides REVERTED the same way, 2026-08-17 crop fix: their old
       // literal (left -76.6rem, width 81.8rem) put the right edge at 5.2rem, ~11.87rem SHORT of
@@ -764,7 +774,9 @@
       ".mev-lg .mev-cap .mev-ico.mk2 { margin-left: 1.000rem; }\n"+
       ".mev-lg .mev-cap .mev-ico.mk3 { margin-left: 3.000rem; }\n"+
       ".mev-lg .mev-cap.bt .mev-d { transform: translate("+
-        X43(-Math.round(st.dGap*st.dFS*100)/100)+"rem, "+st.dY+"rem); }\n";
+        X43(-Math.round(st.dGap*st.dFS*100)/100)+"rem, "+st.dY+"rem); }\n"+
+      // The MoE-% row's gap to the numeral (PCT_GAP_REM, an x-length like the delta's translate).
+      ".mev-lg .mev-cap.bt .mev-pct { margin-right: "+X43(Math.round(st.dGap*st.dFS*100)/100)+"rem; }\n";
   }
   function total(){return st.fadeIn+st.hold+st.fadeOut;}
   // Gaps are plain (no tick-height addition): r4 and the current caption sit above/below the
@@ -802,6 +814,7 @@
     S.setProperty("--lfclear",rem(-p.pad));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--dfs",rem(st.dFS));S.setProperty("--dtf",dTf(rem));
+    S.setProperty("--pctgap",rem(Math.round(st.dGap*st.dFS*100)/100));
     S.setProperty("--reqlh",rem(lh(st.reqFS)));S.setProperty("--curlh",rem(lh(st.curFS)));
     S.setProperty("--dlh",rem(lh(st.dFS)));
     S.setProperty("--wt",st.wt);S.setProperty("--ls",st.ls+"em");
@@ -857,7 +870,7 @@
     // bd-1 (top mark-req row) REVERTED to the shared strip's own width/left (no override at all,
     // right edge still 17rem == -92+109) -- the prior +25% widen read as an overshoot; bd-5
     // (current-damage) keeps its +50% widen, which was NOT flagged.
-    S.setProperty("--bd5left",rem(-146.5));S.setProperty("--bd5w",rem(163.5));
+    S.setProperty("--bd5left",rem(-222));S.setProperty("--bd5w",rem(239));
     S.setProperty("--bd1left",rem(st.bdStripLeft));S.setProperty("--bd1w",rem(st.bdStripW));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
     S.setProperty("--bd3top",rem(st.bd3T));S.setProperty("--bd4top",rem(st.bd4T));
@@ -986,8 +999,12 @@
         crossPadRem:p.pad,stageWPx:st.stageW,stageHPx:st.stageH,
         barRightPx:p.barRight,barBottomPx:p.barBottom,rightInsetPx:p.rightInset}
     };
-    var bandRules="", icoGlowRules="";
+    var bandRules="", icoGlowRules="", pctBandRules="";
     BANDS.forEach(function(b,i){var c=bandCol(i);
+      // The MoE-% wears the SAME per-band glow as the total, in its own rule (the five
+      // `.mev-cap.bt .mev-v` rules above stay byte-identical).
+      pctBandRules+="#mev-bar-root.mev-b-"+b.k+" .mev-cap.bt .mev-pct { text-shadow: "+
+        textGlow(REM,bandNumGlow(b))+"; }\n";
       bandRules+="#mev-bar-root.mev-b-"+b.k+" .mev-fill { background: "+c+"; }\n"+
         "#mev-bar-root.mev-b-"+b.k+" .mev-tick.mev-cur { box-shadow: "+glowSh(REM,c)+"; }\n"+
         "#mev-bar-root.mev-b-"+b.k+" .mev-cap.bt .mev-v { text-shadow: "+
@@ -1024,7 +1041,7 @@
 ".mev-bd-3 { top: "+st.bd3T+"rem; }\n.mev-bd-4 { top: "+st.bd4T+"rem; }\n.mev-bd-5 { top: "+st.bd5T+"rem; }\n"+
 // PER-ROW WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css, 2026-08-12 widen pass):
 // current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, right-edge-pinned.
-".mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
+".mev-bd-5 { left: -222rem; width: 239rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
 // Mark-requirement strips (bd-2/3/4) no longer get their own width/left override -- 2026-08-17
 // crop fix: the 2026-08-12 narrowing pass shrank these rows' own box while leaving the WIDE
 // checker-dither mask below (box-relative percent size/position) unchanged, so the taper's
@@ -1162,8 +1179,20 @@ icoGlowRules+
 "  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n"+
 "  font-weight: "+st.wt+";\n  text-shadow: "+textSh(REM)+";\n  opacity: 0;\n"+
 "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
-".mev-cap.bt .mev-d.on { opacity: 1; }\n\n"+
-bandRules+"\n"+
+".mev-cap.bt .mev-d.on { opacity: 1; }\n"+
+"/* THE MoE-% \"(73.84%)\" (MoEEfficiency.js .mev-pct): an IN-FLOW flex child IMMEDIATELY BEFORE the\n"+
+"   numeral (delta, %, numeral, icon), so it grows the right-anchored row LEFTWARD like the numeral\n"+
+"   and never moves the icon; the out-of-flow delta, anchored on the row's left edge with right:100%,\n"+
+"   rides out ahead of it -- \"+120 (73.84%) 1,850\". margin-right is the gap to the numeral\n"+
+"   (PCT_GAP_REM == "+REM(Math.round(st.dGap*st.dFS*100)/100)+", the delta's own translate gap; an ordinary in-flow margin,\n"+
+"   not the anchored-side one Coherent drops). NO transform: align-items:center puts the "+lh(st.dFS)+"rem line box on\n"+
+"   the same centre the delta's top:0 + translateY lands on (the row's line-height minus the delta's,\n"+
+"   halved, == the delta's Y at the shipped sizes), so the two share one Y by construction. It takes the\n"+
+"   current total's BAND glow in the per-band rules below (maintainer decision, plan Q4). */\n"+
+".mev-cap.bt .mev-pct {\n  margin-right: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n  font-size: "+st.dFS+"rem;\n"+
+"  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
+"  text-shadow: "+textSh(REM)+";\n}\n\n"+
+bandRules+pctBandRules+"\n"+
 keyframes(REM,true)+"\n"+
 "/* ===== THE \"LARGE\" SIZE MODE (mod_settings.progress_bar_size == 1). The mode is delivered by\n"+
 "   the ROOT FONT SIZE (MoEBarTransient.js SIZE_F == 1.25), which IS the rem->px factor in\n"+
@@ -1234,7 +1263,10 @@ JSON.stringify(meta,null,2)+"\n*/\n";
        BANDS.every(function(b){return css.indexOf("#mev-bar-root.mev-b-"+b.k+
          " .mev-cap.bt .mev-v { text-shadow: "+textGlow(REM,bandNumGlow(b))+"; }")>=0;}));
     var lines=css.split("\n"),
-        probes=[["ngT","mev-b-t .mev-cap.bt .mev-v"],["igV","mev-b-v .mev-cap.bt .mev-ico::before"]];
+        // The numeral-glow knob owns TWO rules now: the total's (.mev-v) and the MoE-% (.mev-pct),
+        // which wears the same band glow -- each must move, and nothing else.
+        probes=[["ngT",["mev-b-t .mev-cap.bt .mev-v","mev-b-t .mev-cap.bt .mev-pct"]],
+                ["igV",["mev-b-v .mev-cap.bt .mev-ico::before"]]];
     ok("per-band glow knobs move EXACTLY their own rule (isolation, unchanged from the sibling)",
        probes.every(function(p2){
          var was=st[p2[0]];
@@ -1242,7 +1274,8 @@ JSON.stringify(meta,null,2)+"\n*/\n";
          var m=cssOut().split("\n");
          st[p2[0]]=was;
          var moved=lines.filter(function(l,idx){return l!==m[idx];});
-         return m.length===lines.length&&moved.length===1&&moved[0].indexOf(p2[1])>=0;}));
+         return m.length===lines.length&&moved.length===p2[1].length&&
+           p2[1].every(function(s){return moved.filter(function(l){return l.indexOf(s)>=0;}).length===1;});}));
     ok("a FRESH-defaults emit reproduces the tuned set (200rem length, tuned teal/violet)",
        (function(){
          var live={}; Object.keys(st).forEach(function(k){live[k]=st[k];});

@@ -386,10 +386,13 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # carries SIZE_XF == 4/3 on every x-length AND SIZE_F == 1.25 through the root font (memory
 # `mp-lg-x-lengths-are-pure-sizexf-not-sizef`; the pad is NOT an x-length -- see
 # MoEBarTransient.applySize, which re-derives shiftX as `padX - boxLeft * xf`):
-#   Moving Average:    (70 + 34) + 3 == 107
-#     LARGE:           (70 + 34*4/3 + 3*4/3) * 1.25 == 119.333 * 1.25 == 149.167 -> 149
-#   Damage Efficiency: (52 + 40) + 3 == 95
-#     LARGE:           (52 + 40*4/3 + 3*4/3) * 1.25 == 109.333 * 1.25 == 136.667 -> 137
+#   Moving Average:    (116 + 34) + 3 == 153
+#     LARGE:           (116 + 34*4/3 + 3*4/3) * 1.25 == 165.333 * 1.25 == 206.667 -> 207
+#   Damage Efficiency: (98 + 40) + 3 == 141
+#     LARGE:           (98 + 40*4/3 + 3*4/3) * 1.25 == 155.333 * 1.25 == 194.167 -> 194
+# (MoE-% caption pass: V_PAD_X_REM grew MA 70 -> 116, DE 52 -> 98, +46 each, so the pure derivations
+# above grew by the same 46 -- MA 107 -> 153, DE 95 -> 141; the older figures quoted in the history
+# below are the pre-% ones.)
 # BOTH PADS GREW TWICE, in the SAME two passes, for the SAME reason each time -- a caption's own
 # translateX moved further left (more overflow) and the surface pad had to grow with it or clip:
 #   Moving Average V_PAD_X_REM: 63 -> 70. The maintainer's "move the bottom block (current damage
@@ -439,7 +442,7 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # of fixed hand-measured offset, not a composition length that scales with SIZE_F/SIZE_XF).
 #
 # THE DAMAGE EFFICIENCY BAR IS DELIBERATELY NOT GIVEN THIS CORRECTION. EFFICIENCY_MM_TRACK_X below
-# stays the pure derivation (95 / 137, off the widened padX -- see above) -- its own single
+# stays the pure derivation (141 / 194, off the widened padX -- see above) -- its own single
 # hand-drag (the FIRST one above) is still just one data point, never confirmed by a second
 # independent drag the way the Moving Average bar's now is, and it has since been inspected in-game
 # and accepted as correct as derived. The two bars' compositions differ (different surfaces,
@@ -471,9 +474,9 @@ VERTICAL_ANCHOR_Y_SHIFT_LARGE = -170
 # (only the two VERTICAL ones do), so a horizontal bar beside the minimap has no tuned reference to
 # reproduce -- bar_window._resolve keeps passing the surface's own edges there, which is what it
 # always did. Do not invent the four numbers; tune them first if that alignment ever matters.
-PROGRESS_MM_TRACK_X = 105              # pure derivation 107, -2 measured hand-placement correction
-PROGRESS_MM_TRACK_X_LARGE = 147         # pure derivation 149, same flat -2 (see the comment above)
-EFFICIENCY_MM_TRACK_X = 95              # pure derivation, no correction (see the comment above)
-EFFICIENCY_MM_TRACK_X_LARGE = 137
+PROGRESS_MM_TRACK_X = 151              # pure derivation 153, -2 measured hand-placement correction
+PROGRESS_MM_TRACK_X_LARGE = 205         # pure derivation 207, same flat -2 (see the comment above)
+EFFICIENCY_MM_TRACK_X = 141             # pure derivation, no correction (see the comment above)
+EFFICIENCY_MM_TRACK_X_LARGE = 194
 MM_TRACK_Y = 290
 MM_TRACK_Y_LARGE = 363

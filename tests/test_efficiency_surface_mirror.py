@@ -653,7 +653,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_js()) == (109, 318)
+    assert box == _v_surface_wh(_js()) == (155, 318)
 
 
 def test_the_vertical_shift_matches_progresss_and_is_pinned():
@@ -708,7 +708,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + padxr_large).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (153, 398)
+            iround_half_away(Decimal(default_h) * f)) == (210, 398)
 
 
 def _advances():
@@ -723,15 +723,20 @@ def _advances():
     match = re.search(r"digit ([\d.]+)em, comma ([\d.]+), paren ([\d.]+),\s*\n?//\s*plus ([\d.]+)",
                        js)
     assert match, "MoEProgress.js: the MoEBattle.ttf advance note is gone or reworded"
-    return dict(zip(("digit", "comma", "paren", "sign"),
-                    (Decimal(g) for g in match.groups())))
+    adv = dict(zip(("digit", "comma", "paren", "sign"), (Decimal(g) for g in match.groups())))
+    # The MoE-% caption's two extra glyphs ride the same note ("percent 0.7734 and period 0.2471").
+    extra = re.search(r"percent ([\d.]+) and period ([\d.]+)", js)
+    assert extra, "MoEProgress.js: the percent/period advance note is gone or reworded"
+    adv["percent"], adv["period"] = (Decimal(g) for g in extra.groups())
+    return adv
 
 
-def _ink(adv, size, digits=0, commas=0):
-    """One numeral's rendered width in rem, at `size` rem and letter-spacing 0 -- the r1/r2/r3
-    requirement captions carry no sign/parens/delta, so this is the plain-numeral subset of
-    test_progress_surface_mirror.py's own `_ink`."""
-    return size * (digits * adv["digit"] + commas * adv["comma"])
+def _ink(adv, size, digits=0, commas=0, parens=0, signs=0, percents=0, periods=0):
+    """One numeral's rendered width in rem, at `size` rem and letter-spacing 0 -- a superset of
+    test_progress_surface_mirror.py's own `_ink` (the r1/r2/r3 captions use only digits/commas)."""
+    return size * (digits * adv["digit"] + commas * adv["comma"]
+                   + parens * adv["paren"] + signs * adv["sign"]
+                   + percents * adv["percent"] + periods * adv["period"])
 
 
 def _decrem(css, selector, prop):
@@ -803,6 +808,10 @@ def test_the_vertical_captions_fit_inside_the_surface():
     def _ink(size, digits=0, commas=0, signs=0):
         return size * (digits * adv["digit"] + commas * adv["comma"] + signs * adv["sign"])
 
+    # .mev-pct "(100.00%)": 2 parens + 5 digits + a period + the percent sign, at the delta's 12rem.
+    pct_ink = Decimal(12) * (5 * adv["digit"] + 2 * adv["paren"] + adv["percent"] + adv["period"])
+    pct_gap = _js_decimal_const(js, "PCT_GAP_REM")      # the JS's own x-length gap (x SIZE_XF Large)
+
     halo = blur(".mev-cap .mev-v")
 
     # icon_w is PER ICON CLASS (mk 16rem, bm 14rem, dmg 16rem) -- reading the shared base
@@ -822,12 +831,12 @@ def test_the_vertical_captions_fit_inside_the_surface():
         return -tx(row_sel) + icon_w(icon_class) + _decrem(css, icon_margin_sel, "margin-left") \
             + numeral_r + halo
 
-    def reach_bt(row_sel, icon_margin_sel, delta_sel, delta_font_size):
+    def reach_bt(row_sel, icon_margin_sel, delta_sel, delta_font_size, pct_gap_x=Decimal(1)):
         # Numeral first (icon flush at the anchor, numeral to its left), THEN the delta hangs off
         # the numeral's own left edge via its own translate() gap and grows further left still --
         # the delta's tail, not the numeral's, is the worst point on this row (see the docstring).
         numeral_left = -tx(row_sel) + icon_w("dmg") + _decrem(css, icon_margin_sel, "margin-left") \
-            + numeral_bt
+            + numeral_bt + pct_gap * pct_gap_x + pct_ink   # numeral, gap, "(NN.NN%)", then the delta
         delta_gap = -translate_x_of(delta_sel)
         delta_ink = _ink(delta_font_size, digits=4, commas=1, signs=1)
         return numeral_left + delta_gap + delta_ink + halo
@@ -895,7 +904,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
     if r_tp_lg > large_worst:
         large_worst, large_worst_sel = r_tp_lg, ".mp-lg .mev-cap.tp"
     r_bt_lg = reach_bt(".mp-lg .mev-cap.bt", ".mp-lg .mev-cap .mev-ico",
-                        ".mp-lg .mev-cap.bt .mev-d", Decimal(12))
+                        ".mp-lg .mev-cap.bt .mev-d", Decimal(12), _size_factor("SIZE_XF"))
     assert r_bt_lg <= large_allowance, (
         ".mp-lg .mev-cap.bt's worst-case ink reaches %srem left of the track while the Large "
         "surface only allows %srem -- the caption is CLIPPED" % (r_bt_lg, large_allowance))

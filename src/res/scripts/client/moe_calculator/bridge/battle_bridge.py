@@ -1087,12 +1087,15 @@ def push_efficiency(rvm, snap, model):
         alt_held = mod_settings.progress_alt_held(_alt_held)
         show_events = mod_settings.progress_show_events()
         show_percent = mod_settings.progress_show_percent()
+        # The "(73.84%)" caption value, computed once: gated on the bar's OWN data check (a
+        # non-monotone row hides the bar, so no %) and the "Show MoE %" setting; -1 = hidden.
+        pct = damage_percent(damage, snap.thresholds) if (has_data and show_percent) else -1.0
         LOG_DEBUG("[moe-battle] push_efficiency visible=%s data=%s dmg=%d x=%.2f band=%d "
                   "stops=%.0f/%.0f/%.0f/%.0f alt=%s ctrl=%s epoch=%d size=%d ev=%s vert=%s "
                   "pct=%s show_pct=%s" % (
                       visible, has_data, damage, bar_x, band, r[1], r[2], r[3], r[4], alt_held,
                       _ctrl_held, _battle_epoch, bar_size, show_events, vertical,
-                      damage_percent(damage, snap.thresholds), show_percent))
+                      pct, show_percent))
         with rvm.transaction() as tx:
             tx.setVisible(visible)
             tx.setDamage(damage)
@@ -1123,7 +1126,7 @@ def push_efficiency(rvm, snap, model):
             # The parenthesised "(73.84%)" caption: the percentile THIS battle's damage alone is
             # worth. The "Show MoE %" setting is folded into the -1 sentinel here (like the
             # Transitions master), so the JS's single `>= 0` test covers "off" and "no data".
-            tx.setDamagePercent(damage_percent(damage, snap.thresholds) if show_percent else -1.0)
+            tx.setDamagePercent(pct)
     except Exception:
         LOG_CURRENT_EXCEPTION()
 

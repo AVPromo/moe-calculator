@@ -273,6 +273,14 @@ $tpl = @'
      semantically attached to the numeral), but it can never again disturb the icon, which stays
      flush against the shared fixed anchor regardless of what grows on this side of the row. */
   .mpv-cap .mpv-d{margin-right:var(--dgap);font-size:var(--dfs);transform:translateY(var(--dy));line-height:var(--dlh);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  /* THE MoE-% "(73.84%)": an in-flow flex child IMMEDIATELY BEFORE the numeral (delta, %, numeral,
+     icon), every declaration the delta's own (same dgap/dfs/dy/dlh knobs), so the two share one Y and
+     one 0.35em gap by construction. SEPARATE rule, not the delta's selector. It takes the numeral's
+     state glow: JS puts .mpv-up/.mpv-down on the node itself (it PRECEDES .mpv-v, so no sibling
+     selector could), declared AFTER the base rule so it wins at equal specificity. */
+  .mpv-cap .mpv-pct{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh);margin-right:var(--dgap);font-size:var(--dfs);transform:translateY(var(--dy));line-height:var(--dlh);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mpv-pct.mpv-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
+  .mpv-pct.mpv-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   .mpv-ico.none{display:none}
 
   /* ---- Icon glyphs. Identical split/derivation to the horizontal tuner (GLYPH ::after, GLOW
@@ -318,6 +326,7 @@ $tpl = @'
   #moe-bar-root.mpv-full .mpv-track,#moe-bar-root.mpv-full .mpv-fill,#moe-bar-root.mpv-full .mpv-tick{box-shadow:0 0 var(--glowb) var(--glowc)}
   #moe-bar-root.mpv-full .mpv-fill{background:var(--fullfill)}
   #moe-bar-root.mpv-full .mpv-v{text-shadow:var(--textsh),0 0 var(--glowb) var(--glowc),0 0 var(--glowb2) var(--glowc)}
+  #moe-bar-root.mpv-full .mpv-pct{text-shadow:var(--textsh),0 0 var(--glowb) var(--glowc),0 0 var(--glowb2) var(--glowc)}
 
   /* ================= panel (unchanged chrome from the horizontal tuner) ================= */
   .panel{width:380px;flex:none;background:var(--panel);border-left:1px solid var(--line);padding:18px 18px 60px;overflow:auto;height:100vh;position:sticky;top:0}
@@ -360,7 +369,7 @@ $tpl = @'
     </div>
     <div class="mpv-cap mpv-capEta"><span class="mpv-eta">18</span><i class="mpv-ico battles"></i></div>
     <div class="mpv-cap mpv-capR"><span class="mpv-v">3,050</span><i class="mpv-ico mk mk2"></i></div>
-    <div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num">+8</span>)</span><span class="mpv-v">2,913</span><i class="mpv-ico dmgc"></i></div>
+    <div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num">+8</span>)</span><span class="mpv-pct">(<span class="mpv-pct-num">73.84%</span>)</span><span class="mpv-v">2,913</span><i class="mpv-ico dmgc"></i></div>
   </div></div>
 </div></div>
 
@@ -669,19 +678,20 @@ $tpl = @'
   // capC (static, below the track) shows proj_avg + the delta from pre_avg -- the shipped
   // horizontal convention (bottom-centre = proj_avg, and the ONLY caption that glows). capP
   // (tracks the moving pre tick) shows pre_avg and never glows, matching the pre tick itself.
-  var capD=capC.querySelector(".mpv-d");
+  var capD=capC.querySelector(".mpv-d"), capPT=capC.querySelector(".mpv-pct");
   function showVal(revealed){
     var d=st.projAvg-st.preAvg;
     capV(capC).textContent=fmt(st.projAvg);
     capV(capP).textContent=fmt(st.preAvg);
     capD.style.opacity=revealed?"1":"0";
+    capPT.style.opacity=revealed?"1":"0";
     capDN.textContent=(d>0?"+":d<0?"-":"")+fmt(Math.abs(d));
     if(!revealed)return;
     var glows=Math.round(Math.abs(d))!==0;
     // capEta rides the SAME test as the delta, mirroring shipped MoEProgress.js's showVal() --
     // omitting it here (2026-08-12 fix) left the ETA numeral perpetually plain/white in this
     // tuner while the shipped widget colours it up/down like every other glowing element.
-    [capV(capC),capDN,fill,tProj,capEta].forEach(function(e){
+    [capV(capC),capDN,fill,tProj,capEta,capPT].forEach(function(e){
       e.classList.toggle("mpv-up",glows&&d>0);e.classList.toggle("mpv-down",glows&&d<0);});
   }
 
@@ -743,7 +753,7 @@ $tpl = @'
     S.setProperty("--bdstripleft",rem(st.bdStripLeft));S.setProperty("--bdstripw",rem(st.bdStripW));
     // PER-ROW WIDTH OVERRIDES, literal (see the static rule's own comment): shipped
     // MoEProgressVertical.css verbatim, right-edge-pinned to the shared strip's own edge (15rem).
-    S.setProperty("--bd4left",rem(-163.5));S.setProperty("--bd4w",rem(178.5));
+    S.setProperty("--bd4left",rem(-240));S.setProperty("--bd4w",rem(255));
     S.setProperty("--bd2left",rem(-133.75));S.setProperty("--bd2w",rem(148.75));
     S.setProperty("--bdstriph",rem(st.bdStripH));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
@@ -843,7 +853,7 @@ $tpl = @'
       ".mpv-lg .mpv-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
       // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css's `.mp-lg`
       // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
-      ".mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n"+
+      ".mpv-lg .mpv-bd-4 { left: -264.333rem; width: 279.4rem; }\n"+
       ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
       // bd-3 (preAvg) no longer gets its own Large override -- 2026-08-17 crop fix: the prior
       // narrowing (left -82.183rem) left the checker-dither taper too tight against this row's
@@ -859,6 +869,7 @@ $tpl = @'
       "  transform: translateY(50%) translateX("+X43(st.capxP)+"rem); }\n"+
       ".mpv-lg .mpv-cap .mpv-ico { margin-left: "+X43(st.icoGap)+"rem; }\n"+
       ".mpv-lg .mpv-cap .mpv-d { margin-right: "+X43(st.dGap)+"em; }\n"+
+      ".mpv-lg .mpv-cap .mpv-pct { margin-right: "+X43(st.dGap)+"em; }\n"+
       ".mpv-lg .mpv-capR .mpv-eta { margin-left: "+X43(st.etaGap)+"rem; }\n";
   }
 
@@ -890,7 +901,8 @@ $tpl = @'
       ".mpv-bd-3 { top: "+st.bd3T+"rem; }\n.mpv-bd-4 { top: "+st.bd4T+"rem; }\n"+
       // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
       // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
-      ".mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
+      // (bd-4 re-widened 178.5 -> 255 in the MoE-% pass so the shadow backs "(100.00%)".)
+      ".mpv-bd-4 { left: -240rem; width: 255rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
       // bd-3 (preAvg) no longer gets its own width/left override -- 2026-08-17 crop fix: the
       // 2026-08-12 narrowing pass (then 79.583rem -> 83.733rem right-edge correction in
       // 98ab7ea) shrank this row's own box while leaving the WIDE checker-dither mask's
@@ -964,6 +976,25 @@ $tpl = @'
       ".mpv-cap .mpv-d {\n  margin-right: "+st.dGap+"em;\n  font-size: "+st.dFS+"rem;\n"+
       "  transform: translateY("+st.dY+"rem);\n  line-height: "+lh(st.dFS)+"rem;\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
+      "/* THE MoE-% \"(73.84%)\" (MoEProgress.js .mpv-pct): an IN-FLOW flex child immediately BEFORE the\n"+
+      "   numeral (delta, %, numeral, icon), so it grows the row LEFTWARD like the delta and never moves\n"+
+      "   the icon. EVERY declaration is the delta's own -- same gap (st.dGap em), font-size, Y and\n"+
+      "   fade -- so the two share one baseline and one gap by construction. It takes the numeral's\n"+
+      "   STATE GLOW (maintainer decision, plan Q4) in the .mpv-pct.mpv-up/.mpv-down rules below: JS\n"+
+      "   puts the class on the node itself, because it PRECEDES .mpv-v and no sibling selector can\n"+
+      "   reach backwards. They are SEPARATE rules (not the delta's selector lists), declared after the\n"+
+      "   base rule above so they win at equal specificity; the .mpv-full gold follows the numeral's. */\n"+
+      ".mpv-cap .mpv-pct {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n  letter-spacing: "+st.ls+"em;\n"+
+      "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n"+
+      "  margin-right: "+st.dGap+"em;\n  font-size: "+st.dFS+"rem;\n"+
+      "  transform: translateY("+st.dY+"rem);\n  line-height: "+lh(st.dFS)+"rem;\n  opacity: 0;\n"+
+      "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
+      ".mpv-pct.mpv-up {\n  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
+      "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.upCol,DGA)+",\n"+
+      "               0rem 0rem "+st.dGlowT+"rem "+hexA(st.upCol,DGA)+";\n}\n"+
+      ".mpv-pct.mpv-down {\n  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
+      "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.dnCol,DGA)+",\n"+
+      "               0rem 0rem "+st.dGlowT+"rem "+hexA(st.dnCol,DGA)+";\n}\n"+
       ".mpv-v.mpv-up,\n.mpv-d-num.mpv-up,\n.mpv-eta.mpv-up {\n  color: #ffffff;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
       "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.upCol,DGA)+",\n"+
@@ -1011,6 +1042,10 @@ $tpl = @'
       "#moe-bar-root.mpv-full .mpv-track,\n#moe-bar-root.mpv-full .mpv-fill,\n#moe-bar-root.mpv-full .mpv-tick {\n"+
       "  box-shadow: 0 0 "+st.glowB+"rem "+hexA(st.glowCol,st.glowA)+";\n}\n"+
       "#moe-bar-root.mpv-full .mpv-fill {\n  background: "+hexA(st.glowCol,st.fullFillA)+";\n}\n"+
+      "#moe-bar-root.mpv-full .mpv-pct {\n"+
+      "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
+      "               0 0 "+st.glowB+"rem "+hexA(st.glowCol,st.glowA)+",\n"+
+      "               0 0 "+st.glowB2+"rem "+hexA(st.glowCol,st.glowA)+";\n}\n"+
       "#moe-bar-root.mpv-full .mpv-v {\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
       "               0 0 "+st.glowB+"rem "+hexA(st.glowCol,st.glowA)+",\n"+

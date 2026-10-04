@@ -185,7 +185,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_read("MoEProgress.js")) == (119, 320)
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (165, 320)
 
 
 def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
@@ -245,7 +245,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + _js_decimal_const(js, "V_PAD_XR_REM_LARGE")).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (163, 400)
+            iround_half_away(Decimal(default_h) * f)) == (221, 400)
 
 
 def _advances(js):
@@ -257,14 +257,24 @@ def _advances(js):
     match = re.search(r"digit ([\d.]+)em, comma ([\d.]+), paren ([\d.]+),\s*\n?//\s*plus ([\d.]+)",
                       js)
     assert match, "MoEProgress.js: the MoEBattle.ttf advance note is gone or reworded"
-    return dict(zip(("digit", "comma", "paren", "sign"),
-                    (Decimal(g) for g in match.groups())))
+    adv = dict(zip(("digit", "comma", "paren", "sign"), (Decimal(g) for g in match.groups())))
+    # The MoE-% caption's two extra glyphs ride the same note ("percent 0.7734 and period 0.2471").
+    extra = re.search(r"percent ([\d.]+) and period ([\d.]+)", js)
+    assert extra, "MoEProgress.js: the percent/period advance note is gone or reworded"
+    adv["percent"], adv["period"] = (Decimal(g) for g in extra.groups())
+    return adv
 
 
-def _ink(adv, size, digits=0, commas=0, parens=0, signs=0):
+def _ink(adv, size, digits=0, commas=0, parens=0, signs=0, percents=0, periods=0):
     """One numeral's rendered width in rem, at `size` rem and letter-spacing 0."""
     return size * (digits * adv["digit"] + commas * adv["comma"]
-                   + parens * adv["paren"] + signs * adv["sign"])
+                   + parens * adv["paren"] + signs * adv["sign"]
+                   + percents * adv["percent"] + periods * adv["period"])
+
+
+def _pct_ink(adv, size):
+    """The worst-case "(100.00%)" caption: 2 parens + 5 digits + a period + the percent sign."""
+    return _ink(adv, size, digits=5, parens=2, percents=1, periods=1)
 
 
 def test_the_vertical_captions_fit_inside_the_surface():
@@ -360,6 +370,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
         # dmgc has no margin override (the reference), so this row still reads the shared `ico_gap`.
         ".mpv-capC": (c_size,
                       [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
+                       _pct_ink(adv, d_size), d_gap,   # .mpv-pct "(100.00%)", the 0.35em idiom gap
                        numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
                       glow, ico_gap + d_gap),
         # [pre numeral][damage-projection glyph]
@@ -394,6 +405,30 @@ def test_the_vertical_captions_fit_inside_the_surface():
     assert extra_allowance > gaps * (xf - 1), (
         "the Large allowance grows by %srem but a row's x-gaps grow by up to %srem -- Default no "
         "longer binds and this test owes a Large twin" % (extra_allowance, gaps * (xf - 1)))
+
+
+def test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface():
+    """MA horizontal .mp-capC at axis 100 % (the .mp-full gold state): numeral centred on the tick,
+    then (out of flow, rightward) gap + "(100.00%)" + gap + "(+297)" delta + the delta's glow. The
+    surface clears BOTH sides by -BOX_LEFT_REM + PAD_REM, so that is the budget. Everything is read
+    from the stylesheet / the hmtx note, so only a real overflow fails (the 58.85rem the JS header
+    quotes was the pre-% reach; the % adds ~53rem and the clearance must grow with it)."""
+    css, js = _read("MoEProgress.css"), _read("MoEProgress.js")
+    adv, what = _advances(js), "MoEProgress.css"
+    d = _sole_rule_decls(css, ".mp-cap .mp-d", what)
+    d_size = _rem(d, "font-size", what)
+    gap = d_size * Decimal(re.search(r"margin-left:\s*([\d.]+)em;", d).group(1))
+    numeral = _ink(adv, _rem(_sole_rule_decls(css, ".mp-cap.dn", what), "font-size", what),
+                   digits=4, commas=1)
+    glow = max(Decimal(b) for b in re.findall(
+        r"-?[\d.]+rem\s+-?[\d.]+rem\s+([\d.]+)rem",
+        _sole_rule_decls(css, ".mp-v.mp-up,\n.mp-d-num.mp-up,\n.mp-eta.mp-up", what)))
+    reach = (numeral / 2 + gap + _pct_ink(adv, d_size) + gap
+             + _ink(adv, d_size, digits=3, parens=2, signs=1) + glow)
+    clearance = -Decimal(_js_const(js, "BOX_LEFT_REM")) + _js_const(js, "PAD_REM")
+    assert reach <= clearance, (
+        ".mp-capC's right reach at axis 100%% is %srem but the surface clears only %srem -- the "
+        "(100.00%%) caption is CLIPPED" % (reach, clearance))
 
 
 def test_the_stacked_eta_row_fits_above_the_track_without_clipping():
@@ -1444,18 +1479,18 @@ def test_the_large_centre_caption_icon_cancels_scale_only_their_gap():
 def test_the_backdrop_geometry_is_intentionally_asymmetric_user_approved():
     # RECONCILED (box re-cut for edge-drag): the earlier -72rem drift is gone. .mp-backdrop is now
     # just the INVISIBLE surface bounding box, so it mirrors MoEProgress.js's BOX_LEFT/W exactly
-    # (-80 / 360) and is SYMMETRIC about the track again -- which is what anchor_centred_reduced's
-    # `max_x // 2` (no X term) needs. Left is base -80 x 4/3 == -106.667 under Large. (NAME is now
+    # (-105 / 410) and is SYMMETRIC about the track again -- which is what anchor_centred_reduced's
+    # `max_x // 2` (no X term) needs. Left is base -105 x 4/3 == -140 under Large. (NAME is now
     # stale -- kept to avoid churn; qa re-derives. The Efficiency bar keeps its own symmetry test.)
     _base, large = _cascade("MoEProgress.css")
     base_left = _rem(_base[".mp-backdrop"], "left", "MoEProgress.css")
     base_width = _rem(_base[".mp-backdrop"], "width", "MoEProgress.css")
     large_left = _rem(large[_LG + ".mp-backdrop"], "left", "MoEProgress.css")
     large_width = _rem(large[_LG + ".mp-backdrop"], "width", "MoEProgress.css")
-    assert (base_left, base_width) == (-80, 360), \
-        "the base .mp-backdrop's left/width drifted off its reconciled -80rem/360rem (== JS BOX_LEFT/W)"
-    assert (large_left, large_width) == (Decimal("-106.667"), 480), \
-        "the Large .mp-backdrop's left/width drifted off its reconciled -106.667rem/480rem (-80 x 4/3)"
+    assert (base_left, base_width) == (-105, 410), \
+        "the base .mp-backdrop's left/width drifted off its reconciled -105rem/410rem (== JS BOX_LEFT/W)"
+    assert (large_left, large_width) == (Decimal("-140"), Decimal("546.667")), \
+        "the Large .mp-backdrop's left/width drifted off its reconciled -140rem/546.667rem (-105 x 4/3)"
 
 
 def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():

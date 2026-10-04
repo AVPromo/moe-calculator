@@ -1867,7 +1867,10 @@ def _migrate_pre_v23_alignment(old_raw):
     GATED by register() on `pre_v23` (PROGRESS_POS_FRAME_KEY absent from the stored raw, read
     BEFORE the chain runs because _migrate_pre_v22_pos_frame always seeds it). The pre-v23 3-option
     encoding only exists in a store that predates that key; a v23+ store already speaks the new
-    encoding, where a raw 1 means Free, not Minimap.
+    encoding, where a raw 1 means Free, not Minimap. (Strictly the frame key arrived at settings v22
+    and the encoding changed at v23, so a v22 store would wrongly skip this; safe ONLY because no
+    release ever shipped settings v22 -- v1.8.0-v3.0.0 are v19, v3.1.0 is v28. Never reuse that key
+    as a "v23 marker".)
     # ponytail: this body is NOT idempotent -- a raw 1 is ambiguous (pre-v23 Minimap vs post-v23
     # Free), so never call it outside the register() `pre_v23` gate: re-entering it on a v23+ store
     # (any later bump) would collapse a real Free(1) pin back to Fixed(0).

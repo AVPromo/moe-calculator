@@ -124,20 +124,20 @@ const PROGRESS_EDITS = [
     // LEFT, where the right-anchored captions' ink lives, + V_PAD_XR_REM(-4) on the RIGHT, which
     // CLIPS the (already trimmed) backdrop's own decorative bleed a little further, down to just
     // past the track's tick overhang plus a 2px margin -- see MoEProgress.js's own note).
-    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 119rem; height: 320rem; }\n.mpv-backdrop {',
+    ['\n.mpv-backdrop {', '\nbody.mpv #moe-bar-box { width: 165rem; height: 320rem; }\n.mpv-backdrop {',
      '2/6 sizing shim'],
     // STRIP-GEOMETRY EDIT A (un-numbered in the CSS header; re-anchored 2026-10, ratifies the shipped
     // file as-is): the bd-4/bd-2 width/left overrides move from AFTER the tops (emit order, `left;
     // width;`) to RIGHT AFTER the shared `.mpv-bd` box, property order `width; left;`. Values equal.
     ['  z-index: 0;\n}\n.mpv-bd::before {',
-     '  z-index: 0;\n}\n.mpv-bd-4 { width: 178.5rem; left: -163.5rem; }\n.mpv-bd-2 { width: 148.75rem; left: -133.75rem; }\n' +
+     '  z-index: 0;\n}\n.mpv-bd-4 { width: 255rem; left: -240rem; }\n.mpv-bd-2 { width: 148.75rem; left: -133.75rem; }\n' +
      '.mpv-bd::before {',
      'strip A: bd-4/bd-2 override moved before ::before'],
     // STRIP-GEOMETRY EDIT B (same status): the maintainer-converged tops differ from the tuner's
     // defaults for strips 1 and 3 (-50 -> -50.5, 33 -> 85; 2 and 4 match the emit), and the old
     // bd-4/bd-2 override lines (moved by A) are gone from their emit position.
     ['.mpv-bd-1 { top: -50rem; }\n.mpv-bd-2 { top: -30rem; }\n.mpv-bd-3 { top: 33rem; }\n' +
-     '.mpv-bd-4 { top: 204rem; }\n.mpv-bd-4 { left: -163.5rem; width: 178.5rem; }\n' +
+     '.mpv-bd-4 { top: 204rem; }\n.mpv-bd-4 { left: -240rem; width: 255rem; }\n' +
      '.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n',
      '.mpv-bd-1 { top: -50.5rem; }\n.mpv-bd-2 { top: -30rem; }\n.mpv-bd-3 { top: 85rem; }\n' +
      '.mpv-bd-4 { top: 204rem; }\n',
@@ -159,7 +159,7 @@ const PROGRESS_EDITS = [
      // .mp-lg like every sibling line, VALUE unchanged (the surface's Large geometry, not the
      // backdrop's, drives it -- see MoEProgressVertical.css).
      '.mpv-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }\n' +
-     '.mpv-lg .mpv-bd-4 { left: -180.533rem; width: 195.6rem; }\n' +
+     '.mpv-lg .mpv-bd-4 { left: -264.333rem; width: 279.4rem; }\n' +
      '.mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n' +
      '.mpv-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -169,19 +169,20 @@ const PROGRESS_EDITS = [
      '.mpv-lg .mpv-capP { padding-right: 8rem;\n  transform: translateY(50%) translateX(0rem); }\n' +
      '.mpv-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }\n' +
      '.mpv-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
+     '.mpv-lg .mpv-cap .mpv-pct { margin-right: 0.467em; }\n' +
      '.mpv-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
      'body.mpv.mp-lg #moe-bar-root { width: 4rem; }\n' +
      // 125.333, the PRE-SIZE_F box-shim quantity (round((boxW*xf + padX + padXRLarge) * f) == 157
      // is what actually gets pushed via resizeViewRem -- see MoEProgress.js's own V_PAD_XR_REM
      // note; this shim renders in DOCUMENT rem, so the root font supplies SIZE_F a second time).
-     'body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }\n' +
+     'body.mpv.mp-lg #moe-bar-box { width: 176.8rem; }\n' +
      // HAND-EDIT 6i/6: LITERAL 90, not the tuner's own X43(46)==61.333 -- the naive *4/3 twin lands
      // the backdrop's right edge SHORT of the Large track edge by 15.667rem (see MoEProgress.js's
      // own fact-3 note); 90 lands it exactly on the minimap's edge instead.
      '.mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }\n' +
      '.mp-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }\n' +
      // property order flipped to `width; left;` (same reorder as strip edit A; values equal).
-     '.mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }\n' +
+     '.mp-lg .mpv-bd-4 { width: 279.4rem; left: -264.333rem; }\n' +
      '.mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }\n' +
      '.mp-lg .mpv-tick.mpv-end { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-tick.mpv-pre { width: 12rem;\n  transform: translate(-50%, 50%) translateX(0rem); }\n' +
@@ -198,6 +199,8 @@ const PROGRESS_EDITS = [
      '.mp-lg .mpv-capP { padding-right: 8rem;\n  transform: translateY(50%) translateX(0rem); }\n' +
      '.mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }\n' +
      '.mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }\n' +
+     // the MoE-% row's Large twin: the tuner's own emit line, renamed like every sibling, value kept.
+     '.mp-lg .mpv-cap .mpv-pct { margin-right: 0.467em; }\n' +
      '.mp-lg .mpv-capR .mpv-eta { margin-left: 5.333rem; }',
      '4/6+5/6 Large block'],
     // HAND-EDIT 6/6: the ETA row split (Job 1: "move the ETA on top of the next mark
@@ -305,14 +308,14 @@ const EFFICIENCY_EDITS = [
     // (-6) on the RIGHT, which CLIPS the (already trimmed) backdrop's own bleed a little further,
     // down to just past the track's tick overhang plus a 2px margin -- see MoEEfficiency.js's own
     // note).
-    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 109rem; height: 318rem; }\n.mev-backdrop {',
+    ['\n.mev-backdrop {', '\nbody.mev #moe-bar-box { width: 155rem; height: 318rem; }\n.mev-backdrop {',
      '3/6 sizing shim'],
     // HAND-EDIT 4/6 + 5/6: `.mev-lg` -> `.mp-lg`, plus the box-shim's own Large twin the tuner never
     // emits -- the PRE-SIZE_F quantity (72 + 52 + -8.667 == 115.333; round(115.333 * SIZE_F) == 144
     // is what actually gets pushed via resizeViewRem -- see MoEEfficiency.js's own V_PAD_XR_REM
     // note).
     ['.mev-lg #moe-bar-root { width: 4rem; }',
-     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 122.4rem; }',
+     'body.mev.mp-lg #moe-bar-root { width: 4rem; }\nbody.mev.mp-lg #moe-bar-box { width: 168rem; }',
      '4/6+5/6 Large block (root/box)'],
     ['.mev-lg ', '.mp-lg ', '4/6 remaining Large-block rename', "all"],
     // Large twin of bd-5's narrowing (the SAME pass as HAND-EDIT 6/6 below) -- value already
@@ -321,8 +324,8 @@ const EFFICIENCY_EDITS = [
     // `width; left;`. bd-2/3/4's OWN Large overrides no longer exist at all (2026-08-17 crop fix
     // dropped them from the tuner too -- see HAND-EDIT 6/6 below), so there is nothing left to
     // reorder for them.
-    ['.mp-lg .mev-bd-5 { left: -166.533rem; width: 183.6rem; }',
-     '.mp-lg .mev-bd-5 { width: 183.6rem; left: -166.533rem; }',
+    ['.mp-lg .mev-bd-5 { left: -251.333rem; width: 268.4rem; }',
+     '.mp-lg .mev-bd-5 { width: 268.4rem; left: -251.333rem; }',
      '5j/6 Large bd-5 property order'],
     // 5i: the backdrop's OWN Large width, overridden with a LITERAL 98, not the tuner's own
     // X43(54)==72 (already renamed to .mp-lg by the edit above; V_BOX_W_REM's trim to 54 is
@@ -362,12 +365,12 @@ const EFFICIENCY_EDITS = [
      '.mev-bd::after {\n  content: "";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n' +
      '  z-index: -1;\n  background: radial-gradient(76% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%);\n}\n' +
      '.mev-bd-1 { top: -27rem; }\n.mev-bd-2 { top: 35rem; }\n.mev-bd-3 { top: 85rem; }\n.mev-bd-4 { top: 135rem; }\n' +
-     '.mev-bd-5 { top: 199.5rem; }\n.mev-bd-5 { left: -146.5rem; width: 163.5rem; }\n' +
+     '.mev-bd-5 { top: 199.5rem; }\n.mev-bd-5 { left: -222rem; width: 239rem; }\n' +
      '.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n' +
      '.mev-bd-2::before, .mev-bd-3::before, .mev-bd-4::before { mask: radial-gradient(112% 110% at 90% 50%,#000 0%,transparent 67%); }\n' +
      '.mev-bd-2::after, .mev-bd-3::after, .mev-bd-4::after { background: radial-gradient(128% 57% at 90% 50%,rgba(0,0,0,0.35) 0%,rgba(0,0,0,0) 70%); }',
      '.mev-bd {\n  position: absolute;\n  left: -92rem;\n  width: 109rem;\n  height: 30rem;\n  z-index: 0;\n}\n' +
-     '.mev-bd-5 { width: 163.5rem; left: -146.5rem; }\n' +
+     '.mev-bd-5 { width: 239rem; left: -222rem; }\n' +
      '.mev-bd::before {\n  content: "";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n' +
      '  background: url(checker.png) repeat;\n  background-size: auto;\n  image-rendering: pixelated;\n' +
      '  opacity: 0.1;\n  mask: radial-gradient(56% 110% at 90% 50%,#000 0%,transparent 67%);\n}\n' +
@@ -413,11 +416,11 @@ function run(mutation) {
             "p-lg-class-restored": [() => { progressShipped = progressShipped.replace(
                 "body.mpv.mp-lg #moe-bar-root", ".mpv-lg #moe-bar-root"); }],
             "p-box-shim-dropped": [() => { progressShipped = progressShipped.replace(
-                "body.mpv #moe-bar-box { width: 119rem; height: 320rem; }\n", ""); }],
+                "body.mpv #moe-bar-box { width: 165rem; height: 320rem; }\n", ""); }],
             "e-root-scope-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
                 "body.mev #moe-bar-root {", "#moe-bar-root {"); }],
             "e-lg-box-twin-dropped": [() => { efficiencyShipped = efficiencyShipped.replace(
-                "body.mev.mp-lg #moe-bar-box { width: 122.4rem; }\n", ""); }],
+                "body.mev.mp-lg #moe-bar-box { width: 168rem; }\n", ""); }],
             "e-lg-class-not-renamed": [() => { efficiencyShipped = efficiencyShipped.replace(
                 ".mp-lg .mev-track { width: 4rem; }", ".mev-lg .mev-track { width: 4rem; }"); }],
         };

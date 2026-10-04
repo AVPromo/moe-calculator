@@ -186,9 +186,17 @@ function fmt(n) {
     return sign + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// Percentile -> "73.84" + "%" (two decimals, TRUNCATED never rounded -- MoEBattle.js's trunc2 /
+// pctText, so the readout never overstates). "" for the no-data sentinel (-1), NaN and an absent
+// field alike: `!(p >= 0)` is the one test, so the callers' bare Number(model.x) needs no `|| 0`.
+function pctText(p) {
+    if (!(p >= 0)) return "";
+    return (Math.floor(p * 100) / 100).toFixed(2) + "%";
+}
+
 // Build one bar's transient controller.
 //
-//   root                          the bar's #moe-bar-root element (mp-life animates ITS transform)
+//   root                        the bar's #moe-bar-root element (mp-life animates ITS transform)
 //   boxLeft/boxTop/boxW/boxH      the composition's bounding box in document rem (== .mp-backdrop)
 //   pad                           slack for the shadow/glow bleed, on all four sides
 //   padX                          OPTIONAL, default `pad`. The X-AXIS slack, when the ink reaches
@@ -1092,7 +1100,7 @@ export function createTransient(cfg) {
 }
 
 export {
-    fmt,
+    fmt, pctText,
     SIZE_F, SIZE_XF,
     FADE_IN_MS, HOLD_MS, FADE_OUT_MS, TOTAL_MS,
     SEEK_NONE, SEEK_PLATEAU, SEEK_FADE_OUT,

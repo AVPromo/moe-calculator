@@ -50,7 +50,7 @@ import { ModelObserver } from "../../libs/model.js";
 // end race and the surface re-assert -- is SHARED with MoEProgress.js. Every behaviour in there cost
 // a client relaunch to find; read its header before changing anything that touches timing.
 // Separate documents, so this module is instantiated twice with no cross-talk.
-import { createTransient, fmt, SIZE_F, SIZE_XF } from "./MoEBarTransient.js";
+import { createTransient, fmt, pctText, SIZE_F, SIZE_XF } from "./MoEBarTransient.js";
 
 // No feature name -> observe this view's OWN root model (window.model == EfficiencyVM).
 const observer = ModelObserver();
@@ -71,6 +71,10 @@ const CLAMP_R_REM = 341;             // meta.capClamp.rightRem
 // The icon's gap to the numeral, which rides in .mp-ico's transform (translate(-1rem, -50%)) and
 // so is NOT part of its offsetWidth -- the clamp has to add it back, exactly as the tuner does.
 const ICO_GAP_REM = 1;
+// The MoE-% caption's DELTA gap (the delta's translate off the %'s right edge -- the 0.35em idiom at
+// 12rem == 4.2rem, an x-length like the icon's, so capClampPct scales it by SIZE_XF). The %'s own
+// gap is .mp-pct-t's margin-left, which w(".mp-pct") already measures.
+const PCT_GAP_REM = 4.2;
 // band -> the ONE class that goes on #moe-bar-root, in meta.bands order (white/green/teal/violet/
 // gold). Python's `band` indexes straight into this.
 const BAND_CLASSES = ["mp-b-w", "mp-b-g", "mp-b-t", "mp-b-v", "mp-b-au"];
@@ -102,6 +106,15 @@ let large = false;
 //   * SIDES: .mp-cap.r4 sits at 100 % (x == 300) and the current caption's delta hangs off its
 //     right edge, reaching ~375 at four digits -- which is precisely why meta.capClamp's right
 //     bound is 376. The clamp below keeps it there whatever the digits do.
+//   * MoE-% (.mp-pct "(73.84%)", out of flow at left:100% of the numeral, the delta re-parented
+//     INSIDE it): "(100.00%)" is 2*0.3008 + 5*0.4932 + period 0.2471 + percent 0.7734 == 4.0881em ==
+//     49.06rem at the 12rem delta size, so the right overhang becomes 4.2 + 49.06 + 4.2 + the delta
+//     (capClampPct measures it) and the clamp pulls the wider caption inward -- the ink stays in the
+//     corridor, so the box is UNCHANGED. The width-fixed .mp-bd-5 strip (centred on the numeral)
+//     grew 90 -> 150 (Large 120 -> 200) to back the % (+-75 vs numeral/2 + 4.2 + 49.06 <= 71). The
+//     same clamp keeps the numeral's centre >= -41 + half >= ~9 while the % shows, so the strip's
+//     left edge can sit up to ~11rem past the -45 box edge: only its ~transparent shadow tail
+//     (alpha ~0.02 there), clipped by the surface, never ink.
 // So the surface is that box plus PAD_REM of slack on all four sides, and the whole composition is
 // rigidly translated by that much so NOTHING sits at a negative coordinate -- an origin overflow
 // is clipped no matter how big the surface is.
@@ -158,8 +171,8 @@ const CLIP_B_REM = 8;
 // these four -- the vertical tuner's own tuned lengths -- but its TOP and HEIGHT are IDENTICAL to
 // the vertical Moving Average bar's (-80 / 360), which is why the two share ONE Python shift
 // constant where their horizontal siblings need -50 and -44 apiece:
-//   V_VIEW_W_REM = V_BOX_W_REM + V_PAD_X_REM        V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 92
-//               + V_PAD_XR_REM == 98 (a SPLIT pad now -- see both constants' own notes below)
+//   V_VIEW_W_REM = V_BOX_W_REM + V_PAD_X_REM        V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 138
+//               + V_PAD_XR_REM == 155 (a SPLIT pad now -- see both constants' own notes below)
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                               - V_CLIP_B_REM == 318 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
 // THE X AXIS IS NOT box + PAD_REM EITHER -- SAME DEFECT THE MOVING AVERAGE BAR ALREADY FIXED
@@ -194,6 +207,13 @@ const CLIP_B_REM = 8;
 //     by exactly its own nudge's device-px count and landed on ~4.5rem of margin, not a coincidence,
 //     just two rows with the same shape being pushed by the same kind of nudge):
 //       V_PAD_X_REM == 92 + V_BOX_LEFT_REM == 92 - 40 == 52   (allowance 92, reach 87.28, margin 4.72)
+//     THE MoE-% CAPTION: V_MARKUP puts an in-flow .mev-pct "(73.84%)" between the delta and the
+//     numeral, adding 49.06 ("(100.00%)" at 12rem: 2 parens + 5 digits + period 0.2471 + percent
+//     0.7734) + the gap to the .bt row. THE TEST IS THE AUTHORITY for the sum (it reads every term,
+//     incl. the row's translateX/margins, off the CSS): it measures .bt at 133.53rem and wants >= 4rem
+//     spare, so the allowance had to reach 137.53:
+//       V_PAD_X_REM == 138 + V_BOX_LEFT_REM == 138 - 40 == 98   (was 52; +46 -> allowance 138, 4.47 spare)
+//     (the 87.28 above is the PRE-% figure; EFFICIENCY_MM_TRACK_X(_LARGE) grew by the same 46.)
 // tests/test_efficiency_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is
 // the GATE on all of this, re-deriving every row (not just the mark rows) from the stylesheet
 // rather than trusting this note.
@@ -280,7 +300,7 @@ const V_BOX_TOP_REM = -80;                           // .mev-backdrop's top
 const V_BOX_W_REM = 54;                              // .mev-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mev-backdrop's height
 const V_CLIP_B_REM = 62;                             // backdrop bleed the SURFACE clips off the bottom
-const V_PAD_X_REM = 52;                              // the LEFT X slack, decoupled from the backdrop -- see above
+const V_PAD_X_REM = 98;                              // the LEFT X slack, decoupled from the backdrop -- see above
 // THE SURFACE'S RIGHT (minimap-facing) PAD -- see the sibling MoEProgress.js's own V_PAD_XR_REM note
 // for the full mechanism; only the numbers differ here, and it is a SEPARATE knob from the backdrop's
 // own V_BOX_W_REM trim above: that trim shrinks what is DRAWN, this shrinks what is CLICK-BLOCKING
@@ -314,11 +334,13 @@ const V_PAD_X_REM = 52;                              // the LEFT X slack, decoup
 // minimap's DROP-SHADOW but left the backdrop 4px off the minimap's REAL edge -- that 4px is the
 // minimap's non-interactive frame margin, maintainer-confirmed safe to consume (Ctrl-click area is
 // further in). Surface right edge (and the flush strips) now at margin == -3, flush to the minimap:
-//   Default: view_w == 8 + 3 + 95 - (-3) == 109 -> padXR == 109 - V_BOX_W(54) - V_PAD_X(52) == 3
-//   Large:   view_w == 8 + 5 + 137 - (-3) == 153 -> padXRLarge == 153/SIZE_F - boxW*xf(72) - 52
-//                                             == 122.4 - 124 == -1.6
+//   Default: view_w == 8 + 3 + 141 - (-3) == 155 -> padXR == 155 - V_BOX_W(54) - V_PAD_X(98) == 3
+//   Large:   view_w == 8 + 5 + 194 - (-3) == 210 -> padXRLarge == 210/SIZE_F - boxW*xf(72) - 98
+//                                             == 168 - 170 == -2.0
+//   (MoE-% pass: V_PAD_X 52 -> 98 and EFFICIENCY_MM_TRACK_X 95 -> 141 / 137 -> 194 moved together, so
+//   Default padXR is unchanged at 3; Large's moves -1.6 -> -2.0 by the 194-vs-194.167 rounding.)
 const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -1.6;                     // ...and Large -- its OWN literal, see above
+const V_PAD_XR_REM_LARGE = -2;                       // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- see the sibling MoEProgress.js for the same three-value shape.
 //   PFX      the class prefix every selector and toggled class here is written in. The source spells
@@ -367,8 +389,13 @@ const MARKUP =
         '<span class="mp-v"></span></div>' +
         '  <div class="mp-cap dn r4"><i class="mp-ico bm"></i>' +
         '<span class="mp-v"></span></div>' +
+        // THE MoE-% (.mp-pct) is OUT OF FLOW like the delta was, so the numeral alone stays on its
+        // tick, and the DELTA IS RE-PARENTED INSIDE it so its own left:100% resolves off the %'s
+        // right edge ("1,850 (73.84%) +120"). .mp-pct-t is the gated text group: hiding THAT (not
+        // .mp-pct) keeps the delta alive when the % is off. NOT .mp-v -- capV() is a first match.
         '  <div class="mp-cap up mp-capC"><i class="mp-ico dmg"></i><span class="mp-v"></span>' +
-        '<span class="mp-d"><span class="mp-d-num"></span></span></div>' +
+        '<span class="mp-pct"><span class="mp-pct-t">(<span class="mp-pct-num"></span>)</span>' +
+        '<span class="mp-d"><span class="mp-d-num"></span></span></span></div>' +
         '</div>';
 
 // ...and THE VERTICAL COMPOSITION'S markup, tools/dev/eff_bar_tuner_vertical.html's stage verbatim.
@@ -406,7 +433,10 @@ const V_MARKUP =
         '<div class="mev-cap lf r2"><span class="mev-v"></span><i class="mev-ico mk mk2"></i></div>' +
         '<div class="mev-cap lf r3"><span class="mev-v"></span><i class="mev-ico mk mk3"></i></div>' +
         '<div class="mev-cap tp r4"><span class="mev-v"></span><i class="mev-ico bm"></i></div>' +
+        // The MoE-% sits IMMEDIATELY BEFORE the numeral (after the delta), in flow: "+120 (73.84%) 1,850".
+        // Never .mev-v -- capV() is a first-match querySelector.
         '<div class="mev-cap bt mev-capC"><span class="mev-d"><span class="mev-d-num"></span></span>' +
+        '<span class="mev-pct">(<span class="mev-pct-num"></span>)</span>' +
         '<span class="mev-v"></span><i class="mev-ico dmg"></i></div>';
 
 function ensureRoot() {
@@ -432,6 +462,10 @@ let reqCaps = [1, 2, 3, 4].map(function (i) { return root.querySelector(".mp-cap
 let capC = root.querySelector(".mp-capC");
 let capD = capC.querySelector(".mp-d");
 let capDN = capC.querySelector(".mp-d-num");
+// The MoE-% group (gated on `pct >= 0`) and its digits. Horizontally the gated node is .mp-pct-t INSIDE
+// the out-of-flow .mp-pct (which also holds the delta); vertically it is .mev-pct itself.
+let capPct = capC.querySelector(".mp-pct-t");
+let capPctN = capC.querySelector(".mp-pct-num");
 // capC's per-caption dither strip (HORIZONTAL only): capC rides the axis, so JS tracks the strip's
 // `left` to the caption's. goVertical() nulls it (V_MARKUP uses .mev-bd strips of its own instead).
 let capCbd = root.querySelector(".mp-bd-5");
@@ -455,7 +489,9 @@ function goVertical() {
     capC = root.querySelector(".mev-capC");
     capD = capC.querySelector(".mev-d");
     capDN = capC.querySelector(".mev-d-num");
-    capCbd = null;                   // horizontal-only strip; the vertical bar uses .mev-bd instead
+    capPct = capC.querySelector(".mev-pct");
+    capPctN = capC.querySelector(".mev-pct-num");
+    capCbd = null;                  // horizontal-only strip; the vertical bar uses .mev-bd instead
 }
 
 function capV(c) { return c.querySelector(ns(".mp-v")); }
@@ -526,8 +562,16 @@ function capClampPct(p) {
         const n = capC.querySelector(q);
         return ((n && n.offsetWidth) || 0) / px;
     };
+    // The right overhang is the delta alone when the MoE-% is off (today's number), else the % box
+    // plus the delta's gap and the delta hanging off the % (Option B: both out of flow). The %'s OWN
+    // gap is NOT added here: it is .mp-pct-t's margin-left, so w(".mp-pct") already includes it (the
+    // delta's gap is its translate, outside .mp-pct's box, so that one IS added).
+    // `cur.pct >= 0` is the same gate paintStatic writes the display from.
+    const right = cur.pct >= 0
+        ? w(".mp-pct") + PCT_GAP_REM * xf + w(".mp-d")
+        : w(".mp-d");
     const half = (capC.offsetWidth || 0) / 2 / px +
-                 Math.max(w(".mp-ico") + ICO_GAP_REM * xf, w(".mp-d"));
+                 Math.max(w(".mp-ico") + ICO_GAP_REM * xf, right);
     const lo = CLAMP_L_REM * xf + half;
     const hi = CLAMP_R_REM * xf - half;
     let x = p / 100 * BAR_W_REM * xf;
@@ -567,6 +611,11 @@ function paintStatic() {
     root.classList.toggle(ns("mp-pulse"), cur.band === 4);
     capV(capC).textContent = fmt(cur.damage);
     capDN.textContent = (delta > 0 ? "+" : "") + fmt(delta);
+    // THE MoE-% (VM `damagePercent`), persistent -- unlike the delta's 1.6s flash. Python folds the
+    // "Show MoE %" setting AND no-data into the -1.0 sentinel, so the ONE `>= 0` test covers both; an
+    // ABSENT field is NaN, also false.
+    capPct.style.display = cur.pct >= 0 ? "" : "none";
+    capPctN.textContent = pctText(cur.pct);
 }
 
 // The delta SNAPS in on a hit, holds for its own DELTA_HOLD_MS, then fades out on .mp-d's 500ms
@@ -664,6 +713,9 @@ function render(model) {
         r: [Number(model.r65) || 0, Number(model.r85) || 0,
             Number(model.r95) || 0, Number(model.r100) || 0],
         battleEpoch: Number(model.battleEpoch) || 0,
+        // The MoE % this battle's damage alone is worth (-1.0 == off / no data). BARE, NO `|| 0`:
+        // 0.0 is a real percentile and an absent field must not collapse into it.
+        pct: Number(model.damagePercent),
     };
 
     const first = last === null;

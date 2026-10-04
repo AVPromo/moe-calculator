@@ -222,6 +222,15 @@
     font-size:var(--dfs);line-height:var(--dlh);color:#ffffff;font-weight:var(--wt);
     text-shadow:var(--textsh);opacity:0;transition:opacity var(--dfadems) var(--dfadease)}
   .mp-cap .mp-d.on{opacity:1}
+  /* THE MoE-% "(73.84%)": out of flow off the numeral's right edge like the delta (the numeral stays
+     on its tick), the DELTA is its CHILD so its own left:100% resolves off the %'s right edge.
+     .mp-pct owns the delta's size/line-height + the anchor (top:0); .mp-pct-t is the gated text
+     group, carrying the gap as ITS margin-left (--pctgap == the delta's own 0.35em of dFS) and the
+     delta's Y (--pcty) -- the gap NOT on .mp-pct, so a hidden % (display:none on .mp-pct-t) leaves
+     the delta at today's single gap. The % shares the numeral's BAND glow (rules below). */
+  .mp-cap .mp-pct{position:absolute;left:100%;top:0;font-size:var(--dfs);line-height:var(--pctlh);
+    color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
+  .mp-cap .mp-pct-t{display:block;margin-left:var(--pctgap);transform:translateY(var(--pcty))}
 
   /* ---- BAND COLOURING: five rule groups, one class on the root. The fill and the current tick's
      GLOW take the band's fill colour (the tick's own line stays white -- see .mp-tick.mp-cur
@@ -249,6 +258,12 @@
   #moe-bar-root.mp-b-t  .mp-cap.up .mp-v{text-shadow:var(--tsh-t)}
   #moe-bar-root.mp-b-v  .mp-cap.up .mp-v{text-shadow:var(--tsh-v)}
   #moe-bar-root.mp-b-au .mp-cap.up .mp-v{text-shadow:var(--tsh-au)}
+  /* ...and the MoE-% text group shares that SAME band glow (maintainer decision, plan Q4). */
+  #moe-bar-root.mp-b-w  .mp-cap.up .mp-pct-t{text-shadow:var(--tsh-w)}
+  #moe-bar-root.mp-b-g  .mp-cap.up .mp-pct-t{text-shadow:var(--tsh-g)}
+  #moe-bar-root.mp-b-t  .mp-cap.up .mp-pct-t{text-shadow:var(--tsh-t)}
+  #moe-bar-root.mp-b-v  .mp-cap.up .mp-pct-t{text-shadow:var(--tsh-v)}
+  #moe-bar-root.mp-b-au .mp-cap.up .mp-pct-t{text-shadow:var(--tsh-au)}
 
   /* ---- Icons. GLYPH on ::after, GLOW on ::before at z-index:-1 (an element's own background
      paints BELOW its pseudos); .mp-ico's transform is what makes it a stacking context and so
@@ -363,7 +378,7 @@
           <div class="mp-cap dn r2"><i class="mp-ico mk mk2"></i><span class="mp-v"></span></div>
           <div class="mp-cap dn r3"><i class="mp-ico mk mk3"></i><span class="mp-v"></span></div>
           <div class="mp-cap dn r4"><i class="mp-ico bm"></i><span class="mp-v"></span></div>
-          <div class="mp-cap up mp-capC"><i class="mp-ico dmg"></i><span class="mp-v"></span><span class="mp-d"><span class="mp-d-num"></span></span></div>
+          <div class="mp-cap up mp-capC"><i class="mp-ico dmg"></i><span class="mp-v"></span><span class="mp-pct"><span class="mp-pct-t">(<span class="mp-pct-num">73.84%</span>)</span><span class="mp-d"><span class="mp-d-num"></span></span></span></div>
         </div>
       </div></div>
   <div id="ribbons"><div class="rb">DAMAGE 452</div><div class="rb">ASSIST 189</div><div class="rb">DESTROYED</div></div>
@@ -479,6 +494,9 @@
   // NO LARGE-MODE TWIN: line-height is a uniform (vertical) length, so the root font (SIZE_F)
   // scales it alone; tests/test_efficiency_surface_mirror.py's large-mode walk refuses one.
   function lh(fs){return Math.ceil(fs*2*1.2565)/2;}
+  // The MoE-% box's pinned line box: the delta's own (same dFS knob), through ONE helper so the live
+  // half and the emit half agree.
+  function pctLH(){return lh(st.dFS);}
   // Separator is a knob: MoEBattle carries "," AND space, so both are shippable.
   var SEP={comma:",",space:" ",none:""};
   function fmt(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,SEP[st.sep]);}
@@ -789,6 +807,8 @@
     S.setProperty("--gapbot",rem(gapBot()));S.setProperty("--gaptopn",rem(-gapTop()));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--dfs",rem(st.dFS));S.setProperty("--dtf",dTf(rem));
+S.setProperty("--pctgap",rem(Math.round(st.dGap*st.dFS*100)/100));S.setProperty("--pcty",rem(st.dY));
+S.setProperty("--pctlh",rem(pctLH()));
     // ...and each of those three boxes PINNED, DERIVED from the same size knob (see lh()): a
     // literal would leave the box behind the next size retune, which is the failure being fixed.
     S.setProperty("--reqlh",rem(lh(st.reqFS)));S.setProperty("--curlh",rem(lh(st.curFS)));
@@ -950,8 +970,12 @@
       boxWRem:st.barW+2*st.boxPad, glyphBbox:{barrel_mark:st.bbBm,damage:st.bbDmg,
         note:"ink measured at alpha>32 on the 128px canvas (a raw getbbox reads ~2x too big)"}
     };
-    var bandRules="", icoGlowRules="";
+    var bandRules="", icoGlowRules="", pctBandRules="";
     BANDS.forEach(function(b,i){var c=bandCol(i);
+      // The MoE-% text group wears the SAME per-band glow as the total (its own rule, so the five
+      // `.mp-cap.up .mp-v` rules above stay byte-identical).
+      pctBandRules+="#moe-bar-root.mp-b-"+b.k+" .mp-cap.up .mp-pct-t { text-shadow: "+
+        textGlow(REM,bandNumGlow(b))+"; }\n";
       // GLOW ONLY on the current tick: its line is the static colour in .mp-tick.mp-cur.
       bandRules+="#moe-bar-root.mp-b-"+b.k+" .mp-fill { background: "+c+"; }\n"+
         "#moe-bar-root.mp-b-"+b.k+" .mp-tick.mp-cur { box-shadow: "+glowSh(REM,c)+"; }\n"+
@@ -1025,7 +1049,7 @@
 ".mp-bd-2 {\n  left: 50%;\n  width: 54rem;\n}\n"+
 ".mp-bd-3 {\n  left: 75%;\n  width: 54rem;\n}\n"+
 ".mp-bd-4 {\n  left: 100%;\n  width: 54rem;\n}\n"+
-".mp-bd-5 {\n  top: -35rem;\n  width: 90rem;\n  height: 26rem;\n}\n"+
+".mp-bd-5 {\n  top: -35rem;\n  width: 150rem;\n  height: 26rem;\n}\n"+
 ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n"+
 "  background: "+hexA(st.trackCol,st.trackA)+";\n}\n"+
 "/* THE DASH GRID MASKS THE FILL: "+st.dashW+"rem dash + "+st.dashGap+
@@ -1146,14 +1170,29 @@
 "  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n"+
 "  font-weight: "+st.wt+";\n  text-shadow: "+textSh(REM)+";\n  opacity: 0;\n"+
 "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
-".mp-cap .mp-d.on { opacity: 1; }\n\n"+
+".mp-cap .mp-d.on { opacity: 1; }\n"+
+"/* THE MoE-% \"(73.84%)\" (MoEEfficiency.js .mp-pct > .mp-pct-t + .mp-d). OUT OF FLOW off the\n"+
+"   numeral's right edge like the delta, so the numeral stays on its tick; the DELTA IS ITS CHILD,\n"+
+"   so the delta's own left:100% (and its translate() gap, above, unchanged) resolves off the %'s\n"+
+"   right edge: \"1,850 (73.84%) +120\". .mp-pct owns the delta's own size/line-height and the\n"+
+"   top:0 anchor; .mp-pct-t is the gated text group (JS display:none when the % is off) and carries\n"+
+"   the gap as ITS margin-left (the same "+REM(Math.round(st.dGap*st.dFS*100)/100)+" the delta's translate carries) and the\n"+
+"   delta's Y -- the gap is NOT on .mp-pct, so a hidden % collapses .mp-pct to zero width and\n"+
+"   leaves the delta at today's single gap. The % takes the current total's BAND glow in the\n"+
+"   per-band rules below (maintainer decision, plan Q4). No .mp-s1 correction yet: it waits for the\n"+
+"   live pass. */\n"+
+".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  top: 0;\n  font-size: "+st.dFS+"rem;\n"+
+"  line-height: "+pctLH()+"rem;\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
+"  text-shadow: "+textSh(REM)+";\n}\n"+
+".mp-cap .mp-pct-t {\n  display: block;\n  margin-left: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n"+
+"  transform: translateY("+REM(st.dY)+");\n}\n\n"+
 "/* ---- BANDS. Exactly ONE of these classes on #moe-bar-root at a time, chosen by which\n"+
 "   requirement the current damage has passed (>= INCLUSIVE, so damage on r65 is already green).\n"+
 "   The fill and the current tick's GLOW share the band's fill colour (the tick's own line is the\n"+
 "   static colour above, so the marker reads the same at every band); the current TOTAL's numerals\n"+
 "   and the glyph glow further down take that band's two OWN glow colours, tuned per band. The\n"+
 "   delta (.mp-d-num) is in NONE of these -- it stays white with only the dark drop. */\n"+
-bandRules+"\n"+
+bandRules+pctBandRules+"\n"+
 "/* Icons: GLYPH on ::after, GLOW on ::before at z-index:-1 (an element's own background paints\n"+
 "   BELOW its pseudos). .mp-ico's transform is the stacking context that scopes that -1 AND it\n"+
 "   carries the per-role Y nudge AND the gap to the numeral -- never trade it for a margin, which\n"+
@@ -1315,7 +1354,11 @@ JSON.stringify(meta,null,2)+"\n*/\n";
        css.indexOf("display: flex")<0 &&
        /\.mp-cap \.mp-v \{\n  position: relative;/.test(css));
     ok("emit's delta gap is a transform, not margin-left",
-       css.indexOf("  transform: "+dTf(REM)+";")>=0 && decl(css).indexOf("margin-left")<0);
+       css.indexOf("  transform: "+dTf(REM)+";")>=0 && !/\.mp-cap \.mp-d \{[^}]*margin-left/.test(css));
+    // The MoE-% text group is the ONE thing that carries its gap as a margin (an in-flow block child,
+    // so a hidden % collapses .mp-pct and leaves the delta at the single gap) -- pinned, not waived.
+    ok("emit's MoE-% gap is .mp-pct-t's margin-left, never .mp-pct's (a hidden % must not double the delta's gap)",
+       /\.mp-cap \.mp-pct-t \{[^}]*margin-left: /.test(css) && !/\.mp-cap \.mp-pct \{[^}]*margin-left/.test(css));
     // ---- CHANGE 8: the X gap and the signed Y ride ONE translate(), in ONE unit. Probed at a
     // non-default Y, since the default is 0 and a dropped argument would look identical.
     var wasDY=st.dY; st.dY=-2.25; var css8=cssOut(); st.dY=wasDY;
@@ -1364,9 +1407,12 @@ JSON.stringify(meta,null,2)+"\n*/\n";
     // A knob that a shared value has quietly replaced moves nothing and fails here -- the
     // "own colour" assertions above cannot catch that, since they resolve through the same helper.
     var lines=css.split("\n"),
-        probes=[["ngT","mp-b-t .mp-cap.up .mp-v"],["ngaT","mp-b-t .mp-cap.up .mp-v"],
-                ["igV","mp-b-v .mp-cap.up .mp-ico::before"],
-                ["igaV","mp-b-v .mp-cap.up .mp-ico::before"]];
+        // A numeral-glow knob owns TWO rules now: the total's (.mp-v) and the MoE-% text group's
+        // (.mp-pct-t), which wears the same band glow -- each must move, and nothing else.
+        probes=[["ngT",["mp-b-t .mp-cap.up .mp-v","mp-b-t .mp-cap.up .mp-pct-t"]],
+                ["ngaT",["mp-b-t .mp-cap.up .mp-v","mp-b-t .mp-cap.up .mp-pct-t"]],
+                ["igV",["mp-b-v .mp-cap.up .mp-ico::before"]],
+                ["igaV",["mp-b-v .mp-cap.up .mp-ico::before"]]];
     ok("every per-band glow knob (colour AND alpha, both glows) moves EXACTLY its own rule",
        probes.every(function(p){
          var was=st[p[0]];
@@ -1374,7 +1420,8 @@ JSON.stringify(meta,null,2)+"\n*/\n";
          var m=cssOut().split("\n");
          st[p[0]]=was;
          var moved=lines.filter(function(l,i){return l!==m[i];});
-         return m.length===lines.length&&moved.length===1&&moved[0].indexOf(p[1])>=0;}));
+         return m.length===lines.length&&moved.length===p[1].length&&
+           p[1].every(function(s){return moved.filter(function(l){return l.indexOf(s)>=0;}).length===1;});}));
     ok("shared radii: every band's numeral glow emits the same "+st.glowW+"/"+st.glowT+
        "rem pair after the shared dark drop",
        BANDS.every(function(b){var g=bandNumGlow(b);

@@ -336,13 +336,13 @@ _PANEL = {
             u"Scale", u"Bar scale",
             u"Default: the bar's normal size. Large: draws it bigger, for easier reading from "
             u"a distance."),
-        # The two v21 radios: which axis the bar draws on, and which anchor the position
-        # steppers below offset from. Both carry a tooltip, same reasoning as Mode/Scale above.
         u"progressShowPercent": _row(
             u"Show MoE %", u"MoE percentage",
             u"Shows your Mark of Excellence percentage in brackets beside the current damage "
             u"on the bar. Damage Efficiency: the percentage this battle's damage alone is worth. "
             u"Moving Average: your live MoE percentage with this battle counted."),
+        # The two v21 radios: which axis the bar draws on, and which anchor the position
+        # steppers below offset from. Both carry a tooltip, same reasoning as Mode/Scale above.
         u"progressOrientation": _row(
             u"Orientation", u"Bar orientation",
             u"Horizontal is the bar's original layout. Vertical draws it standing upright, "

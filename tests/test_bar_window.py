@@ -1090,7 +1090,7 @@ def test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large(m
 #   -> movable extent 1720x762
 #   minimap size index 4, Default size, VERTICAL, Minimap alignment
 #
-# X == 1304 is the PURE composition derivation (1920 - 510 - 8 - 3 - 95). This bar's own hand-drag
+# X == 1258 is the PURE composition derivation (1920 - 510 - 8 - 3 - 141). This bar's own hand-drag
 # (see constants.py's EFFICIENCY_MM_TRACK_X comment) predates every one of those widenings and
 # checked a MUCH narrower surface (edge_x 53, X == 1346) -- it landed 2px off that OLDER derivation
 # (1344), read at the time as hand-drag scatter against a second, independent Moving Average drag
@@ -1133,7 +1133,7 @@ def test_the_vertical_efficiency_bar_lands_on_the_derived_position(monkeypatch):
                         mod_settings.PROGRESS_SIZE_KEY: mod_settings.PROGRESS_SIZE_DEFAULT,
                         mod_settings.BAR_POS_X_KEY: 0, mod_settings.BAR_POS_Y_KEY: 0})
     host, window = _efficiency_host()
-    assert _resolved(host, window) == (1304, 762)
+    assert _resolved(host, window) == (1258, 762)
 
 
 def test_the_hand_placed_y_was_below_the_engines_clamp_floor_so_none_of_it_was_folded_in():
@@ -1406,11 +1406,11 @@ def test_a_place_against_an_unrealized_window_does_not_report_placed(monkeypatch
     # The TRUE resolved point for the real Large surface -- independently derived, not the bogus
     # point `intended` computed against the still-256x256 fallback space (space = extent +
     # surface, so a wrong surface at the first _place also poisons the space the anchor math
-    # used): 1920 - 510(minimap@idx4) - 8(gap) - 5(overhang) - 137(track edge) == 1260,
+    # used): 1920 - 510(minimap@idx4) - 8(gap) - 5(overhang) - 194(track edge) == 1203,
     # 1080 - 28(gap_bottom) - 363(track edge y) == 689 -- but 689 is 7px BELOW the movable extent
     # (_EFF_LARGE_MAX[1] == 682), so _place clamps y into the extent (the real engine already
     # clamps this window on-screen; the clamp just makes the readback confirm instead of reject).
-    assert window.position == (1260, 682)
+    assert window.position == (1203, 682)
 
 
 def test_a_place_against_an_already_realized_window_places_normally(monkeypatch):
@@ -1580,9 +1580,9 @@ def test_the_vertical_efficiency_bar_lands_on_the_derived_position_at_large(monk
     host, window = _efficiency_host(max_xy=_EFF_LARGE_MAX, surface=_EFF_LARGE_SURFACE)
     space_x, space_y = host._space(window)
     resolved = _resolved(host, window)
-    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 137(track edge) == 1260
+    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 194(track edge) == 1203
     # 1080 - 28(EFFICIENCY_MM_GAP_BOTTOM) - 363(MM_TRACK_Y_LARGE) == 689
-    assert resolved == (1260, 689)
+    assert resolved == (1203, 689)
     mm_size = MINIMAP_SIZES[4]
     assert resolved[0] + EFFICIENCY_MM_TRACK_X_LARGE <= space_x - mm_size, \
         "the Large Damage Efficiency bar's track overlaps the minimap"
@@ -1598,9 +1598,9 @@ def test_the_vertical_progress_bar_lands_on_the_derived_position_at_large(monkey
     host, window = _progress_vertical_host(max_xy=_PROG_LARGE_MAX, surface=_PROG_LARGE_SURFACE)
     space_x, space_y = host._space(window)
     resolved = _resolved(host, window)
-    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 147(track edge) == 1250
+    # 1920 - 510(minimap idx4) - 8(MM_GAP) - 5(MM_TICK_OVERHANG_LARGE) - 205(track edge) == 1192
     # 1080 - 30(PROGRESS_MM_GAP_BOTTOM) - 363(MM_TRACK_Y_LARGE) == 687
-    assert resolved == (1250, 687)
+    assert resolved == (1192, 687)
     mm_size = MINIMAP_SIZES[4]
     assert resolved[0] + PROGRESS_MM_TRACK_X_LARGE <= space_x - mm_size, \
         "the Large Moving Average bar's track overlaps the minimap"

@@ -404,6 +404,10 @@ assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its 
     assert.strictEqual(ruleOf(".mev-lg .mev-cap.bt .mev-d"),
         "transform: translate(" + x(-Math.round(s.dGap * s.dFS * 100) / 100) + "rem, " + s.dY + "rem);",
         "the delta's x gap scales while its y nudge is restated verbatim");
+    // The MoE-% row's gap to the numeral is the SAME x-length (PCT_GAP_REM, x SIZE_XF) as an in-flow margin.
+    assert.strictEqual(ruleOf(".mev-lg .mev-cap.bt .mev-pct"),
+        "margin-right: " + x(Math.round(s.dGap * s.dFS * 100) / 100) + "rem;",
+        "the MoE-% gap's Large twin is the delta gap's x-length");
 
     // --- 5. NOTHING y/uniform may appear under .mev-lg -- the root font already scales it, so a
     // rule here would DOUBLE-APPLY SIZE_F.
@@ -423,9 +427,10 @@ assert.ok(onlyReq.indexOf("translateY(0.5rem)") >= 0, "icoyCur must stay at its 
     // box-relative WIDE checker-dither mask too little room to taper to a point -- a crop, not a
     // fix. The 2026-08-17 crop fix REVERTED all three back to the shared .mev-lg .mev-bd rule
     // (same move as bd-1's own revert above), dropping the count back to 20. A rule appearing or
-    // vanishing beyond that must be deliberate.
-    assert.strictEqual(lgRules.length, 20,
-        "the .mev-lg block must declare exactly 20 rules, found " + lgRules.length);
+    // vanishing beyond that must be deliberate. PLUS ONE for the MoE-% caption (plan step 11): the
+    // .mev-cap.bt .mev-pct margin-right, the % row's x-length gap to the numeral -> 21.
+    assert.strictEqual(lgRules.length, 21,
+        "the .mev-lg block must declare exactly 21 rules, found " + lgRules.length);
     const lgDecls = lgRules.join("");
     assert.ok(!/(font-size|line-height|height:|padding|margin-top|margin-bottom|animation|background|translateY\(-?[0-9.]+rem\))/
         .test(lgDecls),

@@ -313,8 +313,8 @@ const MUTATIONS = {
     "clamp-right-bound": ["B",
         "    const hi = CLAMP_R_REM * xf - half;", "    const hi = BAR_W_REM - half;"],
     "no-ico-gap": ["B",
-                 'Math.max(w(".mp-ico") + ICO_GAP_REM * xf, w(".mp-d"));',
-                 'Math.max(w(".mp-ico"), w(".mp-d"));'],
+                 'Math.max(w(".mp-ico") + ICO_GAP_REM * xf, right);',
+                 'Math.max(w(".mp-ico"), right);'],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // The shared halves are anchored identically in check_progress_js.js; this bar adds the ONE
@@ -356,6 +356,15 @@ const MUTATIONS = {
     // SIZE_F px, while the caption's width IN REM is unchanged (its font-size is a rem too), so the
     // corridor scales by SIZE_XF and the caption inside it does not. Two halves -- the querySelector
     // helper's measurement and .mp-cap's own offsetWidth -- because either alone mis-centres.
+    // ===== THE MoE-% CAPTION (VM `damagePercent`) ============================================
+    "pct-hidden-when-absent": ["B", "cur.pct >= 0 ?", "!(cur.pct < 0) ?"],
+    "pct-hidden-when-minus-one": ["B", "cur.pct >= 0 ?", "cur.pct >= -1 ?"],
+    // The clamp must count the out-of-flow % box and both gaps...
+    "clamp-ignores-the-pct": ["B",
+        "PCT_GAP_REM * xf + w(\".mp-pct\") + PCT_GAP_REM * xf + w(\".mp-d\")", "w(\".mp-d\")"],
+    // ...but only while it is showing, or a hidden % still pushes the caption inward.
+    "clamp-counts-a-hidden-pct": ["B", "const right = cur.pct >= 0", "const right = true"],
+
     "clamp-measured-icon-not-normalised": ["B",
         "        return ((n && n.offsetWidth) || 0) / px;", "        return (n && n.offsetWidth) || 0;"],
     "clamp-measured-numeral-not-normalised": ["B",
@@ -533,6 +542,9 @@ function mount(srcs, unsettled, unsized) {
         capD: capC.querySelector(".mp-d"),
         capDN: capC.querySelector(".mp-d-num"),
         capIco: capC.querySelector(".mp-ico"),
+        capPctBox: capC.querySelector(".mp-pct"),
+        capPct: capC.querySelector(".mp-pct-t"),
+        capPctN: capC.querySelector(".mp-pct-num"),
         reqTick: (i) => q(".mp-tick.r" + i),
         reqCapV: (i) => q(".mp-cap.r" + i).querySelector(".mp-v"),
         // Which band class is on the root -- ALL of them, so "exactly one" is assertable.
@@ -965,6 +977,45 @@ function run(mutation) {
     eq("a degenerate corridor bails out of the clamp entirely", s.capC.style.left, "100.000%");
     s.push(M({ barX: 0 }));
     eq("...at both ends", s.capC.style.left, "0.000%");
+
+    // --- THE MoE-% CAPTION (damagePercent; Python folds the setting into the -1 sentinel) -------
+    section("moe percent caption");
+    const pctOf = (s) => [s.capPct.style.display, s.capPctN.textContent];
+    s = mount(srcs);
+    s.push(M());
+    eq("damagePercent absent -> hidden and empty (NaN fails >= 0; fail-soft)", pctOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ damagePercent: -1 }));
+    eq("damagePercent -1 (setting off / no data) hides it", pctOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ damagePercent: 0 }));
+    eq("damagePercent 0.0 is a REAL percentile (a 0-damage battle), not absent", pctOf(s), ["", "0.00%"]);
+    s = mount(srcs);
+    s.push(M({ damagePercent: 73.849 }));
+    eq("two decimals, TRUNCATED not rounded", pctOf(s), ["", "73.84%"]);
+    s.push(M({ damagePercent: 100 }));
+    eq("100 renders 100.00%", s.capPctN.textContent, "100.00%");
+    s.push(M({ damagePercent: -1 }));
+    eq("a later -1 frame re-hides it in place", pctOf(s), ["none", ""]);
+    // The clamp's right overhang: with the % showing it is w(.mp-pct) + gap + w(.mp-d) (Option B --
+    // both out of flow; the %'s OWN gap is .mp-pct-t's margin-left, so the measured .mp-pct box
+    // already contains it -- only the delta's translate gap is added); with it hidden it falls back
+    // to today's w(.mp-d) alone.
+    s = mount(srcs);
+    s.capC.offsetWidth = 100;
+    s.capIco.offsetWidth = 60;
+    s.capPctBox.offsetWidth = 80;
+    s.capD.offsetWidth = 20;
+    s.push(M({ barX: 0, damagePercent: 50 }));
+    eq("the clamp's right overhang is the % box (own gap inside it) + the delta's gap + the delta",
+       s.capC.style.left, ((CLAMP_L + 50 + 80 + 4.2 + 20) / BAR_W * 100).toFixed(3) + "%");
+    s.push(M({ barX: 0, damagePercent: -1 }));
+    eq("with the % hidden the clamp falls back to today's numbers (icon side here)",
+       s.capC.style.left, ((CLAMP_L + 50 + 60 + ICO_GAP) / BAR_W * 100).toFixed(3) + "%");
+    s.capIco.offsetWidth = 0;
+    s.push(M({ barX: 0, damagePercent: -1 }));
+    eq("...and the delta alone otherwise (no % term, no gaps)",
+       s.capC.style.left, ((CLAMP_L + 50 + 20) / BAR_W * 100).toFixed(3) + "%");
 
     // --- barX AND band ARE CONSUMED VERBATIM -------------------------------------------------
     // domain/battle_builder owns efficiency_bar_x / efficiency_band, and the `>=`-INCLUSIVE

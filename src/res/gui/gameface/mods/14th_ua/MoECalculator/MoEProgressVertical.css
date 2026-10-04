@@ -99,18 +99,18 @@ body.mpv #moe-bar-root {
    on the horizontal bar and disproven; MoEBarTransient's post-deadline SURFACE_REASSERT_MS is the
    only fix. The box is kept because it is the honest description of the document's size, and the
    horizontal sheet's 380x92 is the WRONG WAY ROUND for this composition.
-   112 x 320 MIRRORS the vertical surface MoEProgress.js pushes -- width
-   V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM == 46+70-4, a SPLIT pad now (V_PAD_X_REM on the LEFT,
+   165 x 320 MIRRORS the vertical surface MoEProgress.js pushes -- width
+   V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM == 46+116+3, a SPLIT pad now (V_PAD_X_REM on the LEFT,
    caption ink; V_PAD_XR_REM on the RIGHT, the track's own tick overhang PLUS a small margin -- see
    both constants' own notes in MoEProgress.js, including fact 5 on why the margin is a PURE local
    quantity, never PROGRESS_MM_TRACK_X's hand-corrected placement value), height
    V_BOX_H_REM + 2*PAD_REM - V_CLIP_B_REM == 360+20-60, the same mirrored-constant contract as the
    JS's vertical shiftY <-> Python's domain/constants.VERTICAL_ANCHOR_Y_SHIFT: change one, change
    all three.
-   THE LEFT X PAD IS 70rem, NOT PAD_REM's 10 (read V_PAD_X_REM's note in MoEProgress.js): the three
+   THE LEFT X PAD IS 116rem, NOT PAD_REM's 10 (read V_PAD_X_REM's note in MoEProgress.js): the three
    captions are right-anchored and grow LEFTWARD past .mpv-backdrop by design, so the SURFACE has to
    reach out to their ink on that side while the backdrop deliberately does not.
-   THE RIGHT X PAD IS NEGATIVE (-4rem, V_PAD_XR_REM): the SURFACE clips .mpv-backdrop's right-side
+   THE RIGHT X PAD IS SMALL (3rem, V_PAD_XR_REM): the SURFACE clips .mpv-backdrop's right-side
    bleed a little further than the backdrop's own (ALREADY TRIMMED, see below) drawn width, down to
    just past the track's own tick overhang PLUS a 2px margin -- this is the fix for the invisible
    surface reaching into the minimap's first column (see MoEProgress.js's own five-point note); it
@@ -128,7 +128,7 @@ body.mpv #moe-bar-root {
    MoEProgress.js's V_CLIP_B_REM note -- it carries the whole derivation). This rule only keeps
    describing whatever the surface actually is. It stays a plain rem box either way, so it cannot
    reflow the composition when the surface shrinks past it. */
-body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
+body.mpv #moe-bar-box { width: 165rem; height: 320rem; }
 /* .mpv-backdrop is now the INVISIBLE surface bounding-box marker only (its rule stays at
    V_BOX_* == -34/-80/46/360 as the CSS cross-check of MoEProgress.js's surface constants, pinned by
    tests/test_progress_surface_mirror.py). The visible dither moved to the per-row .mpv-bd strips
@@ -143,10 +143,12 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
   z-index: 0;
 }
 /* PER-ROW STRIPS. left/width are NOT free literals: they MIRROR the invisible surface the JS pushes
-   (body.mpv #moe-bar-box == 112rem wide, left edge at -(V_PAD_X_REM - V_BOX_LEFT_REM) == -104rem),
-   so each strip's right (minimap-facing) edge lands on the surface's own right edge (root x 8rem
-   Default; 10rem Large via the .mp-lg twin below) -- flush, zero gap, and never past the surface
-   (Gameface clips a draw that overruns the view). Solid dither hugs the minimap side (mask `at 90%`)
+   (body.mpv #moe-bar-box == 165rem wide, left edge at -(V_PAD_X_REM - V_BOX_LEFT_REM) == -150rem),
+   so each strip's right (minimap-facing) edge lands on the surface's own right edge (root x 15rem
+   Default; ~15rem Large via the .mp-lg twin below) -- flush, zero gap. The shared box below
+   (-104/119) is the PRE-% surface extent: the V_PAD_X_REM growth was leftward only, so the right
+   edge did not move, and the rows it backs (capP/capEta/capR) did not grow. Only capC's own strip
+   (.mpv-bd-4) widened, to back the MoE-%. Gameface clips a draw that overruns the view. Solid dither hugs the minimap side (mask `at 90%`)
    and fades toward the leftward-growing numerals. Per-row `top` is a seed the maintainer converges. */
 .mpv-bd {
   position: absolute;
@@ -158,8 +160,11 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 /* Per-index width overrides -- right edge PINNED at the shared strip's own right edge
    (left+width == -104+119 == 15rem), growing LEFTWARD only, so the minimap-facing edge and
    the surface hit-rect do not move. Same specificity as .mpv-bd above; source order wins. */
-.mpv-bd-4 { width: 178.5rem; left: -163.5rem; }
+.mpv-bd-4 { width: 255rem; left: -240rem; }
 .mpv-bd-2 { width: 148.75rem; left: -133.75rem; }
+/* bd-4 (capC) 178.5 -> 255: its ::after shadow reaches 0.532*W left of its focus (at 90%), so it must
+   be ~255 wide to back "(100.00%)" out to capC's -145.75rem ink reach; the part past the surface's
+   own -150rem left edge is clipped, exactly as the old 178.5 overran the old -104rem edge. */
 /* bd-3 (preAvg) no longer gets its own width/left override -- 2026-08-17 crop fix
    (gen_bar_tuner_vertical.ps1 regenerated). The 2026-08-12 narrowing pass (then the
    79.583rem -> 83.733rem right-edge correction in 98ab7ea) shrank this row's own box while
@@ -347,6 +352,36 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
   opacity: 0;
   transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
 }
+/* THE MoE-% "(73.84%)" (MoEProgress.js .mpv-pct): an IN-FLOW flex child immediately BEFORE the
+   numeral (delta, %, numeral, icon), so it grows the row LEFTWARD like the delta and never moves
+   the icon. EVERY declaration is the delta's own -- same gap (st.dGap em), font-size, Y and
+   fade -- so the two share one baseline and one gap by construction. It takes the numeral's
+   STATE GLOW (maintainer decision, plan Q4) in the .mpv-pct.mpv-up/.mpv-down rules below: JS
+   puts the class on the node itself, because it PRECEDES .mpv-v and no sibling selector can
+   reach backwards. They are SEPARATE rules (not the delta's selector lists), declared after the
+   base rule above so they win at equal specificity; the .mpv-full gold follows the numeral's. */
+.mpv-cap .mpv-pct {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0em;
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5);
+  margin-right: 0.35em;
+  font-size: 12rem;
+  transform: translateY(1.5rem);
+  line-height: 15.5rem;
+  opacity: 0;
+  transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
+}
+.mpv-pct.mpv-up {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(123,236,55,0.9),
+               0rem 0rem 1rem rgba(123,236,55,0.9);
+}
+.mpv-pct.mpv-down {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0rem 0rem 6rem rgba(211,68,63,0.9),
+               0rem 0rem 1rem rgba(211,68,63,0.9);
+}
 .mpv-v.mpv-up,
 .mpv-d-num.mpv-up,
 .mpv-eta.mpv-up {
@@ -500,6 +535,11 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
 #moe-bar-root.mpv-full .mpv-fill {
   background: rgba(255,205,90,0.8);
 }
+#moe-bar-root.mpv-full .mpv-pct {
+  text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
+               0 0 8rem rgba(255,205,90,0.5),
+               0 0 2rem rgba(255,205,90,0.5);
+}
 #moe-bar-root.mpv-full .mpv-v {
   text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5),
                0 0 8rem rgba(255,205,90,0.5),
@@ -547,13 +587,13 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    never emits, both scoped `body.mpv.mp-lg` (1,2,1) so they out-specify the horizontal sheet's
    own `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is the
    PRE-SIZE_F quantity MoEBarTransient.applySize computes before its own final `* f`:
-   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 61.333 + 70 + -8.133 == 123.2
-   (V_PAD_XR_REM_LARGE is its own literal, -8.133, NOT V_PAD_XR_REM*SIZE_XF -- see MoEProgress.js's
+   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 61.333 + 116 + -0.533 == 176.8
+   (V_PAD_XR_REM_LARGE is its own literal, -0.533, NOT V_PAD_XR_REM*SIZE_XF -- see MoEProgress.js's
    own note); its HEIGHT is unchanged (the root font carries SIZE_F on a y-length), exactly as the
    horizontal block's own 500rem twin restates width only. THIS SHIM IS DOCUMENT REM, NOT LOGICAL
    PX -- the root font (1.25 under Large) supplies the SIZE_F when the DOCUMENT renders this box,
-   so 125.333rem here reproduces the same round(125.333*1.25)==157 logical px MoEBarTransient.
-   applySize pushes via resizeViewRem -- do not write 157 here, that would double the factor.
+   so 176.8rem here reproduces the same round(176.8*1.25)==221 logical px MoEBarTransient.
+   applySize pushes via resizeViewRem -- do not write 221 here, that would double the factor.
    THE BACKDROP'S OWN LARGE WIDTH BELOW IS A LITERAL 90rem, NOT V_BOX_W_REM*SIZE_XF (61.333, the
    naive *4/3 twin of the tuned Default 46) -- see MoEProgress.js's fact 3: 90 landed the backdrop's
    own right edge exactly on the minimap's edge (70+90==160==edge_x(147)+MM_GAP(8)+
@@ -566,7 +606,7 @@ body.mpv #moe-bar-box { width: 119rem; height: 320rem; }
    a real margin (1px to the minimap at the current gap, ~2.8px to the tick's own true right edge --
    MoEProgress.js's fact 5) instead of the backdrop's own flush zero-clearance edge. */
 body.mpv.mp-lg #moe-bar-root { width: 4rem; }
-body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
+body.mpv.mp-lg #moe-bar-box { width: 176.8rem; }
 .mp-lg .mpv-backdrop { left: -45.333rem; width: 90rem; }
 /* The strips' Large flush override: right edge at root x 10rem (== surface's Large right edge),
    left/width their OWN literals (the surface's Large left is -(V_PAD_X_REM - V_BOX_LEFT_REM*SIZE_XF),
@@ -575,7 +615,7 @@ body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
 .mp-lg .mpv-bd { left: -115.333rem; width: 130.4rem; }
 /* Large per-index width overrides -- right edge PINNED (left+width == -115.333+130.4 ==
    15.067rem); same specificity as .mp-lg .mpv-bd above, source order wins. */
-.mp-lg .mpv-bd-4 { width: 195.6rem; left: -180.533rem; }
+.mp-lg .mpv-bd-4 { width: 279.4rem; left: -264.333rem; }
 .mp-lg .mpv-bd-2 { width: 163rem; left: -147.933rem; }
 /* bd-3 (preAvg) Large no longer gets its own override -- 2026-08-17 crop fix. Its old literal
    (left -82.183rem, width 87.133rem) put its right edge at 4.95rem, ~10.1rem SHORT of the
@@ -609,6 +649,7 @@ body.mpv.mp-lg #moe-bar-box { width: 130.4rem; }
   transform: translateY(50%) translateX(0rem); }
 .mp-lg .mpv-cap .mpv-ico { margin-left: 1.333rem; }
 .mp-lg .mpv-cap .mpv-d { margin-right: 0.467em; }
+.mp-lg .mpv-cap .mpv-pct { margin-right: 0.467em; }
 /* HAND-EDIT 6/8's Large twins of the four per-icon margin corrections above -- SIZE_XF (4/3), same
    as the shared base's own 1rem -> 1.333rem twin, NOT SIZE_F (1.25): margin is a screen-x length
    on this bar, same as every other x-length in this .mp-lg block. */

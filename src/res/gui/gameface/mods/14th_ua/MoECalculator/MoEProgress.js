@@ -35,7 +35,7 @@ import { ModelObserver } from "../../libs/model.js";
 // race and the surface re-assert -- is SHARED with MoEEfficiency.js. Every behaviour in there cost a
 // client relaunch to find; read its header before changing anything that touches timing. Separate
 // documents, so this module is instantiated twice with no cross-talk.
-import { createTransient, fmt, FADE_IN_MS } from "./MoEBarTransient.js";
+import { createTransient, fmt, pctText, FADE_IN_MS } from "./MoEBarTransient.js";
 
 // No feature name -> observe this view's OWN root model (window.model == ProgressVM).
 const observer = ModelObserver();
@@ -75,7 +75,8 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // BOX_W_REM by exactly the same amount and every per-side margin is preserved.
 // WHICH CAPTION IS THE EXTREME HAS NOW MOVED THREE TIMES, so all three extremes are RE-DERIVED here
 // from the shipped CSS and MoEBattle.ttf's own advances (digit 0.4932em, comma 0.2471, paren 0.3008,
-// plus 0.4932; 1rem == 1 logical px; every figure re-checked against the ttf's hmtx). The two moves
+// plus 0.4932; 1rem == 1 logical px; every figure re-checked against the ttf's hmtx; the MoE-%
+// caption adds percent 0.7734 and period 0.2471 -- see THE MoE-% CAPTION below). The two moves
 // in THIS revision: the .mp-capL axis-floor caption is GONE outright, and the REMAINING-BATTLES
 // COUNT moved OFF the delta and ONTO .mp-capR with a glyph of its own.
 //   RIGHT -- .mp-capR, and it is now the extreme by a wide margin. ONE flex row, FOUR items --
@@ -132,11 +133,21 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 //   (down from 24.1rem before the gap, since the gap only widens the reach and the backdrop grows
 //   for a different reason). Still comfortably unclipped, so the Default size keeps binding on
 //   every side.
+//   THE MoE-% CAPTION. capC carries "(73.84%)" (.mp-pct), OUT OF FLOW at left:100% so the numeral
+//   stays on its tick, with the delta re-parented INSIDE it so ITS left:100% resolves off the % box's
+//   right edge. CAPC RIGHT reach at axis 100 % ("(100.00%)" == 2*0.3008 + 5*0.4932 + period 0.2471 +
+//   percent 0.7734 == 4.0881em == 49.06rem at the .mp-d 12rem; "(73.84%)" is 43.14rem):
+//     17.76 + 4.20 (gap) + 49.06 + 4.20 (the delta's gap) + 30.89 ("(+297)") + 6.00 == 112.11rem
+//   against the clearance -BOX_LEFT_REM + PAD_REM == 105 + 10 == 115rem (2.89rem spare): the box grew
+//   symmetrically 80 -> 105 / 360 -> 410 (remedy (i)). The surface-mirror test's own sum is the
+//   authority (test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface). The 58.85rem
+//   above is the PRE-% figure -- do not trust it while the % shows. .mp-bd-2 (capC's strip, centred
+//   on the tick) grew 108 -> 150 so it backs the % (+-75 vs 71.02).
 // Keep the 80rem, and re-derive ALL THREE extremes again before ever moving it -- "which one is the
 // extreme" has now moved three times, and each move invalidated the previous revision's spare.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
-//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 380     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 90
+//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 430     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 115
 //   VIEW_H_REM = BOX_H_REM + 2*PAD_REM - CLIP_B_REM == 67   SHIFT_Y_REM = PAD_REM - BOX_TOP_REM == 32
 // SHIFT_Y_REM is MIRRORED (negated) in Python as
 // domain/constants.PROGRESS_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
@@ -159,11 +170,12 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // the mirrored Python Y-shift is unchanged. Bottom pad becomes PAD_REM - CLIP_B_REM == 2rem: capC's
 // numeral sign-glow (~6rem past its ink) lands at ~31.7 == INSIDE box bottom 33, and the strip box
 // (33) sits 2rem inside the surface -- nothing clips.
-// WIDTH is UNCHANGED (-80/360): symmetric, capR-overhang-bound (see above). Only .mp-bd-3 was pulled
-// in from 126->88 (iter 1) so it no longer clips the surface edge.
-const BOX_LEFT_REM = -80;                            // leftmost edge (== -clearance; symmetric)
+// WIDTH is -105/410: symmetric, now bound by the capC "(100.00%)" reach (see THE MoE-% CAPTION above;
+// it was -80/360, capR-overhang-bound). .mp-bd-3 was pulled in from 126->88 (iter 1) so it no longer
+// clips the surface edge.
+const BOX_LEFT_REM = -105;                           // leftmost edge (== -clearance; symmetric)
 const BOX_TOP_REM = -22;                             // topmost edge (.mp-bd-1's top)
-const BOX_W_REM = 360;                               // track 200 + 2*80 clearance (symmetric)
+const BOX_W_REM = 410;                               // track 200 + 2*105 clearance (symmetric)
 const BOX_H_REM = 55;                                // seed: bounds the strips (capC strip now 26 tall)  [was 50]
 const PAD_REM = 10;
 // BOTTOM-only surface trim (iter 3). Effective bottom pad == PAD_REM - CLIP_B_REM == 2rem. Y-length,
@@ -185,8 +197,8 @@ const CLIP_B_REM = 8;
 // own note below). PAD_REM serves the Y axis; the X axis is a SPLIT pad, V_PAD_X_REM on the left
 // (caption ink) and V_PAD_XR_REM on the right (the track's own tick overhang, deliberately smaller
 // -- see both constants' own notes below), so:
-//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 104
-//               + V_PAD_X_REM + V_PAD_XR_REM == 112
+//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 150
+//               + V_PAD_X_REM + V_PAD_XR_REM == 165
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                                - V_CLIP_B_REM == 320 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
 // V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
@@ -295,10 +307,17 @@ const CLIP_B_REM = 8;
 //     the file by a wide margin.
 //   .mpv-capP (moving, dmgp back at 14rem, margin corrected to 1.253rem): (-6 + 0) -
 //     [ 31.08 + 1.253 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.33rem.
-// capC is STILL the extreme (99.49 > 53.33 > 41.97 > 20.85), and the maintainer's own 7px-left
-// nudge ate the margin (104 - 99.49 == 4.51, was 97 - 92.49 == 4.51 before -- the SAME margin,
+// THE MoE-% CAPTION: V_MARKUP puts an in-flow .mpv-pct "(73.84%)" between the delta and the
+//   numeral, so capC's leftward reach GROWS by that node + one gap: + 49.06 ("(100.00%)" at 12rem:
+//   2 parens + 5 digits + period 0.2471 + percent 0.7734) + 4.2 (the 0.35em gap). The 99.49 above is
+//   the PRE-% figure. THE TEST IS THE AUTHORITY for the new one (it reads every term off the CSS,
+//   incl. the row's padding-right/translateX): test_the_vertical_captions_fit_inside_the_surface
+//   measures .mpv-capC at 145.75rem, and wants >= 4rem spare, so the allowance had to reach 149.75:
+//   V_PAD_X_REM == 150 + V_BOX_LEFT_REM == 150 - 34 == 116   (was 70; +46 -> allowance 150, 4.25 spare)
+// capC is STILL the extreme (145.75 > 53.33 > 41.97 > 20.85), and the maintainer's own 7px-left
+// nudge ate the margin earlier (104 - 99.49 == 4.51, was 97 - 92.49 == 4.51 before -- the SAME margin,
 // because V_PAD_X_REM grew by the identical +7): the surface's left edge had to move WITH it:
-//   V_PAD_X_REM == 104 + V_BOX_LEFT_REM == 104 - 34 == 70   (was 63; +7, matching the capC nudge)
+//   (earlier pass: V_PAD_X_REM == 104 + V_BOX_LEFT_REM == 104 - 34 == 70, was 63; +7)
 // GROWING THIS MOVES THE TRACK INSIDE THE SURFACE, so domain/constants.PROGRESS_MM_TRACK_X(
 // _LARGE) had to grow with it by the exact same amount (in logical px, i.e. *SIZE_F under Large)
 // or the visible bar would slide RIGHT into the minimap -- see that constant's own comment.
@@ -327,7 +346,7 @@ const CLIP_B_REM = 8;
 // re-deriving both sides from source rather than hardcoding 54.5 and 90 as two literals that would
 // have to agree by hand.
 // LARGE IS STRICTLY SLACKER and needs no twin: the allowance is `V_PAD_X_REM - V_BOX_LEFT_REM*4/3`
-// == 115.33rem (was 108.33 before V_PAD_X_REM grew to 70 -- the backdrop's left bleed is an
+// == 161.33rem (was 115.33 at V_PAD_X_REM 70, 108.33 at 63 -- the backdrop's left bleed is an
 // x-length and takes SIZE_XF; V_PAD_X_REM, like PAD_REM, does NOT -- the ink it covers is
 // rem-sized and rides the root font's SIZE_F alone), while the ink only grows on its three
 // x-GAPS. The Default size keeps binding.
@@ -396,7 +415,7 @@ const V_BOX_TOP_REM = -80;                           // .mpv-backdrop's top
 const V_BOX_W_REM = 46;                              // .mpv-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mpv-backdrop's height
 const V_CLIP_B_REM = 60;                             // backdrop bleed the SURFACE clips off the bottom
-const V_PAD_X_REM = 70;                              // the LEFT X slack, decoupled from the backdrop
+const V_PAD_X_REM = 116;                             // the LEFT X slack, decoupled from the backdrop
 // THE SURFACE'S RIGHT (minimap-facing) PAD -- deliberately NOT V_PAD_X_REM's mirror, and a SEPARATE
 // knob from the backdrop's own V_BOX_W_REM trim above: the backdrop trim shrinks what is DRAWN, this
 // shrinks what is CLICK-BLOCKING (the surface, never drawn). Shrunk close to the minimum the TRACK's
@@ -442,13 +461,15 @@ const V_PAD_X_REM = 70;                              // the LEFT X slack, decoup
 // 4px is the minimap's non-interactive frame margin and is safe to consume (the Ctrl-click area is
 // further in). So the surface's right edge (and the flush strips) now sit at margin == -3 (3px into
 // that frame margin), flush against the minimap itself:
-//   Default: view_w == 8 + 3 + 105 - (-3) == 119 -> padXR == 119 - V_BOX_W(46) - V_PAD_X(70) == 3
-//   Large:   view_w == 8 + 5 + 147 - (-3) == 163 -> padXRLarge == 163/SIZE_F - boxW*xf(61.333) - 70
-//                                             == 130.4 - 131.333 == -0.933
+//   Default: view_w == 8 + 3 + 151 - (-3) == 165 -> padXR == 165 - V_BOX_W(46) - V_PAD_X(116) == 3
+//   Large:   view_w == 8 + 5 + 205 - (-3) == 221 -> padXRLarge == 221/SIZE_F - boxW*xf(61.333) - 116
+//                                             == 176.8 - 177.333 == -0.533
+//   (MoE-% pass: V_PAD_X 70 -> 116 and PROGRESS_MM_TRACK_X 105 -> 151 / 147 -> 205 moved together, so
+//   Default padXR is unchanged at 3; Large's drifts by the 207-vs-206.667 rounding of the pure value.)
 // The visible TRACK is unaffected -- gap/overhang/edge_x are unchanged; only view_w (this right pad)
 // grew, which moves the surface's minimap-facing edge alone, not the track.
 const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -0.933;                   // ...and Large -- its OWN literal, see above
+const V_PAD_XR_REM_LARGE = -0.533;                   // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
 // together by goVertical() below and never touched again.
@@ -495,8 +516,13 @@ const MARKUP =
         '  <div class="mp-tick mp-end mp-right"></div>' +
         '  <div class="mp-cap up mp-capP"><i class="mp-ico dmgp"></i>' +
         '<span class="mp-v"></span></div>' +
+        // THE MoE-% (.mp-pct) is OUT OF FLOW like the delta was, so the numeral alone stays on its
+        // tick, and the DELTA IS RE-PARENTED INSIDE it so its own left:100% resolves off the %'s
+        // right edge ("1,850 (73.84%) (+120)"). .mp-pct-t is the gated/faded text group: hiding THAT
+        // (not .mp-pct) keeps the delta alive when the % is off. NOT .mp-v -- capV() is a first match.
         '  <div class="mp-cap dn mp-capC"><i class="mp-ico dmgc"></i><span class="mp-v"></span>' +
-        '<span class="mp-d">(<span class="mp-d-num"></span>)</span></div>' +
+        '<span class="mp-pct"><span class="mp-pct-t">(<span class="mp-pct-num"></span>)</span>' +
+        '<span class="mp-d">(<span class="mp-d-num"></span>)</span></span></div>' +
         // THE MARK PAIR MUST COME FIRST IN THIS ROW: capV() does a querySelector for the FIRST
         // .mp-v, so reordering these four nodes repoints the requirement writer at the count -- with
         // no error to catch it. The mark GLYPH no longer cares (setIco writes to the mount-cached
@@ -549,7 +575,10 @@ const V_MARKUP =
         '</div>' +
         '<div class="mpv-cap mpv-capEta"><span class="mpv-eta"></span><i class="mpv-ico battles"></i></div>' +
         '<div class="mpv-cap mpv-capR"><span class="mpv-v"></span><i class="mpv-ico none"></i></div>' +
+        // The MoE-% sits IMMEDIATELY BEFORE the numeral (after the delta), in flow: "(+12) (73.84%) 1,850".
+        // Never .mpv-v -- capV() is a first-match querySelector.
         '<div class="mpv-cap mpv-capC"><span class="mpv-d">(<span class="mpv-d-num"></span>)</span>' +
+        '<span class="mpv-pct">(<span class="mpv-pct-num"></span>)</span>' +
         '<span class="mpv-v"></span><i class="mpv-ico dmgc"></i></div>';
 
 function ensureRoot() {
@@ -588,6 +617,11 @@ let capCbd = root.querySelector(".mp-bd-2");
 let tBottom = null;
 let capD = capC.querySelector(".mp-d");
 let capDN = capC.querySelector(".mp-d-num");
+// The MoE-% group (the node gated on `pct >= 0` and faded with capD) and its digits. Horizontally the
+// gated node is .mp-pct-t INSIDE the out-of-flow .mp-pct (which also holds the delta); vertically it
+// is .mpv-pct itself.
+let capPct = capC.querySelector(".mp-pct-t");
+let capPctN = capC.querySelector(".mp-pct-num");
 // The remaining-battles pair on capR. Its own classes, NOT a second .mp-v / an .mp-ico index: see the
 // mark-pair-comes-first note on the template above (horizontal only -- the vertical capR swaps the
 // two groups; see V_MARKUP and capMkIco below).
@@ -638,6 +672,8 @@ function goVertical() {
     capR = root.querySelector(".mpv-capR");
     capD = capC.querySelector(".mpv-d");
     capDN = capC.querySelector(".mpv-d-num");
+    capPct = capC.querySelector(".mpv-pct");
+    capPctN = capC.querySelector(".mpv-pct-num");
     // capEtaIco/capEta now live in the SEPARATE .mpv-capEta row (stacked above capR), not inside
     // capR itself -- scoped off `root`, since both classes are unique across the whole document.
     capEtaIco = root.querySelector(".mpv-ico.battles");
@@ -776,6 +812,10 @@ function showVal(sw) {
     const d = cur.projAvg - cur.preAvg;
     capV(capC).textContent = fmt(sw ? cur.projAvg : cur.preAvg);
     capD.style.opacity = sw ? "1" : "0";
+    // The MoE-% belongs to projAvg like the delta, so it fades in with it. Its TEXT and visibility
+    // are written in paintStatic (every render), so a settings flip -- which moves neither projAvg
+    // nor anything in the change-detect -- still lands without a replay.
+    capPct.style.opacity = sw ? "1" : "0";
     // SIGN + MAGNITUDE ONLY. The remaining-battles count used to be appended here as "/NN"; it now
     // lives on .mp-capR beside the requirement it is a countdown to, with a glyph of its own (see
     // paintStatic). Do not re-append it: it was the single term that pushed capC's reach to 74rem.
@@ -793,7 +833,9 @@ function showVal(sw) {
     // already reads correctly on the countdown too. The intuitive-but-wrong instinct is "more
     // battles remaining is worse, so invert" -- resist it; there is no separate battles-count
     // delta to test against, only this one d.
-    [capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {
+    // capPct (the MoE-% text group) rides the SAME sign: the CSS gives it the numeral's glow, and a
+    // sibling selector cannot (it precedes .mpv-v vertically), so the class goes on the node itself.
+    [capV(capC), capDN, fill, tProj, capEta, capPct].forEach(function (e) {
         e.classList.toggle(ns("mp-up"), glows && d > 0);
         e.classList.toggle(ns("mp-down"), glows && d < 0);
     });
@@ -822,8 +864,12 @@ function paintStatic() {
     capEtaIco.classList.toggle("none", !showEta);
     capEta.textContent = showEta ? fmt(cur.eta) : "";
     if (capEtaBd) capEtaBd.classList.toggle("none", !showEta);
+    // THE MoE-% (VM `curPercent`): Python folds the "Show MoE %" setting AND no-data into the -1.0
+    // sentinel, so the ONE `>= 0` test covers both; an ABSENT field is NaN, also false.
+    capPct.style.display = cur.pct >= 0 ? "" : "none";
+    capPctN.textContent = pctText(cur.pct);
     capV(capP).textContent = fmt(cur.preAvg);
-    const pre = axisPct(cur.preAvg).toFixed(3) + "%";
+    const pre =axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style[AX] = pre;
     capP.style[AX] = pre;
     if (capBd3) capBd3.style.bottom = pre;   // keep capP's backdrop strip behind the moving number
@@ -864,6 +910,7 @@ function scheduleSwap() {
 function coldRewind(atCurrent) {
     clearTimeout(swapT);
     capD.style.transition = "none";
+    capPct.style.transition = "none";
     swapped = !!atCurrent;
     showVal(swapped);
     T.disarm();
@@ -871,6 +918,7 @@ function coldRewind(atCurrent) {
     setPos(swapped ? cur.projAvg : cur.axisLo, false);
     void root.offsetWidth;
     capD.style.transition = "";
+    capPct.style.transition = "";
 }
 
 // ...and this is its onCommit hook: the pre->current climb, run after the transient arms a DAMAGE
@@ -992,6 +1040,9 @@ function render(model) {
         // field must not collapse into it. Number(undefined) is NaN, which paintStatic's `>= 1` reads
         // as "render no count" -- the fail-soft direction for a brand-new VM field.
         eta: Number(model.etaBattles),
+        // The MoE % (-1.0 == off / no data). BARE, NO `|| 0`, for the same reason as eta: 0.0 is a
+        // real percentile and an absent field must not collapse into it. NOT in the change-detect.
+        pct: Number(model.curPercent),
     };
     paintStatic();
 

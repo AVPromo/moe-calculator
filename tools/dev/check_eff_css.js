@@ -71,6 +71,8 @@ const ruleIn = (text, sel) => {
     [".mp-lg .mp-tick", "width: 2.667rem;"],
     [".mp-lg .mp-tick.mp-cur", "width: 2.667rem;"],
     [".mp-lg .mp-cap .mp-d", "transform: translate(5.6rem, 2.5rem);"],
+    // the MoE-% text group's gap, the SAME x-length as the delta's translate above (PCT_GAP_REM 4.2 x SIZE_XF)
+    [".mp-lg .mp-cap .mp-pct-t", "margin-left: 5.6rem;"],
     [".mp-lg .mp-ico", "transform: translate(-1.333rem, -50%);"],
     [".mp-lg .mp-cap.dn .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.25rem);"],
     [".mp-lg .mp-cap.up .mp-ico", "transform: translate(-1.333rem, -50%) translateY(0.9rem);"],

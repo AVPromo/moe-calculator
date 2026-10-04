@@ -265,7 +265,8 @@ check("clampCapPPct(50) passes through unclamped", ctx.clampCapPPct(50) === 50);
         while ((m = re.exec(css)) !== null) rules.push({ sel: m[1].trim(), decl: m[2] });
         return rules;
     }
-    function isolated(knobId, probeVal, ownTag) {
+    // alsoTag: a SECOND legitimate owner (the MoE-% rule deliberately mirrors the delta's knobs).
+    function isolated(knobId, probeVal, ownTag, alsoTag) {
         const baseRules = rulesOf(ctx.cssOut());
         const was = ctx.st[knobId];
         ctx.st[knobId] = probeVal;
@@ -277,6 +278,7 @@ check("clampCapPPct(50) passes through unclamped", ctx.clampCapPPct(50) === 50);
         for (let i = 0; i < baseRules.length && i < mutRules.length; i++) {
             if (baseRules[i].decl !== mutRules[i].decl) {
                 if (baseRules[i].sel.indexOf(ownTag) >= 0) ownChanged = true;
+                else if (alsoTag && baseRules[i].sel.indexOf(alsoTag) >= 0) { /* mirrored rule */ }
                 else leaked.push(baseRules[i].sel.replace(/\s+/g, " ").trim());
             }
         }
@@ -303,9 +305,9 @@ check("clampCapPPct(50) passes through unclamped", ctx.clampCapPPct(50) === 50);
     isolated("capxP", 3, ".mpv-capP");
     // Delta label knobs -- dFS legitimately touches both its font-size AND its derived
     // line-height (lh(dFS)), both within the one .mpv-cap .mpv-d rule.
-    isolated("dFS", 20, ".mpv-cap .mpv-d");
-    isolated("dGap", 0.8, ".mpv-cap .mpv-d");
-    isolated("dY", -3, ".mpv-cap .mpv-d");
+    isolated("dFS", 20, ".mpv-cap .mpv-d", ".mpv-cap .mpv-pct");
+    isolated("dGap", 0.8, ".mpv-cap .mpv-d", ".mpv-cap .mpv-pct");
+    isolated("dY", -3, ".mpv-cap .mpv-d", ".mpv-cap .mpv-pct");
     // Per-caption numeral Y nudges -- never merged.
     isolated("numYR", 2, ".mpv-capR .mpv-v");
     isolated("numYC", 2, ".mpv-capC .mpv-v");

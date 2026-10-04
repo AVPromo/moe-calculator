@@ -296,17 +296,17 @@ const MUTATIONS = {
     // invisible to every OTHER assertion in this file (none of them read capEta's classList except
     // the ones added for exactly this mutation).
     "eta-not-in-glow-array": ["B",
-        "[capV(capC), capDN, fill, tProj, capEta].forEach", "[capV(capC), capDN, fill, tProj].forEach"],
+        "[capV(capC), capDN, fill, tProj, capEta, capPct].forEach", "[capV(capC), capDN, fill, tProj, capPct].forEach"],
     // THE INVERSION TRAP: d > 0 is a better-than-average battle, which LOWERS battles_to_axis_hi, so
     // green-on-improving is already correct on the countdown -- the intuitive-but-wrong "more
     // battles remaining is worse, so invert" read would swap capEta's up/down against every other
     // member of the array. Flip ONLY capEta's two toggle calls, leaving the other four untouched.
     "eta-polarity-inverted": ["B",
-        "[capV(capC), capDN, fill, tProj, capEta].forEach(function (e) {\n" +
+        "[capV(capC), capDN, fill, tProj, capEta, capPct].forEach(function (e) {\n" +
         '        e.classList.toggle(ns("mp-up"), glows && d > 0);\n' +
         '        e.classList.toggle(ns("mp-down"), glows && d < 0);\n' +
         "    });",
-        "[capV(capC), capDN, fill, tProj].forEach(function (e) {\n" +
+        "[capV(capC), capDN, fill, tProj, capPct].forEach(function (e) {\n" +
         '        e.classList.toggle(ns("mp-up"), glows && d > 0);\n' +
         '        e.classList.toggle(ns("mp-down"), glows && d < 0);\n' +
         "    });\n" +
@@ -334,6 +334,16 @@ const MUTATIONS = {
     "delta-regains-the-eta-suffix": ["B",
         '(d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d));',
         '(d > 0 ? "+" : d < 0 ? "-" : "") + fmt(Math.abs(d)) + (cur.eta >= 1 ? "/" + cur.eta : "");'],
+
+    // ===== THE MoE-% CAPTION (VM `curPercent`) ===============================================
+    // ONE `>= 0` test covers setting-off and no-data. Absent is NaN and must fail it...
+    "pct-hidden-when-absent": ["B", "cur.pct >= 0 ?", "!(cur.pct < 0) ?"],
+    // ...and the -1 sentinel (setting off, folded in Python) must hide it too.
+    "pct-hidden-when-minus-one": ["B", "cur.pct >= 0 ?", "cur.pct >= -1 ?"],
+    // It moves only when projAvg does: listing it would replay the bar on a settings flip.
+    "pct-not-in-change-detect": ["B",
+        "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg ||",
+        "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg || cur.pct !== last.pct ||"],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // Each half is separately invisible in-client (the CSS half is guarded by
@@ -546,6 +556,8 @@ function mount(srcs, unsettled, unsized) {
         capCV: q(".mp-capC").querySelector(".mp-v"),
         capD: q(".mp-capC").querySelector(".mp-d"),
         capDN: q(".mp-capC").querySelector(".mp-d-num"),
+        capPct: q(".mp-capC").querySelector(".mp-pct-t"),
+        capPctN: q(".mp-capC").querySelector(".mp-pct-num"),
         run: () => (root.classList.contains(RUN_CLASSES[0]) ? RUN_CLASSES[0]
                     : root.classList.contains(RUN_CLASSES[1]) ? RUN_CLASSES[1] : null),
     };
@@ -697,6 +709,34 @@ function run(mutation) {
     eq("a later frame re-collapses it in place", etaOf(s), ["", true]);
     s.push(M({ etaBattles: 7 }));
     eq("...and re-reveals it", etaOf(s), ["7", false]);
+
+    // --- THE MoE-% CAPTION (curPercent; Python folds the setting into the -1 sentinel) ---------
+    section("moe percent caption");
+    const pctOf = (s) => [s.capPct.style.display, s.capPctN.textContent];
+    s = mount(srcs);
+    s.push(M());
+    eq("curPercent absent -> hidden and empty (NaN fails >= 0; fail-soft)", pctOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ curPercent: -1 }));
+    eq("curPercent -1 (setting off / no data) hides it", pctOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ curPercent: 0 }));
+    eq("curPercent 0.0 is a REAL percentile, not absent", pctOf(s), ["", "0.00%"]);
+    s = mount(srcs);
+    s.push(M({ curPercent: 73.849 }));
+    eq("two decimals, TRUNCATED not rounded (pctText)", pctOf(s), ["", "73.84%"]);
+    s.push(M({ curPercent: 100 }));
+    eq("100 renders 100.00%", s.capPctN.textContent, "100.00%");
+    s.push(M({ curPercent: -1 }));
+    eq("a later -1 frame re-hides it in place (a settings flip, no replay needed)", pctOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ curPercent: 73.849 }));
+    eq("the delta is a sibling INSIDE .mp-pct, untouched by the %", s.capDN.textContent, "+50");
+    // NOT in the change-detect: a pct-only flip must not raise the bar.
+    s.push(M({ curPercent: -1 }));
+    eq("a pct-only flip does NOT arm a run", s.run(), null);
+    s.push(M({ curPercent: 12.3 }));
+    eq("...in either direction", s.run(), null);
 
     // --- COLD SHOW --------------------------------------------------------------------------
     section("cold show");

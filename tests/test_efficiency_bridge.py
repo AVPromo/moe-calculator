@@ -795,3 +795,20 @@ def test_damage_percent_is_minus_one_when_the_setting_is_off_even_with_data(monk
 def test_the_show_percent_flag_is_never_pushed_under_its_own_name():
     props = _push(2000)
     assert "showPercent" not in props and mod_settings.PROGRESS_SHOW_PERCENT_KEY not in props
+
+
+@pytest.mark.parametrize("thr", [
+    {65: 2450, 85: 3050, 95: 3050, 100: 4400},     # non-monotone: r85 == r95 (zero-width segment)
+    {65: 0, 85: 3050, 95: 3620, 100: 4400},        # a zero stop
+])
+def test_damage_percent_is_gated_on_the_bars_own_has_data_not_damage_percents_looser_rule(
+        monkeypatch, thr):
+    # Premise: damage_percent ALONE still yields a real percentile on a degenerate row (its fit
+    # just drops the bad anchor)...
+    from moe_calculator.domain.battle_builder import damage_percent
+    assert damage_percent(2450, thr) >= 0.0
+    # ...but the bar has no axis there (efficiency_stops is None -> has_data False), so the push
+    # must not show a "%" under a hidden bar.
+    monkeypatch.setitem(mod_settings._settings, mod_settings.PROGRESS_SHOW_PERCENT_KEY, True)
+    props = _push(2450, thresholds=thr)
+    assert props["hasData"] is False and props["damagePercent"] == -1.0
