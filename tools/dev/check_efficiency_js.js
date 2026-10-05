@@ -331,7 +331,7 @@ const MUTATIONS = {
     // ...and the %-backing strip must stay inside the surface.
     "strip-ignores-the-surface-edge": ["B",
         "BOX_LEFT_REM * xf - PAD_REM + sw / 2);", "-1e9);"],
-    "strip-width-ignores-the-pct": ["B", "(!(cur.pct >= 0) ? 90 : 183)", "183"],
+    "strip-width-ignores-the-pct": ["B", "(!(cur.pct >= 0) ? 90 : 150)", "150"],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // The shared halves are anchored identically in check_progress_js.js; this bar adds the ONE

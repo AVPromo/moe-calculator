@@ -127,7 +127,7 @@ body { margin: 0; }
 }
 .mp-bd-2 {
   top: 7rem;
-  width: 183rem;
+  width: 150rem;
   height: 26rem;
 }
 /* capR's fixed strip. width 126 ran its right edge to root-x 326, 36rem PAST the surface edge (it
@@ -930,10 +930,10 @@ body { margin: 0; }
 .mp-lg .mp-backdrop { left: -160rem; width: 586.667rem; }
 /* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..3 above) -- widths only;
    tops are y-lengths the root font scales, and the .mp-bd-3 left:100% / transform are unitless.
-   Straight base x 4/3: 90->120, 60->80, 183->244, 88->117.333. */
+   Straight base x 4/3: 90->120, 60->80, 150->200, 88->117.333. */
 .mp-lg .mp-bd { width: 120rem; }
 .mp-lg .mp-bd-1 { width: 80rem; }
-.mp-lg .mp-bd-2 { width: 244rem; }
+.mp-lg .mp-bd-2 { width: 200rem; }
 .mp-lg .mp-bd-3 { width: 117.333rem; }
 /* The dash grid's horizontal geometry: 2rem dash + 1rem gap -> 2.667 + 1.333, i.e. a 4rem period,
    and background-size's x term MUST stay equal to dash+gap or the grid drifts out of phase. The

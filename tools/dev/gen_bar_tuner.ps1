@@ -1217,7 +1217,7 @@ $tpl = @'
       ".mp-bd::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  z-index: -1;\n  background: "+ugGrad()+";\n}\n"+
       ".mp-bd-1 {\n  top: -22rem;\n  width: 60rem;\n}\n"+
-      ".mp-bd-2 {\n  top: 7rem;\n  width: 183rem;\n  height: 26rem;\n}\n"+
+      ".mp-bd-2 {\n  top: 7rem;\n  width: 150rem;\n  height: 26rem;\n}\n"+
       ".mp-bd-3 {\n  left: 100%;\n  transform: none;\n  top: -4rem;\n  width: 88rem;\n}\n"+
       ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n  background: "+trackBg()+";\n}\n"+
       "/* THE GARAGE BAR'S TRACK TREATMENT, cloned (MoECalculator.css:277-296 -- #moe-root .moe-track).\n"+

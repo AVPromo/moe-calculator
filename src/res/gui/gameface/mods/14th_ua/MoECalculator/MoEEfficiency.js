@@ -112,8 +112,8 @@ let large = false;
 //     65.41rem at 16rem, so the right overhang becomes 4.2 + 65.41 + 4.2 + the delta
 //     (capClampPct measures it) and the clamp pulls the wider caption inward -- the ink stays in the
 //     corridor, so the box is UNCHANGED. The width-fixed .mp-bd-5 strip (centred on the numeral)
-//     grew 90 -> 183 (Large 120 -> 244; was 150 / 200 at the 12rem %) to back the % (+-91.5 vs
-//     numeral/2 + 4.2 + 65.41 == 17.76 + 4.2 + 65.41 == 87.37). setPos() re-centres the strip so its
+//     stays 90 -> 150 (Large 120 -> 200, as at the 12rem %): +-75 vs numeral/2 + 4.2 + 65.41 ==
+//     87.37, so the rare 100.00% overhangs the dither by a few rem (accepted). setPos() re-centres the strip so its
 //     own left edge never crosses the surface's (BOX_LEFT*xf - PAD == -55), so a numeral near the
 //     axis start leaves the strip to the right of it: its right edge still clears the % ink.
 // So the surface is that box plus PAD_REM of slack on all four sides, and the whole composition is
@@ -600,10 +600,10 @@ function setPos(x) {
     tCur.style[AX] = p;
     if (CAP_C_AX) capC.style[CAP_C_AX] = capClampPct(x).toFixed(3) + "%";
     if (capCbd) {   // strip behind the moving caption
-        // 183 backs the % (+-91.5), 90 is the %-off width; both x-lengths (Large == SIZE_XF). The
+        // 150 backs the % (+-75; overhangs a few rem at 100.00%), 90 is the %-off width; both x-lengths (Large == SIZE_XF). The
         // centre never lets the strip's own edge cross the surface's left edge (BOX_LEFT*xf - PAD).
         const xf = large ? SIZE_XF : 1;
-        const sw = (!(cur.pct >= 0) ? 90 : 183) * xf;
+        const sw = (!(cur.pct >= 0) ? 90 : 150) * xf;
         const c = Math.max(capClampPct(x) / 100 * BAR_W_REM * xf, BOX_LEFT_REM * xf - PAD_REM + sw / 2);
         capCbd.style.width = sw + "rem";
         capCbd.style.left = (c / (BAR_W_REM * xf) * 100).toFixed(3) + "%";

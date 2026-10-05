@@ -118,7 +118,7 @@ body { margin: 0; }
 }
 .mp-bd-5 {
   top: -35rem;
-  width: 183rem;
+  width: 150rem;
   height: 26rem;
 }
 .mp-track {
@@ -558,13 +558,13 @@ body { margin: 0; }
 .mp-lg .mp-backdrop { left: -60rem; width: 520rem; }
 /* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..5) -- widths only;
    tops are y-lengths the root font scales, and the .mp-bd-1..4 left:N% are unitless.
-   Straight base x 4/3: 60->80, 54->72, 183->244. */
+   Straight base x 4/3: 60->80, 54->72, 150->200. */
 .mp-lg .mp-bd { width: 80rem; }
 .mp-lg .mp-bd-1 { width: 72rem; }
 .mp-lg .mp-bd-2 { width: 72rem; }
 .mp-lg .mp-bd-3 { width: 72rem; }
 .mp-lg .mp-bd-4 { width: 72rem; }
-.mp-lg .mp-bd-5 { width: 244rem; }
+.mp-lg .mp-bd-5 { width: 200rem; }
 .mp-lg .mp-track::after {
   background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem);
   background-size: 4rem 100%;

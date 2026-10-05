@@ -146,7 +146,8 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 //   surface-mirror test's own sum is the authority
 //   (test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface). The 58.85rem above is the
 //   PRE-% figure -- do not trust it while the % shows. .mp-bd-2 (capC's strip, centred on the tick)
-//   grew 150 -> 183 so it backs the % (+-91.5 vs 87.37 == 17.76 + 4.20 + 65.41).
+//   stays 150 (grown 108 -> 150 for the 12rem %): at the 16rem % the +-75 strip no longer fully backs
+//   the rare 100.00% gold state (87.37 == 17.76 + 4.20 + 65.41) -- accepted, it overhangs by a few rem.
 // Keep the 80rem, and re-derive ALL THREE extremes again before ever moving it -- "which one is the
 // extreme" has now moved three times, and each move invalidated the previous revision's spare.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
