@@ -338,6 +338,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
     # The "(100.00%)" node has its OWN font-size (the numeral's 16rem, not the delta's 12rem): read it
     # off .mpv-pct itself so the % ink is really modelled, not the delta's size by accident.
     pct_size = rem(".mpv-cap .mpv-pct", "font-size")
+    pct_gap = rem(".mpv-cap .mpv-pct", "margin-right")   # the %'s OWN gap to the numeral
 
     # Per row: [font-size, the row's own in-flow terms, the halo on its LEFTMOST child, x-gaps].
     # A combined-damage numeral is worst-cased at "3,050" -- 4 digits and a comma -- exactly as the
@@ -373,7 +374,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
         # dmgc has no margin override (the reference), so this row still reads the shared `ico_gap`.
         ".mpv-capC": (c_size,
                       [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
-                       _pct_ink(adv, pct_size), d_gap,   # .mpv-pct "(100.00%)", the 0.35em idiom gap
+                       _pct_ink(adv, pct_size), pct_gap,   # .mpv-pct "(100.00%)" + its own margin-right
                        numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
                       glow, ico_gap + d_gap),
         # [pre numeral][damage-projection glyph]
@@ -427,11 +428,12 @@ def test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface():
         r"-?[\d.]+rem\s+-?[\d.]+rem\s+([\d.]+)rem",
         _sole_rule_decls(css, ".mp-v.mp-up,\n.mp-d-num.mp-up,\n.mp-eta.mp-up", what)))
     pct_size = _rem(_sole_rule_decls(css, ".mp-cap .mp-pct", what), "font-size", what)
-    reach = (numeral / 2 + gap + _pct_ink(adv, pct_size) + gap
+    pct_gap = _rem(_sole_rule_decls(css, ".mp-cap .mp-pct-t", what), "margin-left", what)
+    reach = (numeral / 2 + pct_gap + _pct_ink(adv, pct_size) + gap
              + _ink(adv, d_size, digits=3, parens=2, signs=1) + glow)
     clearance = -Decimal(_js_const(js, "BOX_LEFT_REM")) + _js_const(js, "PAD_REM")
     # DELIBERATE `<=` with NO required margin: reach 128.46 vs clearance 130 leaves ~1.54rem spare,
-    # which does not clip (live-confirmed). Known tolerance, not an accident -- do not add a margin.
+    # which should not clip (pending live pass). Known tolerance, not an accident -- do not add a margin.
     assert reach <= clearance, (
         ".mp-capC's right reach at axis 100%% is %srem but the surface clears only %srem -- the "
         "(100.00%%) caption is CLIPPED" % (reach, clearance))

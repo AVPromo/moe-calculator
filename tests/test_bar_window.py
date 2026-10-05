@@ -1107,7 +1107,7 @@ def test_minimap_overhang_scales_to_the_large_constant_when_vertical_and_large(m
 # surface (MoEEfficiency.js V_CLIP_B_REM), not a constant.
 
 _EFF_SPACE = (1920, 1080)
-_EFF_SURFACE = (200, 318)
+_EFF_SURFACE = (171, 318)   # MUST track test_efficiency_surface_mirror._v_surface_wh
 _EFF_MAX = (_EFF_SPACE[0] - _EFF_SURFACE[0], _EFF_SPACE[1] - _EFF_SURFACE[1])
 
 
@@ -1155,7 +1155,7 @@ def test_the_hand_placed_y_was_below_the_engines_clamp_floor_so_none_of_it_was_f
 # in-game measurement, confirmed by two independent drags in two different surface geometries.
 
 _PROG_V_SPACE = (1920, 1080)
-_PROG_V_SURFACE = (212, 320)   # MoEProgress.js's vertical surface -- see test_progress_surface_mirror
+_PROG_V_SURFACE = (182, 320)   # MUST track test_progress_surface_mirror._v_surface_wh
 _PROG_V_MAX = (_PROG_V_SPACE[0] - _PROG_V_SURFACE[0], _PROG_V_SPACE[1] - _PROG_V_SURFACE[1])
 
 
@@ -1313,9 +1313,9 @@ def test_open_window_re_mounts_a_destroyed_handle_but_leaves_a_live_one(monkeypa
 # _FALLBACK_SURFACE_SIZE), not on position -- see bar_window._place's own docstring for why
 # position alone cannot tell a no-op apart from a legitimate off-screen clamp.
 
-_EFF_LARGE_SURFACE = (144, 398)                                    # test_efficiency_surface_mirror
+_EFF_LARGE_SURFACE = (230, 398)   # MUST track test_efficiency_surface_mirror (Large pin)
 _EFF_LARGE_MAX = (_EFF_SPACE[0] - _EFF_LARGE_SURFACE[0], _EFF_SPACE[1] - _EFF_LARGE_SURFACE[1])
-_PROG_LARGE_SURFACE = (157, 400)                                   # test_progress_surface_mirror
+_PROG_LARGE_SURFACE = (242, 400)   # MUST track test_progress_surface_mirror (Large pin)
 _PROG_LARGE_MAX = (_PROG_V_SPACE[0] - _PROG_LARGE_SURFACE[0],
                    _PROG_V_SPACE[1] - _PROG_LARGE_SURFACE[1])
 

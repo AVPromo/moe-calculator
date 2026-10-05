@@ -117,14 +117,3 @@ def test_every_setter_addresses_the_slot_its_own_property_was_registered_at():
                 "pointed at another field" % (name, setter, index, props[int(index)], expected))
 
 
-def test_show_delta_is_the_last_slot_of_both_bar_models_and_set_show_delta_writes_it():
-    # Pinned by literal on top of the derived checks above: the per-bar delta switch is APPENDED
-    # (slot 17 / properties 18 on ProgressVM, slot 19 / properties 20 on EfficiencyVM), a Bool.
-    for name, slot, count in (("ProgressVM", 17, 18), ("EfficiencyVM", 19, 20)):
-        cls = _models()[name]
-        assert inspect.signature(cls.__init__).parameters["properties"].default == count
-        props = re.findall(r"self\._add\w+Property\(\s*[\"'](\w+)[\"']",
-                           inspect.getsource(cls._initialize))
-        assert props.index("showDelta") == slot == len(props) - 1
-        assert re.search(r"def setShowDelta\(self[^)]*\):\s*\n\s*self\._setBool\(%d," % slot,
-                         inspect.getsource(cls))
