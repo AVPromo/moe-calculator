@@ -593,18 +593,18 @@ _PREVIEW_DIR = "gui/maps/icons/moe_calculator/previews/"
 _PREVIEW_DISPLAY = {
     "calc_assist_on": (125, 73),
     "calc_assist_off": (125, 73),
-    "bar_eff_horizontal": (314, 323),
-    "bar_eff_vertical": (496, 210),
-    "bar_ma_horizontal": (257, 216),
-    "bar_ma_vertical": (468, 231),
+    "bar_eff_horizontal": (326, 324),
+    "bar_eff_vertical": (557, 210),
+    "bar_ma_horizontal": (269, 216),
+    "bar_ma_vertical": (516, 231),
 }
 # Reserved layout slot: the calc box holds a uniform 3-row/2-row image (both 125x73 -- the 2-row PNG
 # is re-rendered to the same box so the calc slot never jumps). The bar box reserves the MAX of the
-# swappable bar set -- width 496 (Efficiency vertical) x height 323 (Efficiency horizontal) -- so no
+# swappable bar set -- width 557 (Efficiency vertical) x height 324 (Efficiency horizontal) -- so no
 # orientation/variant swap reflows the panel. The previews are now multi-range composites that FILL
 # the width, so the old align='right' is moot (and MSA ignored it anyway) -- dropped from _template.
 _CALC_PREVIEW_W, _CALC_PREVIEW_H = 125, 73
-_BAR_PREVIEW_W, _BAR_PREVIEW_H = 496, 323
+_BAR_PREVIEW_W, _BAR_PREVIEW_H = 557, 324
 
 # Sanity MAGNITUDE limit for a stored pixel coordinate (well past any real screen size); a
 # typed / echoed value is clamped into [-POS_MAX, POS_MAX], with 0/0 meaning "auto / unseeded".
