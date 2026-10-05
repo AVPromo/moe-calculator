@@ -339,7 +339,7 @@ $tpl = @'
      .mp-up/.mp-down on .mp-pct-t and the whole "(73.84%)" glows with the numeral. .mp-pct .mp-d
      needs its own top:0 -- as a block child's sibling its static position would drop a line. */
   .mp-cap .mp-pct{position:absolute;left:100%;font-size:var(--pctfs);line-height:var(--pctlh);color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
-  .mp-cap .mp-pct-t{display:block;margin-left:.35em;transform:translateY(var(--pcty));opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:.35em;transform:translateY(var(--pcty));opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mp-pct .mp-d{top:0}
   .mp-pct-t.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mp-pct-t.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
@@ -1504,7 +1504,7 @@ $tpl = @'
       ".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  font-size: "+PCT_FS+"rem;\n  line-height: "+lh(PCT_FS)+"rem;\n"+
       "  color: #ffffff;\n  font-weight: "+st.wt+";\n  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n}\n"+
-      ".mp-cap .mp-pct-t {\n  display: block;\n  margin-left: 0.35em;\n  transform: translateY("+PCT_Y+"rem);\n  opacity: 0;\n"+
+      ".mp-cap .mp-pct-t {\n  display: inline-block;\n  white-space: nowrap;\n  margin-left: 0.35em;\n  transform: translateY("+PCT_Y+"rem);\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       ".mp-pct .mp-d {\n  top: 0;\n}\n"+
       ".mp-pct-t.mp-up {\n  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+

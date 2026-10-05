@@ -613,7 +613,8 @@ body { margin: 0; }
   text-shadow: 0rem 0rem 1rem rgba(0,0,0,0.5);
 }
 .mp-cap .mp-pct-t {
-  display: block;
+  display: inline-block;
+  white-space: nowrap;
   margin-left: 0.35em;
   transform: translateY(1.5rem);
   opacity: 0;

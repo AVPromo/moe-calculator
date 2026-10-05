@@ -286,7 +286,8 @@ body { margin: 0; }
   text-shadow: 0 0 1rem rgba(0,0,0,0.5);
 }
 .mp-cap .mp-pct-t {
-  display: block;
+  display: inline-block;
+  white-space: nowrap;
   margin-left: 4.2rem;
   transform: translateY(2.5rem);
 }

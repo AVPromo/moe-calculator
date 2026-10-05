@@ -230,7 +230,7 @@
      the delta at today's single gap. The % shares the numeral's BAND glow (rules below). */
   .mp-cap .mp-pct{position:absolute;left:100%;top:0;font-size:var(--dfs);line-height:var(--pctlh);
     color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
-  .mp-cap .mp-pct-t{display:block;margin-left:var(--pctgap);transform:translateY(var(--pcty))}
+  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:var(--pctgap);transform:translateY(var(--pcty))}
 
   /* ---- BAND COLOURING: five rule groups, one class on the root. The fill and the current tick's
      GLOW take the band's fill colour (the tick's own line stays white -- see .mp-tick.mp-cur
@@ -1186,7 +1186,7 @@ S.setProperty("--pctlh",rem(pctLH()));
 ".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  top: 0;\n  font-size: "+st.dFS+"rem;\n"+
 "  line-height: "+pctLH()+"rem;\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
 "  text-shadow: "+textSh(REM)+";\n}\n"+
-".mp-cap .mp-pct-t {\n  display: block;\n  margin-left: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n"+
+".mp-cap .mp-pct-t {\n  display: inline-block;\n  white-space: nowrap;\n  margin-left: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n"+
 "  transform: translateY("+REM(st.dY)+");\n}\n\n"+
 "/* ---- BANDS. Exactly ONE of these classes on #moe-bar-root at a time, chosen by which\n"+
 "   requirement the current damage has passed (>= INCLUSIVE, so damage on r65 is already green).\n"+
