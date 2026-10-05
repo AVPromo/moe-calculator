@@ -334,12 +334,12 @@ $tpl = @'
   /* THE MoE-% "(73.84%)": out of flow like the delta (numeral stays on its tick), the delta is its
      CHILD so its own left:100% resolves off the %'s right edge. The gap rides .mp-pct-t's margin-left
      (not .mp-pct's) so a hidden % (display:none) leaves the delta at today's single gap. .mp-pct
-     owns font-size/line-height (the delta's own 12rem / 15.5rem); .mp-pct-t owns the delta's Y
-     (translateY(1.5rem)) and the fade. SEPARATE glow rules, not the delta's selector lists: JS puts
+     owns font-size/line-height (the NUMERAL's own, curfs / curlh); .mp-pct-t owns the gap (4.2rem
+     absolute, the delta's own) and the fade; no Y offset, same line box as the numeral. SEPARATE glow rules, not the delta's selector lists: JS puts
      .mp-up/.mp-down on .mp-pct-t and the whole "(73.84%)" glows with the numeral. .mp-pct .mp-d
      needs its own top:0 -- as a block child's sibling its static position would drop a line. */
   .mp-cap .mp-pct{position:absolute;left:100%;font-size:var(--pctfs);line-height:var(--pctlh);color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh)}
-  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:.35em;transform:translateY(var(--pcty));opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:4.2rem;opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mp-pct .mp-d{top:0}
   .mp-pct-t.mp-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mp-pct-t.mp-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
@@ -611,9 +611,11 @@ $tpl = @'
   // it (SIZE_F) -- a size-mode twin would DOUBLE-apply it, and
   // tests/test_progress_surface_mirror.py's large-mode walk refuses one.
   function lh(fs){return Math.ceil(fs*2*1.2565)/2;}
-  // The MoE-% group's size and Y: the DELTA's own tuned 12rem / 1.5rem (no knob owns either -- see
-  // `.mp-cap .mp-d`), so the % lands on the delta's baseline. Read by BOTH the live preview and the emit.
-  var PCT_FS=12, PCT_Y=1.5;
+  // The MoE-% group's gap to the numeral: the DELTA's own tuned 0.35em of 12rem == 4.2rem, held as an
+  // ABSOLUTE rem so growing the % to the numeral's size (st.curFS) does not widen it. Its size and
+  // line-height are the numeral's own (st.curFS), so there is no Y offset either. Read by the emit.
+  var PCT_GAP=4.2;
+  function pctLH(){return lh(st.curFS);}
   function fmt(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
   function hexA(hex,a){var n=parseInt(hex.slice(1),16);return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";}
 
@@ -646,10 +648,10 @@ $tpl = @'
     ["Layout",[
       // 200 is the SETTLED track width (was 300). It is the ONE knob behind
       // `#moe-bar-root { width: Nrem }` in the emit, and three other emitted numbers FOLLOW it:
-      // .mp-backdrop's left/width (barW + 2*bdBleedX = 410rem), the axis readout's rem/px
+      // .mp-backdrop's left/width (barW + 2*bdBleedX = 440rem), the axis readout's rem/px
       // conversion, and -- outside this file -- MoEProgress.js's BOX_W_REM, which mirrors that
-      // backdrop width (so 200 => BOX_W_REM 410, VIEW_W_REM 430, the hand-appended
-      // `#moe-bar-box { width: 430rem }`). SHIFT_X_REM is PAD_REM - BOX_LEFT_REM and does NOT
+      // backdrop width (so 200 => BOX_W_REM 440, VIEW_W_REM 460, the hand-appended
+      // `#moe-bar-box { width: 460rem }`). SHIFT_X_REM is PAD_REM - BOX_LEFT_REM and does NOT
       // move with barW. 200 = 3*66 + 2, so the 3rem dash period still ends on a WHOLE 2rem mark
       // flush with the right edge -- no truncated dash or gap (see dashW/dashGap below).
       {id:"barW",label:"Bar width (rem)",min:80,max:800,step:5,val:200},
@@ -823,7 +825,7 @@ $tpl = @'
       // hot-reload, so every guess made in-game costs a full client relaunch.
       {id:"numY",label:"Side caption numeral Y (rem)",min:-4,max:4,step:0.1,val:-0.5}]],
     ["Backdrop (checker + radial, cloned from .mb-backdrop)",[
-      {id:"bdBleedX",label:"Horizontal bleed (rem)",min:0,max:200,step:1,val:105},
+      {id:"bdBleedX",label:"Horizontal bleed (rem)",min:0,max:200,step:1,val:120},
       // Captions are ABSOLUTE now, so the root's flow height is just the track -> the backdrop is
       // centred on the track: bdTop = -(bdH - trackH)/2. That recomputation is why the old -10
       // does NOT transfer: -10 dated from when the captions were IN FLOW and the root was ~72rem
@@ -1067,9 +1069,9 @@ $tpl = @'
     S.setProperty("--dgw",rem(st.dGlowW));S.setProperty("--dgt",rem(st.dGlowT));
     S.setProperty("--tickdur",st.tickDur+"ms");S.setProperty("--tickdelay",st.tickDelay+"ms");S.setProperty("--tickease",st.tickEase);
     S.setProperty("--dfadms",st.dFadeMs+"ms");S.setProperty("--dfadease",st.dFadeEase);
-    // The MoE-% box: the DELTA's own size / pinned line box / Y (no knob owns any of them), derived
-    // here from PCT_FS/PCT_Y so the live half and the emit half cannot disagree.
-    S.setProperty("--pctfs",rem(PCT_FS));S.setProperty("--pctlh",rem(lh(PCT_FS)));S.setProperty("--pcty",rem(PCT_Y));
+    // The MoE-% box: the NUMERAL's own size / pinned line box (st.curFS), so the % sits on the
+    // numeral's baseline with no Y offset; derived here so the live half and the emit half agree.
+    S.setProperty("--pctfs",rem(st.curFS));S.setProperty("--pctlh",rem(pctLH()));
     // backdrop: explicit box, bled past the bar on both sides
     S.setProperty("--bdleft",rem(-st.bdBleedX));S.setProperty("--bdw",rem(st.barW+2*st.bdBleedX));
     S.setProperty("--bdtop",rem(st.bdTop));S.setProperty("--bdh",rem(st.bdH));
@@ -1215,7 +1217,7 @@ $tpl = @'
       ".mp-bd::after {\n  content: \"\";\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n"+
       "  z-index: -1;\n  background: "+ugGrad()+";\n}\n"+
       ".mp-bd-1 {\n  top: -22rem;\n  width: 60rem;\n}\n"+
-      ".mp-bd-2 {\n  top: 7rem;\n  width: 150rem;\n  height: 26rem;\n}\n"+
+      ".mp-bd-2 {\n  top: 7rem;\n  width: 183rem;\n  height: 26rem;\n}\n"+
       ".mp-bd-3 {\n  left: 100%;\n  transform: none;\n  top: -4rem;\n  width: 88rem;\n}\n"+
       ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n  background: "+trackBg()+";\n}\n"+
       "/* THE GARAGE BAR'S TRACK TREATMENT, cloned (MoECalculator.css:277-296 -- #moe-root .moe-track).\n"+
@@ -1490,10 +1492,10 @@ $tpl = @'
       "/* THE MoE-% \"(73.84%)\" (MoEProgress.js .mp-pct > .mp-pct-t + .mp-d). OUT OF FLOW off the\n"+
       "   numeral's right edge exactly like the delta (so the numeral stays on its tick), and the DELTA\n"+
       "   IS ITS CHILD, so the delta's own left:100% resolves off the %'s right edge:\n"+
-      "   \"1,850 (73.84%) (+120)\". .mp-pct owns the delta's own font-size/line-height (12rem/15.5rem,\n"+
-      "   so the em gap below is the same 4.2rem); .mp-pct-t owns the delta's Y (translateY(1.5rem))\n"+
-      "   and the fade, and carries the gap as ITS margin-left (0.35em, the same one-gap idiom as\n"+
-      "   .mp-cap .mp-d) -- NOT .mp-pct's, so a hidden % (JS display:none on .mp-pct-t) collapses\n"+
+      "   \"1,850 (73.84%) (+120)\". .mp-pct takes the NUMERAL's own font-size/line-height (the % is the\n"+
+      "   same size as the damage numeral); .mp-pct-t has NO Y offset (same line box as the numeral) and\n"+
+      "   carries the fade and the gap as ITS margin-left (4.2rem ABSOLUTE, the delta's own gap -- it\n"+
+      "   does not grow with the bigger %) -- NOT .mp-pct's, so a hidden % (JS display:none on .mp-pct-t) collapses\n"+
       "   .mp-pct to zero width and leaves the delta at today's single gap. The delta rule above is\n"+
       "   UNTOUCHED (its own translateY/left/margin still hold); `.mp-pct .mp-d { top: 0 }` is the one\n"+
       "   addition, because beside a display:block sibling its static position would be a line lower.\n"+
@@ -1501,10 +1503,10 @@ $tpl = @'
       "   on .mp-pct-t off the same rounded sign test, so the parens and the number glow together --\n"+
       "   in the SEPARATE rules below, not the delta's selector lists. The .mp-full gold is further\n"+
       "   down. NO .mp-s1 correction yet: it waits for the live pass. */\n"+
-      ".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  font-size: "+PCT_FS+"rem;\n  line-height: "+lh(PCT_FS)+"rem;\n"+
+      ".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  font-size: "+st.curFS+"rem;\n  line-height: "+pctLH()+"rem;\n"+
       "  color: #ffffff;\n  font-weight: "+st.wt+";\n  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n}\n"+
-      ".mp-cap .mp-pct-t {\n  display: inline-block;\n  white-space: nowrap;\n  margin-left: 0.35em;\n  transform: translateY("+PCT_Y+"rem);\n  opacity: 0;\n"+
+      ".mp-cap .mp-pct-t {\n  display: inline-block;\n  white-space: nowrap;\n  margin-left: "+PCT_GAP+"rem;\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       ".mp-pct .mp-d {\n  top: 0;\n}\n"+
       ".mp-pct-t.mp-up {\n  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+

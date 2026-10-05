@@ -265,7 +265,8 @@ check("clampCapPPct(50) passes through unclamped", ctx.clampCapPPct(50) === 50);
         while ((m = re.exec(css)) !== null) rules.push({ sel: m[1].trim(), decl: m[2] });
         return rules;
     }
-    // alsoTag: a SECOND legitimate owner (the MoE-% rule deliberately mirrors the delta's knobs).
+    // alsoTag: a SECOND legitimate owner (the MoE-% rule deliberately mirrors the delta's gap knobs
+    // and the capC numeral's Y-nudge knob -- it is the numeral's own size).
     function isolated(knobId, probeVal, ownTag, alsoTag) {
         const baseRules = rulesOf(ctx.cssOut());
         const was = ctx.st[knobId];
@@ -310,7 +311,7 @@ check("clampCapPPct(50) passes through unclamped", ctx.clampCapPPct(50) === 50);
     isolated("dY", -3, ".mpv-cap .mpv-d", ".mpv-cap .mpv-pct");
     // Per-caption numeral Y nudges -- never merged.
     isolated("numYR", 2, ".mpv-capR .mpv-v");
-    isolated("numYC", 2, ".mpv-capC .mpv-v");
+    isolated("numYC", 2, ".mpv-capC .mpv-v", ".mpv-cap .mpv-pct");
     isolated("numYP", 2, ".mpv-capP .mpv-v");
 }
 

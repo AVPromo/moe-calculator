@@ -118,7 +118,7 @@ body { margin: 0; }
 }
 .mp-bd-5 {
   top: -35rem;
-  width: 150rem;
+  width: 183rem;
   height: 26rem;
 }
 .mp-track {
@@ -268,10 +268,10 @@ body { margin: 0; }
 /* THE MoE-% "(73.84%)" (MoEEfficiency.js .mp-pct > .mp-pct-t + .mp-d). OUT OF FLOW off the
    numeral's right edge like the delta, so the numeral stays on its tick; the DELTA IS ITS CHILD,
    so the delta's own left:100% (and its translate() gap, above, unchanged) resolves off the %'s
-   right edge: "1,850 (73.84%) +120". .mp-pct owns the delta's own size/line-height and the
-   top:0 anchor; .mp-pct-t is the gated text group (JS display:none when the % is off) and carries
-   the gap as ITS margin-left (the same 4.2rem the delta's translate carries) and the
-   delta's Y -- the gap is NOT on .mp-pct, so a hidden % collapses .mp-pct to zero width and
+   right edge: "1,850 (73.84%) +120". .mp-pct takes the NUMERAL's size/line-height (the % is the
+   damage numeral's size) and the top:0 anchor; .mp-pct-t is the gated text group (JS display:none
+   when the % is off) and carries the gap as ITS margin-left (the same 4.2rem the delta's translate
+   carries, ABSOLUTE) and the numeral's own Y nudge -- the gap is NOT on .mp-pct, so a hidden % collapses .mp-pct to zero width and
    leaves the delta at today's single gap. The % takes the current total's BAND glow in the
    per-band rules below (maintainer decision, plan Q4). No .mp-s1 correction yet: it waits for the
    live pass. */
@@ -279,8 +279,8 @@ body { margin: 0; }
   position: absolute;
   left: 100%;
   top: 0;
-  font-size: 12rem;
-  line-height: 15.5rem;
+  font-size: 16rem;
+  line-height: 20.5rem;
   color: #ffffff;
   font-weight: 600;
   text-shadow: 0 0 1rem rgba(0,0,0,0.5);
@@ -289,7 +289,7 @@ body { margin: 0; }
   display: inline-block;
   white-space: nowrap;
   margin-left: 4.2rem;
-  transform: translateY(2.5rem);
+  transform: translateY(0rem);
 }
 
 /* ---- BANDS. Exactly ONE of these classes on #moe-bar-root at a time, chosen by which
@@ -558,13 +558,13 @@ body { margin: 0; }
 .mp-lg .mp-backdrop { left: -60rem; width: 520rem; }
 /* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..5) -- widths only;
    tops are y-lengths the root font scales, and the .mp-bd-1..4 left:N% are unitless.
-   Straight base x 4/3: 60->80, 54->72, 150->200. */
+   Straight base x 4/3: 60->80, 54->72, 183->244. */
 .mp-lg .mp-bd { width: 80rem; }
 .mp-lg .mp-bd-1 { width: 72rem; }
 .mp-lg .mp-bd-2 { width: 72rem; }
 .mp-lg .mp-bd-3 { width: 72rem; }
 .mp-lg .mp-bd-4 { width: 72rem; }
-.mp-lg .mp-bd-5 { width: 200rem; }
+.mp-lg .mp-bd-5 { width: 244rem; }
 .mp-lg .mp-track::after {
   background-image: repeating-linear-gradient(90deg,rgba(236,230,218,0.16) 0rem,rgba(236,230,218,0.16) 2.667rem,rgba(13,14,16,1) 2.667rem,rgba(13,14,16,1) 4rem);
   background-size: 4rem 100%;

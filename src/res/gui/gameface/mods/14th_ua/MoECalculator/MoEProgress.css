@@ -40,12 +40,12 @@
    is the honest description of the document's size, it costs nothing, and it is not what is broken.
    body margin:0 matters: the UA's default 8px would inflate the measured box to 396x108. The box is
    an empty, transparent sizing shim; the abspos bar root overlays it and no tuned geometry moves.
-   430 x 67 MIRRORS MoEProgress.js's VIEW_W_REM / VIEW_H_REM (H == BOX_H + 2*PAD - CLIP_B), SOURCE OF TRUTH
+   460 x 67 MIRRORS MoEProgress.js's VIEW_W_REM / VIEW_H_REM (H == BOX_H + 2*PAD - CLIP_B), SOURCE OF TRUTH
    (BOX_W/H_REM + 2*PAD_REM). Same mirrored-constant contract as the JS's SHIFT_Y_REM <->
    Python's domain/constants.PROGRESS_ANCHOR_Y_SHIFT: change one, change all of them.
    tests/test_progress_surface_mirror.py fails if they drift. */
 body { margin: 0; }
-#moe-bar-box { width: 430rem; height: 67rem; }
+#moe-bar-box { width: 460rem; height: 67rem; }
 
 #moe-bar-root {
   position: absolute;
@@ -57,7 +57,7 @@ body { margin: 0; }
      dash flush against the right edge. Any width == 0 or 2 (mod 3) is clean; a width == 1
      (mod 3) ends on a half gap and the grid reads irregular at the right end -- fix that by
      moving the WIDTH, never the tuned dash/gap/period. .mp-backdrop's width and
-     MoEProgress.js's BOX_W_REM (hence #moe-bar-box above) are this + 2*105rem of side clearance;
+     MoEProgress.js's BOX_W_REM (hence #moe-bar-box above) are this + 2*120rem of side clearance;
      everything that MOVES is a percentage and follows for free. */
   width: 200rem;
   z-index: 9000;
@@ -73,15 +73,15 @@ body { margin: 0; }
    CENTRED (radial at 50% 50%) since horizontal captions sit centred on their tick. */
 /* SYMMETRIC surface marker, RECONCILED to the JS BOX_* source of truth (the old -72rem drift is
    gone -- .mp-backdrop is now just the invisible surface bounding box, so it MUST mirror
-   MoEProgress.js's BOX_LEFT/TOP/W/H exactly: -105 / -22 / 410 / 55). The surface stays symmetric
-   about the track (105rem clearance each side) because anchor_centred_reduced's `max_x // 2` has no
+   MoEProgress.js's BOX_LEFT/TOP/W/H exactly: -120 / -22 / 440 / 55). The surface stays symmetric
+   about the track (120rem clearance each side) because anchor_centred_reduced's `max_x // 2` has no
    X term -- see MoEProgress.js's header. top/height re-cut with the box shrink; width is unchanged
    (capR's right overhang binds the clearance floor, so the left side cannot shrink below it). */
 .mp-backdrop {
   position: absolute;
-  left: -105rem;
+  left: -120rem;
   top: -22rem;
-  width: 410rem;
+  width: 440rem;
   height: 55rem;
   z-index: 0;
 }
@@ -127,7 +127,7 @@ body { margin: 0; }
 }
 .mp-bd-2 {
   top: 7rem;
-  width: 150rem;
+  width: 183rem;
   height: 26rem;
 }
 /* capR's fixed strip. width 126 ran its right edge to root-x 326, 36rem PAST the surface edge (it
@@ -591,10 +591,10 @@ body { margin: 0; }
 /* THE MoE-% "(73.84%)" (MoEProgress.js .mp-pct > .mp-pct-t + .mp-d). OUT OF FLOW off the
    numeral's right edge exactly like the delta (so the numeral stays on its tick), and the DELTA
    IS ITS CHILD, so the delta's own left:100% resolves off the %'s right edge:
-   "1,850 (73.84%) (+120)". .mp-pct owns the delta's own font-size/line-height (12rem/15.5rem,
-   so the em gap below is the same 4.2rem); .mp-pct-t owns the delta's Y (translateY(1.5rem))
-   and the fade, and carries the gap as ITS margin-left (0.35em, the same one-gap idiom as
-   .mp-cap .mp-d) -- NOT .mp-pct's, so a hidden % (JS display:none on .mp-pct-t) collapses
+   "1,850 (73.84%) (+120)". .mp-pct takes the NUMERAL's own font-size/line-height (the % is the
+   same size as the damage numeral); .mp-pct-t has NO Y offset (same line box as the numeral) and
+   carries the fade and the gap as ITS margin-left (4.2rem ABSOLUTE, the delta's own gap -- it
+   does not grow with the bigger %) -- NOT .mp-pct's, so a hidden % (JS display:none on .mp-pct-t) collapses
    .mp-pct to zero width and leaves the delta at today's single gap. The delta rule above is
    UNTOUCHED (its own translateY/left/margin still hold); `.mp-pct .mp-d { top: 0 }` is the one
    addition, because beside a display:block sibling its static position would be a line lower.
@@ -605,8 +605,8 @@ body { margin: 0; }
 .mp-cap .mp-pct {
   position: absolute;
   left: 100%;
-  font-size: 12rem;
-  line-height: 15.5rem;
+  font-size: 16rem;
+  line-height: 20.5rem;
   color: #ffffff;
   font-weight: 600;
   letter-spacing: 0em;
@@ -615,8 +615,7 @@ body { margin: 0; }
 .mp-cap .mp-pct-t {
   display: inline-block;
   white-space: nowrap;
-  margin-left: 0.35em;
-  transform: translateY(1.5rem);
+  margin-left: 4.2rem;
   opacity: 0;
   transition: opacity 600ms cubic-bezier(.2,.8,.2,1);
 }
@@ -917,24 +916,24 @@ body { margin: 0; }
    JS-created root. Every selector below is its base rule plus one class, so it out-specifies it.
    Values are the base times 4/3, to 3dp -- except the two NEGATIVE MARGINS and the sizing box, which
    are RE-DERIVED because they mix in a non-x term (see each). */
-/* The surface mirror, in document rem: VIEW_W_REM' == BOX_W_REM*4/3 + 2*PAD_REM == 546.667 + 20. NOT
-   430*4/3: PAD_REM is slack on both axes and does NOT take the x factor. Height is unchanged (92rem
+/* The surface mirror, in document rem: VIEW_W_REM' == BOX_W_REM*4/3 + 2*PAD_REM == 586.667 + 20. NOT
+   440*4/3: PAD_REM is slack on both axes and does NOT take the x factor. Height is unchanged (92rem
    at 1.25x root font == the 115 logical px the JS pushes). */
-.mp-lg #moe-bar-box { width: 566.667rem; }
+.mp-lg #moe-bar-box { width: 606.667rem; }
 /* The track: 200 -> 266.667. Still tiles the (now 4rem) dash period without a truncated GAP -- 66
    whole periods then a final full 2.667rem dash flush against the right edge, exactly as at 1x
    (the whole grid is scaled uniformly, so that invariant is preserved by construction). */
 .mp-lg #moe-bar-root { width: 266.667rem; }
 /* Large twin of the base .mp-backdrop, RECONCILED with the base's -72rem drift removal: left is base
-   -105rem x 4/3 == -140rem, width base 410 x 4/3 == 546.667rem. SYMMETRIC about the track again (the
+   -120rem x 4/3 == -160rem, width base 440 x 4/3 == 586.667rem. SYMMETRIC about the track again (the
    old -96rem was the drifted -72rem's twin). */
-.mp-lg .mp-backdrop { left: -140rem; width: 546.667rem; }
+.mp-lg .mp-backdrop { left: -160rem; width: 586.667rem; }
 /* The per-caption dither strips' x-length twins (base .mp-bd / .mp-bd-1..3 above) -- widths only;
    tops are y-lengths the root font scales, and the .mp-bd-3 left:100% / transform are unitless.
-   Straight base x 4/3: 90->120, 60->80, 150->200, 88->117.333. */
+   Straight base x 4/3: 90->120, 60->80, 183->244, 88->117.333. */
 .mp-lg .mp-bd { width: 120rem; }
 .mp-lg .mp-bd-1 { width: 80rem; }
-.mp-lg .mp-bd-2 { width: 200rem; }
+.mp-lg .mp-bd-2 { width: 244rem; }
 .mp-lg .mp-bd-3 { width: 117.333rem; }
 /* The dash grid's horizontal geometry: 2rem dash + 1rem gap -> 2.667 + 1.333, i.e. a 4rem period,
    and background-size's x term MUST stay equal to dash+gap or the grid drifts out of phase. The
@@ -991,9 +990,10 @@ body { margin: 0; }
    delta's font-size: 0.35 * 4/3 at the block's 3dp. The base rule's translateY is NOT restated --
    a plain rem Y needs no twin, the root font scales it. */
 .mp-lg .mp-cap .mp-d { margin-left: 0.467em; }
-/* The MoE-% text group's gap, the same em twin as the delta's (it is the % that carries the gap
-   in this composition -- see `.mp-cap .mp-pct-t` above). */
-.mp-lg .mp-cap .mp-pct-t { margin-left: 0.467em; }
+/* The MoE-% text group's gap (it is the % that carries the gap in this composition -- see
+   `.mp-cap .mp-pct-t` above): 4.2rem ABSOLUTE at Default, so the x-length twin is 4.2 x 4/3 == 5.6rem
+   (NOT an em: the % is now the numeral's 16rem, so 0.467em would be 7.47rem and out of step with the delta). */
+.mp-lg .mp-cap .mp-pct-t { margin-left: 5.6rem; }
 /* THE TWO CENTRE CAPTIONS' ICON-WIDTH CANCELS ARE RE-DERIVED, NOT MULTIPLIED: the margin is
    -(this caption's own icon box + ITS OWN gap), and the icon BOX is a uniform y-ish length that
    the root font scales on its own -- only the gap takes the x factor. dmgC still reads the shared

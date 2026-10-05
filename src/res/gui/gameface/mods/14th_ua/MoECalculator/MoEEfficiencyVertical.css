@@ -71,10 +71,10 @@ body.mev #moe-bar-root {
    MoEEfficiency.js's V_CLIP_B_REM note, and its sibling MoEProgress.js's, for the derivation). This
    rule only keeps describing whatever the surface actually is, and it stays a plain rem box either
    way, so it cannot reflow the composition when the surface shrinks past it. */
-/* WIDTH IS V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM (54 + 98 + 3), a SPLIT pad now, NOT + 2*PAD_REM
+/* WIDTH IS V_BOX_W_REM + V_PAD_X_REM + V_PAD_XR_REM (54 + 114 + 3), a SPLIT pad now, NOT + 2*PAD_REM
    -- see MoEEfficiency.js's V_PAD_X_REM note: this bar's own extreme is `.mev-cap.bt` (the
    current-damage + delta row), not the mark rows -- an earlier pass only checked the mark rows and
-   undersized this at 124rem, which is why the LEFT pad grew to 52 (and to 98 for the MoE-%). Height is untouched -- V_PAD_X_REM
+   undersized this at 124rem, which is why the LEFT pad grew to 52 (then 98, then 114 for the MoE-%). Height is untouched -- V_PAD_X_REM
    only ever widens X.
    V_BOX_W_REM ITSELF IS 54, NOT 96 -- a SEPARATE, asymmetric trim of `.mev-backdrop`'s own drawn
    width (right edge only, V_BOX_LEFT_REM below untouched), live-measured correct AT THE TIME:
@@ -92,7 +92,7 @@ body.mev #moe-bar-root {
    the fix for the invisible SURFACE reaching into the minimap's first column (see MoEEfficiency.js's
    own four-point note for the full derivation); it costs nothing visible, since no caption ink
    reaches that far right (every caption here is anchored to the LEFT). */
-body.mev #moe-bar-box { width: 155rem; height: 318rem; }
+body.mev #moe-bar-box { width: 171rem; height: 318rem; }
 /* .mev-backdrop is now the INVISIBLE surface bounding-box marker only (rule kept at V_BOX_* ==
    -40/-80/54/360 as the CSS cross-check of MoEEfficiency.js's surface constants, pinned by
    tests/test_efficiency_surface_mirror.py; its .mp-lg twin's `left` is also read by the caption-fit
@@ -106,9 +106,9 @@ body.mev #moe-bar-box { width: 155rem; height: 318rem; }
   z-index: 0;
 }
 /* PER-ROW STRIPS. left/width were the invisible surface's extent (-92rem / 109rem, the PRE-% surface:
-   the V_PAD_X_REM growth to 98 was leftward only, so the right edge did not move and the shared box
-   keeps backing the rows that did not grow; the surface is now body.mev #moe-bar-box == 155rem wide,
-   left edge -(V_PAD_X_REM - V_BOX_LEFT_REM) == -138rem), so each strip's right (minimap-facing)
+   the V_PAD_X_REM growth to 114 was leftward only, so the right edge did not move and the shared box
+   keeps backing the rows that did not grow; the surface is now body.mev #moe-bar-box == 171rem wide,
+   left edge -(V_PAD_X_REM - V_BOX_LEFT_REM) == -154rem), so each strip's right (minimap-facing)
    edge lands flush on the surface's own right edge (root x 17rem Default; ~17rem Large). Solid dither
    hugs the minimap side (mask `at 90%`) and fades toward the leftward-growing numerals. Per-row
    `top` is a seed the maintainer converges. */
@@ -122,10 +122,11 @@ body.mev #moe-bar-box { width: 155rem; height: 318rem; }
 /* Per-index width overrides -- right edge PINNED at the shared strip's own right edge
    (left+width == -92+109 == 17rem), growing LEFTWARD only, so the minimap-facing edge and
    the surface hit-rect do not move. Same specificity as .mev-bd above; source order wins. */
-.mev-bd-5 { width: 239rem; left: -222rem; }
-/* bd-5 (.mev-cap.bt) 163.5 -> 239: its ::after shadow reaches 0.532*W left of its focus (at 90%), so
-   ~239 is what backs "(100.00%)" out to the row's -133.53rem ink reach; the part past the surface's
-   own -138rem left edge is clipped, as the old 163.5 overran the old -92rem edge. */
+.mev-bd-5 { width: 265rem; left: -248rem; }
+/* bd-5 (.mev-cap.bt) 163.5 -> 239 -> 265: its ::after shadow reaches 0.532*W left of its focus (at 90%),
+   so its left extent is 17 - 0.632*W rem and W >= (17 + 149.89)/0.632 == 264.1 -> 265 backs "(100.00%)"
+   (the numeral-sized %) out to the row's -149.89rem ink reach; the part past the surface's own -154rem
+   left edge is clipped, as the old 163.5 overran the old -92rem edge. */
 /* Mark-requirement strips (bd-2/3/4) no longer get their own width/left override -- 2026-08-17
    crop fix. The 2026-08-12 narrowing pass shrank these rows' own box while leaving the WIDE
    checker-dither mask below (box-relative percent size/position) unchanged, so the taper's
@@ -385,15 +386,15 @@ body.mev #moe-bar-box { width: 155rem; height: 318rem; }
    numeral (delta, %, numeral, icon), so it grows the right-anchored row LEFTWARD like the numeral
    and never moves the icon; the out-of-flow delta, anchored on the row's left edge with right:100%,
    rides out ahead of it -- "+120 (73.84%) 1,850". margin-right is the gap to the numeral
-   (PCT_GAP_REM == 4.2rem, the delta's own translate gap; an ordinary in-flow margin,
-   not the anchored-side one Coherent drops). NO transform: align-items:center puts the 15.5rem line box on
-   the same centre the delta's top:0 + translateY lands on (the row's line-height minus the delta's,
-   halved, == the delta's Y at the shipped sizes), so the two share one Y by construction. It takes the
+   (PCT_GAP_REM == 4.2rem, the delta's own translate gap, ABSOLUTE; an ordinary in-flow margin,
+   not the anchored-side one Coherent drops). It is the NUMERAL's own font-size, 20.5rem line box and Y
+   nudge (the % is the damage numeral's size), so the two share one baseline. It takes the
    current total's BAND glow in the per-band rules below (maintainer decision, plan Q4). */
 .mev-cap.bt .mev-pct {
   margin-right: 4.2rem;
-  font-size: 12rem;
-  line-height: 15.5rem;
+  font-size: 16rem;
+  line-height: 20.5rem;
+  transform: translateY(0rem);
   color: #ffffff;
   font-weight: 600;
   text-shadow: 0 0 1rem rgba(0,0,0,0.5);
@@ -465,13 +466,13 @@ body.mev #moe-bar-box { width: 155rem; height: 318rem; }
    scoped `body.mev.mp-lg` (1,2,1) so they out-specify the horizontal sheet's own
    `.mp-lg #moe-bar-root` / `.mp-lg #moe-bar-box` (1,1,0) outright. The shim's width is the
    PRE-SIZE_F quantity MoEBarTransient.applySize computes before its own final `* f`:
-   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 72 + 98 + -2 == 168
+   V_BOX_W_REM*SIZE_XF + V_PAD_X_REM + V_PAD_XR_REM_LARGE == 72 + 114 + -2 == 184
    (V_PAD_XR_REM_LARGE is its own literal, -2, NOT V_PAD_XR_REM*SIZE_XF -- see
    MoEEfficiency.js's own note); its HEIGHT is unchanged (the root font carries SIZE_F on a
    y-length), exactly as the horizontal block's own twin restates width only. THIS SHIM IS
    DOCUMENT REM, NOT LOGICAL PX -- the root font (1.25 under Large) supplies the SIZE_F when the
-   DOCUMENT renders this box, so 168rem here reproduces the same round(168*1.25)==210
-   logical px MoEBarTransient.applySize pushes via resizeViewRem -- do not write 210 here, that
+   DOCUMENT renders this box, so 184rem here reproduces the same round(184*1.25)==230
+   logical px MoEBarTransient.applySize pushes via resizeViewRem -- do not write 230 here, that
    would double the factor.
    THE BACKDROP'S OWN LARGE WIDTH BELOW IS A LITERAL 98rem, NOT V_BOX_W_REM*SIZE_XF (72, the naive
    *4/3 twin of the tuned Default 54) -- see MoEEfficiency.js's fact 3: 98 landed the backdrop's own
@@ -485,7 +486,7 @@ body.mev #moe-bar-box { width: 155rem; height: 318rem; }
    leave a real margin (1px to the minimap at the current gap, ~2.3px to the tick's own true right
    edge) instead of the backdrop's own flush zero-clearance edge. */
 body.mev.mp-lg #moe-bar-root { width: 4rem; }
-body.mev.mp-lg #moe-bar-box { width: 168rem; }
+body.mev.mp-lg #moe-bar-box { width: 184rem; }
 .mp-lg .mev-track { width: 4rem; }
 .mp-lg .mev-backdrop { left: -53.333rem; width: 98rem; }
 /* The strips' Large flush override: right edge at root x 10rem (surface's Large right edge); OWN
@@ -493,7 +494,7 @@ body.mev.mp-lg #moe-bar-box { width: 168rem; }
 .mp-lg .mev-bd { left: -105.333rem; width: 122.4rem; }
 /* Large per-index width overrides -- right edge PINNED (left+width == -105.333+122.4 ==
    17.067rem); same specificity as .mp-lg .mev-bd above, source order wins. */
-.mp-lg .mev-bd-5 { width: 268.4rem; left: -251.333rem; }
+.mp-lg .mev-bd-5 { width: 297.6rem; left: -280.533rem; }
 /* bd-2/3/4 Large no longer get their own override -- 2026-08-17 crop fix. Their old literal
    (left -76.6rem, width 81.8rem) put the right edge at 5.2rem, ~11.87rem SHORT of the
    17.067rem edge every other Large row shares (the comment above claimed 17.067rem, but was

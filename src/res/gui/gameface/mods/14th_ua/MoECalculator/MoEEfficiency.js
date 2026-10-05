@@ -107,14 +107,15 @@ let large = false;
 //     right edge, reaching ~375 at four digits -- which is precisely why meta.capClamp's right
 //     bound is 376. The clamp below keeps it there whatever the digits do.
 //   * MoE-% (.mp-pct "(73.84%)", out of flow at left:100% of the numeral, the delta re-parented
-//     INSIDE it): "(100.00%)" is 2*0.3008 + 5*0.4932 + period 0.2471 + percent 0.7734 == 4.0881em ==
-//     49.06rem at the 12rem delta size, so the right overhang becomes 4.2 + 49.06 + 4.2 + the delta
+//     INSIDE it). THE % IS THE DAMAGE NUMERAL'S SIZE (16rem / 20.5rem, no Y offset -- so no height
+//     moved): "(100.00%)" is 2*0.3008 + 5*0.4932 + period 0.2471 + percent 0.7734 == 4.0881em ==
+//     65.41rem at 16rem, so the right overhang becomes 4.2 + 65.41 + 4.2 + the delta
 //     (capClampPct measures it) and the clamp pulls the wider caption inward -- the ink stays in the
 //     corridor, so the box is UNCHANGED. The width-fixed .mp-bd-5 strip (centred on the numeral)
-//     grew 90 -> 150 (Large 120 -> 200) to back the % (+-75 vs numeral/2 + 4.2 + 49.06 <= 71). The
-//     same clamp keeps the numeral's centre >= -41 + half >= ~9 while the % shows, so the strip's
-//     left edge can sit up to ~11rem past the -45 box edge: only its ~transparent shadow tail
-//     (alpha ~0.02 there), clipped by the surface, never ink.
+//     grew 90 -> 183 (Large 120 -> 244; was 150 / 200 at the 12rem %) to back the % (+-91.5 vs
+//     numeral/2 + 4.2 + 65.41 == 17.76 + 4.2 + 65.41 == 87.37). setPos() re-centres the strip so its
+//     own left edge never crosses the surface's (BOX_LEFT*xf - PAD == -55), so a numeral near the
+//     axis start leaves the strip to the right of it: its right edge still clears the % ink.
 // So the surface is that box plus PAD_REM of slack on all four sides, and the whole composition is
 // rigidly translated by that much so NOTHING sits at a negative coordinate -- an origin overflow
 // is clipped no matter how big the surface is.
@@ -171,8 +172,8 @@ const CLIP_B_REM = 8;
 // these four -- the vertical tuner's own tuned lengths -- but its TOP and HEIGHT are IDENTICAL to
 // the vertical Moving Average bar's (-80 / 360), which is why the two share ONE Python shift
 // constant where their horizontal siblings need -50 and -44 apiece:
-//   V_VIEW_W_REM = V_BOX_W_REM + V_PAD_X_REM        V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 138
-//               + V_PAD_XR_REM == 155 (a SPLIT pad now -- see both constants' own notes below)
+//   V_VIEW_W_REM = V_BOX_W_REM + V_PAD_X_REM        V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 154
+//               + V_PAD_XR_REM == 171 (a SPLIT pad now -- see both constants' own notes below)
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                               - V_CLIP_B_REM == 318 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
 // THE X AXIS IS NOT box + PAD_REM EITHER -- SAME DEFECT THE MOVING AVERAGE BAR ALREADY FIXED
@@ -208,12 +209,14 @@ const CLIP_B_REM = 8;
 //     just two rows with the same shape being pushed by the same kind of nudge):
 //       V_PAD_X_REM == 92 + V_BOX_LEFT_REM == 92 - 40 == 52   (allowance 92, reach 87.28, margin 4.72)
 //     THE MoE-% CAPTION: V_MARKUP puts an in-flow .mev-pct "(73.84%)" between the delta and the
-//     numeral, adding 49.06 ("(100.00%)" at 12rem: 2 parens + 5 digits + period 0.2471 + percent
-//     0.7734) + the gap to the .bt row. THE TEST IS THE AUTHORITY for the sum (it reads every term,
-//     incl. the row's translateX/margins, off the CSS): it measures .bt at 133.53rem and wants >= 4rem
-//     spare, so the allowance had to reach 137.53:
-//       V_PAD_X_REM == 138 + V_BOX_LEFT_REM == 138 - 40 == 98   (was 52; +46 -> allowance 138, 4.47 spare)
-//     (the 87.28 above is the PRE-% figure; EFFICIENCY_MM_TRACK_X(_LARGE) grew by the same 46.)
+//     numeral, adding 65.41 ("(100.00%)" at the NUMERAL'S 16rem -- the % matches the damage numeral's
+//     size, same 20.5rem line box and Y nudge, so the row's height did not move: 2 parens + 5 digits +
+//     period 0.2471 + percent 0.7734) + the gap (ABSOLUTE 4.2rem) to the .bt row. THE TEST IS THE
+//     AUTHORITY for the sum (it reads every term, incl. the row's translateX/margins, off the CSS): it
+//     measures .bt at 149.89rem and wants >= 4rem spare, so the allowance had to reach 153.89:
+//       V_PAD_X_REM == 154 + V_BOX_LEFT_REM == 154 - 40 == 114   (was 98 at the 12rem %, 52 pre-%;
+//       allowance 154, 4.11 spare)
+//     (the 87.28 above is the PRE-% figure; EFFICIENCY_MM_TRACK_X(_LARGE) grew by the same amount.)
 // tests/test_efficiency_surface_mirror.py::test_the_vertical_captions_fit_inside_the_surface is
 // the GATE on all of this, re-deriving every row (not just the mark rows) from the stylesheet
 // rather than trusting this note.
@@ -300,7 +303,7 @@ const V_BOX_TOP_REM = -80;                           // .mev-backdrop's top
 const V_BOX_W_REM = 54;                              // .mev-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mev-backdrop's height
 const V_CLIP_B_REM = 62;                             // backdrop bleed the SURFACE clips off the bottom
-const V_PAD_X_REM = 98;                              // the LEFT X slack, decoupled from the backdrop -- see above
+const V_PAD_X_REM = 114;                             // the LEFT X slack, decoupled from the backdrop -- see above
 // THE SURFACE'S RIGHT (minimap-facing) PAD -- see the sibling MoEProgress.js's own V_PAD_XR_REM note
 // for the full mechanism; only the numbers differ here, and it is a SEPARATE knob from the backdrop's
 // own V_BOX_W_REM trim above: that trim shrinks what is DRAWN, this shrinks what is CLICK-BLOCKING
@@ -334,11 +337,12 @@ const V_PAD_X_REM = 98;                              // the LEFT X slack, decoup
 // minimap's DROP-SHADOW but left the backdrop 4px off the minimap's REAL edge -- that 4px is the
 // minimap's non-interactive frame margin, maintainer-confirmed safe to consume (Ctrl-click area is
 // further in). Surface right edge (and the flush strips) now at margin == -3, flush to the minimap:
-//   Default: view_w == 8 + 3 + 141 - (-3) == 155 -> padXR == 155 - V_BOX_W(54) - V_PAD_X(98) == 3
-//   Large:   view_w == 8 + 5 + 194 - (-3) == 210 -> padXRLarge == 210/SIZE_F - boxW*xf(72) - 98
-//                                             == 168 - 170 == -2.0
-//   (MoE-% pass: V_PAD_X 52 -> 98 and EFFICIENCY_MM_TRACK_X 95 -> 141 / 137 -> 194 moved together, so
-//   Default padXR is unchanged at 3; Large's moves -1.6 -> -2.0 by the 194-vs-194.167 rounding.)
+//   Default: view_w == 8 + 3 + 157 - (-3) == 171 -> padXR == 171 - V_BOX_W(54) - V_PAD_X(114) == 3
+//   Large:   view_w == 8 + 5 + 214 - (-3) == 230 -> padXRLarge == 230/SIZE_F - boxW*xf(72) - 114
+//                                             == 184 - 186 == -2.0
+//   (MoE-% passes: V_PAD_X 52 -> 98 -> 114 and EFFICIENCY_MM_TRACK_X 95 -> 141 -> 157 / 137 -> 194 ->
+//   214 moved together, so Default padXR is unchanged at 3 and Large's stays -2.0 (214 vs the pure
+//   214.167).)
 const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
 const V_PAD_XR_REM_LARGE = -2;                       // ...and Large -- its OWN literal, see above
 
@@ -596,10 +600,10 @@ function setPos(x) {
     tCur.style[AX] = p;
     if (CAP_C_AX) capC.style[CAP_C_AX] = capClampPct(x).toFixed(3) + "%";
     if (capCbd) {   // strip behind the moving caption
-        // 150 backs the % (+-75), 90 is the %-off width; both x-lengths (Large == SIZE_XF). The
+        // 183 backs the % (+-91.5), 90 is the %-off width; both x-lengths (Large == SIZE_XF). The
         // centre never lets the strip's own edge cross the surface's left edge (BOX_LEFT*xf - PAD).
         const xf = large ? SIZE_XF : 1;
-        const sw = (!(cur.pct >= 0) ? 90 : 150) * xf;
+        const sw = (!(cur.pct >= 0) ? 90 : 183) * xf;
         const c = Math.max(capClampPct(x) / 100 * BAR_W_REM * xf, BOX_LEFT_REM * xf - PAD_REM + sw / 2);
         capCbd.style.width = sw + "rem";
         capCbd.style.left = (c / (BAR_W_REM * xf) * 100).toFixed(3) + "%";

@@ -185,7 +185,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEProgressVertical.css: body.mpv #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_read("MoEProgress.js")) == (165, 320)
+    assert box == _v_surface_wh(_read("MoEProgress.js")) == (182, 320)
 
 
 def test_the_vertical_shift_is_the_pure_intra_surface_term_and_shared_by_both_bars():
@@ -245,7 +245,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + _js_decimal_const(js, "V_PAD_XR_REM_LARGE")).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (221, 400)
+            iround_half_away(Decimal(default_h) * f)) == (242, 400)
 
 
 def _advances(js):
@@ -335,6 +335,9 @@ def test_the_vertical_captions_fit_inside_the_surface():
     d_gap_em = re.search(r"margin-right:\s*([\d.]+)em;", decls(".mpv-cap .mpv-d"))
     assert d_gap_em, "%s: the delta's gap is no longer an em" % what
     d_gap = d_size * Decimal(d_gap_em.group(1))
+    # The "(100.00%)" node has its OWN font-size (the numeral's 16rem, not the delta's 12rem): read it
+    # off .mpv-pct itself so the % ink is really modelled, not the delta's size by accident.
+    pct_size = rem(".mpv-cap .mpv-pct", "font-size")
 
     # Per row: [font-size, the row's own in-flow terms, the halo on its LEFTMOST child, x-gaps].
     # A combined-damage numeral is worst-cased at "3,050" -- 4 digits and a comma -- exactly as the
@@ -370,7 +373,7 @@ def test_the_vertical_captions_fit_inside_the_surface():
         # dmgc has no margin override (the reference), so this row still reads the shared `ico_gap`.
         ".mpv-capC": (c_size,
                       [_ink(adv, d_size, digits=4, commas=1, parens=2, signs=1), d_gap,
-                       _pct_ink(adv, d_size), d_gap,   # .mpv-pct "(100.00%)", the 0.35em idiom gap
+                       _pct_ink(adv, pct_size), d_gap,   # .mpv-pct "(100.00%)", the 0.35em idiom gap
                        numeral(c_size), ico_gap, rem(".mpv-ico.dmgc", "width")],
                       glow, ico_gap + d_gap),
         # [pre numeral][damage-projection glyph]
@@ -423,9 +426,12 @@ def test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface():
     glow = max(Decimal(b) for b in re.findall(
         r"-?[\d.]+rem\s+-?[\d.]+rem\s+([\d.]+)rem",
         _sole_rule_decls(css, ".mp-v.mp-up,\n.mp-d-num.mp-up,\n.mp-eta.mp-up", what)))
-    reach = (numeral / 2 + gap + _pct_ink(adv, d_size) + gap
+    pct_size = _rem(_sole_rule_decls(css, ".mp-cap .mp-pct", what), "font-size", what)
+    reach = (numeral / 2 + gap + _pct_ink(adv, pct_size) + gap
              + _ink(adv, d_size, digits=3, parens=2, signs=1) + glow)
     clearance = -Decimal(_js_const(js, "BOX_LEFT_REM")) + _js_const(js, "PAD_REM")
+    # DELIBERATE `<=` with NO required margin: reach 128.46 vs clearance 130 leaves ~1.54rem spare,
+    # which does not clip (live-confirmed). Known tolerance, not an accident -- do not add a margin.
     assert reach <= clearance, (
         ".mp-capC's right reach at axis 100%% is %srem but the surface clears only %srem -- the "
         "(100.00%%) caption is CLIPPED" % (reach, clearance))
@@ -1479,18 +1485,18 @@ def test_the_large_centre_caption_icon_cancels_scale_only_their_gap():
 def test_the_backdrop_geometry_is_intentionally_asymmetric_user_approved():
     # RECONCILED (box re-cut for edge-drag): the earlier -72rem drift is gone. .mp-backdrop is now
     # just the INVISIBLE surface bounding box, so it mirrors MoEProgress.js's BOX_LEFT/W exactly
-    # (-105 / 410) and is SYMMETRIC about the track again -- which is what anchor_centred_reduced's
-    # `max_x // 2` (no X term) needs. Left is base -105 x 4/3 == -140 under Large. (NAME is now
+    # (-120 / 440) and is SYMMETRIC about the track again -- which is what anchor_centred_reduced's
+    # `max_x // 2` (no X term) needs. Left is base -120 x 4/3 == -160 under Large. (NAME is now
     # stale -- kept to avoid churn; qa re-derives. The Efficiency bar keeps its own symmetry test.)
     _base, large = _cascade("MoEProgress.css")
     base_left = _rem(_base[".mp-backdrop"], "left", "MoEProgress.css")
     base_width = _rem(_base[".mp-backdrop"], "width", "MoEProgress.css")
     large_left = _rem(large[_LG + ".mp-backdrop"], "left", "MoEProgress.css")
     large_width = _rem(large[_LG + ".mp-backdrop"], "width", "MoEProgress.css")
-    assert (base_left, base_width) == (-105, 410), \
-        "the base .mp-backdrop's left/width drifted off its reconciled -105rem/410rem (== JS BOX_LEFT/W)"
-    assert (large_left, large_width) == (Decimal("-140"), Decimal("546.667")), \
-        "the Large .mp-backdrop's left/width drifted off its reconciled -140rem/546.667rem (-105 x 4/3)"
+    assert (base_left, base_width) == (-120, 440), \
+        "the base .mp-backdrop's left/width drifted off its reconciled -120rem/440rem (== JS BOX_LEFT/W)"
+    assert (large_left, large_width) == (Decimal("-160"), Decimal("586.667")), \
+        "the Large .mp-backdrop's left/width drifted off its reconciled -160rem/586.667rem (-120 x 4/3)"
 
 
 def test_the_large_size_block_cannot_be_silently_lost_to_a_tuner_re_emit():

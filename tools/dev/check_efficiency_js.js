@@ -331,7 +331,7 @@ const MUTATIONS = {
     // ...and the %-backing strip must stay inside the surface.
     "strip-ignores-the-surface-edge": ["B",
         "BOX_LEFT_REM * xf - PAD_REM + sw / 2);", "-1e9);"],
-    "strip-width-ignores-the-pct": ["B", "(!(cur.pct >= 0) ? 90 : 150)", "150"],
+    "strip-width-ignores-the-pct": ["B", "(!(cur.pct >= 0) ? 90 : 183)", "183"],
 
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // The shared halves are anchored identically in check_progress_js.js; this bar adds the ONE
@@ -1065,7 +1065,7 @@ function run(mutation) {
     s = mount(srcs);
     s.capC.offsetWidth = 20;
     s.capIco.offsetWidth = 14;
-    s.capPctBox.offsetWidth = 55;
+    s.capPctBox.offsetWidth = 70;   // "(100.00%)" at the numeral's 16rem (65.41) + the 4.2 gap
     s.capD.offsetWidth = 31;
     s.push(M({ barX: 0, damagePercent: 50 }));
     eq("barX 0 with the % ON leaves the caption on its tick (0%)", s.capC.style.left, "0.000%");
@@ -1081,7 +1081,7 @@ function run(mutation) {
             const t = mount(srcs);
             t.push(M({ barSize: large ? 1 : 0 }));
             t.capC.offsetWidth = 20 * f; t.capIco.offsetWidth = 14 * f;
-            t.capPctBox.offsetWidth = 55 * f; t.capD.offsetWidth = 31 * f;
+            t.capPctBox.offsetWidth = 70 * f; t.capD.offsetWidth = 31 * f;
             let worst = [Infinity, -Infinity];
             for (let x = 0; x <= 100; x += 2.5) {
                 t.push(M({ barSize: large ? 1 : 0, barX: x, damagePercent: pct }));

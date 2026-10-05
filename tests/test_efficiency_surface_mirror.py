@@ -653,7 +653,7 @@ def test_the_vertical_css_sizing_box_matches_the_js_surface():
                        css)
     assert match, "MoEEfficiencyVertical.css: body.mev #moe-bar-box rule not found"
     box = (int(match.group(1)), int(match.group(2)))
-    assert box == _v_surface_wh(_js()) == (155, 318)
+    assert box == _v_surface_wh(_js()) == (171, 318)
 
 
 def test_the_vertical_shift_matches_progresss_and_is_pinned():
@@ -688,7 +688,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
     # 2*V_PAD_X_REM -- see _v_surface_wh's own note; the root font's SIZE_F is layered on top of
     # every rem for free, including this one and the unrestated height) -- so the LOGICAL PX
     # surface under Large is this rem value times SIZE_F for width, and the default height times
-    # SIZE_F alone. Pinned: efficiency vertical Large -> 144 x 398 (was 290 before this pad was
+    # SIZE_F alone. Pinned: efficiency vertical Large -> 230 x 398 (was 290 before this pad was
     # split -- the OLD symmetric V_PAD_X_REM(52) on BOTH sides reached the surface past the
     # minimap's own edge; see MoEEfficiency.js's own four-point note). NOTE this SHIM width formula
     # is unrelated to the backdrop's OWN Large width, which is a literal 98rem (kept,
@@ -708,7 +708,7 @@ def test_the_vertical_large_box_reproduces_the_pinned_logical_surface():
                            + padxr_large).quantize(Decimal("0.001"))
     _, default_h = _v_surface_wh(js)
     assert (iround_half_away(large_w_rem * f),
-            iround_half_away(Decimal(default_h) * f)) == (210, 398)
+            iround_half_away(Decimal(default_h) * f)) == (230, 398)
 
 
 def _advances():
@@ -800,8 +800,9 @@ def test_the_vertical_captions_fit_inside_the_surface():
     def _ink(size, digits=0, commas=0, signs=0):
         return size * (digits * adv["digit"] + commas * adv["comma"] + signs * adv["sign"])
 
-    # .mev-pct "(100.00%)": 2 parens + 5 digits + a period + the percent sign, at the delta's 12rem.
-    pct_ink = Decimal(12) * (5 * adv["digit"] + 2 * adv["paren"] + adv["percent"] + adv["period"])
+    # .mev-pct "(100.00%)": 2 parens + 5 digits + a period + the percent sign, at the % node's OWN
+    # font-size (read off its rule, not the delta's 12rem).
+    pct_ink = Decimal(_rem(css, ".mev-cap.bt .mev-pct", "font-size")) * (5 * adv["digit"] + 2 * adv["paren"] + adv["percent"] + adv["period"])
     pct_gap = _js_decimal_const(js, "PCT_GAP_REM")      # the JS's own x-length gap (x SIZE_XF Large)
 
     halo = blur(".mev-cap .mev-v")

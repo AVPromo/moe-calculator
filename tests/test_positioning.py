@@ -662,13 +662,13 @@ def test_the_vertical_track_x_terms_are_pure_composition_derivations():
         PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE,
         EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE)
 
-    # (116 + 34) + 3 == 153 and (116 + 34*4/3 + 3*4/3) * 1.25 == 165.333 * 1.25 == 206.667 -> 207 is
-    # the PURE derivation (V_PAD_X_REM 150 - V_BOX_LEFT_REM 34 == 116); the shipped constant is that
-    # MINUS the flat -2 hand-placement correction (151 / 205).
-    assert (PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE) == (151, 205)
-    # (98 + 40) + 3 == 141 and (98 + 40*4/3 + 3*4/3) * 1.25 == 155.333 * 1.25 == 194.167 -> 194 --
-    # no correction on top.
-    assert (EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE) == (141, 194)
+    # (133 + 34) + 3 == 170 (V_PAD_X_REM 133 - V_BOX_LEFT_REM -34 == 167, + V_PAD_XR_REM 3) is the PURE
+    # Default derivation and 228 the Large one (constants.py); the shipped constant is that MINUS the
+    # flat -2 hand-placement correction (168 / 226).
+    assert (PROGRESS_MM_TRACK_X, PROGRESS_MM_TRACK_X_LARGE) == (168, 226)
+    # (114 + 40) + 3 == 157 (V_PAD_X_REM 114 - V_BOX_LEFT_REM -40 == 154, + V_PAD_XR_REM 3); Large
+    # 214 per constants.py -- no correction on top.
+    assert (EFFICIENCY_MM_TRACK_X, EFFICIENCY_MM_TRACK_X_LARGE) == (157, 214)
 
 
 def test_vertical_anchor_shift_is_identical_for_both_bars():

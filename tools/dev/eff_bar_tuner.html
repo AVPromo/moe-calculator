@@ -225,12 +225,14 @@
   /* THE MoE-% "(73.84%)": out of flow off the numeral's right edge like the delta (the numeral stays
      on its tick), the DELTA is its CHILD so its own left:100% resolves off the %'s right edge.
      .mp-pct owns the delta's size/line-height + the anchor (top:0); .mp-pct-t is the gated text
-     group, carrying the gap as ITS margin-left (--pctgap == the delta's own 0.35em of dFS) and the
-     delta's Y (--pcty) -- the gap NOT on .mp-pct, so a hidden % (display:none on .mp-pct-t) leaves
-     the delta at today's single gap. The % shares the numeral's BAND glow (rules below). */
-  .mp-cap .mp-pct{position:absolute;left:100%;top:0;font-size:var(--dfs);line-height:var(--pctlh);
+     group, carrying the gap as ITS margin-left (--pctgap == the delta's own 0.35em of dFS, ABSOLUTE:
+     it does not grow with the bigger %) and the numeral's own Y nudge (--numycur) -- the gap NOT on
+     .mp-pct, so a hidden % (display:none on .mp-pct-t) leaves the delta at today's single gap.
+     .mp-pct is the NUMERAL's size (--curfs / --pctlh == lh(curFS)). The % shares the numeral's BAND
+     glow (rules below). */
+  .mp-cap .mp-pct{position:absolute;left:100%;top:0;font-size:var(--curfs);line-height:var(--pctlh);
     color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
-  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:var(--pctgap);transform:translateY(var(--pcty))}
+  .mp-cap .mp-pct-t{display:inline-block;white-space:nowrap;margin-left:var(--pctgap);transform:translateY(var(--numycur))}
 
   /* ---- BAND COLOURING: five rule groups, one class on the root. The fill and the current tick's
      GLOW take the band's fill colour (the tick's own line stays white -- see .mp-tick.mp-cur
@@ -494,9 +496,9 @@
   // NO LARGE-MODE TWIN: line-height is a uniform (vertical) length, so the root font (SIZE_F)
   // scales it alone; tests/test_efficiency_surface_mirror.py's large-mode walk refuses one.
   function lh(fs){return Math.ceil(fs*2*1.2565)/2;}
-  // The MoE-% box's pinned line box: the delta's own (same dFS knob), through ONE helper so the live
-  // half and the emit half agree.
-  function pctLH(){return lh(st.dFS);}
+  // The MoE-% box's pinned line box: the NUMERAL's own (same curFS knob -- the % is the damage numeral's
+  // size), through ONE helper so the live half and the emit half agree.
+  function pctLH(){return lh(st.curFS);}
   // Separator is a knob: MoEBattle carries "," AND space, so both are shippable.
   var SEP={comma:",",space:" ",none:""};
   function fmt(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,SEP[st.sep]);}
@@ -809,7 +811,7 @@
     S.setProperty("--gapbot",rem(gapBot()));S.setProperty("--gaptopn",rem(-gapTop()));
     S.setProperty("--reqfs",rem(st.reqFS));S.setProperty("--curfs",rem(st.curFS));
     S.setProperty("--dfs",rem(st.dFS));S.setProperty("--dtf",dTf(rem));
-S.setProperty("--pctgap",rem(Math.round(st.dGap*st.dFS*100)/100));S.setProperty("--pcty",rem(st.dY));
+S.setProperty("--pctgap",rem(Math.round(st.dGap*st.dFS*100)/100));
 S.setProperty("--pctlh",rem(pctLH()));
     // ...and each of those three boxes PINNED, DERIVED from the same size knob (see lh()): a
     // literal would leave the box behind the next size retune, which is the failure being fixed.
@@ -1051,7 +1053,7 @@ S.setProperty("--pctlh",rem(pctLH()));
 ".mp-bd-2 {\n  left: 50%;\n  width: 54rem;\n}\n"+
 ".mp-bd-3 {\n  left: 75%;\n  width: 54rem;\n}\n"+
 ".mp-bd-4 {\n  left: 100%;\n  width: 54rem;\n}\n"+
-".mp-bd-5 {\n  top: -35rem;\n  width: 150rem;\n  height: 26rem;\n}\n"+
+".mp-bd-5 {\n  top: -35rem;\n  width: 183rem;\n  height: 26rem;\n}\n"+
 ".mp-track {\n  position: relative;\n  z-index: 1;\n  width: 100%;\n  height: "+st.trackH+"rem;\n"+
 "  background: "+hexA(st.trackCol,st.trackA)+";\n}\n"+
 "/* THE DASH GRID MASKS THE FILL: "+st.dashW+"rem dash + "+st.dashGap+
@@ -1176,18 +1178,18 @@ S.setProperty("--pctlh",rem(pctLH()));
 "/* THE MoE-% \"(73.84%)\" (MoEEfficiency.js .mp-pct > .mp-pct-t + .mp-d). OUT OF FLOW off the\n"+
 "   numeral's right edge like the delta, so the numeral stays on its tick; the DELTA IS ITS CHILD,\n"+
 "   so the delta's own left:100% (and its translate() gap, above, unchanged) resolves off the %'s\n"+
-"   right edge: \"1,850 (73.84%) +120\". .mp-pct owns the delta's own size/line-height and the\n"+
-"   top:0 anchor; .mp-pct-t is the gated text group (JS display:none when the % is off) and carries\n"+
-"   the gap as ITS margin-left (the same "+REM(Math.round(st.dGap*st.dFS*100)/100)+" the delta's translate carries) and the\n"+
-"   delta's Y -- the gap is NOT on .mp-pct, so a hidden % collapses .mp-pct to zero width and\n"+
+"   right edge: \"1,850 (73.84%) +120\". .mp-pct takes the NUMERAL's size/line-height (the % is the\n"+
+"   damage numeral's size) and the top:0 anchor; .mp-pct-t is the gated text group (JS display:none\n"+
+"   when the % is off) and carries the gap as ITS margin-left (the same "+REM(Math.round(st.dGap*st.dFS*100)/100)+" the delta's translate\n"+
+"   carries, ABSOLUTE) and the numeral's own Y nudge -- the gap is NOT on .mp-pct, so a hidden % collapses .mp-pct to zero width and\n"+
 "   leaves the delta at today's single gap. The % takes the current total's BAND glow in the\n"+
 "   per-band rules below (maintainer decision, plan Q4). No .mp-s1 correction yet: it waits for the\n"+
 "   live pass. */\n"+
-".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  top: 0;\n  font-size: "+st.dFS+"rem;\n"+
+".mp-cap .mp-pct {\n  position: absolute;\n  left: 100%;\n  top: 0;\n  font-size: "+st.curFS+"rem;\n"+
 "  line-height: "+pctLH()+"rem;\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
 "  text-shadow: "+textSh(REM)+";\n}\n"+
 ".mp-cap .mp-pct-t {\n  display: inline-block;\n  white-space: nowrap;\n  margin-left: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n"+
-"  transform: translateY("+REM(st.dY)+");\n}\n\n"+
+"  transform: translateY("+REM(st.numyCur)+");\n}\n\n"+
 "/* ---- BANDS. Exactly ONE of these classes on #moe-bar-root at a time, chosen by which\n"+
 "   requirement the current damage has passed (>= INCLUSIVE, so damage on r65 is already green).\n"+
 "   The fill and the current tick's GLOW share the band's fill colour (the tick's own line is the\n"+

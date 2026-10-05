@@ -303,10 +303,11 @@
     text-shadow:var(--textsh);opacity:0;transition:opacity var(--dfadems) var(--dfadease)}
   .mev-cap.bt .mev-d.on{opacity:1}
   /* THE MoE-% "(73.84%)": in-flow, immediately BEFORE the numeral (delta, %, numeral, icon); margin-right
-     is its gap to the numeral (--pctgap == the delta's own gap), no transform -- align-items:center
-     lands its line box on the same centre the delta's top:0 + dY does. Shares the BAND glow below. */
-  .mev-cap.bt .mev-pct{margin-right:var(--pctgap);font-size:var(--dfs);line-height:var(--dlh);
-    color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
+     is its gap to the numeral (--pctgap == the delta's own gap, ABSOLUTE). It is the NUMERAL's own
+     size / line box / Y nudge (--curfs / --curlh / --numycur), so the two share one baseline.
+     Shares the BAND glow below. */
+  .mev-cap.bt .mev-pct{margin-right:var(--pctgap);font-size:var(--curfs);line-height:var(--curlh);
+    transform:translateY(var(--numycur));color:#ffffff;font-weight:var(--wt);text-shadow:var(--textsh)}
 
   /* ---- BAND COLOURING: byte-identical to the horizontal sibling apart from the rename. The
      current TOTAL's numeral AND its icon glow both live in .mev-cap.bt now (the static readout);
@@ -741,7 +742,7 @@
       ".mev-lg .mev-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
       // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css's `.mp-lg`
       // twin, 2026-08-12 widen pass, right-edge-pinned to 17.067rem).
-      ".mev-lg .mev-bd-5 { left: -251.333rem; width: 268.4rem; }\n"+
+      ".mev-lg .mev-bd-5 { left: -280.533rem; width: 297.6rem; }\n"+
       // bd-1's Large override REVERTED to the shared Large strip (no separate rule needed).
       // bd-2/3/4's Large overrides REVERTED the same way, 2026-08-17 crop fix: their old
       // literal (left -76.6rem, width 81.8rem) put the right edge at 5.2rem, ~11.87rem SHORT of
@@ -870,7 +871,7 @@
     // bd-1 (top mark-req row) REVERTED to the shared strip's own width/left (no override at all,
     // right edge still 17rem == -92+109) -- the prior +25% widen read as an overshoot; bd-5
     // (current-damage) keeps its +50% widen, which was NOT flagged.
-    S.setProperty("--bd5left",rem(-222));S.setProperty("--bd5w",rem(239));
+    S.setProperty("--bd5left",rem(-248));S.setProperty("--bd5w",rem(265));
     S.setProperty("--bd1left",rem(st.bdStripLeft));S.setProperty("--bd1w",rem(st.bdStripW));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
     S.setProperty("--bd3top",rem(st.bd3T));S.setProperty("--bd4top",rem(st.bd4T));
@@ -1041,7 +1042,7 @@
 ".mev-bd-3 { top: "+st.bd3T+"rem; }\n.mev-bd-4 { top: "+st.bd4T+"rem; }\n.mev-bd-5 { top: "+st.bd5T+"rem; }\n"+
 // PER-ROW WIDTH OVERRIDES, literal (shipped MoEEfficiencyVertical.css, 2026-08-12 widen pass):
 // current-damage (bd-5) +50%, top-mark/tp (bd-1) +25%, right-edge-pinned.
-".mev-bd-5 { left: -222rem; width: 239rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
+".mev-bd-5 { left: -248rem; width: 265rem; }\n.mev-bd-1 { left: -119.25rem; width: 136.25rem; }\n"+
 // Mark-requirement strips (bd-2/3/4) no longer get their own width/left override -- 2026-08-17
 // crop fix: the 2026-08-12 narrowing pass shrank these rows' own box while leaving the WIDE
 // checker-dither mask below (box-relative percent size/position) unchanged, so the taper's
@@ -1184,13 +1185,12 @@ icoGlowRules+
 "   numeral (delta, %, numeral, icon), so it grows the right-anchored row LEFTWARD like the numeral\n"+
 "   and never moves the icon; the out-of-flow delta, anchored on the row's left edge with right:100%,\n"+
 "   rides out ahead of it -- \"+120 (73.84%) 1,850\". margin-right is the gap to the numeral\n"+
-"   (PCT_GAP_REM == "+REM(Math.round(st.dGap*st.dFS*100)/100)+", the delta's own translate gap; an ordinary in-flow margin,\n"+
-"   not the anchored-side one Coherent drops). NO transform: align-items:center puts the "+lh(st.dFS)+"rem line box on\n"+
-"   the same centre the delta's top:0 + translateY lands on (the row's line-height minus the delta's,\n"+
-"   halved, == the delta's Y at the shipped sizes), so the two share one Y by construction. It takes the\n"+
+"   (PCT_GAP_REM == "+REM(Math.round(st.dGap*st.dFS*100)/100)+", the delta's own translate gap, ABSOLUTE; an ordinary in-flow margin,\n"+
+"   not the anchored-side one Coherent drops). It is the NUMERAL's own font-size, "+lh(st.curFS)+"rem line box and Y\n"+
+"   nudge (the % is the damage numeral's size), so the two share one baseline. It takes the\n"+
 "   current total's BAND glow in the per-band rules below (maintainer decision, plan Q4). */\n"+
-".mev-cap.bt .mev-pct {\n  margin-right: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n  font-size: "+st.dFS+"rem;\n"+
-"  line-height: "+lh(st.dFS)+"rem;\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
+".mev-cap.bt .mev-pct {\n  margin-right: "+REM(Math.round(st.dGap*st.dFS*100)/100)+";\n  font-size: "+st.curFS+"rem;\n"+
+"  line-height: "+lh(st.curFS)+"rem;\n  transform: translateY("+st.numyCur+"rem);\n  color: #ffffff;\n  font-weight: "+st.wt+";\n"+
 "  text-shadow: "+textSh(REM)+";\n}\n\n"+
 bandRules+pctBandRules+"\n"+
 keyframes(REM,true)+"\n"+

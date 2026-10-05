@@ -274,11 +274,12 @@ $tpl = @'
      flush against the shared fixed anchor regardless of what grows on this side of the row. */
   .mpv-cap .mpv-d{margin-right:var(--dgap);font-size:var(--dfs);transform:translateY(var(--dy));line-height:var(--dlh);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   /* THE MoE-% "(73.84%)": an in-flow flex child IMMEDIATELY BEFORE the numeral (delta, %, numeral,
-     icon), every declaration the delta's own (same dgap/dfs/dy/dlh knobs), so the two share one Y and
-     one 0.35em gap by construction. SEPARATE rule, not the delta's selector. It takes the numeral's
+     icon). It is the NUMERAL's own size / line box / Y nudge (cfs / clh / numyc), so the two share one
+     baseline; the gap is the delta's own 0.35em of dfs held ABSOLUTE (--pctgap) so the bigger % does
+     not widen it. SEPARATE rule, not the delta's selector. It takes the numeral's
      state glow: JS puts .mpv-up/.mpv-down on the node itself (it PRECEDES .mpv-v, so no sibling
      selector could), declared AFTER the base rule so it wins at equal specificity. */
-  .mpv-cap .mpv-pct{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh);margin-right:var(--dgap);font-size:var(--dfs);transform:translateY(var(--dy));line-height:var(--dlh);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
+  .mpv-cap .mpv-pct{color:#ffffff;font-weight:var(--wt);letter-spacing:var(--ls);text-shadow:var(--textsh);margin-right:var(--pctgap);font-size:var(--cfs);transform:translateY(var(--numyc));line-height:var(--clh);opacity:0;transition:opacity var(--dfadms) var(--dfadease)}
   .mpv-pct.mpv-up{text-shadow:var(--textsh),0 0 var(--dgw) var(--upc),0 0 var(--dgt) var(--upc)}
   .mpv-pct.mpv-down{text-shadow:var(--textsh),0 0 var(--dgw) var(--dnc),0 0 var(--dgt) var(--dnc)}
   .mpv-ico.none{display:none}
@@ -737,6 +738,7 @@ $tpl = @'
     S.setProperty("--numyr",rem(st.numYR));S.setProperty("--numyc",rem(st.numYC));S.setProperty("--numyp",rem(st.numYP));
     S.setProperty("--dfs",rem(st.dFS));S.setProperty("--dgap",st.dGap+"em");S.setProperty("--dy",rem(st.dY));
     S.setProperty("--dlh",rem(lh(st.dFS)));
+    S.setProperty("--pctgap",rem(Math.round(st.dGap*st.dFS*100)/100));
     S.setProperty("--dmgpbox",rem(st.dmgPBox));S.setProperty("--dmgcbox",rem(st.dmgCBox));
     S.setProperty("--dmgpimg","url("+DMG[st.dmgPIco].u+")");S.setProperty("--dmgpsz",icoSz(DMG[st.dmgPIco].bb));
     S.setProperty("--dmgcimg","url("+DMG[st.dmgCIco].u+")");S.setProperty("--dmgcsz",icoSz(DMG[st.dmgCIco].bb));
@@ -753,7 +755,7 @@ $tpl = @'
     S.setProperty("--bdstripleft",rem(st.bdStripLeft));S.setProperty("--bdstripw",rem(st.bdStripW));
     // PER-ROW WIDTH OVERRIDES, literal (see the static rule's own comment): shipped
     // MoEProgressVertical.css verbatim, right-edge-pinned to the shared strip's own edge (15rem).
-    S.setProperty("--bd4left",rem(-240));S.setProperty("--bd4w",rem(255));
+    S.setProperty("--bd4left",rem(-266));S.setProperty("--bd4w",rem(281));
     S.setProperty("--bd2left",rem(-133.75));S.setProperty("--bd2w",rem(148.75));
     S.setProperty("--bdstriph",rem(st.bdStripH));
     S.setProperty("--bd1top",rem(st.bd1T));S.setProperty("--bd2top",rem(st.bd2T));
@@ -853,7 +855,7 @@ $tpl = @'
       ".mpv-lg .mpv-bd { left: "+st.bdStripLeftLg+"rem; width: "+st.bdStripWLg+"rem; }\n"+
       // PER-ROW Large WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css's `.mp-lg`
       // twin, 2026-08-12 widen pass, right-edge-pinned to 15.067rem).
-      ".mpv-lg .mpv-bd-4 { left: -264.333rem; width: 279.4rem; }\n"+
+      ".mpv-lg .mpv-bd-4 { left: -292.833rem; width: 307.9rem; }\n"+
       ".mpv-lg .mpv-bd-2 { left: -147.933rem; width: 163rem; }\n"+
       // bd-3 (preAvg) no longer gets its own Large override -- 2026-08-17 crop fix: the prior
       // narrowing (left -82.183rem) left the checker-dither taper too tight against this row's
@@ -869,7 +871,7 @@ $tpl = @'
       "  transform: translateY(50%) translateX("+X43(st.capxP)+"rem); }\n"+
       ".mpv-lg .mpv-cap .mpv-ico { margin-left: "+X43(st.icoGap)+"rem; }\n"+
       ".mpv-lg .mpv-cap .mpv-d { margin-right: "+X43(st.dGap)+"em; }\n"+
-      ".mpv-lg .mpv-cap .mpv-pct { margin-right: "+X43(st.dGap)+"em; }\n"+
+      ".mpv-lg .mpv-cap .mpv-pct { margin-right: "+X43(Math.round(st.dGap*st.dFS*100)/100)+"rem; }\n"+
       ".mpv-lg .mpv-capR .mpv-eta { margin-left: "+X43(st.etaGap)+"rem; }\n";
   }
 
@@ -901,8 +903,8 @@ $tpl = @'
       ".mpv-bd-3 { top: "+st.bd3T+"rem; }\n.mpv-bd-4 { top: "+st.bd4T+"rem; }\n"+
       // PER-ROW WIDTH OVERRIDES, literal (shipped MoEProgressVertical.css, 2026-08-12 widen
       // pass): current-damage (bd-4) +50%, mark-req (bd-2) +25%, right-edge-pinned.
-      // (bd-4 re-widened 178.5 -> 255 in the MoE-% pass so the shadow backs "(100.00%)".)
-      ".mpv-bd-4 { left: -240rem; width: 255rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
+      // (bd-4 re-widened 178.5 -> 255 -> 281 in the MoE-% passes so the shadow backs "(100.00%)" at the numeral-sized %.)
+      ".mpv-bd-4 { left: -266rem; width: 281rem; }\n.mpv-bd-2 { left: -133.75rem; width: 148.75rem; }\n"+
       // bd-3 (preAvg) no longer gets its own width/left override -- 2026-08-17 crop fix: the
       // 2026-08-12 narrowing pass (then 79.583rem -> 83.733rem right-edge correction in
       // 98ab7ea) shrank this row's own box while leaving the WIDE checker-dither mask's
@@ -978,16 +980,17 @@ $tpl = @'
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       "/* THE MoE-% \"(73.84%)\" (MoEProgress.js .mpv-pct): an IN-FLOW flex child immediately BEFORE the\n"+
       "   numeral (delta, %, numeral, icon), so it grows the row LEFTWARD like the delta and never moves\n"+
-      "   the icon. EVERY declaration is the delta's own -- same gap (st.dGap em), font-size, Y and\n"+
-      "   fade -- so the two share one baseline and one gap by construction. It takes the numeral's\n"+
+      "   the icon. It is the NUMERAL's own font-size, line-height and Y nudge (the % is the same size as\n"+
+      "   the damage numeral, so the two share one baseline); the gap is the delta's own 0.35em of its\n"+
+      "   12rem == 4.2rem held ABSOLUTE (it does not grow with the bigger %); fade is the delta's. It takes the numeral's\n"+
       "   STATE GLOW (maintainer decision, plan Q4) in the .mpv-pct.mpv-up/.mpv-down rules below: JS\n"+
       "   puts the class on the node itself, because it PRECEDES .mpv-v and no sibling selector can\n"+
       "   reach backwards. They are SEPARATE rules (not the delta's selector lists), declared after the\n"+
       "   base rule above so they win at equal specificity; the .mpv-full gold follows the numeral's. */\n"+
       ".mpv-cap .mpv-pct {\n  color: #ffffff;\n  font-weight: "+st.wt+";\n  letter-spacing: "+st.ls+"em;\n"+
       "  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+";\n"+
-      "  margin-right: "+st.dGap+"em;\n  font-size: "+st.dFS+"rem;\n"+
-      "  transform: translateY("+st.dY+"rem);\n  line-height: "+lh(st.dFS)+"rem;\n  opacity: 0;\n"+
+      "  margin-right: "+(Math.round(st.dGap*st.dFS*100)/100)+"rem;\n  font-size: "+st.cFS+"rem;\n"+
+      "  transform: translateY("+st.numYC+"rem);\n  line-height: "+lh(st.cFS)+"rem;\n  opacity: 0;\n"+
       "  transition: opacity "+st.dFadeMs+"ms "+st.dFadeEase+";\n}\n"+
       ".mpv-pct.mpv-up {\n  text-shadow: 0rem 0rem "+st.shBlur+"rem "+hexA(st.shColor,st.shAlpha)+",\n"+
       "               0rem 0rem "+st.dGlowW+"rem "+hexA(st.upCol,DGA)+",\n"+

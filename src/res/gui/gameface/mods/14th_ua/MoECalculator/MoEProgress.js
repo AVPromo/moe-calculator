@@ -135,19 +135,23 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 //   every side.
 //   THE MoE-% CAPTION. capC carries "(73.84%)" (.mp-pct), OUT OF FLOW at left:100% so the numeral
 //   stays on its tick, with the delta re-parented INSIDE it so ITS left:100% resolves off the % box's
-//   right edge. CAPC RIGHT reach at axis 100 % ("(100.00%)" == 2*0.3008 + 5*0.4932 + period 0.2471 +
-//   percent 0.7734 == 4.0881em == 49.06rem at the .mp-d 12rem; "(73.84%)" is 43.14rem):
-//     17.76 + 4.20 (gap) + 49.06 + 4.20 (the delta's gap) + 30.89 ("(+297)") + 6.00 == 112.11rem
-//   against the clearance -BOX_LEFT_REM + PAD_REM == 105 + 10 == 115rem (2.89rem spare): the box grew
-//   symmetrically 80 -> 105 / 360 -> 410 (remedy (i)). The surface-mirror test's own sum is the
-//   authority (test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface). The 58.85rem
-//   above is the PRE-% figure -- do not trust it while the % shows. .mp-bd-2 (capC's strip, centred
-//   on the tick) grew 108 -> 150 so it backs the % (+-75 vs 71.02).
+//   right edge. THE % IS THE DAMAGE NUMERAL'S SIZE (.mp-pct takes .mp-cap.dn's 16rem / 20.5rem, no Y
+//   offset, so the caption's HEIGHT -- hence BOX_TOP/PAD/CLIP_B and the Y shift -- did not move).
+//   CAPC RIGHT reach at axis 100 % ("(100.00%)" == 2*0.3008 + 5*0.4932 + period 0.2471 +
+//   percent 0.7734 == 4.0881em == 65.41rem at the 16rem numeral size; "(73.84%)" is 57.52rem):
+//     17.76 + 4.20 (gap, ABSOLUTE: .mp-pct-t's margin-left, the delta's own 0.35em of 12rem) + 65.41
+//     + 4.20 (the delta's gap) + 30.89 ("(+297)" at the delta's own 12rem) + 6.00 == 128.46rem
+//   against the clearance -BOX_LEFT_REM + PAD_REM == 120 + 10 == 130rem (1.54rem spare): the box grew
+//   symmetrically 105 -> 120 / 410 -> 440 (remedy (i); was 80 -> 105 for the 12rem %). The
+//   surface-mirror test's own sum is the authority
+//   (test_the_horizontal_capc_percent_reach_at_axis_100_fits_the_surface). The 58.85rem above is the
+//   PRE-% figure -- do not trust it while the % shows. .mp-bd-2 (capC's strip, centred on the tick)
+//   grew 150 -> 183 so it backs the % (+-91.5 vs 87.37 == 17.76 + 4.20 + 65.41).
 // Keep the 80rem, and re-derive ALL THREE extremes again before ever moving it -- "which one is the
 // extreme" has now moved three times, and each move invalidated the previous revision's spare.
 // These five ARE this bar's surface contract and stay HERE, per bar. MoEBarTransient derives the
 // rest from them (its box*/pad arguments), exactly as this file used to:
-//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 430     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 115
+//   VIEW_W_REM = BOX_W_REM + 2 * PAD_REM == 460     SHIFT_X_REM = PAD_REM - BOX_LEFT_REM == 130
 //   VIEW_H_REM = BOX_H_REM + 2*PAD_REM - CLIP_B_REM == 67   SHIFT_Y_REM = PAD_REM - BOX_TOP_REM == 32
 // SHIFT_Y_REM is MIRRORED (negated) in Python as
 // domain/constants.PROGRESS_ANCHOR_Y_SHIFT, so changing BOX_TOP_REM or PAD_REM moves the bar on
@@ -170,12 +174,12 @@ const VALUE_SWAP_MS = FADE_IN_MS;
 // the mirrored Python Y-shift is unchanged. Bottom pad becomes PAD_REM - CLIP_B_REM == 2rem: capC's
 // numeral sign-glow (~6rem past its ink) lands at ~31.7 == INSIDE box bottom 33, and the strip box
 // (33) sits 2rem inside the surface -- nothing clips.
-// WIDTH is -105/410: symmetric, now bound by the capC "(100.00%)" reach (see THE MoE-% CAPTION above;
+// WIDTH is -120/440: symmetric, now bound by the capC "(100.00%)" reach (see THE MoE-% CAPTION above;
 // it was -80/360, capR-overhang-bound). .mp-bd-3 was pulled in from 126->88 (iter 1) so it no longer
 // clips the surface edge.
-const BOX_LEFT_REM = -105;                           // leftmost edge (== -clearance; symmetric)
+const BOX_LEFT_REM = -120;                           // leftmost edge (== -clearance; symmetric)
 const BOX_TOP_REM = -22;                             // topmost edge (.mp-bd-1's top)
-const BOX_W_REM = 410;                               // track 200 + 2*105 clearance (symmetric)
+const BOX_W_REM = 440;                               // track 200 + 2*120 clearance (symmetric)
 const BOX_H_REM = 55;                                // seed: bounds the strips (capC strip now 26 tall)  [was 50]
 const PAD_REM = 10;
 // BOTTOM-only surface trim (iter 3). Effective bottom pad == PAD_REM - CLIP_B_REM == 2rem. Y-length,
@@ -197,8 +201,8 @@ const CLIP_B_REM = 8;
 // own note below). PAD_REM serves the Y axis; the X axis is a SPLIT pad, V_PAD_X_REM on the left
 // (caption ink) and V_PAD_XR_REM on the right (the track's own tick overhang, deliberately smaller
 // -- see both constants' own notes below), so:
-//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 150
-//               + V_PAD_X_REM + V_PAD_XR_REM == 165
+//   V_VIEW_W_REM = V_BOX_W_REM                   V_SHIFT_X_REM = V_PAD_X_REM - V_BOX_LEFT_REM == 167
+//               + V_PAD_X_REM + V_PAD_XR_REM == 182
 //   V_VIEW_H_REM = V_BOX_H_REM + 2 * PAD_REM
 //                                - V_CLIP_B_REM == 320 V_SHIFT_Y_REM = PAD_REM - V_BOX_TOP_REM  == 90
 // V_SHIFT_Y_REM is MIRRORED (negated) in Python as domain/constants.VERTICAL_ANCHOR_Y_SHIFT (-90,
@@ -308,13 +312,16 @@ const CLIP_B_REM = 8;
 //   .mpv-capP (moving, dmgp back at 14rem, margin corrected to 1.253rem): (-6 + 0) -
 //     [ 31.08 + 1.253 + 14 (.mpv-ico.dmgp) ] - 1.00 == -53.33rem.
 // THE MoE-% CAPTION: V_MARKUP puts an in-flow .mpv-pct "(73.84%)" between the delta and the
-//   numeral, so capC's leftward reach GROWS by that node + one gap: + 49.06 ("(100.00%)" at 12rem:
-//   2 parens + 5 digits + period 0.2471 + percent 0.7734) + 4.2 (the 0.35em gap). The 99.49 above is
-//   the PRE-% figure. THE TEST IS THE AUTHORITY for the new one (it reads every term off the CSS,
+//   numeral, so capC's leftward reach GROWS by that node + one gap: + 65.41 ("(100.00%)" at the
+//   NUMERAL'S 16rem -- the % matches the damage numeral's size, same 20.5rem line box, same -0.5rem
+//   Y nudge, so the row's height did not move: 2 parens + 5 digits + period 0.2471 + percent 0.7734
+//   == 4.0881em) + 4.2 (the gap, ABSOLUTE 4.2rem, the delta's own 0.35em of 12rem). The 99.49 above
+//   is the PRE-% figure. THE TEST IS THE AUTHORITY for the new one (it reads every term off the CSS,
 //   incl. the row's padding-right/translateX): test_the_vertical_captions_fit_inside_the_surface
-//   measures .mpv-capC at 145.75rem, and wants >= 4rem spare, so the allowance had to reach 149.75:
-//   V_PAD_X_REM == 150 + V_BOX_LEFT_REM == 150 - 34 == 116   (was 70; +46 -> allowance 150, 4.25 spare)
-// capC is STILL the extreme (145.75 > 53.33 > 41.97 > 20.85), and the maintainer's own 7px-left
+//   measures .mpv-capC at 162.10rem, and wants >= 4rem spare, so the allowance had to reach 166.10:
+//   V_PAD_X_REM == 167 + V_BOX_LEFT_REM == 167 - 34 == 133   (was 116 at the 12rem %; +17 -> allowance
+//   167, 4.90 spare)
+// capC is STILL the extreme (162.10 > 53.33 > 41.97 > 20.85), and the maintainer's own 7px-left
 // nudge ate the margin earlier (104 - 99.49 == 4.51, was 97 - 92.49 == 4.51 before -- the SAME margin,
 // because V_PAD_X_REM grew by the identical +7): the surface's left edge had to move WITH it:
 //   (earlier pass: V_PAD_X_REM == 104 + V_BOX_LEFT_REM == 104 - 34 == 70, was 63; +7)
@@ -346,7 +353,7 @@ const CLIP_B_REM = 8;
 // re-deriving both sides from source rather than hardcoding 54.5 and 90 as two literals that would
 // have to agree by hand.
 // LARGE IS STRICTLY SLACKER and needs no twin: the allowance is `V_PAD_X_REM - V_BOX_LEFT_REM*4/3`
-// == 161.33rem (was 115.33 at V_PAD_X_REM 70, 108.33 at 63 -- the backdrop's left bleed is an
+// == 178.33rem (was 161.33 at V_PAD_X_REM 116, 115.33 at 70, 108.33 at 63 -- the backdrop's left bleed is an
 // x-length and takes SIZE_XF; V_PAD_X_REM, like PAD_REM, does NOT -- the ink it covers is
 // rem-sized and rides the root font's SIZE_F alone), while the ink only grows on its three
 // x-GAPS. The Default size keeps binding.
@@ -415,7 +422,7 @@ const V_BOX_TOP_REM = -80;                           // .mpv-backdrop's top
 const V_BOX_W_REM = 46;                              // .mpv-backdrop's width (right edge only, trimmed -- see fact 3)
 const V_BOX_H_REM = 360;                             // .mpv-backdrop's height
 const V_CLIP_B_REM = 60;                             // backdrop bleed the SURFACE clips off the bottom
-const V_PAD_X_REM = 116;                             // the LEFT X slack, decoupled from the backdrop
+const V_PAD_X_REM = 133;                             // the LEFT X slack, decoupled from the backdrop
 // THE SURFACE'S RIGHT (minimap-facing) PAD -- deliberately NOT V_PAD_X_REM's mirror, and a SEPARATE
 // knob from the backdrop's own V_BOX_W_REM trim above: the backdrop trim shrinks what is DRAWN, this
 // shrinks what is CLICK-BLOCKING (the surface, never drawn). Shrunk close to the minimum the TRACK's
@@ -461,15 +468,16 @@ const V_PAD_X_REM = 116;                             // the LEFT X slack, decoup
 // 4px is the minimap's non-interactive frame margin and is safe to consume (the Ctrl-click area is
 // further in). So the surface's right edge (and the flush strips) now sit at margin == -3 (3px into
 // that frame margin), flush against the minimap itself:
-//   Default: view_w == 8 + 3 + 151 - (-3) == 165 -> padXR == 165 - V_BOX_W(46) - V_PAD_X(116) == 3
-//   Large:   view_w == 8 + 5 + 205 - (-3) == 221 -> padXRLarge == 221/SIZE_F - boxW*xf(61.333) - 116
-//                                             == 176.8 - 177.333 == -0.533
-//   (MoE-% pass: V_PAD_X 70 -> 116 and PROGRESS_MM_TRACK_X 105 -> 151 / 147 -> 205 moved together, so
-//   Default padXR is unchanged at 3; Large's drifts by the 207-vs-206.667 rounding of the pure value.)
+//   Default: view_w == 8 + 3 + 168 - (-3) == 182 -> padXR == 182 - V_BOX_W(46) - V_PAD_X(133) == 3
+//   Large:   view_w == 8 + 5 + 226 - (-3) == 242 -> padXRLarge == 242/SIZE_F - boxW*xf(61.333) - 133
+//                                             == 193.6 - 194.333 == -0.733
+//   (MoE-% passes: V_PAD_X 70 -> 116 -> 133 and PROGRESS_MM_TRACK_X 105 -> 151 -> 168 / 147 -> 205 ->
+//   226 moved together, so Default padXR is unchanged at 3; Large's drifts by the 228-vs-227.917
+//   rounding of the pure value.)
 // The visible TRACK is unaffected -- gap/overhang/edge_x are unchanged; only view_w (this right pad)
 // grew, which moves the surface's minimap-facing edge alone, not the track.
 const V_PAD_XR_REM = 3;                              // the RIGHT (minimap-facing) X slack, Default
-const V_PAD_XR_REM_LARGE = -0.533;                   // ...and Large -- its OWN literal, see above
+const V_PAD_XR_REM_LARGE = -0.733;                   // ...and Large -- its OWN literal, see above
 
 // THE LIVE ORIENTATION PROFILE -- the three things the render path cares about, all rewritten
 // together by goVertical() below and never touched again.
