@@ -1369,7 +1369,9 @@ def test_template_settings_version_pins_the_current_layout():
     # Bumped 29 -> 30 for the "Show MoE %" checkbox (PROGRESS_SHOW_PERCENT_KEY): a new varName AND a
     # new standalone column-2 row right after Scale, which shifts settings_i18n.COL2_KEYS's
     # positional zip. No migration function: the new key takes its fresh True default.
-    assert SETTINGS_VERSION == 30
+    # Bumped 30 -> 31 to force a template rebuild for the per-bar %/delta layout: a stored-v30 install
+    # (earlier single-% deploy) runs no migration, so MSA kept painting the old one-checkbox template.
+    assert SETTINGS_VERSION == 31
     assert mod_settings._template()["settingsVersion"] == SETTINGS_VERSION
 
 
@@ -3344,17 +3346,17 @@ def _v29_store(alignment, pair):
 
 @pytest.mark.parametrize("alignment,pair", [(PROGRESS_ALIGN_FREE, (900, 500)),
                                             (PROGRESS_ALIGN_FIXED, (0, 0))])
-def test_v29_to_v30_bump_keeps_every_value_and_seeds_all_four_caption_keys_true(
+def test_v29_to_current_bump_keeps_every_value_and_seeds_all_four_caption_keys_true(
         _run_register, alignment, pair):
     old = _v29_store(alignment, pair)
-    api = _FakeMsaApi(stored=old, stored_version=SETTINGS_VERSION - 1)
-    assert SETTINGS_VERSION == 30
+    api = _FakeMsaApi(stored=old, stored_version=29)   # FIXED v29, not SETTINGS_VERSION - 1
+    assert SETTINGS_VERSION > 29
     _run_register(api)
 
     live = mod_settings._settings
     for key, value in old.items():
         if key != "enabled":
-            assert live[key] == value, "%s did not survive the 29 -> 30 bump" % key
+            assert live[key] == value, "%s did not survive the 29 -> current bump" % key
     # The four new keys were absent from the stored dict -> their fresh defaults, ON.
     for key, getter in zip(_CAPTION_KEYS, _CAPTION_GETTERS):
         assert live[key] is True
@@ -3370,6 +3372,27 @@ def test_v29_to_v30_bump_keeps_every_value_and_seeds_all_four_caption_keys_true(
     assert api.updated == 1
     for key in _CAPTION_KEYS:
         assert api.state["settings"][LINKAGE][key] is True
+
+
+@pytest.mark.parametrize("old_percent", [True, False])
+def test_v30_to_v31_bump_rebuilds_template_and_carries_percent(_run_register, old_percent):
+    # A v30 store (the old single "show %" checkbox) must NOT skip the template rebuild: that stale
+    # template under the new i18n zip is the bug this bump fixes.
+    old = _v29_store(PROGRESS_ALIGN_FREE, (900, 500))
+    old[mod_settings.PROGRESS_SHOW_PERCENT_KEY] = old_percent
+    api = _FakeMsaApi(stored=old, stored_version=30)
+    _run_register(api)
+
+    live = mod_settings._settings
+    for key, value in old.items():
+        if key != "enabled":
+            assert live[key] == value, "%s did not survive the 30 -> 31 bump" % key
+    assert live[mod_settings.PROGRESS_SHOW_PERCENT_KEY] is old_percent
+    for key in _CAPTION_KEYS[1:]:
+        assert live[key] is True
+    assert api.last_set_template == mod_settings._template()   # template rebuilt
+    assert api.updated == 1 and api.saved >= 1
+    assert api.state["settings"][LINKAGE][mod_settings.PROGRESS_SHOW_PERCENT_KEY] is old_percent
 
 
 @pytest.mark.parametrize("old_alignment,expected", [(1, PROGRESS_ALIGN_FIXED),    # old Minimap

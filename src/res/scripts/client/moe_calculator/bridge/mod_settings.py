@@ -362,7 +362,15 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # only a forward bump reaches an existing install. NO _migrate_pre_v30_* function: register()'s bump
 # branch runs _apply(raw), which carries every v29 value, and the new keys -- absent from raw --
 # take their fresh True defaults.
-SETTINGS_VERSION = 30
+# Bumped 30 -> 31 to rebuild the template for that same per-bar %/delta checkbox restructure: the
+# four-checkbox column-2 layout landed WITHIN the still-unreleased 30, so an install that already
+# stored v30 (from the earlier single-% deploy) runs no migration on load (stored == current),
+# register() never calls setModTemplate, and MSA keeps painting the OLD one-checkbox template under
+# the NEW i18n zip (Transitions shows as a checkbox, "show %" as a section title). A layout change
+# owes its own forward bump even inside an unreleased version. NO _migrate_pre_v31_* function:
+# the bump branch's _apply(raw) carries every v30 value (progress_show_percent carries to the MA %
+# key) and the three new keys land at their True defaults.
+SETTINGS_VERSION = 31
 
 GARAGE_KEY = "garage_widget_enabled"
 BATTLE_KEY = "battle_widget_enabled"
