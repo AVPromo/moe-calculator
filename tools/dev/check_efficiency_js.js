@@ -290,7 +290,16 @@ const MUTATIONS = {
         "        damageDelta: Number(model.damageDelta) || 0,"],
 
     // ===== THIS BAR: the delta's display window ================================================
-    "no-delta-on-hit": ["B", "        showDelta();\n        T.show();", "        T.show();"],
+    "no-delta-on-hit": ["B", "        if (cur.showDelta !== false) showDelta();\n        T.show();", "        T.show();"],
+    // ===== THE DELTA SWITCH (VM `showDelta`, a FEATURE flag: absent == shown) ==================
+    "delta-hidden-when-showDelta-false": ["B",
+        'capD.style.display = cur.showDelta !== false ? "" : "none";', 'capD.style.display = "";'],
+    "delta-shown-when-showDelta-absent": ["B",
+        'capD.style.display = cur.showDelta !== false ?', 'capD.style.display = cur.showDelta === true ?'],
+    "delta-flashes-when-showDelta-false": ["B",
+        "if (cur.showDelta !== false) showDelta();", "showDelta();"],
+    "delta-gate-rides-the-pct": ["B",
+        'capD.style.display = cur.showDelta !== false ?', 'capD.style.display = cur.pct >= 0 && cur.showDelta !== false ?'],
     "no-delta-window": ["B",
         'deltaT = setTimeout(function () { capD.classList.remove("on"); }, DELTA_HOLD_MS);',
         "deltaT = null;"],
@@ -1007,6 +1016,29 @@ function run(mutation) {
     eq("100 renders 100.00%", s.capPctN.textContent, "100.00%");
     s.push(M({ damagePercent: -1 }));
     eq("a later -1 frame re-hides it in place", pctOf(s), ["none", ""]);
+
+    // --- THE DELTA SWITCH (showDelta; independent of the %) ---------------------------------
+    section("delta switch");
+    const dispOf = (s) => [s.capD.style.display, s.capPct.style.display];
+    s = mount(srcs);
+    s.push(M({ damagePercent: 50 }));
+    eq("showDelta absent -> delta shown (feature flag degrades to shown)", dispOf(s), ["", ""]);
+    s = mount(srcs);
+    s.push(M({ damagePercent: 50, showDelta: false }));
+    eq("showDelta false hides the delta, the % stays", dispOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ damagePercent: -1, showDelta: true }));
+    eq("% off + delta on: the delta stays shown", dispOf(s), ["", "none"]);
+    s.push(M({ damagePercent: -1, showDelta: false }));
+    eq("both off", dispOf(s), ["none", "none"]);
+    s = mount(srcs);
+    s.push(M({ damage: 0, showDelta: false }));
+    s.push(M({ damage: 500, showDelta: false }));
+    eq("a hit with showDelta false never flashes", s.deltaOn(), false);
+    s = mount(srcs);
+    s.push(M({ damage: 0 }));
+    s.push(M({ damage: 500 }));
+    ok("...while showDelta absent still flashes", s.deltaOn());
     // The clamp's right overhang: with the % showing it is w(.mp-pct) + gap + w(.mp-d) (Option B --
     // both out of flow; the %'s OWN gap is .mp-pct-t's margin-left, so the measured .mp-pct box
     // already contains it -- only the delta's translate gap is added); with it hidden it falls back

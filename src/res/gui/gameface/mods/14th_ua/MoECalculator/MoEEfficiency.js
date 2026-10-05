@@ -626,6 +626,9 @@ function paintStatic() {
     // ABSENT field is NaN, also false.
     capPct.style.display = cur.pct >= 0 ? "" : "none";
     capPctN.textContent = pctText(cur.pct);
+    // THE DELTA "+N" (VM `showDelta`): FEATURE switch, `!== false` so an ABSENT field stays shown. Off
+    // = display:none (no space, never flashes); independent of the % gate above.
+    capD.style.display = cur.showDelta !== false ? "" : "none";
 }
 
 // The delta SNAPS in on a hit, holds for its own DELTA_HOLD_MS, then fades out on .mp-d's 500ms
@@ -726,6 +729,8 @@ function render(model) {
         // The MoE % this battle's damage alone is worth (-1.0 == off / no data). BARE, NO `|| 0`:
         // 0.0 is a real percentile and an absent field must not collapse into it.
         pct: Number(model.damagePercent),
+        // The per-bar show-delta switch, RAW (`!== false` in paintStatic).
+        showDelta: model.showDelta,
     };
 
     const first = last === null;
@@ -770,7 +775,7 @@ function render(model) {
     // caption rides the same gate -- with the bar staying down there is nothing to flash. "Alt
     // Press" and "Always" need no branch here: both arrive folded into `altHeld` below.
     if (gained && model.showEvents !== false && T.settled()) {
-        showDelta();
+        if (cur.showDelta !== false) showDelta();
         T.show();
     }
 

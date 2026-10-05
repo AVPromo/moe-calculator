@@ -8,6 +8,8 @@ mod's test_settings_i18n."""
 import sys
 import types
 
+import pytest
+
 from moe_calculator.adapter import settings_i18n as S
 from moe_calculator.adapter import i18n
 
@@ -186,14 +188,15 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # Mode Toggle threshold Slider), growing the run 16 -> 17.
     assert u"progressBar" in S._PANEL[u"en"]
     start = S.COL2_KEYS.index(u"catBattleProgress")
-    # v29->30 added progressShowPercent right after progressSize (the standalone Show MoE %
-    # checkbox), growing the run 17 -> 18.
-    tail = S.COL2_KEYS[start:start + 18]
+    # v29->30 added the four per-bar caption checkboxes right after progressSize (MA %, MA
+    # change, Efficiency %, Efficiency change), growing the run 17 -> 21.
+    tail = S.COL2_KEYS[start:start + 21]
     assert tail == (u"catBattleProgress", u"progressBar",
                     u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
                     None, S.VARIANT_KEY, S.VARIANT_HOTKEY_KEY,
                     u"progressAutoToggleThreshold", u"progressSize",
-                    u"progressShowPercent",
+                    u"progressShowPercent", u"progressShowDelta",
+                    u"efficiencyShowPercent", u"efficiencyShowDelta",
                     None, u"catTransitions",
                     u"progressTransitions", u"progressTransEvents", u"progressTransManual",
                     None, u"progressHoldSeconds"), (
@@ -203,7 +206,7 @@ def test_progress_bar_group_is_the_whole_of_col2():
     # spacer included -- with the Orientation/Alignment radios spliced in BEFORE the steppers. The
     # barPreview Image's trailing None sentinel that used to close COL2_KEYS (appended at 24->25)
     # MOVED to COL1_KEYS's own tail at 26->27 -- see mod_settings's SETTINGS_VERSION history.
-    assert S.COL2_KEYS[start + 18:] == (
+    assert S.COL2_KEYS[start + 21:] == (
         None, u"catBarPosition", u"progressOrientation", u"progressAlignment",
         u"barPosX", u"barPosY"), (
         u"the Layout category is no longer the tail of COL2_KEYS: %r" % (S.COL2_KEYS,))
@@ -684,13 +687,31 @@ def test_col2_keys_pair_one_to_one_with_the_built_template_column2():
         assert (comp["type"] == "Empty") == (key is None)
 
 
-def test_the_show_percent_row_pairs_with_the_show_percent_checkbox():
+_CAPTION_ROWS = (
+    (u"progressShowPercent", "PROGRESS_SHOW_PERCENT_KEY", u"Moving Average: show %"),
+    (u"progressShowDelta", "PROGRESS_SHOW_DELTA_KEY", u"Moving Average: show change"),
+    (u"efficiencyShowPercent", "EFFICIENCY_SHOW_PERCENT_KEY", u"Damage Efficiency: show %"),
+    (u"efficiencyShowDelta", "EFFICIENCY_SHOW_DELTA_KEY", u"Damage Efficiency: show change"),
+)
+
+
+def test_the_four_caption_rows_follow_progress_size_in_order_and_pair_with_their_checkboxes():
     from moe_calculator.bridge import mod_settings
     col2 = mod_settings._template()["column2"]
-    i = S.COL2_KEYS.index(u"progressShowPercent")
-    assert S.COL2_KEYS[i - 1] == u"progressSize"
-    assert col2[i]["varName"] == mod_settings.PROGRESS_SHOW_PERCENT_KEY
-    assert col2[i]["text"] == S.panel_text()[u"progressShowPercent"]["text"]
+    first = S.COL2_KEYS.index(u"progressShowPercent")
+    assert S.COL2_KEYS[first - 1] == u"progressSize"
+    assert S.COL2_KEYS[first:first + 4] == tuple(k for k, _, _ in _CAPTION_ROWS)
+    for off, (key, const, label) in enumerate(_CAPTION_ROWS):
+        i = first + off
+        assert S.COL2_KEYS[i] == key
+        assert col2[i]["type"] == "CheckBox"
+        assert col2[i]["varName"] == getattr(mod_settings, const)
+        assert col2[i]["text"] == S.panel_text()[key]["text"] == label
+
+
+def test_col2_keys_length_matches_the_column_two_control_count():
+    from moe_calculator.bridge import mod_settings
+    assert len(S.COL2_KEYS) == len(mod_settings._template()["column2"]) == 27
 
 
 def test_sync_template_text_retitles_the_show_percent_row(monkeypatch):
@@ -714,11 +735,12 @@ def test_sync_template_text_retitles_the_show_percent_row(monkeypatch):
     assert _Api.saved == 1
 
 
-def test_every_language_has_a_translated_show_percent_row():
-    en = S._PANEL[u"en"][u"progressShowPercent"]
-    assert en[u"label"] == u"Show MoE %"
+@pytest.mark.parametrize("key,const,label", _CAPTION_ROWS)
+def test_every_language_has_a_translated_caption_row(key, const, label):
+    en = S._PANEL[u"en"][key]
+    assert en[u"label"] == label
     for code in _SHIPPED:
-        row = S._PANEL[code][u"progressShowPercent"]
+        row = S._PANEL[code][key]
         assert row[u"label"] and row[u"label"] != en[u"label"], code
         assert row[u"ttBody"] != en[u"ttBody"], code
         assert row[u"ttHeader"] != en[u"ttHeader"], code

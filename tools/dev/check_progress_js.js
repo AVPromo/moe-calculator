@@ -345,6 +345,17 @@ const MUTATIONS = {
         "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg ||",
         "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg || cur.pct !== last.pct ||"],
 
+    // ===== THE DELTA SWITCH (VM `showDelta`, a FEATURE flag: absent == shown) ================
+    "delta-hidden-when-showDelta-false": ["B",
+        'capD.style.display = cur.showDelta !== false ? "" : "none";', 'capD.style.display = "";'],
+    "delta-shown-when-showDelta-absent": ["B", "cur.showDelta !== false ?", "cur.showDelta === true ?"],
+    "delta-not-in-change-detect": ["B",
+        "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg ||",
+        "cur.projAvg !== last.projAvg || cur.preAvg !== last.preAvg || cur.showDelta !== last.showDelta ||"],
+    // The % and the delta hide INDEPENDENTLY: the delta gate must not ride the % gate.
+    "delta-gate-rides-the-pct": ["B",
+        'capD.style.display = cur.showDelta !== false ?', 'capD.style.display = cur.pct >= 0 && cur.showDelta !== false ?'],
+
     // ===== THE LARGE SIZE MODE (VM `barSize` == 1) ===========================================
     // Each half is separately invisible in-client (the CSS half is guarded by
     // tests/test_progress_surface_mirror.py, the Python anchor by its constants), so each gets its
@@ -737,6 +748,23 @@ function run(mutation) {
     eq("a pct-only flip does NOT arm a run", s.run(), null);
     s.push(M({ curPercent: 12.3 }));
     eq("...in either direction", s.run(), null);
+
+    // --- THE DELTA SWITCH (showDelta; independent of the %) ---------------------------------
+    section("delta switch");
+    const dispOf = (s) => [s.capD.style.display, s.capPct.style.display];
+    s = mount(srcs);
+    s.push(M({ curPercent: 50 }));
+    eq("showDelta absent -> delta shown (feature flag degrades to shown)", dispOf(s), ["", ""]);
+    s = mount(srcs);
+    s.push(M({ curPercent: 50, showDelta: false }));
+    eq("showDelta false hides the delta, the % stays on its tick", dispOf(s), ["none", ""]);
+    s = mount(srcs);
+    s.push(M({ curPercent: -1, showDelta: true }));
+    eq("% off + delta on: the delta stays shown", dispOf(s), ["", "none"]);
+    s.push(M({ curPercent: -1, showDelta: false }));
+    eq("both off", dispOf(s), ["none", "none"]);
+    s.push(M({ curPercent: -1, showDelta: true }));
+    eq("a showDelta-only flip does NOT arm a run", s.run(), null);
 
     // --- COLD SHOW --------------------------------------------------------------------------
     section("cold show");

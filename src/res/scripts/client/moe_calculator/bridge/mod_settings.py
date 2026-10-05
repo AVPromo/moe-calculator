@@ -355,11 +355,13 @@ MOD_DISPLAY_NAME = "14th_ua's MoE Calculator"
 # its own ponytail comment on that hazard). Every OTHER saved value carries across the bump unchanged (enumerated from DEFAULTS,
 # not hand-listed); the new key takes its fresh True ("nothing to heal") default on a fresh
 # install, where the migration doesn't apply.
-# Bumped 29 -> 30 for the Show MoE % checkbox (PROGRESS_SHOW_PERCENT_KEY): a new varName AND a new
-# column-2 row right after Scale, which shifts settings_i18n.COL2_KEYS's positional zip by one
-# (progressShowPercent inserted after progressSize). Structural, so only a forward bump reaches an
-# existing install. NO _migrate_pre_v30_* function: register()'s bump branch runs _apply(raw),
-# which carries every v29 value, and the new key -- absent from raw -- takes its fresh True default.
+# Bumped 29 -> 30 for the four per-bar caption checkboxes -- MA "show %" (PROGRESS_SHOW_PERCENT_KEY),
+# MA "show change" (PROGRESS_SHOW_DELTA_KEY), Efficiency "show %" (EFFICIENCY_SHOW_PERCENT_KEY) and
+# Efficiency "show change" (EFFICIENCY_SHOW_DELTA_KEY): four new varNames AND four new column-2 rows
+# right after Scale, which shifts settings_i18n.COL2_KEYS's positional zip by four. Structural, so
+# only a forward bump reaches an existing install. NO _migrate_pre_v30_* function: register()'s bump
+# branch runs _apply(raw), which carries every v29 value, and the new keys -- absent from raw --
+# take their fresh True defaults.
 SETTINGS_VERSION = 30
 
 GARAGE_KEY = "garage_widget_enabled"
@@ -414,10 +416,16 @@ PROGRESS_SIZE_KEY = "progress_bar_size"
 PROGRESS_SIZE_DEFAULT = 0             # the shipped size -- every existing user keeps it
 PROGRESS_SIZE_LARGE = 1               # ... and the highest legal index (see clamp_variant)
 
-# The parenthesised MoE % caption beside the current-damage numeral on BOTH centre bars (v30). A
-# plain bool, default ON, one shared toggle, STANDALONE row after Scale. The bridge folds it into
-# the percent VM slot's -1 sentinel (like the Transitions master), so the JS never reads it.
+# The per-bar caption toggles (v30), all plain bools, default ON, STANDALONE rows after Scale. MA =
+# the Moving Average bar (push_progress), EFFICIENCY = the Damage Efficiency bar (push_efficiency).
+# PROGRESS_SHOW_PERCENT_KEY is the MA bar's parenthesised MoE % ONLY (its name predates the split;
+# no rename map, so the key stays); the % keys are folded into the percent VM slot's -1 sentinel by
+# the bridge (like the Transitions master), so the JS never reads them. The two DELTA keys (the MA
+# "(+N)" caption / the DE "+N" flash) ride a `showDelta` VM bool the JS reads as `!== false`.
 PROGRESS_SHOW_PERCENT_KEY = "progress_show_percent"
+PROGRESS_SHOW_DELTA_KEY = "progress_show_delta"
+EFFICIENCY_SHOW_PERCENT_KEY = "efficiency_show_percent"
+EFFICIENCY_SHOW_DELTA_KEY = "efficiency_show_delta"
 
 # WHEN the Progress Bar comes up -- three children of PROGRESS_BAR_KEY, and a DIFFERENT axis from
 # the Transitions group below, which only decides HOW it moves once it is coming up. Do not
@@ -618,7 +626,8 @@ DEFAULTS = {GARAGE_KEY: True, BATTLE_KEY: True, BATTLE_ALT_KEY: False,
             COUNTED_ASSIST_KEY: True, PROGRESS_BAR_KEY: False,
             PROGRESS_VARIANT_KEY: PROGRESS_VARIANT_EFFICIENCY,
             PROGRESS_SIZE_KEY: PROGRESS_SIZE_DEFAULT,
-            PROGRESS_SHOW_PERCENT_KEY: True,
+            PROGRESS_SHOW_PERCENT_KEY: True, PROGRESS_SHOW_DELTA_KEY: True,
+            EFFICIENCY_SHOW_PERCENT_KEY: True, EFFICIENCY_SHOW_DELTA_KEY: True,
             PROGRESS_SHOW_EVENTS_KEY: True, PROGRESS_SHOW_ALT_KEY: True,
             PROGRESS_SHOW_ALWAYS_KEY: False,
             PROGRESS_TRANSITIONS_KEY: True, PROGRESS_TRANS_EVENTS_KEY: True,
@@ -822,10 +831,26 @@ def progress_show_events():
 
 
 def progress_show_percent():
-    """Whether the bars draw the parenthesised MoE % beside the current-damage numeral (default
-    True). Not master-folded: the bar's own master already closes the window. The bridge folds
-    this into the percent VM slot's -1 sentinel, so the JS never sees the flag."""
+    """Whether the MOVING AVERAGE bar draws the parenthesised MoE % beside the current-damage
+    numeral (default True). Not master-folded: the bar's own master already closes the window. The
+    bridge folds this into the percent VM slot's -1 sentinel, so the JS never sees the flag."""
     return bool(_settings.get(PROGRESS_SHOW_PERCENT_KEY, True))
+
+
+def progress_show_delta():
+    """Whether the MOVING AVERAGE bar draws its "(+N)" delta caption (default True)."""
+    return bool(_settings.get(PROGRESS_SHOW_DELTA_KEY, True))
+
+
+def efficiency_show_percent():
+    """Whether the DAMAGE EFFICIENCY bar draws the parenthesised MoE % (default True); folded into
+    the percent VM slot's -1 sentinel like progress_show_percent."""
+    return bool(_settings.get(EFFICIENCY_SHOW_PERCENT_KEY, True))
+
+
+def efficiency_show_delta():
+    """Whether the DAMAGE EFFICIENCY bar draws its "+N" damage flash (default True)."""
+    return bool(_settings.get(EFFICIENCY_SHOW_DELTA_KEY, True))
 
 
 def progress_alt_held(alt_held):
@@ -1517,6 +1542,9 @@ def _template():
                                       t[settings_i18n.VARIANT_HOTKEY_KEY])
     progress_size = _radio(PROGRESS_SIZE_KEY, t["progressSize"])
     show_percent = _checkbox(PROGRESS_SHOW_PERCENT_KEY, t["progressShowPercent"])
+    show_delta = _checkbox(PROGRESS_SHOW_DELTA_KEY, t["progressShowDelta"])
+    eff_show_percent = _checkbox(EFFICIENCY_SHOW_PERCENT_KEY, t["efficiencyShowPercent"])
+    eff_show_delta = _checkbox(EFFICIENCY_SHOW_DELTA_KEY, t["efficiencyShowDelta"])
     progress_orientation = _radio(PROGRESS_ORIENTATION_KEY, t["progressOrientation"])
     progress_alignment = _radio(PROGRESS_ALIGNMENT_KEY, t["progressAlignment"])
     # Automatic Mode Toggle (v28): the SAME _slider helper as the hold-duration one below, but its
@@ -1652,7 +1680,8 @@ def _template():
         "column2": ([_label("catBattleProgress", t["catBattleProgress"])]
                     + progress_group
                     + [_empty(), progress_variant, progress_variant_hotkey, auto_toggle,
-                       progress_size, show_percent,
+                       progress_size, show_percent, show_delta,
+                       eff_show_percent, eff_show_delta,
                        _empty(), _label("catTransitions", t["catTransitions"])]
                     + _grouped_column1(trans_master, [trans_events, trans_manual])
                     + [_empty(), trans_hold,

@@ -234,7 +234,7 @@ class ProgressVM(ViewModel):
     change-detect compares pushed values, so an int() there quantised almost every real update away
     and the bar essentially never showed. MoEProgress.js's fmt() rounds for display."""
 
-    def __init__(self, properties=17, commands=0):
+    def __init__(self, properties=18, commands=0):
         super(ProgressVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -348,6 +348,14 @@ class ProgressVM(ViewModel):
                                                      #    BARE (Number(model.curPercent), no `|| 0`)
                                                      #    and draws only when >= 0, so an absent
                                                      #    field (NaN) draws nothing
+        self._addBoolProperty("showDelta", True)      # 17 the "Show change" switch for the (+N)
+                                                     #    delta caption (mod_settings.
+                                                     #    progress_show_delta). APPENDED,
+                                                     #    `properties=` bumped WITH it. A FEATURE
+                                                     #    switch: the JS reads it as
+                                                     #    `model.showDelta !== false`, so an absent
+                                                     #    field is default-ON (the delta was
+                                                     #    always shown before this existed)
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -400,6 +408,9 @@ class ProgressVM(ViewModel):
     def setCurPercent(self, v):
         self._setReal(16, v)
 
+    def setShowDelta(self, v):
+        self._setBool(17, v)
+
 
 class EfficiencyVM(ViewModel):
     """Root model for the centre-screen DAMAGE EFFICIENCY bar (MoEEfficiencyView) -- the radio
@@ -427,7 +438,7 @@ class EfficiencyVM(ViewModel):
 
     Indices are hand-maintained to match the _addXProperty order; the JS reads by NAME."""
 
-    def __init__(self, properties=19, commands=0):
+    def __init__(self, properties=20, commands=0):
         super(EfficiencyVM, self).__init__(properties=properties, commands=commands)
 
     def _initialize(self):
@@ -511,12 +522,19 @@ class EfficiencyVM(ViewModel):
                                                     #    NOT Number: _setNumber int-casts and would
                                                     #    render 73.00%. -1.0 is the load-bearing
                                                     #    sentinel for "no data" AND "setting off"
-                                                    #    (mod_settings.progress_show_percent is folded
+                                                    #    (mod_settings.efficiency_show_percent is folded
                                                     #    in Python, like the Transitions master):
                                                     #    0.0 is a REAL percentile. The JS reads it
                                                     #    BARE (Number(model.damagePercent), no `|| 0`)
                                                     #    and draws only when >= 0, so an absent field
                                                     #    (NaN) draws nothing
+        self._addBoolProperty("showDelta", True)      # 19 the "Show change" switch for the +N flash
+                                                    #    (mod_settings.efficiency_show_delta).
+                                                    #    APPENDED, `properties=` bumped WITH it. A
+                                                    #    FEATURE switch: the JS reads it as
+                                                    #    `model.showDelta !== false`, so an absent
+                                                    #    field is default-ON (the flash was always
+                                                    #    shown before this existed)
 
     def setVisible(self, v):
         self._setBool(0, v)
@@ -574,3 +592,6 @@ class EfficiencyVM(ViewModel):
 
     def setDamagePercent(self, v):
         self._setReal(18, v)
+
+    def setShowDelta(self, v):
+        self._setBool(19, v)

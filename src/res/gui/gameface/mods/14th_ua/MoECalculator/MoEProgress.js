@@ -868,6 +868,9 @@ function paintStatic() {
     // sentinel, so the ONE `>= 0` test covers both; an ABSENT field is NaN, also false.
     capPct.style.display = cur.pct >= 0 ? "" : "none";
     capPctN.textContent = pctText(cur.pct);
+    // THE DELTA "(+N)" (VM `showDelta`): a FEATURE switch, `!== false` so an ABSENT field stays shown.
+    // display:none takes no space; independent of the % gate above (.mp-d is nested in .mp-pct).
+    capD.style.display = cur.showDelta !== false ? "" : "none";
     capV(capP).textContent = fmt(cur.preAvg);
     const pre = axisPct(cur.preAvg).toFixed(3) + "%";
     tPre.style[AX] = pre;
@@ -1043,6 +1046,8 @@ function render(model) {
         // The MoE % (-1.0 == off / no data). BARE, NO `|| 0`, for the same reason as eta: 0.0 is a
         // real percentile and an absent field must not collapse into it. NOT in the change-detect.
         pct: Number(model.curPercent),
+        // The per-bar show-delta switch, RAW (`!== false` in paintStatic). NOT in the change-detect.
+        showDelta: model.showDelta,
     };
     paintStatic();
 

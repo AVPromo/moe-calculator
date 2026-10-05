@@ -123,14 +123,15 @@ def _push(**settings_over):
 
 def test_push_writes_exactly_every_view_model_property():
     # ProgressVM's only producer, and the push swallows every exception -- so a prop declared on one
-    # side only is invisible in the client. SEVENTEEN: the nine through barSize, then transEvents /
+    # side only is invisible in the client. EIGHTEEN: the nine through barSize, then transEvents /
     # transManual, showEvents, holdMs, ctrlHeld, etaBattles, (Phase 1) `vertical` -- draw the
     # vertical composition instead of horizontal -- and `curPercent` (the "(73.84%)" caption), all
-    # APPENDED after barSize so nothing above them is renumbered.
+    # APPENDED after barSize so nothing above them is renumbered -- then `showDelta`.
     assert set(_push()) == _VM_PROPS
     assert "vertical" in _VM_PROPS
     assert "curPercent" in _VM_PROPS
-    assert len(_VM_PROPS) == 17
+    assert "showDelta" in _VM_PROPS
+    assert len(_VM_PROPS) == 18
 
 
 # --- push_progress's own has_placed() gate (the corner-flash fix) -----------------------------
@@ -374,3 +375,19 @@ def test_cur_percent_zero_is_a_real_percentile_not_the_sentinel():
 def test_the_show_percent_flag_is_never_pushed_under_its_own_name():
     props = _push()
     assert "showPercent" not in props and mod_settings.PROGRESS_SHOW_PERCENT_KEY not in props
+
+
+def test_the_de_show_percent_key_does_not_gate_the_ma_percent():
+    props = _push_model(_model(), **{mod_settings.PROGRESS_SHOW_PERCENT_KEY: True,
+                                     mod_settings.EFFICIENCY_SHOW_PERCENT_KEY: False})
+    assert props["curPercent"] == 74.3
+
+
+def test_show_delta_is_the_progress_show_delta_setting_default_true():
+    assert _push()["showDelta"] is True
+
+
+def test_show_delta_pushes_false_when_the_setting_is_off():
+    props = _push(**{mod_settings.PROGRESS_SHOW_DELTA_KEY: False,
+                     mod_settings.EFFICIENCY_SHOW_DELTA_KEY: True})
+    assert props["showDelta"] is False

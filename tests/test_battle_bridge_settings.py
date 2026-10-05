@@ -123,7 +123,7 @@ def test_a_broken_constants_import_fails_open_and_reroutes_everything(monkeypatc
 
 # --- a Show MoE % flip + apply_settings() re-pushes the -1 sentinel ------------------------------
 
-def test_flipping_show_percent_then_apply_settings_repushes_minus_one_on_both_bars(monkeypatch):
+def test_flipping_each_bars_show_percent_then_apply_settings_repushes_minus_one_on_that_bar(monkeypatch):
     from moe_calculator.bridge import mod_settings
     from moe_calculator.bridge.view_models import EfficiencyVM, ProgressVM
     from moe_calculator.domain import battle_types as bt
@@ -171,16 +171,26 @@ def test_flipping_show_percent_then_apply_settings_repushes_minus_one_on_both_ba
     monkeypatch.setattr(mod_settings, "progress_bar_enabled", lambda: True)
     saved = dict(mod_settings._settings)
     try:
-        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: True})
+        P, E = mod_settings.PROGRESS_SHOW_PERCENT_KEY, mod_settings.EFFICIENCY_SHOW_PERCENT_KEY
+        mod_settings._apply({P: True, E: True})
         battle_bridge.apply_settings()
         assert ma_vm.props["curPercent"] >= 0.0 and de_vm.props["damagePercent"] >= 0.0
 
-        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: False})
+        mod_settings._apply({P: False, E: True})          # MA key gates ONLY the MA bar
         battle_bridge.apply_settings()
         assert ma_vm.props["curPercent"] == -1.0
+        assert de_vm.props["damagePercent"] >= 0.0
+
+        mod_settings._apply({P: True, E: False})          # DE key gates ONLY the DE bar
+        battle_bridge.apply_settings()
+        assert ma_vm.props["curPercent"] >= 0.0
         assert de_vm.props["damagePercent"] == -1.0
 
-        mod_settings._apply({mod_settings.PROGRESS_SHOW_PERCENT_KEY: True})   # and back
+        mod_settings._apply({P: False, E: False})
+        battle_bridge.apply_settings()
+        assert ma_vm.props["curPercent"] == -1.0 and de_vm.props["damagePercent"] == -1.0
+
+        mod_settings._apply({P: True, E: True})           # and back
         battle_bridge.apply_settings()
         assert ma_vm.props["curPercent"] >= 0.0 and de_vm.props["damagePercent"] >= 0.0
     finally:
