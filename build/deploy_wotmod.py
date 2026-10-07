@@ -58,7 +58,7 @@ def _abort_if_locked(err):
 def _clean(mods_dir, res_mods_dir, mod_id):
     # 1) old versions of OUR packaged mod. Match only version-numbered files
     # (mod_id + "_<digit>...") so we never delete a sibling dev mod such as
-    # "<mod_id>_debug.wotmod".
+    # "<mod_id>_debug.wotmod" (the per-mod debug build is retired; the glob never matches it).
     for f in glob.glob(os.path.join(mods_dir, mod_id + "_[0-9]*.wotmod")):
         try:
             os.remove(f)
@@ -69,6 +69,7 @@ def _clean(mods_dir, res_mods_dir, mod_id):
     # both the .py and its byte-compiled .pyc sibling -- a stale .pyc outranks the
     # packaged entry point just as a .py does (the installer deletes both too).
     mods_py = os.path.join(res_mods_dir, "scripts", "client", "gui", "mods")
+    # "_debug" stem: leftover cleanup of the retired per-mod debug build (old installs only).
     for stem in ("mod_moe_calculator", "mod_moe_calculator_debug"):
         for name in (stem + ".py", stem + ".pyc"):
             p = os.path.join(mods_py, name)

@@ -146,7 +146,10 @@ update as you change the settings that affect their look:
 | **Mode Override Key** | K | The in-battle key that flips the current vehicle's bar mode; the mod remembers each vehicle's own choice. |
 | **Automatic Mode Toggle** | 100% (off) | Once a vehicle's mark progress reaches this percentage before battle, its mode switches once on its own — the same as pressing the override key. 100% disables it. |
 | **Scale** | Default | **Default** or **Large**. Large draws a noticeably bigger bar — same layout, just larger. |
-| **Show MoE %** | On | Shows your Mark of Excellence percentage in brackets beside the current damage on the bar. Damage Efficiency: the percentage this battle's damage alone is worth. Moving Average: your live MoE percentage with this battle counted. |
+| **Moving Average: show %** | On | Shows your live Mark of Excellence percentage, with this battle counted, in brackets beside the current damage on the Moving Average bar. |
+| **Moving Average: show change** | On | Shows how much this battle changes your moving average, as (+N), beside the current damage on the Moving Average bar. |
+| **Damage Efficiency: show %** | On | Shows the Mark of Excellence percentage this battle's damage alone is worth, in brackets beside the current damage on the Damage Efficiency bar. |
+| **Damage Efficiency: show change** | On | Shows the +N flash for the damage of your latest hit on the Damage Efficiency bar. |
 | *Transitions* | — | Category header for how the centre-screen bar animates and how long it stays up. |
 | **Enabled** | On | The bar fades and slides as it appears and disappears. Turn off to make it appear and disappear **instantly** instead; the bar still shows and still hides, only the motion is skipped. |
 | ↳ **Events** | On | Animates the bar when a battle event brings it up (a damage tick) and lets it go again. |
@@ -350,7 +353,10 @@ Building, deploying, testing, and the repo layout are documented in
 | **Клавіша зміни режиму** | K | Клавіша в бою, яка перемикає режим смуги поточної машини; мод запам'ятовує вибір для кожної машини окремо. |
 | **Автоматичне перемикання режиму** | 100% (вимк.) | Щойно прогрес знаків машини перед боєм досягає цього відсотка, її режим перемикається один раз самостійно — так само як клавішею перемикання. 100% вимикає функцію. |
 | **Масштаб** | Стандартний | **Стандартний** або **Великий**. Великий малює помітно більшу смугу — той самий вигляд, просто більша. |
-| **Показувати % ВМ** | Увімк. | Показує ваш відсоток відмітки майстерності в дужках поруч із поточною шкодою на смузі. Ефективність шкоди: відсоток, якого вартує сама лише шкода цього бою. Ковзне середнє: ваш поточний відсоток відмітки з урахуванням цього бою. |
+| **Ковзне середнє: показувати %** | Увімк. | Показує ваш поточний відсоток відмітки майстерності з урахуванням цього бою в дужках поруч із поточною шкодою на смузі «Ковзне середнє». |
+| **Ковзне середнє: показувати зміну** | Увімк. | Показує у вигляді (+N), наскільки цей бій змінює ваше ковзне середнє, поруч із поточною шкодою на смузі «Ковзне середнє». |
+| **Ефективність шкоди: показувати %** | Увімк. | Показує відсоток відмітки майстерності, якого вартує сама лише шкода цього бою, в дужках поруч із поточною шкодою на смузі «Ефективність шкоди». |
+| **Ефективність шкоди: показувати зміну** | Увімк. | Показує на смузі «Ефективність шкоди» спалах +N зі шкодою вашого останнього влучання. |
 | *Переходи* | — | Заголовок категорії для того, як анімується смуга в центрі екрана і як довго вона тримається на екрані. |
 | **Увімкнено** | Увімк. | Смуга з'являється та зникає з плавним затуханням і зсувом. Вимкніть, щоб вона з'являлася й зникала **миттєво**; смуга все одно показується й ховається, лише без анімації. |
 | ↳ **Події** | Увімк. | Анімує смугу, коли її показує подія в бою (тик шкоди), і коли вона знову ховається. |

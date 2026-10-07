@@ -1652,9 +1652,9 @@ def _template():
         # change (a pre-battle percentile crossing), not when the bar shows, and 100 (the shipped
         # default) already disables it, so it must stay readable while the feature is off.
         #
-        # The Show MoE % checkbox (v30) sits right after Scale, ALSO standalone (no master, no
-        # _gate_and) for the same reason: a caption's content describes the bar, not when it shows,
-        # so it must not inherit the visibility children's "Always" gate nor grey out with the master.
+        # The four per-bar checkboxes (v30/v31) sit right after Scale, ALSO standalone (no master,
+        # no _gate_and) for the same reason: a caption's content describes the bar, not when it
+        # shows, so it must not inherit the visibility children's "Always" gate nor grey out with the master.
         #
         # Wire order MUST stay in lockstep with settings_i18n.COL2_KEYS (see
         # _sync_template_text) -- its zip is positional, so a reorder retitles the wrong control.

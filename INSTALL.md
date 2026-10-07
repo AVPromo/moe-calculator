@@ -128,7 +128,10 @@ settings that affect their look.
     percentage before battle, its mode switches once on its own, the same as pressing the
     override key. 100% disables it.
   - **Scale** — **Default** or **Large**.
-  - **Show MoE %** *(on)* — shows the MoE percentage in brackets beside the current damage.
+  - **Moving Average: show %** *(on)* — shows your live MoE percentage, with this battle counted, in brackets beside the current damage on the Moving Average bar.
+  - **Moving Average: show change** *(on)* — shows how much this battle changes your moving average, as (+N), beside the current damage on the Moving Average bar.
+  - **Damage Efficiency: show %** *(on)* — shows the MoE percentage this battle's damage alone is worth, in brackets beside the current damage on the Damage Efficiency bar.
+  - **Damage Efficiency: show change** *(on)* — shows the +N flash for the damage of your latest hit on the Damage Efficiency bar.
   - **Transitions** — **Enabled** *(on)*, with **Events** / **Alt Press** children (whether
     the bar animates its entry/exit for each trigger, or appears and disappears instantly) and
     a **Hold Duration (s)** slider *(1–30, default 5)* for how long it stays up before fading.
