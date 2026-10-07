@@ -304,9 +304,10 @@ pin them against real geometry.
 
 ## Settings (keys/getters — see `moe-settings` for the panel itself)
 
-`SETTINGS_VERSION` is in `mod_settings.py` (28→29 was a stored-value self-heal; 29→30 added the
-standalone `progress_show_percent` checkbox, default True — a layout change, forward bump; see
-`moe-settings`). Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
+`SETTINGS_VERSION` is in `mod_settings.py` (read it there; 28→29 was a stored-value self-heal;
+29→30 and 30→31 were forward structural bumps for the four per-bar caption checkboxes —
+`progress_show_percent` / `progress_show_delta` (Moving Average) and `efficiency_show_percent` /
+`efficiency_show_delta` (Damage Efficiency), default True; see `moe-settings`). Master `PROGRESS_BAR_KEY="progress_bar_enabled"` (default False), getter
 `progress_bar_enabled()`. Variant `PROGRESS_VARIANT_KEY=
 "progress_bar_variant"` (0=Efficiency/1=Moving Average). Size `PROGRESS_SIZE_KEY=
 "progress_bar_size"` (0=default/1=Large). Orientation `PROGRESS_ORIENTATION_KEY=

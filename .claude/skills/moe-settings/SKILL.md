@@ -18,10 +18,11 @@ Owner module: `bridge/mod_settings.py` (flag state + MSA registration). Prose: `
 ## The controls (two-column panel, four categories, three grouped masters + four standalone radios + one standalone stepper pair + one standalone HotKey + one standalone threshold slider + two live preview Images)
 
 `SETTINGS_VERSION` lives in `mod_settings.py` (read it there; it was 23 as of the v3.0.0-era pass
-over this skill). Of the bumps since: 24-28 and 30 are structural (see "The column swap (v24)"
-below; **30 added the standalone `progress_show_percent` checkbox** — a new varName plus a new
-column-2 row right after Scale, so a forward bump); 28→29 is a stored-value self-heal with no
-template/row change — see `mod_settings.py`'s comment block above the constant. Each `varName` ==
+over this skill). Of the bumps since: 24-28, 30 and 31 are structural (see "The column swap (v24)"
+below; **30 and 31 added the four per-bar caption checkboxes** — new varNames plus four column-2
+rows right after Scale, forward bumps, saved values all carried by `register()`'s bump branch,
+pinned by a v30→v31 migration test in `tests/test_mod_settings.py`); 28→29 is a stored-value
+self-heal with no template/row change — see `mod_settings.py`'s comment block above the constant. Each `varName` ==
 the `DEFAULTS` key, so the dict MSA returns maps
 straight through `merge_settings`. Bump `SETTINGS_VERSION` **only** when the control layout /
 varName set changes (the host wipes saved values back to defaults on a bump, and `register()`'s
@@ -45,7 +46,7 @@ Built in `_template()`:
 
 **`SETTINGS_VERSION` 23 → 24 SWAPPED the two columns** (see "The column swap (v24) and what rode
 in after it" below) — column 1 is now the Battle Calculator + everything garage-related, column 2
-is the WHOLE Progress Bar feature. The bullet list below is in **current (post-v30) column order**;
+is the WHOLE Progress Bar feature. The bullet list below is in **current (post-v31) column order**;
 where a sub-bullet's own history predates the swap it still says "column1" for what is now
 column 2 — read those as **feature-relative**, not literal-column, until the swap section.
 
@@ -74,13 +75,17 @@ column 2 — read those as **feature-relative**, not literal-column, until the s
      **"Automatic Mode Toggle"** `Slider` (`progress_auto_toggle_threshold`, 0–100, default
      **100 = the DISABLE sentinel** since no percentile can reach past it) — the pre-battle MoE
      percentile at/above which a vehicle's bar Mode auto-toggles once — then the standalone
-     `inline` **"Scale"** radio, then (v30) the standalone **"Show MoE %"** checkbox
-     (`progress_show_percent`, `PROGRESS_SHOW_PERCENT_KEY`, default **True**, getter
-     `progress_show_percent()`) — the parenthesised MoE % beside both centre bars' current-damage
-     numeral. It carries a tooltip and an 11-language `progressShowPercent` row. It is **folded in
-     Python** into the VM's `-1` sentinel (`push_progress` / `push_efficiency` in
-     `bridge/battle_bridge.py` send `curPercent` / `damagePercent` = `-1.0` when it is off — the JS
-     draws only on `>= 0`; see `moe-progress`). All five are deliberately **ungated** (describe the
+     `inline` **"Scale"** radio, then (v30/v31) FOUR standalone per-bar checkboxes, all default
+     **True**, each with a tooltip and an 11-language row: **"Moving Average: show %"**
+     (`PROGRESS_SHOW_PERCENT_KEY`), **"Moving Average: show change"** (`PROGRESS_SHOW_DELTA_KEY`),
+     **"Damage Efficiency: show %"** (`EFFICIENCY_SHOW_PERCENT_KEY`) and **"Damage Efficiency: show
+     change"** (`EFFICIENCY_SHOW_DELTA_KEY`) — read the key strings and getters in
+     `mod_settings.py`, the i18n keys in `settings_i18n.COL2_KEYS`. The `%` pair is the
+     parenthesised MoE % beside each bar's current-damage numeral, **folded in Python** into the
+     VM's `-1` sentinel (`push_progress` / `push_efficiency` in `bridge/battle_bridge.py` send
+     `curPercent` / `damagePercent` = `-1.0` when off — the JS draws only on `>= 0`; see
+     `moe-progress`); the `change` pair rides a `showDelta` VM bool the JS reads as `!== false`.
+     All are deliberately **ungated** (describe the
      bar itself, not when it shows), matching the pre-v13 reasoning for Mode/Scale;
   3. `_empty()`, `Label` **"Transitions"**, then the `progress_transitions_enabled` master + THREE
      children: two label-only checkboxes ("Events", "Alt Press") and, as of v17, a `Slider`
@@ -181,12 +186,13 @@ COL1_KEYS = (u"catBattleCalc", u"battleWidget", u"battleAltKey", u"countedAssist
              None)                                   # barPreview Image (no i18n text)
 # Column 2: the WHOLE Progress Bar feature (moved here from column1 at v23->24), plus the HotKey
 # mode-override control (v26), the Automatic Mode Toggle slider (v28) and the Show MoE % checkbox
-# (v30). TWENTY-FOUR slots.
+# (v30; v31 split it into four per-bar checkboxes). Count the slots in settings_i18n.py.
 COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"progressShowEvents", u"progressShowAlt", u"progressShowAlways",
              None,
              VARIANT_KEY, VARIANT_HOTKEY_KEY, u"progressAutoToggleThreshold", u"progressSize",
-             u"progressShowPercent",
+             u"progressShowPercent", u"progressShowDelta",
+             u"efficiencyShowPercent", u"efficiencyShowDelta",
              None,
              u"catTransitions", u"progressTransitions",
              u"progressTransEvents", u"progressTransManual",
@@ -197,13 +203,13 @@ COL2_KEYS = (u"catBattleProgress", u"progressBar",
              u"barPosX", u"barPosY")
 ```
 
-**Current counts (v30; recount the two tuples in `adapter/settings_i18n.py`, they drift): `COL1_KEYS` 16 slots, `COL2_KEYS` 24 slots, `spacers == 9` (the `None` sentinels, recounted); `tipless == 8` carried over, not recounted — the v30 row has a tooltip so it is unchanged.**
+**Counts (v31: `COL1_KEYS` 16 slots, `COL2_KEYS` 27 slots, `spacers == 9`; recount the two tuples in `adapter/settings_i18n.py`, they drift). `tipless == 8` carried over, not recounted — the per-bar rows all have tooltips so it is unchanged.**
 Growth since v23 (26 / 9 at the time, described by the pre-swap layout further below): the v24
 column swap itself changed only which keys sit in which tuple, not the total row count; v25 added
 one `None` slot to each tuple (the two preview Images' sentinels); v26 added one slot to `COL2_KEYS`
 (`VARIANT_HOTKEY_KEY`); v27 moved one `None` slot from `COL2_KEYS` to the tail of `COL1_KEYS`
-(`barPreview`); v28 added one more slot to `COL2_KEYS` (`progressAutoToggleThreshold`); v30 added
-one COL2 slot (`progress_show_percent`'s `progressShowPercent`, right after `progressSize`). `spacers`
+(`barPreview`); v28 added one more slot to `COL2_KEYS` (`progressAutoToggleThreshold`); v30/v31 added
+four COL2 slots (the per-bar show-%/show-change checkboxes, right after `progressSize`). `spacers`
 grew 7 → 9 across this span (the two preview Images' own sentinels); `tipless` (8) is unchanged —
 neither preview Image nor the HotKey/threshold controls are tooltip-less.
 
@@ -694,9 +700,9 @@ sentinel rather than letting the JS read the setting; the JS then reads the new 
 
 Every visible label/tooltip comes from `adapter/settings_i18n.panel_text()` at the client's active
 language (English master + per-key fallback; `COL1_KEYS` / `COL2_KEYS` are the wire order MSA and
-`_sync_template_text` walk in lockstep — recount them in `settings_i18n.py` (16 and 24 as of v30; 26 and 9 immediately
-pre-v24; the v24 column swap reassigned which tuple holds which feature, and v25/v26/v27/v28/v30 each
-grew one tuple by one slot — see "The column swap (v24)" above), several of which are `None`
+`_sync_template_text` walk in lockstep — recount them in `settings_i18n.py` (16 and 27 as of v31; 26 and 9 immediately
+pre-v24; the v24 column swap reassigned which tuple holds which feature, and v25/v26/v27/v28 each
+grew one tuple by one slot, v30/v31 by four — see "The column swap (v24)" above), several of which are `None`
 sentinels for the `Empty` spacers and the two preview Images. 11 language blocks. The six
 `HEADER_KEYS` entries come out of
 `build()` pre-wrapped in `<b>...</b>` — see the `HEADER_KEYS` section above for why that wrap must

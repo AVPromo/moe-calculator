@@ -98,20 +98,18 @@ before every release** (it is part of the gate, alongside `check_version.py`), a
 
 ## Release state
 
-**Unreleased (on `main` after v7.0.0): the MoE `%` caption.** A parenthesised MoE % beside both
-centre bars' current-damage numeral (new `ProgressVM.curPercent` / `EfficiencyVM.damagePercent`
-slots), a new standalone **Show MoE %** MSA checkbox (`progress_show_percent`, default on), grown
-bar surfaces with re-derived `*_MM_TRACK_X(_LARGE)`. **`SETTINGS_VERSION` 29 → 30** (structural:
-new varName + a COL2 row, forward bump; no `_migrate_pre_v30_*`). Also fixes a pre-v23 alignment
-migration that re-ran on every bump (now gated on `pre_v23`). Player docs (`README.md` EN + UA
-tables, `INSTALL.md`) gained the new option. The release cut still owes the usual
-version/notes/preview-PNG steps; `src/meta.xml` was still at 7.0.0 when this was written.
-
-**v0.1.0 through v6.0.1 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
-**v7.0.0 is the current Latest** — a game-upgrade release retargeting the mod to WoT client
-**EU 2.4.0.2** (up from 2.4.0.1), major bump per convention, cut on top of v6.0.1 with **zero
-functional/code changes** (static-only analysis found 0 divergences; live CONFIRM still owed).
-`SETTINGS_VERSION` is unchanged at **29**.
+**v0.1.0 through v7.0.0 are published** on `github.com/drizzer14/moe-calculator` (`origin/main`);
+**v7.0.0 (2026-10-07) is the current Latest** (`src/meta.xml` is 7.0.0). It retargets the mod to
+WoT client **EU 2.4.0.2** (up from 2.4.0.1; major bump per convention) and ships the MoE `%`
+caption work: a parenthesised MoE % beside both centre bars' current-damage numeral (new
+`ProgressVM.curPercent` / `EfficiencyVM.damagePercent` slots), **four per-bar MSA checkboxes**
+(Moving Average / Damage Efficiency × show % / show change; keys in `mod_settings.py`), the
+%-caption font matched to the damage numeral, grown bar surfaces with re-derived
+`*_MM_TRACK_X(_LARGE)`, and a fix for the pre-v23 alignment migration that re-ran on every
+version bump (Free alignment is no longer collapsed to Fixed; now gated on `pre_v23`).
+`SETTINGS_VERSION` went **29 → 31** (structural forward bumps, no `_migrate_pre_v30_*` /
+`_migrate_pre_v31_*`; every saved value is kept, pinned by a v30→v31 test). The maintainer
+live-tested the build on 2.4.0.2 on 2026-10-07.
 
 **v6.0.1 (2026-09-20) was the prior Latest** — a patch release cut on top of v6.0.0. The garage
 weekly MoE trend chart's 100% mark icon is now centered on its top gridline (it was clamped
