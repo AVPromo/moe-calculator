@@ -3361,7 +3361,7 @@ def test_v29_to_current_bump_keeps_every_value_and_seeds_all_four_caption_keys_t
     for key, getter in zip(_CAPTION_KEYS, _CAPTION_GETTERS):
         assert live[key] is True
         assert getattr(mod_settings, getter)() is True
-    # Free/Fixed (and the pair) came through the unconditional _migrate_pre_v23_alignment intact.
+    # Free/Fixed (and the pair) were skipped by register()'s pre_v23 gate, intact.
     assert mod_settings.progress_bar_alignment() == alignment
     assert (bar_pos_x(), bar_pos_y()) == pair
     # ...and the radios stayed INT indices, never booled.

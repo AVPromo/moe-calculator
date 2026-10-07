@@ -1607,3 +1607,13 @@ def test_the_cap_clamp_corridor_sits_inside_the_backdrop():
     box_right = box_left + _js_const(js, "BOX_W_REM")
     assert box_left <= left < right <= box_right, "the corridor must stay inside the backdrop"
     assert left - box_left == box_right - right, "the end inset must be symmetric"
+
+
+# --- capC dither strip: maintainer-approved widths (150rem base, 200rem Large) ------------------
+
+@pytest.mark.parametrize("sheet,sel", [("MoEProgress.css", ".mp-bd-2"),
+                                       ("MoEEfficiency.css", ".mp-bd-5")])
+def test_capc_dither_strip_width_is_pinned(sheet, sel):
+    css = _no_css_comments(_read(sheet))
+    assert _decl(css, sel, "width") == "150rem"
+    assert _decl(css, ".mp-lg " + sel, "width") == "200rem"
